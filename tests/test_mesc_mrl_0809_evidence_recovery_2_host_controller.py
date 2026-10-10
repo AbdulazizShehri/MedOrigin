@@ -315,15 +315,25 @@ def test_failed_remote_driver_drains_last_evidence_without_ack(
     assert outcome["stderr"] == ""
 
 
+@pytest.mark.parametrize("outcome_write_delay", [0.0, 0.2])
 def test_failed_driver_interrupts_watcher_scan_before_final_drain(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    outcome_write_delay: float,
 ) -> None:
     evidence = tmp_path / "evidence"
     evidence.mkdir()
     _write_valid_host_receipt(evidence)
     first_download_started = threading.Event()
+    driver_started = threading.Event()
+    driver_stop: threading.Event | None = None
     initial_requests: list[str] = []
+    original_write = HOST._write_new_fsync
+
+    def write(path: Path, raw: bytes) -> None:
+        if path.name == "evidence-recovery-2-colab-exec-outcome.json":
+            time.sleep(outcome_write_delay)
+        original_write(path, raw)
 
     def download(**kwargs: object) -> bool:
         if kwargs.get("force") is True:
@@ -332,7 +342,10 @@ def test_failed_driver_interrupts_watcher_scan_before_final_drain(
         assert isinstance(name, str)
         initial_requests.append(name)
         first_download_started.set()
-        time.sleep(0.1)
+        assert driver_started.wait(timeout=2.0)
+        assert driver_stop is not None
+        # Receipt fsync can outlast a fixed sleep; wait for the real stop signal.
+        assert driver_stop.wait(timeout=5.0)
         return False
 
     def run(
@@ -341,12 +354,17 @@ def test_failed_driver_interrupts_watcher_scan_before_final_drain(
         timeout_seconds: float | None = None,
         abort_event: threading.Event | None = None,
     ) -> object:
+        nonlocal driver_stop
         if "stop" in args:
             return _completed(args)
         assert "exec" in args
+        assert abort_event is not None
+        driver_stop = abort_event
+        driver_started.set()
         assert first_download_started.wait(timeout=2.0)
         return _completed(args, returncode=1)
 
+    monkeypatch.setattr(HOST, "_write_new_fsync", write)
     monkeypatch.setattr(HOST, "_download_once", download)
     monkeypatch.setattr(HOST, "_run_colab", run)
     with pytest.raises(HOST.EvidenceRecovery2HostError, match="remote Recovery-2 driver failed"):
