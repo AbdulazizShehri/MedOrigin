@@ -195,7 +195,7 @@ uv run medscale stats > artifacts/stats-$(date +%Y%m%d).json
 - `corpus.*` - by source, year, tier, query, domain.
 - `evidence.*` - objects by study type, verification state, coverage.
 
-In your methods section, cite: the MedScale version (`medscale --version`), the
+In your methods section, cite: the installed Python package version (`medscale --version`), the
 snapshot id, and the git commit. Those three values let anyone reconstruct and
 verify your exact evidence base.
 
