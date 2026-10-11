@@ -6,6 +6,12 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
+### Branding
+
+- Renamed the GitHub project to **MedOrigin** (formerly MESC / MedScale) with an evidence-first public identity.
+- Preserved the `medscale` Python package, CLI, frozen scientific artifact identities, existing data, history, and release lineage for compatibility; no new release or clinical execution authority is inferred.
+- Added public project onboarding, identity/compatibility policy, and third-party provenance guidelines.
+
 ### Changed
 
 - **ADR-0018 evidence identity:** accepted and implemented explicit semantic

@@ -1,16 +1,16 @@
 cff-version: 1.2.0
-message: "If you use MedScale in academic work, please cite it as below."
-title: "MedScale: An open research platform for verifiable clinical AI"
+message: "If you use MedOrigin (formerly MedScale) in academic work, please cite it as below."
+title: "MedOrigin (formerly MedScale): Verifiable medical AI research infrastructure"
 abstract: >-
-  MedScale is an open-source research platform for verifiable clinical AI: FHIR-native,
+  MedOrigin (formerly MedScale) is an open-source research platform for verifiable clinical AI: FHIR-native,
   grammar-constrained, validator-grounded, deterministically benchmarked, and fully
   reproducible. It is trained and evaluated on synthetic data only.
 type: software
 authors:
   - family-names: Alshehri
     given-names: Abdulaziz
-repository-code: "https://github.com/TheHalfMoon/MESC"
-url: "https://github.com/TheHalfMoon/MESC"
+repository-code: "https://github.com/TheHalfMoon/MedOrigin"
+url: "https://github.com/TheHalfMoon/MedOrigin"
 license: Apache-2.0
 version: 0.2.0
 date-released: "2026-07-13"

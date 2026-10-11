@@ -1,6 +1,6 @@
-# MedScale Documentation
+# MedOrigin Documentation
 
-The canonical documentation for MedScale. Start here.
+The canonical documentation for MedOrigin (formerly MedScale). Start here. Historical technical paths and source-bound names remain unchanged.
 
 ## Source readiness
 
