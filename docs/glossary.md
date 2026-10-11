@@ -3,12 +3,13 @@
 - **Status:** Reference (append-only; extend, do not rename)
 - **Date:** 2026-07-10
 
-Terminology used across MedScale. Acronyms are expanded on first use here so that
+Terminology used across MedOrigin and preserved legacy research records. Acronyms are expanded on first use here so that
 external contributors and collaborators can read any document without prior context.
 
 | Term | Definition |
 |---|---|
-| **MedScale** | This project: an open research platform for verifiable clinical AI. |
+| **MedOrigin** | Current public identity of this medical AI research and local Clinical Workspace project. |
+| **MedScale** | Historical project name and retained `medscale` Python distribution/API/CLI compatibility identity. |
 | **Afia** | A separate healthcare product that *consumes* MedScale. MedScale never depends on Afia. |
 | **MESC** | The MedScale clinical model family — a grammar-constrained, QLoRA-adapted clinical model. `MESC-v0` is the first adapter. *(The letter-expansion of the acronym is not yet ratified; a naming ADR is recommended.)* |
 | **MedScale-Bench** | MedScale's deterministic, executable, PHI-free benchmark; the program's crown artifact. |

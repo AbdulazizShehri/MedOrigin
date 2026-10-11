@@ -1,6 +1,6 @@
 # MedOrigin Documentation
 
-The canonical documentation for MedOrigin (formerly MedScale). Start here. Historical technical paths and source-bound names remain unchanged.
+The documentation for **MedOrigin**. Original scientific specifications, package paths, and archival identifiers remain source-bound; see the [compatibility policy](BRAND_TRANSITION.md).
 
 ## Source readiness
 
@@ -9,19 +9,20 @@ Repository-local documentation link hygiene is mechanically checked by
 sources plus `docs/**/*.md`, including local file/image targets and Markdown anchors,
 without network access or a third-party documentation dependency.
 
-This is **documentation-source readiness only**. MedScale does not currently configure or
+This is **documentation-source readiness only**. MedOrigin does not currently configure or
 authorize a standalone hosted documentation site, GitHub Pages deployment, Read the Docs,
 MkDocs/Sphinx/Jekyll deployment, DNS/domain routing, or documentation publication authority.
 Any hosted rendering/deployment decision remains separately scoped.
 
 ## Reading order
 
-1. [README](../README.md) — what MedScale is, in one page.
-2. [Strategic Blueprint](vision/MEDSCALE_STRATEGIC_BLUEPRINT_V1.md) — the full narrative.
-3. [Research Vision](vision/MEDSCALE_RESEARCH_VISION.md) — scope authority (what is / is not).
-4. [Research Questions](research/research_questions.md) — RQ1–RQ7.
-5. [Program Rules R1–R7](governance/rules.md) — the rules the docs cite by number.
-6. [Glossary](glossary.md) — terminology.
+1. [README](../README.md) — what MedOrigin is, in one page.
+2. [MedOrigin overview](vision/MEDORIGIN_OVERVIEW.md) — current project identity, implemented modules, and important limits.
+3. [Strategic Blueprint](vision/MEDSCALE_STRATEGIC_BLUEPRINT_V1.md) — founding research narrative (historical title).
+4. [Research Vision](vision/MEDSCALE_RESEARCH_VISION.md) — scope authority (what is / is not).
+5. [Research Questions](research/research_questions.md) — RQ1–RQ7.
+6. [Program Rules R1–R7](governance/rules.md) — the rules the docs cite by number.
+7. [Glossary](glossary.md) — terminology.
 
 ## Map
 

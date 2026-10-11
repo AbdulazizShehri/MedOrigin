@@ -6,14 +6,16 @@ code reading required.*
 ## 1. Install (once)
 
 ```bash
-git clone https://github.com/TheHalfMoon/MESC MedScale
-cd MedScale
+git clone https://github.com/TheHalfMoon/MedOrigin.git
+cd MedOrigin
 uv sync          # Python 3.11+, no runtime dependencies
 ```
 
 Every command below is run from the repository root. The corpus lives in
 `data/litdb` (the default `--root`), and it ships with the repository - you already
 have 1,346 deduplicated records to work with.
+
+The public project is **MedOrigin**; the installed Python command remains `medscale` for compatibility with existing research artifacts.
 
 ## 2. Orient yourself
 

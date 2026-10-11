@@ -1,8 +1,8 @@
 cff-version: 1.2.0
-message: "If you use MedOrigin (formerly MedScale) in academic work, please cite it as below."
-title: "MedOrigin (formerly MedScale): Verifiable medical AI research infrastructure"
+message: "If you use MedOrigin in academic work, please cite it as below."
+title: "MedOrigin: Verifiable medical AI research infrastructure"
 abstract: >-
-  MedOrigin (formerly MedScale) develops reproducible, evidence-oriented medical AI
+  MedOrigin develops reproducible, evidence-oriented medical AI
   research infrastructure and a local-first clinical workspace foundation. The current
   research workflows are synthetic-only; no clinical readiness or model training is implied.
 type: software

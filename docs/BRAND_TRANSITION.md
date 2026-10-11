@@ -20,6 +20,12 @@ Use **MedOrigin** in new public-facing product documentation, repository metadat
 - Earlier GitHub issue/PR decisions, original failure records, data provenance, citation and licensing records, and signed/hashed research artifacts remain authentic records of their historical names.
 - Do **not** rewrite vendor, contributor, model, or third-party authorship to make borrowed code look internally invented.
 
+## Verified residual-name audit
+
+The 2026-10-11 source audit found legacy names in 1,263 of 1,431 tracked files. Many occurrences are technical or frozen identities: `src/medscale`, executable tests, dependency lockfiles, `specs/`, research notebooks, provider and model receipts, and prior decisions. This is **not** a safe repository-wide string-replacement task. Historical GitHub URLs are preserved only in original evidence; new clone instructions use `TheHalfMoon/MedOrigin`.
+
+The outstanding package/API migration needs compatibility shims, dependency/lockfile review, tests and independent authorization when scientific source-bound contracts would change. No old source authorship or historical identity may be erased merely for cosmetic branding.
+
 ## Separate engineering migration
 
 Future changes to a Python distribution name, package imports, public API, lockfiles, or serialized schema require explicit compatibility design: migration map; aliases/deprecation policy; tests across installed versions; dependency, provenance and artifact identity review; independent review; exact-head CI; and a separate authorization if governed science bytes or credentials are affected.

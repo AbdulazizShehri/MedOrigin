@@ -4,7 +4,7 @@
 - **Date:** 2026-07-10
 - **Related:** [CONTRIBUTING](../../CONTRIBUTING.md), [Program Rules](../governance/rules.md)
 
-How to work in the MedScale repository.
+How to work in the MedOrigin repository. The `medscale` Python package and command remain supported for compatibility.
 
 ## Prerequisites
 
@@ -18,8 +18,8 @@ How to work in the MedScale repository.
 ## Setup
 
 ```bash
-git clone https://github.com/TheHalfMoon/MESC MedScale
-cd MedScale
+git clone https://github.com/TheHalfMoon/MedOrigin.git
+cd MedOrigin
 uv sync
 uv run pre-commit install
 uv run pre-commit install --hook-type pre-push
