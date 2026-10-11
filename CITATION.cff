@@ -2,9 +2,9 @@ cff-version: 1.2.0
 message: "If you use MedOrigin (formerly MedScale) in academic work, please cite it as below."
 title: "MedOrigin (formerly MedScale): Verifiable medical AI research infrastructure"
 abstract: >-
-  MedOrigin (formerly MedScale) is an open-source research platform for verifiable clinical AI: FHIR-native,
-  grammar-constrained, validator-grounded, deterministically benchmarked, and fully
-  reproducible. It is trained and evaluated on synthetic data only.
+  MedOrigin (formerly MedScale) develops reproducible, evidence-oriented medical AI
+  research infrastructure and a local-first clinical workspace foundation. The current
+  research workflows are synthetic-only; no clinical readiness or model training is implied.
 type: software
 authors:
   - family-names: Alshehri

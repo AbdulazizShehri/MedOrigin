@@ -1,4 +1,7 @@
-# MedScale Clinical Workspace
+# MedOrigin Clinical Workspace
+
+> Public identity: MedOrigin. The existing `medscale_workspace` Python package and source-bound identifiers remain unchanged for compatibility; see [brand transition](../../docs/BRAND_TRANSITION.md).
+
 
 CW-001 established a Python-only application boundary for the future local Clinical Workspace.
 CW-002 adds governed local protected storage under [ADR-0039](../../docs/adr/0039-local-protected-storage-and-key-management.md),

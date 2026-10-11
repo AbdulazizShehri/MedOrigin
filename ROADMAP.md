@@ -1,4 +1,6 @@
-# MedScale Roadmap
+# MedOrigin Roadmap
+
+MedOrigin continues the evidence-governed MedScale research program under a new public identity; historical technical names remain source-bound.
 
 This roadmap is a **filter, not a backlog.** It is a human-readable planning view; canonical specifications, governance, exact-head evidence, and accepted ADRs determine what is actually eligible, complete, releasable, or publishable.
 
