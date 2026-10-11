@@ -1,4 +1,4 @@
-# MedScale Model Registry
+# MedOrigin Model Registry
 
 - **Status:** Canonical registry (governed by [ADR-0006](../adr/0006-model-access-strategy.md);
   structured-artifact design governed by [ADR-0012](../adr/0012-layered-architecture-model.md))
@@ -13,12 +13,12 @@ constructor errors, not prose. Every row records licence, tier, role, and a veri
 source before it may inform any decision. The two must stay consistent — the code is
 authoritative for eligibility, this document for rationale.
 
-## 1. Where MedScale sits in the medical-AI ecosystem
+## 1. Where MedOrigin sits in the medical-AI ecosystem
 
-MedScale is **infrastructure and evaluation**, not a foundation model. It *consumes* the
+MedOrigin is **infrastructure and evaluation**, not a foundation model. It *consumes* the
 layers below and makes their claims verifiable; it competes with none of them.
 
-| Ecosystem layer | Examples | MedScale's relation |
+| Ecosystem layer | Examples | MedOrigin's relation |
 |---|---|---|
 | Foundation models | MedGemma, BioMistral, PubMedBERT, ClinicalBERT | Evaluation subjects; Tier-1 generative models are adapter bases |
 | Resources | OpenMed, Hugging Face (medical) | Optional eval-time adapters + distribution mirror (ADR-0007, ADR-0010) |

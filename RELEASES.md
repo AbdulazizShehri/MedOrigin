@@ -1,4 +1,6 @@
-# MedScale v0.2.0 Release Notes
+# MedOrigin Release History — MedScale v0.2.0
+
+This is an **historical MedScale v0.2.0 release**, before the MedOrigin repository rename. Existing tag names, built artifacts and original source provenance are preserved. See [MedOrigin identity policy](docs/BRAND_TRANSITION.md).
 
 - **Release date:** 2026-07-13
 - **Tag:** `v0.2.0` (existing annotated tag)

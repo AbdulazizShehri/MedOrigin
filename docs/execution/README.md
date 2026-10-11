@@ -2,7 +2,7 @@
 
 - **Status:** Active repository execution index (`medscale` package version v0.2.0)
 
-This directory contains MedScale execution and phase-planning documents. It is not an authority source by itself: eligibility and completion come from canonical specifications, governance, exact gate evidence, and accepted decisions on canonical `main`.
+This directory contains MedOrigin research execution and phase-planning documents. Frozen legacy MESC/MRL protocol and evidence identities remain unchanged. It is not an authority source by itself: eligibility and completion come from canonical specifications, governance, exact gate evidence, and accepted decisions on canonical `main`.
 
 The original T0–T7 phase vocabulary remains useful as historical planning context, but the repository now contains more granular governed MESC/MRL work. Module existence must not be read as proof that a legacy research phase is complete.
 

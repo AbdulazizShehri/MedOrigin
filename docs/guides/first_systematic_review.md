@@ -1,4 +1,4 @@
-# Your First Systematic Review with MedScale
+# Your First Systematic Review with MedOrigin
 
 *The complete workflow, stage by stage: what each command does, what it writes,
 what it maps to in PRISMA 2020, and what you must never do. Read the
@@ -16,6 +16,8 @@ Everything downstream of Import is driven by six commands: `screen`, `extract`,
 content-addressed, so nothing you do can silently destroy earlier work.
 
 ---
+
+The `medscale` commands below intentionally use the retained Python CLI name; the repository and public identity are **MedOrigin**.
 
 ## Stage 0 - Before you begin
 
