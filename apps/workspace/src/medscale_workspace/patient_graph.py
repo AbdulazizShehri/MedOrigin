@@ -46,6 +46,7 @@ from medscale_workspace.data_class import synthetic_data_class_value
 from medscale_workspace.errors import (
     ClaimInputError,
     ClaimRevisionError,
+    CorpusInputError,
     GraphConflictError,
     GraphInputError,
     GraphPathError,
@@ -164,7 +165,7 @@ class GraphNode:
     source_revision: str
     content_digest: str
 
-    def validated(self):
+    def validated(self) -> GraphNode:
         if not isinstance(self.workspace_id, UUID):
             raise GraphInputError("a workspace id must be a UUID value")
         if not isinstance(self.node_id, UUID):
@@ -191,7 +192,7 @@ class GraphNode:
             content_digest=digest,
         )
 
-    def to_document(self):
+    def to_document(self) -> dict[str, object]:
         admitted = self.validated()
         return {
             "content_digest": admitted.content_digest,
@@ -208,7 +209,7 @@ class GraphNode:
         }
 
     @staticmethod
-    def from_document(document):
+    def from_document(document: object) -> GraphNode:
         if not isinstance(document, dict):
             raise GraphInputError("a stored node must be a JSON object")
         expected = {
@@ -259,7 +260,7 @@ class GraphEdgeSource:
     source_revision: str
     content_digest: str
 
-    def validated(self):
+    def validated(self) -> GraphEdgeSource:
         if not isinstance(self.source_id, UUID):
             raise GraphInputError("an edge source id must be a UUID value")
         revision = _admit_identifier(self.source_revision, "source revision")
@@ -270,7 +271,7 @@ class GraphEdgeSource:
             content_digest=digest,
         )
 
-    def to_document(self):
+    def to_document(self) -> dict[str, object]:
         admitted = self.validated()
         return {
             "content_digest": admitted.content_digest,
@@ -279,7 +280,7 @@ class GraphEdgeSource:
         }
 
     @staticmethod
-    def from_document(document):
+    def from_document(document: object) -> GraphEdgeSource:
         if not isinstance(document, dict):
             raise GraphInputError("a stored edge source must be a JSON object")
         expected = {"content_digest", "source_id", "source_revision"}
@@ -306,14 +307,14 @@ class GraphEdge:
     target_node: UUID
     relationship: RelationshipType
     epistemic: EpistemicState
-    sources: tuple
+    sources: tuple[GraphEdgeSource, ...]
     derivation_method: str
     derivation_version: str
     graph_schema_version: int
     claim_set_id: UUID | None
     claim_id: UUID | None
 
-    def validated(self):
+    def validated(self) -> GraphEdge:
         if not isinstance(self.workspace_id, UUID):
             raise GraphInputError("a workspace id must be a UUID value")
         if not isinstance(self.edge_id, UUID):
@@ -382,7 +383,7 @@ class GraphEdge:
             claim_id=claim,
         )
 
-    def to_document(self):
+    def to_document(self) -> dict[str, object]:
         admitted = self.validated()
         return {
             "claim_id": "" if admitted.claim_id is None else str(admitted.claim_id),
@@ -403,7 +404,7 @@ class GraphEdge:
         }
 
     @staticmethod
-    def from_document(document):
+    def from_document(document: object) -> GraphEdge:
         if not isinstance(document, dict):
             raise GraphInputError("a stored edge must be a JSON object")
         expected = {
@@ -469,13 +470,13 @@ class GraphView:
 
     workspace_id: UUID
     view_id: UUID
-    node_ids: tuple
-    edge_ids: tuple
+    node_ids: tuple[UUID, ...]
+    edge_ids: tuple[UUID, ...]
     derivation_method: str
     derivation_version: str
     graph_schema_version: int
 
-    def validated(self):
+    def validated(self) -> GraphView:
         if not isinstance(self.workspace_id, UUID):
             raise GraphInputError("a workspace id must be a UUID value")
         if not isinstance(self.view_id, UUID):
@@ -526,7 +527,7 @@ class GraphView:
             graph_schema_version=schema,
         )
 
-    def to_document(self):
+    def to_document(self) -> dict[str, object]:
         admitted = self.validated()
         return {
             "data_class": synthetic_data_class_value(),
@@ -542,7 +543,7 @@ class GraphView:
         }
 
     @staticmethod
-    def from_document(document):
+    def from_document(document: object) -> GraphView:
         if not isinstance(document, dict):
             raise GraphInputError("a stored view must be a JSON object")
         expected = {
@@ -599,8 +600,8 @@ class PathStep:
     target_node: UUID
     relationship: RelationshipType
     epistemic: EpistemicState
-    source_ids: tuple
-    source_revisions: tuple
+    source_ids: tuple[UUID, ...]
+    source_revisions: tuple[str, ...]
     derivation_method: str
     derivation_version: str
     provenance_digest: str
@@ -613,10 +614,10 @@ class PathExplanation:
     workspace_id: UUID
     source_node: UUID
     target_node: UUID
-    node_ids: tuple
-    steps: tuple
+    node_ids: tuple[UUID, ...]
+    steps: tuple[PathStep, ...]
 
-    def validated(self):
+    def validated(self) -> PathExplanation:
         if not isinstance(self.workspace_id, UUID):
             raise GraphPathError("a path workspace id must be a UUID value")
         if not isinstance(self.source_node, UUID):
@@ -637,7 +638,9 @@ class PathExplanation:
         return self
 
 
-def node_id_for(workspace_id, node_key, node_kind, source_revision):
+def node_id_for(
+    workspace_id: object, node_key: object, node_kind: object, source_revision: object
+) -> UUID:
     """Return the deterministic identity of one graph node."""
     if not isinstance(workspace_id, UUID):
         raise GraphInputError("a workspace id must be a UUID value")
@@ -652,17 +655,17 @@ def node_id_for(workspace_id, node_key, node_kind, source_revision):
 
 
 def edge_id_for(
-    workspace_id,
-    source_node,
-    target_node,
-    relationship,
-    epistemic,
-    sources,
-    derivation_method,
-    derivation_version,
-    claim_set_id,
-    claim_id,
-):
+    workspace_id: object,
+    source_node: object,
+    target_node: object,
+    relationship: object,
+    epistemic: object,
+    sources: object,
+    derivation_method: object,
+    derivation_version: object,
+    claim_set_id: object,
+    claim_id: object,
+) -> UUID:
     """Return the deterministic identity of one graph edge."""
     if not isinstance(workspace_id, UUID):
         raise GraphInputError("a workspace id must be a UUID value")
@@ -676,10 +679,8 @@ def edge_id_for(
         raise GraphInputError("an edge epistemic state is not admitted here")
     if not isinstance(sources, tuple) or not sources:
         raise GraphInputError("an edge needs a non-empty tuple of sources")
-    checked = tuple(
-        item.validated() if isinstance(item, GraphEdgeSource) else None for item in sources
-    )
-    if any(item is None for item in checked):
+    checked = tuple(item.validated() for item in sources if isinstance(item, GraphEdgeSource))
+    if len(checked) != len(sources):
         raise GraphInputError("edge sources need GraphEdgeSource instances")
     ordered = tuple(sorted(checked, key=lambda item: str(item.source_id)))
     method = _admit_identifier(derivation_method, "derivation method")
@@ -709,7 +710,13 @@ def edge_id_for(
     )
 
 
-def view_id_for(workspace_id, node_ids, edge_ids, derivation_method, derivation_version):
+def view_id_for(
+    workspace_id: object,
+    node_ids: object,
+    edge_ids: object,
+    derivation_method: object,
+    derivation_version: object,
+) -> UUID:
     """Return the deterministic identity of one frozen graph view."""
     if not isinstance(workspace_id, UUID):
         raise GraphInputError("a workspace id must be a UUID value")
@@ -733,7 +740,7 @@ def view_id_for(workspace_id, node_ids, edge_ids, derivation_method, derivation_
     )
 
 
-def node_binding(workspace_id, node_id):
+def node_binding(workspace_id: object, node_id: object) -> ObjectBinding:
     """Return the store binding of one graph node."""
     if not isinstance(workspace_id, UUID):
         raise GraphInputError("a workspace id must be a UUID value")
@@ -747,7 +754,7 @@ def node_binding(workspace_id, node_id):
     )
 
 
-def edge_binding(workspace_id, edge_id):
+def edge_binding(workspace_id: object, edge_id: object) -> ObjectBinding:
     """Return the store binding of one graph edge."""
     if not isinstance(workspace_id, UUID):
         raise GraphInputError("a workspace id must be a UUID value")
@@ -761,7 +768,7 @@ def edge_binding(workspace_id, edge_id):
     )
 
 
-def view_binding(workspace_id, view_id):
+def view_binding(workspace_id: object, view_id: object) -> ObjectBinding:
     """Return the store binding of one frozen graph view."""
     if not isinstance(workspace_id, UUID):
         raise GraphInputError("a workspace id must be a UUID value")
@@ -805,7 +812,7 @@ def admit_node(
     moment = _admit_occurred_at(occurred_at)
     try:
         source = corpus_mod.read_source(store, source_id)
-    except corpus_mod.CorpusInputError as error:
+    except CorpusInputError as error:
         raise GraphRevisionError("the node source is absent in this store") from error
     node = GraphNode(
         workspace_id=workspace_id,
@@ -847,7 +854,7 @@ def admit_node(
     return binding
 
 
-def read_node(store, node_id):
+def read_node(store: object, node_id: object) -> GraphNode:
     """Read and verify one stored graph node with its source still current."""
     if not isinstance(store, WorkspaceStore):
         raise GraphInputError("a workspace store is required")
@@ -875,7 +882,7 @@ def read_node(store, node_id):
     record.verify_payload(raw)
     try:
         source = corpus_mod.read_source(store, node.source_id)
-    except corpus_mod.CorpusInputError as error:
+    except CorpusInputError as error:
         raise GraphStaleError("a node source is no longer present") from error
     if source.source_revision != node.source_revision:
         raise GraphStaleError("a node source revision no longer matches")
@@ -948,7 +955,7 @@ def admit_edge(
     for source_id in source_ids:
         try:
             source = corpus_mod.read_source(store, source_id)
-        except corpus_mod.CorpusInputError as error:
+        except CorpusInputError as error:
             raise GraphRevisionError("an edge source is absent in this store") from error
         bound_sources.append(
             GraphEdgeSource(
@@ -1031,7 +1038,7 @@ def admit_edge(
     return binding
 
 
-def read_edge(store, edge_id):
+def read_edge(store: object, edge_id: object) -> GraphEdge:
     """Read and verify one stored graph edge with all sources still current."""
     if not isinstance(store, WorkspaceStore):
         raise GraphInputError("a workspace store is required")
@@ -1068,7 +1075,7 @@ def read_edge(store, edge_id):
     for bound in edge.sources:
         try:
             source = corpus_mod.read_source(store, bound.source_id)
-        except corpus_mod.CorpusInputError as error:
+        except CorpusInputError as error:
             raise GraphStaleError("an edge source is no longer present") from error
         if source.source_revision != bound.source_revision:
             raise GraphStaleError("an edge source revision no longer matches")
@@ -1189,7 +1196,7 @@ def rebuild_graph(store, trail, workspace_id, node_ids, edge_ids, actor_id, occu
     return binding
 
 
-def read_view(store, view_id):
+def read_view(store: object, view_id: object) -> GraphView:
     """Read and verify one frozen graph view with all members still current."""
     if not isinstance(store, WorkspaceStore):
         raise GraphInputError("a workspace store is required")
@@ -1387,7 +1394,9 @@ def nodes_affected_by_source(store, source_id):
     return tuple(sorted(affected, key=str))
 
 
-def delete_edge(store, trail, edge_id, actor_id, occurred_at):
+def delete_edge(
+    store: object, trail: object, edge_id: object, actor_id: object, occurred_at: object
+) -> int:
     """Delete one edge revision and its provenance while keeping audit events."""
     if not isinstance(store, WorkspaceStore):
         raise GraphInputError("a workspace store is required")
@@ -1412,7 +1421,9 @@ def delete_edge(store, trail, edge_id, actor_id, occurred_at):
     return removed
 
 
-def delete_node(store, trail, node_id, actor_id, occurred_at):
+def delete_node(
+    store: object, trail: object, node_id: object, actor_id: object, occurred_at: object
+) -> int:
     """Delete one node, its incident edges, and their provenance records."""
     if not isinstance(store, WorkspaceStore):
         raise GraphInputError("a workspace store is required")
@@ -1457,7 +1468,7 @@ def delete_node(store, trail, node_id, actor_id, occurred_at):
     return removed
 
 
-def _check_duplicate_edge_sources(sources):
+def _check_duplicate_edge_sources(sources: tuple[GraphEdgeSource, ...]) -> None:
     seen = set()
     for item in sources:
         if item.source_id in seen:
@@ -1465,7 +1476,7 @@ def _check_duplicate_edge_sources(sources):
         seen.add(item.source_id)
 
 
-def _admit_identifier(raw, label):
+def _admit_identifier(raw: object, label: str) -> str:
     if not isinstance(raw, str):
         raise GraphInputError(f"{label} must be a string")
     value = raw.strip()
@@ -1481,7 +1492,7 @@ def _admit_identifier(raw, label):
     return value
 
 
-def _admit_node_key(raw):
+def _admit_node_key(raw: object) -> str:
     if not isinstance(raw, str):
         raise GraphInputError("a node key must be a string")
     value = raw.strip()
@@ -1497,7 +1508,7 @@ def _admit_node_key(raw):
     return value
 
 
-def _admit_label(raw):
+def _admit_label(raw: object) -> str:
     if not isinstance(raw, str):
         raise GraphInputError("a node label must be a string")
     value = raw.strip()
@@ -1515,7 +1526,7 @@ def _admit_label(raw):
     return value
 
 
-def _admit_digest(raw):
+def _admit_digest(raw: object) -> str:
     if not isinstance(raw, str) or not raw.startswith("sha256:"):
         raise GraphInputError("content digest must be a sha256: digest")
     hex_part = raw[len("sha256:") :]
@@ -1524,7 +1535,7 @@ def _admit_digest(raw):
     return raw
 
 
-def _admit_occurred_at(raw):
+def _admit_occurred_at(raw: object) -> str:
     if not isinstance(raw, str):
         raise GraphInputError("a graph occurrence time must be a string")
     value = raw.strip()
@@ -1539,7 +1550,7 @@ def _admit_occurred_at(raw):
     return value
 
 
-def _admit_optional_uuid(raw, label):
+def _admit_optional_uuid(raw: object, label: str) -> UUID | None:
     if raw is None:
         return None
     if not isinstance(raw, UUID):
@@ -1547,7 +1558,7 @@ def _admit_optional_uuid(raw, label):
     return raw
 
 
-def _optional_uuid_member(document, name):
+def _optional_uuid_member(document: dict[str, object], name: str) -> UUID | None:
     value = document[name]
     if value == "":
         return None
@@ -1559,7 +1570,7 @@ def _optional_uuid_member(document, name):
         raise GraphInputError(f"a stored {name} is not admitted") from error
 
 
-def _parse_uuid_member(value):
+def _parse_uuid_member(value: object) -> UUID:
     if not isinstance(value, str):
         raise GraphInputError("a stored member identity must be a string")
     try:
@@ -1568,13 +1579,13 @@ def _parse_uuid_member(value):
         raise GraphInputError("a stored member identity is not admitted") from error
 
 
-def _canonical_bytes(document):
+def _canonical_bytes(document: object) -> bytes:
     return json.dumps(document, sort_keys=True, separators=(",", ":"), ensure_ascii=True).encode(
         "ascii"
     )
 
 
-def _string_member(document, name):
+def _string_member(document: dict[str, object], name: str) -> str:
     value = document[name]
     if not isinstance(value, str):
         raise GraphInputError(f"a stored {name} must be a string")
