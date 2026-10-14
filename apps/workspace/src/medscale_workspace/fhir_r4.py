@@ -340,7 +340,9 @@ class FhirResource:
         labels = tuple(
             item.validated() for item in self.security_labels if isinstance(item, SecurityLabel)
         )
-        if len(labels) != len(self.security_labels):
+        if len(labels) != len(self.security_labels) or any(
+            not isinstance(item, SecurityLabel) for item in labels
+        ):
             raise FhirInputError("FHIR security labels need SecurityLabel instances")
         if not isinstance(self.references, tuple):
             raise FhirInputError("FHIR references must be a tuple")
@@ -349,7 +351,9 @@ class FhirResource:
         references = tuple(
             item.validated() for item in self.references if isinstance(item, ResourceReference)
         )
-        if len(references) != len(self.references):
+        if len(references) != len(self.references) or any(
+            not isinstance(item, ResourceReference) for item in references
+        ):
             raise FhirInputError("FHIR references need ResourceReference instances")
         patient_id = None
         if self.patient_id is not None:
