@@ -400,18 +400,25 @@ def admit_manifest(
     ).validated()
 
 
+class FixtureReadTransport:
+    """Static read-only fixture interface; runtime methods remain fail-closed."""
+
+    def fetch(self, *, destination: str, query: str, timeout_ms: int) -> object:
+        raise NotImplementedError
+
+
 def fetch_envelope(
-    store,
-    trail,
-    workspace_id,
-    manifest,
-    transport,
-    destination,
-    query,
-    capability,
-    actor_id,
-    occurred_at,
-):
+    store: WorkspaceStore,
+    trail: AuditTrail,
+    workspace_id: UUID,
+    manifest: ConnectorManifest,
+    transport: FixtureReadTransport,
+    destination: object,
+    query: object,
+    capability: object,
+    actor_id: object,
+    occurred_at: object,
+) -> ObjectBinding:
     """Fetch one read-only connector result through a fixture transport.
 
     Offline connectors are refused without touching the transport. Temporary
