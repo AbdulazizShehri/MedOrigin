@@ -305,7 +305,7 @@ class ClaimSet:
         if len(self.claims) < 1 or len(self.claims) > MAXIMUM_CLAIMS_PER_SET:
             raise ClaimInputError("a claim set carries an unadmitted claim count")
         checked = tuple(item.validated() for item in self.claims if isinstance(item, Claim))
-        if len(checked) != len(self.claims):
+        if len(checked) != len(self.claims) or any(not isinstance(item, Claim) for item in checked):
             raise ClaimInputError("claim-set claims need Claim instances")
         expected_ids = tuple(
             claim_id_for(self.workspace_id, self.set_id, position, item.claim_text)
