@@ -553,9 +553,7 @@ class Draft:
             raise DraftInputError("draft spans must be a tuple")
         if len(self.spans) < 1 or len(self.spans) > MAXIMUM_SPANS:
             raise DraftInputError("a draft carries an unadmitted span count")
-        checked = tuple(
-            item.validated() for item in self.spans if isinstance(item, DraftSpan)
-        )
+        checked = tuple(item.validated() for item in self.spans if isinstance(item, DraftSpan))
         if len(checked) != len(self.spans):
             raise DraftInputError("draft spans need DraftSpan instances")
         _check_duplicate_span_ids(checked)
@@ -696,7 +694,13 @@ def input_bundle_digest_for(
     return "sha256:" + hashlib.sha256(_canonical_bytes(document)).hexdigest()
 
 
-def draft_id_for(workspace_id, session_id, transcript_id, template, input_bundle_digest):
+def draft_id_for(
+    workspace_id: object,
+    session_id: object,
+    transcript_id: object,
+    template: object,
+    input_bundle_digest: object,
+) -> UUID:
     """Return the deterministic draft identity for one input bundle."""
     if not isinstance(workspace_id, UUID):
         raise DraftInputError("a workspace id must be a UUID value")
@@ -742,7 +746,12 @@ def draft_payload_bytes(draft: object) -> bytes:
     return _canonical_bytes(draft.to_document())
 
 
-def mock_draft_backend(transcript_text, segments, template, requested_sections):
+def mock_draft_backend(
+    transcript_text: object,
+    segments: object,
+    template: object,
+    requested_sections: object,
+) -> tuple[str, tuple[object, ...], str]:
     """Deterministic placeholder backend with fixed outputs only, never a model."""
     checked_template = verify_template(template)
     if not isinstance(transcript_text, str):
@@ -759,19 +768,19 @@ def mock_draft_backend(transcript_text, segments, template, requested_sections):
 
 
 def synthesize_with_backend(
-    workspace_id,
-    session_id,
-    transcript_id,
-    transcript_revision,
-    transcript_text,
-    segments,
-    template,
-    input_bundle_digest,
-    model,
-    runtime,
-    span_plan,
-    backend,
-):
+    workspace_id: object,
+    session_id: object,
+    transcript_id: object,
+    transcript_revision: object,
+    transcript_text: object,
+    segments: object,
+    template: object,
+    input_bundle_digest: object,
+    model: object,
+    runtime: object,
+    span_plan: object,
+    backend: object,
+) -> Draft:
     """Build a draft through an injected backend under the deterministic contract."""
     if not isinstance(workspace_id, UUID):
         raise DraftInputError("a workspace id must be a UUID value")
@@ -804,8 +813,8 @@ def synthesize_with_backend(
     kind, _sections, _marker = out
     if kind != "draft":
         raise DraftBackendError("a backend kind is not admitted here")
-    spans = tuple(item.validated() if isinstance(item, DraftSpan) else None for item in span_plan)
-    if any(item is None for item in spans):
+    spans = tuple(item.validated() for item in span_plan if isinstance(item, DraftSpan))
+    if len(spans) != len(span_plan):
         raise DraftBackendError("a span plan needs DraftSpan instances")
     draft_id = draft_id_for(workspace_id, session_id, transcript_id, checked_template, bundle)
     return Draft(
@@ -890,7 +899,9 @@ def validate_draft_support(store: object, draft: object) -> Draft:
     return admitted
 
 
-def store_draft(store, trail, draft, actor_id, occurred_at):
+def store_draft(
+    store: object, trail: object, draft: object, actor_id: object, occurred_at: object
+) -> ObjectBinding:
     """Store one draft with provenance and audit, failing closed."""
     if not isinstance(store, WorkspaceStore):
         raise DraftInputError("a workspace store is required")
@@ -968,7 +979,7 @@ def _expected_template_digest() -> str:
     return "sha256:" + hashlib.sha256(_canonical_bytes(document)).hexdigest()
 
 
-def _provenance_source_refs(draft):
+def _provenance_source_refs(draft: Draft) -> tuple[SourceRef, ...]:
     refs = []
     seen = set()
     for span in draft.spans:
@@ -1003,7 +1014,9 @@ def _provenance_source_refs(draft):
     return tuple(refs)
 
 
-def _validate_span_against_transcript(span, transcript_id, texts):
+def _validate_span_against_transcript(
+    span: DraftSpan, transcript_id: UUID, texts: tuple[str, ...]
+) -> DraftSpan:
     if span.status in (SupportStatus.SUPPORTED, SupportStatus.PARTIALLY_SUPPORTED):
         if len(span.sources) < 1:
             raise DraftSupportError("a backed span needs at least one source")
