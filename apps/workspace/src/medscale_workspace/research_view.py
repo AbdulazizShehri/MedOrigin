@@ -96,7 +96,7 @@ class ResearchArtifactDescriptor:
     interface_name: str
     interface_version: str
 
-    def validated(self):
+    def validated(self) -> ResearchArtifactDescriptor:
         if not isinstance(self.artifact_id, UUID):
             raise ResearchViewInputError("an artifact identity must be a UUID value")
         if not isinstance(self.artifact_kind, ArtifactKind):
@@ -128,7 +128,7 @@ class ResearchViewRecord:
     interface_name: str
     interface_version: str
 
-    def validated(self):
+    def validated(self) -> ResearchViewRecord:
         if not isinstance(self.workspace_id, UUID):
             raise ResearchViewInputError("a workspace id must be a UUID value")
         if not isinstance(self.view_id, UUID):
@@ -163,7 +163,7 @@ class ResearchViewRecord:
             interface_version=version,
         )
 
-    def to_document(self):
+    def to_document(self) -> dict[str, object]:
         admitted = self.validated()
         return {
             "artifact_id": str(admitted.artifact_id),
@@ -182,11 +182,11 @@ class ResearchViewRecord:
             "workspace_id": str(admitted.workspace_id),
         }
 
-    def canonical_bytes(self):
+    def canonical_bytes(self) -> bytes:
         return _canonical_bytes(self.to_document())
 
     @staticmethod
-    def from_document(document):
+    def from_document(document: object) -> ResearchViewRecord:
         if not isinstance(document, dict):
             raise ResearchViewInputError("a stored research view must be a JSON object")
         expected = {
@@ -237,19 +237,19 @@ class ResearchViewRecord:
         ).validated()
 
 
-def research_view_data_class_value():
+def research_view_data_class_value() -> str:
     """Return the wire value of the public research-metadata data class."""
     return _research_view_data_class_value()
 
 
 def admit_research_descriptor(
-    artifact_id,
-    artifact_kind,
-    artifact_revision,
-    evidence_digest,
-    interface_name,
-    interface_version,
-):
+    artifact_id: object,
+    artifact_kind: object,
+    artifact_revision: str,
+    evidence_digest: str,
+    interface_name: str,
+    interface_version: str,
+) -> ResearchArtifactDescriptor:
     """Admit one caller-supplied artifact descriptor with an exact member set.
 
     The descriptor carries exactly the six admitted members. Any additional
@@ -270,14 +270,14 @@ def admit_research_descriptor(
 
 
 def view_id_for(
-    workspace_id,
-    artifact_id,
-    artifact_kind,
-    artifact_revision,
-    evidence_digest,
-    interface_name,
-    interface_version,
-):
+    workspace_id: object,
+    artifact_id: object,
+    artifact_kind: object,
+    artifact_revision: object,
+    evidence_digest: object,
+    interface_name: object,
+    interface_version: object,
+) -> UUID:
     """Return the deterministic view identity for one exact pinned input set."""
     if not isinstance(workspace_id, UUID):
         raise ResearchViewInputError("a workspace id must be a UUID value")
@@ -304,7 +304,7 @@ def view_id_for(
     )
 
 
-def view_binding(workspace_id, view_id):
+def view_binding(workspace_id: object, view_id: object) -> ObjectBinding:
     """Return the store binding of one research view."""
     if not isinstance(workspace_id, UUID):
         raise ResearchViewInputError("a workspace id must be a UUID value")
@@ -318,14 +318,21 @@ def view_binding(workspace_id, view_id):
     )
 
 
-def view_payload_bytes(record):
+def view_payload_bytes(record: object) -> bytes:
     """Return the canonical storage payload of one research view."""
     if not isinstance(record, ResearchViewRecord):
         raise ResearchViewInputError("a view payload needs a ResearchViewRecord instance")
     return _canonical_bytes(record.to_document())
 
 
-def store_research_view(store, trail, workspace_id, descriptor, actor_id, occurred_at):
+def store_research_view(
+    store: object,
+    trail: object,
+    workspace_id: object,
+    descriptor: object,
+    actor_id: object,
+    occurred_at: object,
+) -> ObjectBinding:
     """Pin one artifact descriptor as an immutable workspace view.
 
     The descriptor is re-validated here; the stored view binds the exact
@@ -410,7 +417,7 @@ def store_research_view(store, trail, workspace_id, descriptor, actor_id, occurr
     return view_binding(workspace_id, record.view_id)
 
 
-def read_research_view(store, view_id):
+def read_research_view(store: object, view_id: object) -> ResearchViewRecord:
     """Read and verify one stored research view."""
     if not isinstance(store, WorkspaceStore):
         raise ResearchViewInputError("a workspace store is required")
@@ -442,7 +449,9 @@ def read_research_view(store, view_id):
     return record.validated()
 
 
-def delete_research_view(store, trail, view_id, actor_id, occurred_at):
+def delete_research_view(
+    store: object, trail: object, view_id: object, actor_id: object, occurred_at: object
+) -> ObjectBinding:
     """Delete one research view; the audit trail survives."""
     if not isinstance(store, WorkspaceStore):
         raise ResearchViewInputError("a workspace store is required")
@@ -461,11 +470,11 @@ def delete_research_view(store, trail, view_id, actor_id, occurred_at):
     return binding
 
 
-def _research_view_data_class_value():
+def _research_view_data_class_value() -> str:
     return admit_data_class("PUBLIC").value
 
 
-def _admit_artifact_kind(raw):
+def _admit_artifact_kind(raw: object) -> ArtifactKind:
     if isinstance(raw, ArtifactKind):
         return raw
     if isinstance(raw, str):
@@ -476,7 +485,7 @@ def _admit_artifact_kind(raw):
     raise ResearchViewInputError("an artifact kind must be admitted here")
 
 
-def _admit_revision(raw):
+def _admit_revision(raw: object) -> str:
     if not isinstance(raw, str):
         raise ResearchViewInputError("an artifact revision must be a string")
     value = raw.strip()
@@ -494,7 +503,7 @@ def _admit_revision(raw):
     return value
 
 
-def _admit_digest(raw):
+def _admit_digest(raw: object) -> str:
     if not isinstance(raw, str):
         raise ResearchViewInputError("an evidence digest must be a string")
     value = raw.strip()
@@ -509,7 +518,7 @@ def _admit_digest(raw):
     return value
 
 
-def _admit_interface_name(raw):
+def _admit_interface_name(raw: object) -> str:
     if not isinstance(raw, str):
         raise ResearchViewInputError("an interface name must be a string")
     value = raw.strip()
@@ -527,7 +536,7 @@ def _admit_interface_name(raw):
     return value
 
 
-def _admit_interface_version(raw):
+def _admit_interface_version(raw: object) -> str:
     if not isinstance(raw, str):
         raise ResearchViewInputError("an interface version must be a string")
     value = raw.strip()
@@ -542,7 +551,7 @@ def _admit_interface_version(raw):
     return value
 
 
-def _admit_identifier(raw, label):
+def _admit_identifier(raw: object, label: str) -> str:
     if not isinstance(raw, str):
         raise ResearchViewInputError(f"{label} must be a string")
     value = raw.strip()
@@ -558,7 +567,7 @@ def _admit_identifier(raw, label):
     return value
 
 
-def _admit_occurred_at(raw):
+def _admit_occurred_at(raw: object) -> str:
     value = _admit_identifier(raw, "view occurrence time")
     if len(value) > MAXIMUM_OCCURRED_AT_CHARS:
         raise ResearchViewInputError("a view occurrence time is longer than admitted")
@@ -567,13 +576,13 @@ def _admit_occurred_at(raw):
     return value
 
 
-def _canonical_bytes(document):
+def _canonical_bytes(document: object) -> bytes:
     return json.dumps(document, sort_keys=True, separators=(",", ":"), ensure_ascii=True).encode(
         "ascii"
     )
 
 
-def _string_member(document, name):
+def _string_member(document: dict[str, object], name: str) -> str:
     value = document[name]
     if not isinstance(value, str):
         raise ResearchViewInputError(f"a stored {name} must be a string")
