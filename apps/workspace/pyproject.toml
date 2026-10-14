@@ -4,8 +4,8 @@ build-backend = "hatchling.build"
 
 [project]
 name = "medscale-workspace"
-version = "0.1.0.dev1"
-description = "Local-first MedScale Clinical Workspace shell."
+dynamic = ["version"]
+description = "Local-first MedOrigin Clinical Workspace (synthetic-only research foundation)."
 requires-python = ">=3.11,<3.15"
 license = "Apache-2.0"
 authors = [{ name = "Abdulaziz Alshehri" }]
@@ -14,6 +14,11 @@ authors = [{ name = "Abdulaziz Alshehri" }]
 # primitive only. Key derivation, envelope encoding, key-version handling and
 # migration remain reviewed code in this package.
 dependencies = ["cryptography==50.0.1"]
+
+# The runtime __version__ remains the single source for wheel/sdist metadata.
+# Preserve the legacy distribution and import names for backward compatibility.
+[tool.hatch.version]
+path = "src/medscale_workspace/__init__.py"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/medscale_workspace"]
