@@ -415,7 +415,9 @@ class DraftSpan:
         checked = tuple(
             item.validated() for item in self.sources if isinstance(item, SourceReference)
         )
-        if len(checked) != len(self.sources):
+        if len(checked) != len(self.sources) or any(
+            not isinstance(item, SourceReference) for item in checked
+        ):
             raise DraftInputError("span sources need SourceReference instances")
         note = _admit_optional_text(self.relation_note, MAXIMUM_REASON_CHARS, "relation note")
         if self.status is SupportStatus.SUPPORTED:
@@ -554,7 +556,9 @@ class Draft:
         if len(self.spans) < 1 or len(self.spans) > MAXIMUM_SPANS:
             raise DraftInputError("a draft carries an unadmitted span count")
         checked = tuple(item.validated() for item in self.spans if isinstance(item, DraftSpan))
-        if len(checked) != len(self.spans):
+        if len(checked) != len(self.spans) or any(
+            not isinstance(item, DraftSpan) for item in checked
+        ):
             raise DraftInputError("draft spans need DraftSpan instances")
         _check_duplicate_span_ids(checked)
         return Draft(
