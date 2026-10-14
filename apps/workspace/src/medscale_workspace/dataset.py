@@ -519,7 +519,14 @@ def collection_payload_bytes(record: object) -> bytes:
     return _canonical_bytes(record.to_document())
 
 
-def store_dataset_collection(store, trail, workspace_id, descriptor, actor_id, occurred_at):
+def store_dataset_collection(
+    store: object,
+    trail: object,
+    workspace_id: object,
+    descriptor: object,
+    actor_id: object,
+    occurred_at: object,
+) -> ObjectBinding:
     """Pin one collection of dataset-manifest views as an immutable workspace record.
 
     Every member view is re-read through the existing versioned read interface
@@ -786,23 +793,23 @@ def export_payload_bytes(record: object) -> bytes:
 
 
 def stage_export_manifest(
-    store,
-    trail,
-    workspace_id,
-    items,
+    store: object,
+    trail: object,
+    workspace_id: object,
+    items: object,
     *,
-    target_path,
-    quarantine_root,
-    research_core_roots,
-    consent_scope,
-    source_rights,
-    deidentification_method,
-    deidentification_version,
-    explicit_export_request,
-    interface_version,
-    actor_id,
-    occurred_at,
-):
+    target_path: object,
+    quarantine_root: object,
+    research_core_roots: object,
+    consent_scope: object,
+    source_rights: object,
+    deidentification_method: object,
+    deidentification_version: object,
+    explicit_export_request: object,
+    interface_version: object,
+    actor_id: object,
+    occurred_at: object,
+) -> ObjectBinding:
     """Stage one export manifest in Domain X from already-stored source revisions.
 
     Every source payload is re-read and its digest recomputed here; the stored
