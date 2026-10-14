@@ -43,7 +43,7 @@ def test_workspace_version_is_single_sourced_from_public_runtime_version() -> No
     assert project["dynamic"] == ["version"]
     assert "version" not in project
     assert hatch_version == {"path": _VERSION_FILE.as_posix()}
-    assert _version_from_source() == "0.1.0.dev1"
+    assert _version_from_source()  # The current version may change without editing this test.
 
 
 def test_workspace_legacy_package_identity_and_dependency_stay_unchanged() -> None:
