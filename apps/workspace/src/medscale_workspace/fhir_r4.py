@@ -38,6 +38,7 @@ from medscale_workspace.audit import AuditEventType, AuditObjectRef, AuditTrail
 from medscale_workspace.binding import ObjectBinding
 from medscale_workspace.data_class import synthetic_data_class_value
 from medscale_workspace.errors import (
+    CorpusInputError,
     FhirConflictError,
     FhirInputError,
     FhirRevisionError,
@@ -247,17 +248,17 @@ class SecurityLabel:
     code: str
     display: str
 
-    def validated(self):
+    def validated(self) -> SecurityLabel:
         system = _admit_coding(self.system, "security label system")
         code = _admit_coding(self.code, "security label code")
         display = _admit_coding(self.display, "security label display")
         return SecurityLabel(system=system, code=code, display=display)
 
-    def to_document(self):
+    def to_document(self) -> dict[str, object]:
         return {"system": self.system, "code": self.code, "display": self.display}
 
     @staticmethod
-    def from_document(document):
+    def from_document(document: object) -> SecurityLabel:
         if not isinstance(document, dict):
             raise FhirInputError("a stored security label must be a JSON object")
         for name in ("system", "code", "display"):
@@ -277,21 +278,23 @@ class ResourceReference:
     resource_type: FhirResourceType
     resource_id: str
 
-    def validated(self):
+    def validated(self) -> ResourceReference:
         if not isinstance(self.resource_type, FhirResourceType):
             raise FhirInputError("a reference resource type is not admitted here")
         resource_id = _admit_identifier(self.resource_id, "reference resource id")
         return ResourceReference(resource_type=self.resource_type, resource_id=resource_id)
 
-    def to_document(self):
+    def to_document(self) -> dict[str, object]:
         return {"resource_type": self.resource_type.value, "resource_id": self.resource_id}
 
     @staticmethod
-    def from_document(document):
+    def from_document(document: object) -> ResourceReference:
         if not isinstance(document, dict):
             raise FhirInputError("a stored resource reference must be a JSON object")
         raw_type = document.get("resource_type")
         raw_id = document.get("resource_id")
+        if not isinstance(raw_type, str):
+            raise FhirInputError("a stored reference resource type is not admitted")
         try:
             resource_type = FhirResourceType(raw_type)
         except ValueError as error:
@@ -310,15 +313,15 @@ class FhirResource:
     resource_type: FhirResourceType
     fhir_id: str
     resource_version: str
-    content: tuple
-    security_labels: tuple
-    references: tuple
+    content: tuple[tuple[str, object], ...]
+    security_labels: tuple[SecurityLabel, ...]
+    references: tuple[ResourceReference, ...]
     patient_id: str | None
     source_id: UUID | None
     source_revision: str | None
     content_digest: str | None
 
-    def validated(self):
+    def validated(self) -> FhirResource:
         if not isinstance(self.workspace_id, UUID):
             raise FhirInputError("a FHIR workspace id must be a UUID value")
         if not isinstance(self.resource_id, UUID):
@@ -335,20 +338,18 @@ class FhirResource:
         if len(self.security_labels) > MAXIMUM_SECURITY_LABELS:
             raise FhirInputError("a FHIR resource carries too many security labels")
         labels = tuple(
-            item.validated() if isinstance(item, SecurityLabel) else None
-            for item in self.security_labels
+            item.validated() for item in self.security_labels if isinstance(item, SecurityLabel)
         )
-        if any(item is None for item in labels):
+        if len(labels) != len(self.security_labels):
             raise FhirInputError("FHIR security labels need SecurityLabel instances")
         if not isinstance(self.references, tuple):
             raise FhirInputError("FHIR references must be a tuple")
         if len(self.references) > MAXIMUM_REFERENCES:
             raise FhirInputError("a FHIR resource carries too many references")
         references = tuple(
-            item.validated() if isinstance(item, ResourceReference) else None
-            for item in self.references
+            item.validated() for item in self.references if isinstance(item, ResourceReference)
         )
-        if any(item is None for item in references):
+        if len(references) != len(self.references):
             raise FhirInputError("FHIR references need ResourceReference instances")
         patient_id = None
         if self.patient_id is not None:
@@ -379,8 +380,8 @@ class FhirResource:
             content_digest=content_digest,
         )
 
-    def to_document(self):
-        document = {
+    def to_document(self) -> dict[str, object]:
+        document: dict[str, object] = {
             "workspace_id": str(self.workspace_id),
             "resource_id": str(self.resource_id),
             "resource_type": self.resource_type.value,
@@ -403,7 +404,7 @@ class FhirResource:
         return document
 
     @staticmethod
-    def from_document(document):
+    def from_document(document: object) -> FhirResource:
         if not isinstance(document, dict):
             raise FhirInputError("a stored FHIR resource must be a JSON object")
         expected = (
@@ -511,12 +512,12 @@ class ValidationReport:
 
     resource_type: FhirResourceType
     fhir_id: str
-    stages: tuple
+    stages: tuple[ValidationStage, ...]
 
-    def passed(self):
+    def passed(self) -> bool:
         return all(item.passed for item in self.stages if item.evaluated)
 
-    def stage(self, name):
+    def stage(self, name: str) -> ValidationStage:
         for item in self.stages:
             if item.stage == name:
                 return item
@@ -530,11 +531,11 @@ class FhirExport:
     workspace_id: UUID
     target_path: str
     quarantine_root: str
-    resource_ids: tuple
+    resource_ids: tuple[UUID, ...]
     manifest_digest: str
     entry_count: int
 
-    def validated(self):
+    def validated(self) -> FhirExport:
         if not isinstance(self.workspace_id, UUID):
             raise FhirInputError("a FHIR export workspace id must be a UUID value")
         if not isinstance(self.resource_ids, tuple) or not self.resource_ids:
@@ -557,7 +558,9 @@ class FhirExport:
         )
 
 
-def resource_id_for(workspace_id, resource_type, fhir_id, resource_version):
+def resource_id_for(
+    workspace_id: object, resource_type: object, fhir_id: object, resource_version: object
+) -> UUID:
     """Return the deterministic identity of one admitted FHIR resource."""
     if not isinstance(workspace_id, UUID):
         raise FhirInputError("a workspace id must be a UUID value")
@@ -571,7 +574,7 @@ def resource_id_for(workspace_id, resource_type, fhir_id, resource_version):
     )
 
 
-def resource_binding(workspace_id, resource_id):
+def resource_binding(workspace_id: object, resource_id: object) -> ObjectBinding:
     """Return the store binding of one admitted FHIR resource."""
     if not isinstance(workspace_id, UUID):
         raise FhirInputError("a workspace id must be a UUID value")
@@ -585,7 +588,9 @@ def resource_binding(workspace_id, resource_id):
     )
 
 
-def validate_payload(resource_type, fhir_id, payload_text):
+def validate_payload(
+    resource_type: object, fhir_id: object, payload_text: object
+) -> ValidationReport:
     """Validate the parse, structure, and profile stages of a FHIR payload.
 
     Reference and provenance stages need a workspace store, so they are
@@ -598,6 +603,8 @@ def validate_payload(resource_type, fhir_id, payload_text):
         return _parse_failed_report(
             resource_type, admitted_id, "the payload exceeds the admitted resource size"
         )
+    if not isinstance(payload_text, (str, bytes, bytearray)):
+        return _parse_failed_report(resource_type, admitted_id, "the payload is not JSON")
     try:
         payload = json.loads(payload_text)
     except (TypeError, json.JSONDecodeError):
@@ -605,7 +612,9 @@ def validate_payload(resource_type, fhir_id, payload_text):
     return _validate_parsed_payload(resource_type, admitted_id, payload)
 
 
-def _parse_failed_report(resource_type, fhir_id, detail):
+def _parse_failed_report(
+    resource_type: FhirResourceType, fhir_id: str, detail: str
+) -> ValidationReport:
     """Return a parse-stage refusal with later stages unevaluated."""
     return ValidationReport(
         resource_type=resource_type,
@@ -645,7 +654,9 @@ def _parse_failed_report(resource_type, fhir_id, detail):
     )
 
 
-def _validate_parsed_payload(resource_type, admitted_id, payload):
+def _validate_parsed_payload(
+    resource_type: FhirResourceType, admitted_id: str, payload: object
+) -> ValidationReport:
     """Validate the structure and profile stages of an already-parsed payload."""
     try:
         _check_structure(resource_type, admitted_id, payload)
@@ -745,16 +756,16 @@ def _validate_parsed_payload(resource_type, admitted_id, payload):
 
 
 def admit_resource(
-    store,
-    trail,
-    workspace_id,
-    resource_type,
-    fhir_id,
-    payload_text,
-    actor_id,
-    occurred_at,
-    source_id=None,
-):
+    store: object,
+    trail: object,
+    workspace_id: object,
+    resource_type: object,
+    fhir_id: object,
+    payload_text: str | bytes | bytearray,
+    actor_id: object,
+    occurred_at: object,
+    source_id: object = None,
+) -> ObjectBinding:
     """Admit one synthetic FHIR R4 resource with all five stages enforced."""
     if not isinstance(store, WorkspaceStore):
         raise FhirInputError("a workspace store is required")
@@ -790,7 +801,7 @@ def admit_resource(
             raise FhirInputError("a FHIR source id must be a UUID value")
         try:
             source = corpus_mod.read_source(store, source_id)
-        except corpus_mod.CorpusInputError as error:
+        except CorpusInputError as error:
             raise FhirRevisionError("the FHIR source is absent in this store") from error
         source_revision = source.source_revision
         source_digest = source.content_digest
@@ -826,7 +837,7 @@ def admit_resource(
             SourceRef(
                 kind=SourceKind.EVIDENCE_SOURCE,
                 source_id=str(source_id),
-                source_revision=source_revision,
+                source_revision=source.source_revision,
                 locator=None,
             )
         )
@@ -845,7 +856,7 @@ def admit_resource(
     return binding
 
 
-def read_resource(store, resource_id):
+def read_resource(store: object, resource_id: object) -> FhirResource:
     """Read and verify one stored FHIR resource with bindings still current."""
     if not isinstance(store, WorkspaceStore):
         raise FhirInputError("a workspace store is required")
@@ -874,7 +885,7 @@ def read_resource(store, resource_id):
     if resource.source_id is not None:
         try:
             source = corpus_mod.read_source(store, resource.source_id)
-        except corpus_mod.CorpusInputError as error:
+        except CorpusInputError as error:
             raise FhirStaleError("a FHIR source is no longer present") from error
         if source.source_revision != resource.source_revision:
             raise FhirStaleError("a FHIR source revision no longer matches")
@@ -887,7 +898,9 @@ def read_resource(store, resource_id):
     return resource.validated()
 
 
-def delete_resource(store, trail, resource_id, actor_id, occurred_at):
+def delete_resource(
+    store: object, trail: object, resource_id: object, actor_id: object, occurred_at: object
+) -> ObjectBinding:
     """Delete one admitted FHIR resource; dependents refuse the deletion."""
     if not isinstance(store, WorkspaceStore):
         raise FhirInputError("a workspace store is required")
@@ -909,7 +922,7 @@ def delete_resource(store, trail, resource_id, actor_id, occurred_at):
     return binding
 
 
-def dependents_for(store, resource_id):
+def dependents_for(store: object, resource_id: object) -> tuple[UUID, ...]:
     """Return the identities of admitted resources referencing this resource."""
     if not isinstance(store, WorkspaceStore):
         raise FhirInputError("a workspace store is required")
@@ -936,7 +949,7 @@ def dependents_for(store, resource_id):
     return tuple(found)
 
 
-def resources_for_patient(store, patient_fhir_id):
+def resources_for_patient(store: object, patient_fhir_id: object) -> tuple[UUID, ...]:
     """Return the identities of admitted resources bound to one patient."""
     if not isinstance(store, WorkspaceStore):
         raise FhirInputError("a workspace store is required")
@@ -958,16 +971,16 @@ def resources_for_patient(store, patient_fhir_id):
 
 
 def stage_fhir_export(
-    store,
-    trail,
-    workspace_id,
-    resource_ids,
-    target_path,
-    quarantine_root,
-    research_core_roots,
-    actor_id,
-    occurred_at,
-):
+    store: object,
+    trail: object,
+    workspace_id: object,
+    resource_ids: object,
+    target_path: object,
+    quarantine_root: object,
+    research_core_roots: object,
+    actor_id: object,
+    occurred_at: object,
+) -> tuple[FhirExport, bytes]:
     """Stage a Domain X export envelope for admitted FHIR resources.
 
     The target path is proven by string algebra to sit strictly below the
@@ -1052,14 +1065,14 @@ def stage_fhir_export(
     return (envelope, manifest_bytes)
 
 
-def _stored_content(resource):
+def _stored_content(resource: FhirResource) -> dict[str, object]:
     document = {}
     for key, value in resource.content:
         document[key] = _content_value_to_json(value)
     return document
 
 
-def _check_structure(resource_type, fhir_id, payload):
+def _check_structure(resource_type: FhirResourceType, fhir_id: str, payload: object) -> None:
     if not isinstance(payload, dict):
         raise FhirInputError("the FHIR payload must be a JSON object")
     if payload.get("resourceType") != resource_type.value:
@@ -1071,7 +1084,9 @@ def _check_structure(resource_type, fhir_id, payload):
             raise FhirInputError("the FHIR payload is missing a required member")
 
 
-def _check_profile(resource_type, payload):
+def _check_profile(resource_type: FhirResourceType, payload: object) -> None:
+    if not isinstance(payload, dict):
+        raise FhirInputError("the FHIR payload must be a JSON object")
     allowed = _ALLOWED_KEYS[resource_type]
     for name in payload:
         if name not in allowed:
@@ -1098,7 +1113,7 @@ def _check_profile(resource_type, payload):
     _admit_json_value(payload, 0)
 
 
-def _resource_version(payload):
+def _resource_version(payload: dict[str, object]) -> str:
     meta = payload.get("meta")
     if isinstance(meta, dict):
         version = meta.get("versionId")
@@ -1107,7 +1122,7 @@ def _resource_version(payload):
     return "1"
 
 
-def _security_labels(payload):
+def _security_labels(payload: dict[str, object]) -> tuple[SecurityLabel, ...]:
     meta = payload.get("meta")
     if not isinstance(meta, dict):
         return ()
@@ -1129,7 +1144,7 @@ def _security_labels(payload):
     return tuple(item.validated() for item in labels)
 
 
-def _resource_references(payload):
+def _resource_references(payload: dict[str, object]) -> tuple[ResourceReference, ...]:
     references = []
     for name in _SINGLE_REFERENCE_KEYS:
         raw = payload.get(name)
@@ -1147,7 +1162,7 @@ def _resource_references(payload):
     return tuple(item.validated() for item in references)
 
 
-def _parse_reference(raw):
+def _parse_reference(raw: object) -> ResourceReference:
     if isinstance(raw, dict):
         raw = raw.get("reference")
     if not isinstance(raw, str):
@@ -1163,7 +1178,7 @@ def _parse_reference(raw):
     return ResourceReference(resource_type=resource_type, resource_id=parts[1].strip())
 
 
-def _patient_binding(resource_type, payload):
+def _patient_binding(resource_type: FhirResourceType, payload: dict[str, object]) -> str | None:
     if resource_type is FhirResourceType.PATIENT:
         return None
     for name in _SUBJECT_KEYS:
@@ -1177,7 +1192,12 @@ def _patient_binding(resource_type, payload):
     raise FhirInputError("a non-Patient resource needs a Patient subject binding")
 
 
-def _check_references(store, workspace_id, references, operation):
+def _check_references(
+    store: WorkspaceStore,
+    workspace_id: UUID,
+    references: tuple[ResourceReference, ...],
+    operation: str,
+) -> None:
     for reference in references:
         admitted = reference.validated()
         target = _find_resource_id(
@@ -1189,7 +1209,13 @@ def _check_references(store, workspace_id, references, operation):
             raise FhirStaleError("a FHIR reference is no longer present")
 
 
-def _check_patient_binding(store, workspace_id, resource_type, patient_id, operation):
+def _check_patient_binding(
+    store: WorkspaceStore,
+    workspace_id: UUID,
+    resource_type: FhirResourceType,
+    patient_id: str | None,
+    operation: str,
+) -> None:
     if resource_type is FhirResourceType.PATIENT:
         return
     if patient_id is None:
@@ -1201,7 +1227,9 @@ def _check_patient_binding(store, workspace_id, resource_type, patient_id, opera
         raise FhirStaleError("the FHIR patient binding is no longer present")
 
 
-def _find_resource_id(store, workspace_id, resource_type, fhir_id):
+def _find_resource_id(
+    store: WorkspaceStore, workspace_id: UUID, resource_type: FhirResourceType, fhir_id: str
+) -> UUID | None:
     for object_id, _revision in store.object_revisions(WorkspaceObjectType.FHIR_RESOURCE):
         candidate = _scan_match(store, workspace_id, object_id, resource_type, fhir_id)
         if candidate is not None:
@@ -1209,7 +1237,13 @@ def _find_resource_id(store, workspace_id, resource_type, fhir_id):
     return None
 
 
-def _scan_match(store, workspace_id, object_id, resource_type, fhir_id):
+def _scan_match(
+    store: WorkspaceStore,
+    workspace_id: UUID,
+    object_id: UUID,
+    resource_type: FhirResourceType,
+    fhir_id: str,
+) -> UUID | None:
     """Match one stored object by type and FHIR id without verifying references."""
     binding = ObjectBinding(
         workspace_id=workspace_id,
@@ -1240,7 +1274,9 @@ def _scan_match(store, workspace_id, object_id, resource_type, fhir_id):
     return None
 
 
-def _reference_binding(store, workspace_id, reference):
+def _reference_binding(
+    store: WorkspaceStore, workspace_id: UUID, reference: ResourceReference
+) -> ObjectBinding:
     admitted = reference.validated()
     target = _find_resource_id(store, workspace_id, admitted.resource_type, admitted.resource_id)
     if target is None:
@@ -1253,14 +1289,14 @@ def _reference_binding(store, workspace_id, reference):
     )
 
 
-def _content_entries(payload):
+def _content_entries(payload: dict[str, object]) -> tuple[tuple[str, object], ...]:
     entries = []
     for name in sorted(payload):
         entries.append((name, _freeze_value(payload[name], 0)))
     return tuple(entries)
 
 
-def _freeze_value(value, depth):
+def _freeze_value(value: object, depth: int) -> object:
     if depth > MAXIMUM_VALUE_DEPTH:
         raise FhirInputError("a FHIR value is nested too deeply")
     if value is None or isinstance(value, bool):
@@ -1285,7 +1321,7 @@ def _freeze_value(value, depth):
     raise FhirInputError("a FHIR value has an unadmitted JSON type")
 
 
-def _admit_json_value(value, depth):
+def _admit_json_value(value: object, depth: int) -> object:
     if depth > MAXIMUM_VALUE_DEPTH:
         raise FhirInputError("a FHIR value is nested too deeply")
     if value is None or isinstance(value, bool):
@@ -1317,7 +1353,7 @@ def _admit_json_value(value, depth):
     raise FhirInputError("a FHIR value has an unadmitted JSON type")
 
 
-def _validated_content_entry(entry):
+def _validated_content_entry(entry: object) -> tuple[str, object]:
     if not isinstance(entry, tuple) or len(entry) != 2:
         raise FhirInputError("FHIR resource content needs key/value entries")
     name, value = entry
@@ -1325,7 +1361,7 @@ def _validated_content_entry(entry):
     return (name, _freeze_value(_thaw_value(value), 0))
 
 
-def _thaw_value(value):
+def _thaw_value(value: object) -> object:
     if isinstance(value, tuple):
         if value and all(
             isinstance(item, tuple) and len(item) == 2 and isinstance(item[0], str)
@@ -1338,12 +1374,12 @@ def _thaw_value(value):
     return value
 
 
-def _content_entry_to_document(entry):
+def _content_entry_to_document(entry: tuple[str, object]) -> dict[str, object]:
     name, value = entry
     return {"key": name, "value": _content_value_to_json(value)}
 
 
-def _content_entry_from_document(document):
+def _content_entry_from_document(document: object) -> tuple[str, object]:
     if not isinstance(document, dict):
         raise FhirInputError("a stored FHIR content entry must be a JSON object")
     if "key" not in document or "value" not in document:
@@ -1353,7 +1389,7 @@ def _content_entry_from_document(document):
     return (document["key"], _content_value_from_json(document["value"]))
 
 
-def _content_value_to_json(value):
+def _content_value_to_json(value: object) -> object:
     if isinstance(value, tuple):
         if value and all(
             isinstance(item, tuple) and len(item) == 2 and isinstance(item[0], str)
@@ -1369,7 +1405,7 @@ def _content_value_to_json(value):
     return value
 
 
-def _content_value_from_json(document):
+def _content_value_from_json(document: object) -> object:
     if isinstance(document, dict) and set(document) == {"object"}:
         frozen = []
         for name in sorted(document["object"]):
@@ -1380,7 +1416,7 @@ def _content_value_from_json(document):
     return document
 
 
-def _admit_identifier(raw, label):
+def _admit_identifier(raw: object, label: str) -> str:
     if not isinstance(raw, str):
         raise FhirInputError(f"{label} must be a string")
     value = raw.strip()
@@ -1396,7 +1432,7 @@ def _admit_identifier(raw, label):
     return value
 
 
-def _admit_coding(raw, label):
+def _admit_coding(raw: object, label: str) -> str:
     if not isinstance(raw, str):
         raise FhirInputError(f"a {label} must be a string")
     value = raw.strip()
@@ -1412,7 +1448,7 @@ def _admit_coding(raw, label):
     return " ".join(value.split())
 
 
-def _admit_digest(raw):
+def _admit_digest(raw: object) -> str:
     if not isinstance(raw, str) or not raw.startswith("sha256:"):
         raise FhirInputError("content digest must be a sha256: digest")
     hex_part = raw[len("sha256:") :]
@@ -1421,7 +1457,7 @@ def _admit_digest(raw):
     return raw
 
 
-def _admit_occurred_at(raw):
+def _admit_occurred_at(raw: object) -> str:
     if not isinstance(raw, str):
         raise FhirInputError("a FHIR occurrence time must be a string")
     value = raw.strip()
@@ -1436,7 +1472,7 @@ def _admit_occurred_at(raw):
     return value
 
 
-def _admit_path(raw, label):
+def _admit_path(raw: object, label: str) -> str:
     if not isinstance(raw, str):
         raise FhirInputError(f"a {label} must be a string")
     value = raw.strip()
@@ -1454,11 +1490,13 @@ def _admit_path(raw, label):
     return value
 
 
-def _path_segments(path):
+def _path_segments(path: str) -> list[str]:
     return path.split("/")
 
 
-def _admit_export_path(target_path, quarantine_root, research_core_roots):
+def _admit_export_path(
+    target_path: object, quarantine_root: object, research_core_roots: object
+) -> str:
     target = _admit_path(target_path, "export target path")
     root = _admit_path(quarantine_root, "quarantine root")
     if not isinstance(research_core_roots, tuple):
@@ -1475,7 +1513,7 @@ def _admit_export_path(target_path, quarantine_root, research_core_roots):
     return target
 
 
-def _canonical_bytes(document):
+def _canonical_bytes(document: object) -> bytes:
     return json.dumps(document, sort_keys=True, separators=(",", ":"), ensure_ascii=True).encode(
         "ascii"
     )
