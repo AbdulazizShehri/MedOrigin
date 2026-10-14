@@ -6,6 +6,7 @@ SourceReference or DraftSpan instance violates its claimed return contract.
 
 from __future__ import annotations
 
+import importlib
 import sys
 from pathlib import Path
 from uuid import UUID
@@ -15,8 +16,8 @@ import pytest
 WORKSPACE_SRC = Path(__file__).resolve().parents[1] / "apps" / "workspace" / "src"
 sys.path.insert(0, str(WORKSPACE_SRC))
 
-from medscale_workspace import draft as draft_mod  # noqa: E402
-from medscale_workspace.errors import DraftInputError  # noqa: E402
+draft_mod = importlib.import_module("medscale_workspace.draft")
+errors_mod = importlib.import_module("medscale_workspace.errors")
 
 WORKSPACE = UUID("af295d45-8d6e-4281-a48b-7838439e839b")
 SESSION = UUID("2af64fba-ea6b-4e18-8475-28d6c373718e")
@@ -43,7 +44,7 @@ def test_span_rejects_unexpected_validation_result(monkeypatch: pytest.MonkeyPat
         abstention_reason="",
     )
     monkeypatch.setattr(draft_mod.SourceReference, "validated", lambda _self: None)
-    with pytest.raises(DraftInputError, match="SourceReference"):
+    with pytest.raises(errors_mod.DraftInputError, match="SourceReference"):
         span.validated()
 
 
@@ -73,7 +74,7 @@ def test_draft_rejects_unexpected_span_validation_result(
         spans=(span,),
     )
     monkeypatch.setattr(draft_mod.DraftSpan, "validated", lambda _self: None)
-    with pytest.raises(DraftInputError, match="DraftSpan"):
+    with pytest.raises(errors_mod.DraftInputError, match="DraftSpan"):
         draft.validated()
 
 
