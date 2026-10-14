@@ -58,6 +58,7 @@ from medscale_workspace.errors import (
     WorkspaceIsolationError,
 )
 from medscale_workspace.identity import WorkspaceObjectType
+from medscale_workspace.review import ReviewRecord
 from medscale_workspace.provenance import (
     ProducerIdentity,
     ProducerKind,
@@ -103,24 +104,24 @@ class MetricCount:
     label: str
     value: int
 
-    def validated(self):
+    def validated(self) -> MetricCount:
         label = _admit_label(self.label)
         value = _admit_count_value(self.value)
         return MetricCount(label=label, value=value)
 
-    def to_document(self):
+    def to_document(self) -> dict[str, object]:
         admitted = self.validated()
         return {"label": admitted.label, "value": admitted.value}
 
     @staticmethod
-    def from_document(document):
+    def from_document(document: object) -> MetricCount:
         if not isinstance(document, dict):
             raise AnalyticsInputError("a stored metric count must be a JSON object")
         if set(document) != {"label", "value"}:
             raise AnalyticsInputError("a stored metric count carries unadmitted members")
         return MetricCount(
             label=_string_member(document, "label"),
-            value=document["value"],
+            value=_admit_count_value(document["value"]),
         ).validated()
 
 
@@ -134,9 +135,9 @@ class AnalyticsRecord:
     metric_version: str
     input_count: int
     input_digest: str
-    counts: tuple
+    counts: tuple[MetricCount, ...]
 
-    def validated(self):
+    def validated(self) -> AnalyticsRecord:
         if not isinstance(self.workspace_id, UUID):
             raise AnalyticsInputError("a workspace id must be a UUID value")
         if not isinstance(self.analytics_id, UUID):
@@ -151,9 +152,9 @@ class AnalyticsRecord:
         if len(self.counts) < 1 or len(self.counts) > MAXIMUM_COUNTS_PER_RESULT:
             raise AnalyticsInputError("an analytics result carries an unadmitted count")
         checked = tuple(
-            item.validated() if isinstance(item, MetricCount) else None for item in self.counts
+            item.validated() for item in self.counts if isinstance(item, MetricCount)
         )
-        if any(item is None for item in checked):
+        if len(checked) != len(self.counts):
             raise AnalyticsInputError("analytics counts need MetricCount instances")
         _check_duplicate_labels(checked)
         _check_expected_labels(self.metric_name, checked)
@@ -172,7 +173,7 @@ class AnalyticsRecord:
             counts=checked,
         )
 
-    def to_document(self):
+    def to_document(self) -> dict[str, object]:
         admitted = self.validated()
         return {
             "analytics_id": str(admitted.analytics_id),
@@ -190,11 +191,11 @@ class AnalyticsRecord:
             "workspace_id": str(admitted.workspace_id),
         }
 
-    def canonical_bytes(self):
+    def canonical_bytes(self) -> bytes:
         return _canonical_bytes(self.to_document())
 
     @staticmethod
-    def from_document(document):
+    def from_document(document: object) -> AnalyticsRecord:
         if not isinstance(document, dict):
             raise AnalyticsInputError("a stored analytics result must be a JSON object")
         expected = {
@@ -241,18 +242,20 @@ class AnalyticsRecord:
             analytics_id=analytics_id,
             metric_name=metric_name,
             metric_version=_admit_metric_version(document["metric_version"]),
-            input_count=document["input_count"],
+            input_count=_admit_input_count(document["input_count"]),
             input_digest=_string_member(document, "input_digest"),
             counts=counts,
         ).validated()
 
 
-def analytics_data_class_value():
+def analytics_data_class_value() -> str:
     """Return the wire value of the operational analytics data class."""
     return _analytics_data_class_value()
 
 
-def analytics_id_for(workspace_id, metric_name, metric_version, input_digest):
+def analytics_id_for(
+    workspace_id: object, metric_name: object, metric_version: object, input_digest: object
+) -> UUID:
     """Return the deterministic analytics identity for one exact input set."""
     if not isinstance(workspace_id, UUID):
         raise AnalyticsInputError("a workspace id must be a UUID value")
@@ -265,7 +268,7 @@ def analytics_id_for(workspace_id, metric_name, metric_version, input_digest):
     )
 
 
-def analytics_binding(workspace_id, analytics_id):
+def analytics_binding(workspace_id: object, analytics_id: object) -> ObjectBinding:
     """Return the store binding of one analytics result."""
     if not isinstance(workspace_id, UUID):
         raise AnalyticsInputError("a workspace id must be a UUID value")
@@ -279,7 +282,7 @@ def analytics_binding(workspace_id, analytics_id):
     )
 
 
-def analytics_payload_bytes(record):
+def analytics_payload_bytes(record: object) -> bytes:
     """Return the canonical storage payload of one analytics result."""
     if not isinstance(record, AnalyticsRecord):
         raise AnalyticsInputError("an analytics payload needs an AnalyticsRecord instance")
@@ -287,14 +290,14 @@ def analytics_payload_bytes(record):
 
 
 def compute_analytics(
-    store,
-    trail,
-    metric_name,
-    metric_version,
-    review_ids,
-    actor_id,
-    occurred_at,
-):
+    store: object,
+    trail: object,
+    metric_name: object,
+    metric_version: object,
+    review_ids: object,
+    actor_id: object,
+    occurred_at: object,
+) -> ObjectBinding:
     """Compute one operational aggregate over exact stored review revisions.
 
     Each supplied review identity is re-read and re-verified against the
@@ -317,7 +320,7 @@ def compute_analytics(
     admitted_ids = _admit_review_ids(review_ids)
     actor = _admit_identifier(actor_id, "actor id")
     moment = _admit_occurred_at(occurred_at)
-    verified = []
+    verified: list[ReviewRecord] = []
     for review_id in admitted_ids:
         try:
             loaded = review_mod.read_review(store, review_id)
@@ -390,7 +393,7 @@ def compute_analytics(
     return analytics_binding(workspace_id, record.analytics_id)
 
 
-def read_analytics(store, analytics_id):
+def read_analytics(store: object, analytics_id: object) -> AnalyticsRecord:
     """Read and verify one stored analytics result."""
     if not isinstance(store, WorkspaceStore):
         raise AnalyticsInputError("a workspace store is required")
@@ -422,7 +425,9 @@ def read_analytics(store, analytics_id):
     return record.validated()
 
 
-def delete_analytics(store, trail, analytics_id, actor_id, occurred_at):
+def delete_analytics(
+    store: object, trail: object, analytics_id: object, actor_id: object, occurred_at: object
+) -> ObjectBinding:
     """Delete one analytics result; the audit trail survives."""
     if not isinstance(store, WorkspaceStore):
         raise AnalyticsInputError("a workspace store is required")
@@ -441,7 +446,7 @@ def delete_analytics(store, trail, analytics_id, actor_id, occurred_at):
     return binding
 
 
-def _tally_review_statuses(verified):
+def _tally_review_statuses(verified: list[ReviewRecord]) -> tuple[MetricCount, ...]:
     from medscale_workspace import review as review_mod
 
     draft_total = 0
@@ -463,7 +468,7 @@ def _tally_review_statuses(verified):
     )
 
 
-def _tally_suggestion_decisions(verified):
+def _tally_suggestion_decisions(verified: list[ReviewRecord]) -> tuple[MetricCount, ...]:
     from medscale_workspace import review as review_mod
 
     pending_total = 0
@@ -486,7 +491,12 @@ def _tally_suggestion_decisions(verified):
     )
 
 
-def _input_digest_for(workspace_id, metric_name, metric_version, review_ids):
+def _input_digest_for(
+    workspace_id: UUID,
+    metric_name: MetricName,
+    metric_version: str,
+    review_ids: tuple[UUID, ...],
+) -> str:
     ordered = sorted(str(item) for item in review_ids)
     document = {
         "metric_name": metric_name.value,
@@ -497,11 +507,11 @@ def _input_digest_for(workspace_id, metric_name, metric_version, review_ids):
     return content_digest_of(_canonical_bytes(document))
 
 
-def _analytics_data_class_value():
+def _analytics_data_class_value() -> str:
     return admit_data_class("OPERATIONAL_ANALYTICS").value
 
 
-def _admit_metric_name(raw):
+def _admit_metric_name(raw: object) -> MetricName:
     if isinstance(raw, MetricName):
         return raw
     if isinstance(raw, str):
@@ -512,7 +522,7 @@ def _admit_metric_name(raw):
     raise AnalyticsInputError("a metric name must be admitted here")
 
 
-def _admit_metric_version(raw):
+def _admit_metric_version(raw: object) -> str:
     if not isinstance(raw, str):
         raise AnalyticsInputError("a metric version must be a string")
     value = raw.strip()
@@ -527,7 +537,7 @@ def _admit_metric_version(raw):
     return value
 
 
-def _admit_review_ids(raw):
+def _admit_review_ids(raw: object) -> tuple[UUID, ...]:
     if not isinstance(raw, tuple):
         raise AnalyticsInputError("review identities must be a tuple")
     if len(raw) < 1 or len(raw) > MAXIMUM_REVIEWS_PER_COMPUTATION:
@@ -543,7 +553,7 @@ def _admit_review_ids(raw):
     return raw
 
 
-def _admit_input_count(raw):
+def _admit_input_count(raw: object) -> int:
     if isinstance(raw, bool) or not isinstance(raw, int):
         raise AnalyticsInputError("an input count must be an integer")
     if raw < 1 or raw > MAXIMUM_REVIEWS_PER_COMPUTATION:
@@ -551,7 +561,7 @@ def _admit_input_count(raw):
     return raw
 
 
-def _admit_count_value(raw):
+def _admit_count_value(raw: object) -> int:
     if isinstance(raw, bool) or not isinstance(raw, int):
         raise AnalyticsInputError("a metric count value must be an integer")
     if raw < 0 or raw > MAXIMUM_REVIEWS_PER_COMPUTATION:
@@ -559,7 +569,7 @@ def _admit_count_value(raw):
     return raw
 
 
-def _admit_label(raw):
+def _admit_label(raw: object) -> str:
     if not isinstance(raw, str):
         raise AnalyticsInputError("a metric label must be a string")
     value = raw.strip()
@@ -575,7 +585,7 @@ def _admit_label(raw):
     return value
 
 
-def _admit_digest(raw):
+def _admit_digest(raw: object) -> str:
     if not isinstance(raw, str):
         raise AnalyticsInputError("a content digest must be a string")
     value = raw.strip()
@@ -590,7 +600,7 @@ def _admit_digest(raw):
     return value
 
 
-def _check_duplicate_labels(counts):
+def _check_duplicate_labels(counts: tuple[MetricCount, ...]) -> None:
     seen = set()
     for item in counts:
         if item.label in seen:
@@ -598,7 +608,9 @@ def _check_duplicate_labels(counts):
         seen.add(item.label)
 
 
-def _check_expected_labels(metric_name, counts):
+def _check_expected_labels(
+    metric_name: MetricName, counts: tuple[MetricCount, ...]
+) -> None:
     if metric_name is MetricName.REVIEW_STATUS_COUNTS:
         expected = ("draft", "reviewed", "finalized")
     elif metric_name is MetricName.REVIEW_SUGGESTION_COUNTS:
@@ -610,7 +622,7 @@ def _check_expected_labels(metric_name, counts):
         raise AnalyticsInputError("an analytics result carries unadmitted labels")
 
 
-def _admit_identifier(raw, label):
+def _admit_identifier(raw: object, label: str) -> str:
     if not isinstance(raw, str):
         raise AnalyticsInputError(f"{label} must be a string")
     value = raw.strip()
@@ -626,7 +638,7 @@ def _admit_identifier(raw, label):
     return value
 
 
-def _admit_occurred_at(raw):
+def _admit_occurred_at(raw: object) -> str:
     value = _admit_identifier(raw, "analytics occurrence time")
     if len(value) > MAXIMUM_OCCURRED_AT_CHARS:
         raise AnalyticsInputError("an analytics occurrence time is longer than admitted")
@@ -635,13 +647,13 @@ def _admit_occurred_at(raw):
     return value
 
 
-def _canonical_bytes(document):
+def _canonical_bytes(document: object) -> bytes:
     return json.dumps(document, sort_keys=True, separators=(",", ":"), ensure_ascii=True).encode(
         "ascii"
     )
 
 
-def _string_member(document, name):
+def _string_member(document: dict[str, object], name: str) -> str:
     value = document[name]
     if not isinstance(value, str):
         raise AnalyticsInputError(f"a stored {name} must be a string")
