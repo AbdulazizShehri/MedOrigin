@@ -1,6 +1,6 @@
-# Contributing to MedScale
+# Contributing to MedOrigin
 
-Thank you for your interest. MedScale is an open research platform for **verifiable
+Thank you for your interest. MedOrigin is an open research platform for **verifiable
 clinical AI**. Its value comes from discipline, not volume — so contributions are held
 to explicit scientific and engineering standards.
 
@@ -9,13 +9,13 @@ Please read this document, the [Code of Conduct](CODE_OF_CONDUCT.md), and the
 
 ## Ground rules (non-negotiable)
 
-MedScale preserves these invariants at all times:
+MedOrigin preserves these invariants at all times:
 
 - **FHIR-native, validator-first, grammar-constrained, deterministic.**
 - **Synthetic-only, PHI-free.** No real patient data enters training, evaluation, or
   benchmarks — ever (Rule R2).
 - **No LLM-as-judge in any primary metric** (Rule R5). Headline metrics are executable.
-- **One-way dependency.** MedScale must never depend on Afia.
+- **One-way dependency.** MedOrigin must never depend on Afia.
 - **Permissive licensing.** Anything shipped must permit derivative models and
   commercial use (Rule R3).
 - **Reproducibility.** No result without a script and a committed artifact (Rule R7).
@@ -24,15 +24,17 @@ A change that violates any invariant will not be merged, regardless of quality.
 
 ## Development setup
 
-MedScale uses [uv](https://docs.astral.sh/uv/) and Python 3.11.
+MedOrigin uses [uv](https://docs.astral.sh/uv/) and Python 3.11.
 
 ```bash
-git clone https://github.com/TheHalfMoon/MESC MedScale
-cd MedScale
+git clone https://github.com/TheHalfMoon/MedOrigin.git
+cd MedOrigin
 uv sync
 uv run pre-commit install
 uv run pre-commit install --hook-type pre-push
 ```
+
+The Python package and CLI remain named `medscale` for backwards compatibility; see the [brand transition policy](docs/BRAND_TRANSITION.md).
 
 ## The quality gate
 
@@ -64,6 +66,10 @@ The pre-commit hooks run the same checks. Do not bypass them.
 Any decision that would cost more than a day to reverse requires an
 [ADR](docs/adr/) (Rule R6): propose, wait for approval, then implement. Use
 [`docs/adr/0000-template.md`](docs/adr/0000-template.md).
+
+## Third-party code and design integrity
+
+Use external sources only with validated rights, provenance and necessary notices. Branding must not obscure copyright or claim external code as original; see [Third-party notices](THIRD_PARTY_NOTICES.md). Source licenses, model licenses, and dataset rights are separate.
 
 ## Citations
 

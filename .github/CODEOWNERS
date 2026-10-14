@@ -1,4 +1,4 @@
-# CODEOWNERS — review ownership for MedScale.
+# CODEOWNERS — review ownership for MedOrigin.
 #
 # Solo-maintained today. The path rules below are intentional, not decorative: they
 # encode which areas demand extra scrutiny (governance, decisions, scientific policy,
@@ -10,7 +10,7 @@
 *                       @TheHalfMoon
 
 # Governance, architecture decisions, and scientific policy.
-# Changes here alter how MedScale is run or what it claims — maintainer review always.
+# Changes here alter how MedOrigin is run or what it claims — maintainer review always.
 /docs/governance/       @TheHalfMoon
 /docs/adr/              @TheHalfMoon
 /docs/research/         @TheHalfMoon

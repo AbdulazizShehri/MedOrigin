@@ -1,4 +1,6 @@
-# MedScale Roadmap
+# MedOrigin Roadmap
+
+**MedOrigin** is the active public identity of this evidence-governed research program. Historical scientific names and compatibility interfaces remain source-bound; see [identity policy](docs/BRAND_TRANSITION.md).
 
 This roadmap is a **filter, not a backlog.** It is a human-readable planning view; canonical specifications, governance, exact-head evidence, and accepted ADRs determine what is actually eligible, complete, releasable, or publishable.
 

@@ -4,7 +4,7 @@
 - **Date:** 2026-07-10
 - **Related:** [CONTRIBUTING](../../CONTRIBUTING.md), [Program Rules](../governance/rules.md)
 
-How to work in the MedScale repository.
+How to work in the MedOrigin repository. The `medscale` Python package and command remain supported for compatibility.
 
 ## Prerequisites
 
@@ -18,8 +18,8 @@ How to work in the MedScale repository.
 ## Setup
 
 ```bash
-git clone https://github.com/TheHalfMoon/MESC MedScale
-cd MedScale
+git clone https://github.com/TheHalfMoon/MedOrigin.git
+cd MedOrigin
 uv sync
 uv run pre-commit install
 uv run pre-commit install --hook-type pre-push
@@ -58,7 +58,7 @@ docs/                all documentation
 
 ## Adding a subpackage (when there is research to hold)
 
-MedScale is intentionally one package. When a phase needs new code (e.g. `fhirkit` at
+MedOrigin retains one Python research package named `medscale` for API and reproducibility compatibility. When a phase needs new code (e.g. `fhirkit` at
 T2), add it as a subpackage under `src/medscale/` with its own tests and a clear public
 surface — do **not** create empty top-level packages ahead of need
 (see [ADR-0004](../adr/0004-t0-foundation-scope.md)).

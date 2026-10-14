@@ -1,101 +1,105 @@
 <!-- markdownlint-disable MD033 MD041 -->
 <div align="center">
 
-# MedScale
+# MedOrigin
 
-**Open research intelligence infrastructure for medicine.**
+**Every medical AI output deserves an origin.**
 
-*Verifiable clinical AI and verified evidence · FHIR-native · validator-grounded · deterministic · reproducible*
+Evidence-native medical AI research infrastructure and a local-first clinical workspace foundation.
 
-[![CI](https://github.com/TheHalfMoon/MESC/actions/workflows/ci.yml/badge.svg)](https://github.com/TheHalfMoon/MESC/actions/workflows/ci.yml)
-[![License: Apache-2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
-[![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue.svg)](pyproject.toml)
-[![Status: Active research platform](https://img.shields.io/badge/status-active%20research%20platform-orange.svg)](ROADMAP.md)
+[![CI](https://github.com/TheHalfMoon/MedOrigin/actions/workflows/ci.yml/badge.svg)](https://github.com/TheHalfMoon/MedOrigin/actions/workflows/ci.yml)
+[![CodeQL](https://github.com/TheHalfMoon/MedOrigin/actions/workflows/codeql.yml/badge.svg)](https://github.com/TheHalfMoon/MedOrigin/actions/workflows/codeql.yml)
+[![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
+[![Python 3.11+](https://img.shields.io/badge/Python-3.11%2B-3776AB.svg)](pyproject.toml)
+[![Status: Research](https://img.shields.io/badge/status-active%20research-orange.svg)](ROADMAP.md)
+
+[Overview](#overview) · [Architecture](#architecture) · [Project status](#project-status) · [Get started](#get-started) · [Documentation](#documentation) · [Contributing](CONTRIBUTING.md)
 
 </div>
 
----
+> [!IMPORTANT]
+> **Research software, not a medical device.** No production clinical use, real-patient/PHI ingestion, autonomous diagnosis, or EHR write capability is authorized. The supported development and evaluation path is synthetic-only. Do not interpret an implemented module or passing CI as clinical or scientific validation.
 
-## What MedScale is
+## Overview
 
-MedScale builds research infrastructure whose clinical outputs can be checked mechanically against explicit validators, schemas, and executable evaluation contracts rather than judged only by plausibility. The organizing bet is that, in medicine, **verifiable form and traceable content are worth more than fluent prose that cannot be checked.**
+MedOrigin is an open-source foundation for **traceable medical AI**: reproducible research workflows, source-linked evidence, deterministic verification, FHIR interoperability contracts, and privacy-conscious clinical-workspace infrastructure.
 
-The platform is organized around five ideas:
+Our design question is simple: *What evidence produced this output, what was inferred, and can an independent reviewer reproduce the result?*
 
-| Idea | Current meaning |
-|---|---|
-| **FHIR-native** | FHIR is a first-class representation; a deterministic local validation boundary exists in `medscale.fhirkit`. |
-| **Grammar-constrained generation** | Research direction, not a current release capability. FHIR grammar work remains separately gated. |
-| **Validator-grounded verification** | Validation and explicit machine-checkable contracts are the verification boundary; external validator execution remains dependency/runtime constrained. |
-| **Deterministic benchmarking** | `medscale.bench` provides deterministic benchmark contracts, scoring, artifacts, and replay surfaces; completion of the broader T3 research phase is not implied. |
-| **Reproducible research** | Claims require committed scripts/artifacts and canonical evidence; negative results are first-class. |
+Rather than starting with a chatbot interface, MedOrigin starts with explicit data boundaries, inspectable artifacts, typed contracts, and falsifiable tests.
 
-The guiding scientific hypothesis remains: **grammar guarantees form; training only teaches content.** It is a hypothesis to test, not a present capability claim.
+## What exists today
 
-MedScale has two pillars on one verification spine ([ADR-0005](docs/adr/0005-research-intelligence-scope.md)): **verifiable clinical generation** and **verified evidence infrastructure**. It is research infrastructure — not a medical chatbot, and not a clinician-facing answer product.
+| Area | Implemented foundation | Important boundary |
+| --- | --- | --- |
+| **Evidence & literature** | Provenance, screening, reproducible literature workflows, research artifacts | Evidence infrastructure is not itself a verified medical answer service |
+| **Evaluation & research** | Deterministic benchmark/scoring contracts, replay, governed research-loop framework | Real GPU feasibility, training, and model promotion require separate evidence and authorization |
+| **FHIR** | Deterministic validation, bounded FHIR R4 import/export contracts | Structural validity does not establish clinical correctness |
+| **Clinical Workspace** | Local Python APIs for synthetic encounters, drafts, review, evidence, timeline/graph, dataset staging, analytics, and encrypted storage | **No general-purpose desktop/web GUI or PHI-ready production workflow** |
+| **Trust & privacy** | One-way Research/Workspace boundary, integrity/audit controls, quarantined export semantics | Patient/workspace data cannot flow into Research Core training or benchmarks |
 
-> MedScale is **not** a from-scratch foundation model, **not** a medical device, and is
-> **never** trained or evaluated on PHI. See
-> [What MedScale is / is not](docs/vision/MEDSCALE_RESEARCH_VISION.md).
-
-## MedScale and Afia
-
-MedScale is an independent research platform. A separate product, **Afia**, consumes it. The dependency is strict and one-way:
+### Architecture
 
 ```mermaid
 flowchart LR
-    MS["MedScale<br/>(research platform · synthetic-only)"] -- "versioned artifacts:<br/>package · weights · schemas" --> AF["Afia<br/>(product · real PHI in prod)"]
-    AF -. "PHI must NEVER flow back" .-x MS
+    RC["Research Core<br/>Synthetic-only • provenance • evaluation"]
+    API["Versioned, read-only<br/>interfaces and artifacts"]
+    CW["Clinical Workspace<br/>Local synthetic workflows"]
+    RX["Quarantined export<br/>Separate admission"]
+    RC --> API --> CW
+    CW --> RX
+    CW -. "No PHI or workspace-to-research backflow" .-x RC
 ```
 
-**Afia depends on MedScale. MedScale must never depend on Afia.** Formalized in [ADR-0003](docs/adr/0003-repository-topology.md).
+The **Research Core** is independently packaged under `src/medscale/`. The separate **Clinical Workspace** foundation lives in `apps/workspace/`. Import boundaries and no-backflow rules are tested; deployment and real patient-data permissions are separate governance decisions.
 
-## Status
+## Project status
 
-**Current package version: v0.2.0.** The repository contains deterministic literature/evidence infrastructure, benchmark contracts and execution surfaces, Dataset v1 contracts, a FHIR validation boundary, optional model-backend/runtime boundaries, reviewer collaboration workflows, and governed research-loop infrastructure.
+MedOrigin is **an active research platform**, not a finished clinical product.
 
-Those implemented surfaces do **not** by themselves mean that every legacy T-phase is complete or that model execution, training, promotion, publication, or production deployment is authorized. In particular, FHIR grammar-constrained generation remains open, broader benchmark/research gates remain governed separately, and live MRL/Mission Zero evidence takes precedence over summary prose here. See the [Roadmap](ROADMAP.md).
+- **Engineering:** Clinical Workspace units `CW-000` through `CW-020` are canonically closed for their authorized synthetic-only scope. `CW-021` has **not** been authorized.
+- **Scientific readiness:** `MRL-0809` (trusted real-runtime feasibility) and `MRL-0899` (real-experiment readiness) are still open. Scientific success is not inferred from test success.
+- **Free GPU routes:** Colab Recovery-3 is stopped after a consumed, failed preflight exception; Kaggle remains separately governed and unqualified for scientific execution.
+- **Release:** The existing Python distribution and command remain `medscale` for compatibility. The **MedOrigin** branding does not rename frozen protocols or previously published artifacts.
 
-The public package surface includes reproducibility primitives, literature database storage, review/screening workflows, evidence objects, deterministic benchmark/evaluation contracts, FHIR validation, model-interface/runtime boundaries, and governed MESC research infrastructure. Exact eligibility and completion claims must be established from canonical specifications and evidence, not inferred from module existence.
+See the [canonical roadmap](ROADMAP.md), [research task ledger](specs/mesc-research-loop-v1/tasks.md), [workspace task ledger](specs/medscale-clinical-workspace-v1/tasks.md), and [brand transition policy](docs/BRAND_TRANSITION.md). Those sources and their exact verification records take precedence over this summary.
 
-## Repository map
+## Get started
 
-| Path | Contents |
-|---|---|
-| [`docs/vision/`](docs/vision/) | Strategic Blueprint (canonical narrative) + Research Vision (canonical scope) |
-| [`docs/research/`](docs/research/) | Research questions, paper taxonomy, reproducibility policy |
-| [`docs/governance/`](docs/governance/) | Program rules (R1–R7), policies |
-| [`docs/adr/`](docs/adr/) | Architecture Decision Records |
-| [`docs/execution/`](docs/execution/) | Execution and phase-planning documents |
-| [`docs/archive/`](docs/archive/) | Superseded material retained for history |
-| [`src/medscale/`](src/medscale/) | The `medscale` Python package |
-| [`tests/`](tests/) | Test suite |
-
-Start with the [Documentation Index](docs/README.md) and the [Glossary](docs/glossary.md).
-
-## Quickstart (development)
-
-MedScale uses [uv](https://docs.astral.sh/uv/) and Python 3.11+.
+Requirements: Python 3.11+ (the package currently supports 3.11–3.14), [uv](https://docs.astral.sh/uv/), and Git.
 
 ```bash
-git clone https://github.com/TheHalfMoon/MESC MedScale
-cd MedScale
+git clone https://github.com/TheHalfMoon/MedOrigin.git
+cd MedOrigin
 uv sync
+uv run medscale --help
 uv run pytest
 uv run ruff check .
+uv run ruff format --check .
 uv run mypy
 ```
 
-See the [Developer Guide](docs/guides/developer_guide.md) for the full workflow.
+The `medscale` CLI and Python import paths are **intentional compatibility names**; they are not an alternative product identity. The Clinical Workspace is a separate local Python package and currently provides a synthetic offline shell, **not a user-ready browser or desktop application**.
+
+## Documentation
+
+| Start here | Why |
+| --- | --- |
+| [Documentation index](docs/README.md) | Architecture, research, data, governance, and technical guides |
+| [Research vision](docs/vision/MEDSCALE_RESEARCH_VISION.md) | Scientific scope and permanent limits |
+| [Clinical Workspace specification](specs/medscale-clinical-workspace-v1/README.md) | Product modules, security, and planned journeys |
+| [Research Loop specification](specs/mesc-research-loop-v1/README.md) | Evidence-first execution model and scientific gates |
+| [Brand transition](docs/BRAND_TRANSITION.md) | MedOrigin identity, legacy package names, and migration policy |
+| [Third-party provenance](THIRD_PARTY_NOTICES.md) | Attribution and rules for using external sources |
 
 ## Contributing
 
-MedScale welcomes contributors under its reproducibility and citation policies. Please read [CONTRIBUTING](CONTRIBUTING.md), the [Code of Conduct](CODE_OF_CONDUCT.md), and the [program rules R1–R7](docs/governance/rules.md) before opening a pull request.
+Read [CONTRIBUTING.md](CONTRIBUTING.md), [SECURITY.md](SECURITY.md), the [Code of Conduct](CODE_OF_CONDUCT.md), and [governance rules R1–R7](docs/governance/rules.md). Every significant claim needs the actual tests and review evidence; failures and missing qualifications are first-class results.
 
-## Citing MedScale
+**Security reports belong in [private vulnerability reporting](https://github.com/TheHalfMoon/MedOrigin/security/advisories/new), not public issues.**
 
-If you use MedScale in academic work, please cite it — see [CITATION.cff](CITATION.cff).
+## License & citation
 
-## License
+This repository is distributed under [Apache-2.0](LICENSE), subject to any file-level third-party notices and the licenses of optional external model or dataset artifacts. Permissions for source reuse do **not** remove legal attribution or license obligations. See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) and [CITATION.cff](CITATION.cff).
 
-[Apache-2.0](LICENSE). Everything MedScale ships is chosen to permit derivative models and commercial use, so that Afia — and others — may build on it.
+*MedOrigin was previously developed under the MESC / MedScale project names. Historical identifiers and research evidence are retained intentionally.*
