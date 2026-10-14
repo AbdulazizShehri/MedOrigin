@@ -28,6 +28,8 @@ _FUNCTIONS = {
     "delete_export_manifest",
     "dataset_collection_binding",
     "export_binding",
+    "store_dataset_collection",
+    "stage_export_manifest",
 }
 _CLASSES = {"DatasetCollectionRecord", "ExportManifestRecord"}
 
