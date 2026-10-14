@@ -36,8 +36,8 @@ def test_research_view_callable_signatures_remain_typed() -> None:
         ]:
             if argument.arg != "self" and argument.annotation is None:
                 missing.append(f"{node.name}: {argument.arg}")
-        for argument in (node.args.vararg, node.args.kwarg):
-            if argument is not None and argument.annotation is None:
-                missing.append(f"{node.name}: {argument.arg}")
+        for variadic in (node.args.vararg, node.args.kwarg):
+            if variadic is not None and variadic.annotation is None:
+                missing.append(f"{node.name}: {variadic.arg}")
     assert functions >= 23
     assert not missing, f"untyped Research View API signatures: {missing}"
