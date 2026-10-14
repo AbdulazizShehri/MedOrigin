@@ -41,6 +41,7 @@ from medscale_workspace.audit import AuditEventType, AuditObjectRef, AuditTrail
 from medscale_workspace.binding import ObjectBinding
 from medscale_workspace.data_class import synthetic_data_class_value
 from medscale_workspace.draft import (
+    Draft,
     SupportStatus,
     read_draft,
     validate_draft_support,
@@ -142,7 +143,7 @@ class SuggestionRecord:
     status: SuggestionStatus
     decision: SuggestionDecision
 
-    def validated(self):
+    def validated(self) -> SuggestionRecord:
         if not isinstance(self.suggestion_id, UUID):
             raise ReviewInputError("a suggestion id must be a UUID value")
         if not isinstance(self.kind, SuggestionKind):
@@ -162,7 +163,7 @@ class SuggestionRecord:
             decision=self.decision,
         )
 
-    def to_document(self):
+    def to_document(self) -> dict[str, object]:
         admitted = self.validated()
         return {
             "decision": admitted.decision.value,
@@ -173,7 +174,7 @@ class SuggestionRecord:
         }
 
     @staticmethod
-    def from_document(document):
+    def from_document(document: object) -> SuggestionRecord:
         if not isinstance(document, dict):
             raise ReviewInputError("a stored suggestion must be a JSON object")
         expected = {"decision", "kind", "status", "suggestion_id", "text"}
@@ -205,7 +206,7 @@ class SpanReview:
     current_status: SupportStatus
     invalidation_reason: str
 
-    def validated(self):
+    def validated(self) -> SpanReview:
         span_id = _admit_identifier(self.span_id, "span id")
         text = _admit_text(self.text, "span text")
         if not isinstance(self.prior_status, SupportStatus):
@@ -221,7 +222,7 @@ class SpanReview:
             invalidation_reason=reason,
         )
 
-    def to_document(self):
+    def to_document(self) -> dict[str, object]:
         admitted = self.validated()
         return {
             "current_status": admitted.current_status.value,
@@ -232,7 +233,7 @@ class SpanReview:
         }
 
     @staticmethod
-    def from_document(document):
+    def from_document(document: object) -> SpanReview:
         if not isinstance(document, dict):
             raise ReviewInputError("a stored span review must be a JSON object")
         expected = {
@@ -269,10 +270,10 @@ class ReviewRecord:
     revision_number: int
     parent_review_id: UUID
     status: ReviewStatus
-    spans: tuple
-    suggestions: tuple
+    spans: tuple[SpanReview, ...]
+    suggestions: tuple[SuggestionRecord, ...]
 
-    def validated(self):
+    def validated(self) -> ReviewRecord:
         if not isinstance(self.workspace_id, UUID):
             raise ReviewInputError("a workspace id must be a UUID value")
         if not isinstance(self.session_id, UUID):
@@ -291,9 +292,9 @@ class ReviewRecord:
         if len(self.spans) < 1 or len(self.spans) > MAXIMUM_SPANS:
             raise ReviewSupportError("a review carries an unadmitted span count")
         checked_spans = tuple(
-            item.validated() if isinstance(item, SpanReview) else None for item in self.spans
+            item.validated() for item in self.spans if isinstance(item, SpanReview)
         )
-        if any(item is None for item in checked_spans):
+        if len(checked_spans) != len(self.spans):
             raise ReviewSupportError("review spans need SpanReview instances")
         _check_duplicate_span_ids(checked_spans)
         if not isinstance(self.suggestions, tuple):
@@ -301,10 +302,9 @@ class ReviewRecord:
         if len(self.suggestions) > MAXIMUM_SUGGESTIONS:
             raise ReviewSuggestionError("a review carries an unadmitted suggestion count")
         checked_suggestions = tuple(
-            item.validated() if isinstance(item, SuggestionRecord) else None
-            for item in self.suggestions
+            item.validated() for item in self.suggestions if isinstance(item, SuggestionRecord)
         )
-        if any(item is None for item in checked_suggestions):
+        if len(checked_suggestions) != len(self.suggestions):
             raise ReviewSuggestionError("review suggestions need SuggestionRecord instances")
         _check_duplicate_suggestion_ids(checked_suggestions)
         return ReviewRecord(
@@ -319,7 +319,7 @@ class ReviewRecord:
             suggestions=checked_suggestions,
         )
 
-    def to_document(self):
+    def to_document(self) -> dict[str, object]:
         admitted = self.validated()
         return {
             "data_class": synthetic_data_class_value(),
@@ -336,11 +336,11 @@ class ReviewRecord:
             "workspace_id": str(admitted.workspace_id),
         }
 
-    def canonical_bytes(self):
+    def canonical_bytes(self) -> bytes:
         return _canonical_bytes(self.to_document())
 
     @staticmethod
-    def from_document(document):
+    def from_document(document: object) -> ReviewRecord:
         if not isinstance(document, dict):
             raise ReviewInputError("a stored review must be a JSON object")
         expected = {
@@ -387,7 +387,7 @@ class ReviewRecord:
             session_id=session_id,
             draft_id=draft_id,
             review_id=review_id,
-            revision_number=document["revision_number"],
+            revision_number=_admit_revision_number(document["revision_number"]),
             parent_review_id=parent_review_id,
             status=status,
             spans=spans,
@@ -395,7 +395,9 @@ class ReviewRecord:
         ).validated()
 
 
-def review_id_for(workspace_id, session_id, draft_id, revision_number):
+def review_id_for(
+    workspace_id: object, session_id: object, draft_id: object, revision_number: object
+) -> UUID:
     """Return the deterministic review identity for one draft revision number."""
     if not isinstance(workspace_id, UUID):
         raise ReviewInputError("a workspace id must be a UUID value")
@@ -410,7 +412,9 @@ def review_id_for(workspace_id, session_id, draft_id, revision_number):
     )
 
 
-def suggestion_id_for(workspace_id, session_id, draft_id, kind, text):
+def suggestion_id_for(
+    workspace_id: object, session_id: object, draft_id: object, kind: object, text: object
+) -> UUID:
     """Return the deterministic suggestion identity for one suggestion text."""
     if not isinstance(workspace_id, UUID):
         raise ReviewInputError("a workspace id must be a UUID value")
@@ -428,7 +432,7 @@ def suggestion_id_for(workspace_id, session_id, draft_id, kind, text):
     )
 
 
-def review_binding(workspace_id, review_id):
+def review_binding(workspace_id: object, review_id: object) -> ObjectBinding:
     """Return the store binding of one review revision."""
     if not isinstance(workspace_id, UUID):
         raise ReviewInputError("a workspace id must be a UUID value")
@@ -442,14 +446,14 @@ def review_binding(workspace_id, review_id):
     )
 
 
-def review_payload_bytes(review):
+def review_payload_bytes(review: object) -> bytes:
     """Return the canonical storage payload of one review revision."""
     if not isinstance(review, ReviewRecord):
         raise ReviewInputError("a review payload needs a ReviewRecord instance")
     return _canonical_bytes(review.to_document())
 
 
-def _provenance_review_state(status):
+def _provenance_review_state(status: object) -> ReviewState:
     if status is ReviewStatus.DRAFT:
         return ReviewState.DRAFT
     if status is ReviewStatus.REVIEWED:
@@ -459,7 +463,9 @@ def _provenance_review_state(status):
     raise ReviewTransitionError("a review status is not admitted here")
 
 
-def create_review(store, trail, draft, actor_id, occurred_at):
+def create_review(
+    store: object, trail: object, draft: object, actor_id: object, occurred_at: object
+) -> ObjectBinding:
     """Open the genesis DRAFT review revision for one stored draft."""
     if not isinstance(store, WorkspaceStore):
         raise ReviewInputError("a workspace store is required")
@@ -501,15 +507,15 @@ def create_review(store, trail, draft, actor_id, occurred_at):
 
 
 def revise_review(
-    store,
-    trail,
-    parent_review_id,
-    status,
-    spans,
-    suggestions,
-    actor_id,
-    occurred_at,
-):
+    store: object,
+    trail: object,
+    parent_review_id: object,
+    status: object,
+    spans: object,
+    suggestions: object,
+    actor_id: object,
+    occurred_at: object,
+) -> ObjectBinding:
     """Store one child review revision after mechanical transition checks.
 
     The caller supplies the complete new span set, suggestion set, and target
@@ -574,7 +580,7 @@ def revise_review(
     return review_binding(review.workspace_id, review.review_id)
 
 
-def read_review(store, review_id):
+def read_review(store: object, review_id: object) -> ReviewRecord:
     """Read and verify one stored review revision with its full chain."""
     if not isinstance(store, WorkspaceStore):
         raise ReviewInputError("a workspace store is required")
@@ -603,7 +609,7 @@ def read_review(store, review_id):
     return validate_review_chain(store, review)
 
 
-def validate_review_chain(store, review):
+def validate_review_chain(store: object, review: object) -> ReviewRecord:
     """Mechanically validate one review revision against its draft and lineage."""
     if not isinstance(store, WorkspaceStore):
         raise ReviewInputError("a workspace store is required")
@@ -643,7 +649,14 @@ def validate_review_chain(store, review):
     return admitted
 
 
-def _store_revision(store, trail, review, validated_draft, actor, moment):
+def _store_revision(
+    store: WorkspaceStore,
+    trail: AuditTrail,
+    review: ReviewRecord,
+    validated_draft: Draft,
+    actor: str,
+    moment: str,
+) -> None:
     binding = review_binding(review.workspace_id, review.review_id)
     payload = review_payload_bytes(review)
     source_refs = (
@@ -679,7 +692,9 @@ def _store_revision(store, trail, review, validated_draft, actor, moment):
     )
 
 
-def _record_suggestion_decisions(trail, parent, review, actor, moment):
+def _record_suggestion_decisions(
+    trail: AuditTrail, parent: ReviewRecord, review: ReviewRecord, actor: str, moment: str
+) -> None:
     previous = {item.suggestion_id: item.decision for item in parent.suggestions}
     binding = review_binding(review.workspace_id, review.review_id)
     payload = review_payload_bytes(review)
@@ -711,7 +726,9 @@ def _record_suggestion_decisions(trail, parent, review, actor, moment):
             )
 
 
-def _check_span_support_against_draft(spans, validated_draft):
+def _check_span_support_against_draft(
+    spans: tuple[SpanReview, ...], validated_draft: Draft
+) -> None:
     by_id = {span.span_id: span for span in validated_draft.spans}
     if {item.span_id for item in spans} != set(by_id):
         raise ReviewSupportError("a review must cover exactly the draft span set")
@@ -740,7 +757,9 @@ def _check_span_support_against_draft(spans, validated_draft):
             raise ReviewSupportError("edited text cannot retain supported status")
 
 
-def _check_suggestion_lineage(suggestions, parent, validated_draft):
+def _check_suggestion_lineage(
+    suggestions: tuple[SuggestionRecord, ...], parent: ReviewRecord | None, validated_draft: Draft
+) -> None:
     seen = set()
     for item in suggestions:
         if item.suggestion_id in seen:
@@ -770,33 +789,33 @@ def _check_suggestion_lineage(suggestions, parent, validated_draft):
             raise ReviewSuggestionError("a recorded suggestion decision is immutable")
 
 
-def _admit_span_set(spans):
+def _admit_span_set(spans: object) -> tuple[SpanReview, ...]:
     if not isinstance(spans, tuple):
         raise ReviewSupportError("review spans must be a tuple")
     if len(spans) < 1 or len(spans) > MAXIMUM_SPANS:
         raise ReviewSupportError("a review carries an unadmitted span count")
-    checked = tuple(item.validated() if isinstance(item, SpanReview) else None for item in spans)
-    if any(item is None for item in checked):
+    checked = tuple(item.validated() for item in spans if isinstance(item, SpanReview))
+    if len(checked) != len(spans):
         raise ReviewSupportError("review spans need SpanReview instances")
     _check_duplicate_span_ids(checked)
     return checked
 
 
-def _admit_suggestion_set(suggestions):
+def _admit_suggestion_set(suggestions: object) -> tuple[SuggestionRecord, ...]:
     if not isinstance(suggestions, tuple):
         raise ReviewSuggestionError("review suggestions must be a tuple")
     if len(suggestions) > MAXIMUM_SUGGESTIONS:
         raise ReviewSuggestionError("a review carries an unadmitted suggestion count")
     checked = tuple(
-        item.validated() if isinstance(item, SuggestionRecord) else None for item in suggestions
+        item.validated() for item in suggestions if isinstance(item, SuggestionRecord)
     )
-    if any(item is None for item in checked):
+    if len(checked) != len(suggestions):
         raise ReviewSuggestionError("review suggestions need SuggestionRecord instances")
     _check_duplicate_suggestion_ids(checked)
     return checked
 
 
-def _check_duplicate_span_ids(spans):
+def _check_duplicate_span_ids(spans: tuple[SpanReview, ...]) -> None:
     seen = set()
     for item in spans:
         if item.span_id in seen:
@@ -804,7 +823,7 @@ def _check_duplicate_span_ids(spans):
         seen.add(item.span_id)
 
 
-def _check_duplicate_suggestion_ids(suggestions):
+def _check_duplicate_suggestion_ids(suggestions: tuple[SuggestionRecord, ...]) -> None:
     seen = set()
     for item in suggestions:
         if item.suggestion_id in seen:
@@ -812,7 +831,7 @@ def _check_duplicate_suggestion_ids(suggestions):
         seen.add(item.suggestion_id)
 
 
-def _admit_revision_number(raw):
+def _admit_revision_number(raw: object) -> int:
     if isinstance(raw, bool) or not isinstance(raw, int):
         raise ReviewRevisionError("a revision number must be an integer")
     if raw < 1:
@@ -820,7 +839,7 @@ def _admit_revision_number(raw):
     return raw
 
 
-def _admit_identifier(raw, label):
+def _admit_identifier(raw: object, label: str) -> str:
     if not isinstance(raw, str):
         raise ReviewInputError(f"{label} must be a string")
     value = raw.strip()
@@ -836,7 +855,7 @@ def _admit_identifier(raw, label):
     return value
 
 
-def _admit_text(raw, label):
+def _admit_text(raw: object, label: str) -> str:
     if not isinstance(raw, str):
         raise ReviewInputError(f"{label} must be a string")
     value = raw.strip()
@@ -852,7 +871,7 @@ def _admit_text(raw, label):
     return value
 
 
-def _admit_invalidation_reason(raw):
+def _admit_invalidation_reason(raw: object) -> str:
     if not isinstance(raw, str):
         raise ReviewSupportError("an invalidation reason must be a string")
     if raw == "":
@@ -864,12 +883,12 @@ def _admit_invalidation_reason(raw):
     return reason.value
 
 
-def _admit_actor(raw):
+def _admit_actor(raw: object) -> str:
     value = _admit_identifier(raw, "actor id")
     return value
 
 
-def _admit_occurred_at(raw):
+def _admit_occurred_at(raw: object) -> str:
     value = _admit_text(raw, "review occurrence time")
     if len(value) > MAXIMUM_OCCURRED_AT_CHARS:
         raise ReviewInputError("a review occurrence time is longer than the admitted maximum")
@@ -878,13 +897,13 @@ def _admit_occurred_at(raw):
     return value
 
 
-def _canonical_bytes(document):
+def _canonical_bytes(document: object) -> bytes:
     return json.dumps(document, sort_keys=True, separators=(",", ":"), ensure_ascii=True).encode(
         "ascii"
     )
 
 
-def _string_member(document, name):
+def _string_member(document: dict[str, object], name: str) -> str:
     value = document[name]
     if not isinstance(value, str):
         raise ReviewInputError(f"a stored {name} must be a string")
