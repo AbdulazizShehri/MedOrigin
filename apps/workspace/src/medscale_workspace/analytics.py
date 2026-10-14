@@ -58,7 +58,6 @@ from medscale_workspace.errors import (
     WorkspaceIsolationError,
 )
 from medscale_workspace.identity import WorkspaceObjectType
-from medscale_workspace.review import ReviewRecord
 from medscale_workspace.provenance import (
     ProducerIdentity,
     ProducerKind,
@@ -71,6 +70,7 @@ from medscale_workspace.provenance import (
     read_provenance,
     store_with_provenance,
 )
+from medscale_workspace.review import ReviewRecord
 from medscale_workspace.storage import WorkspaceStore
 from medscale_workspace.versions import POLICY_VERSION
 
@@ -151,9 +151,7 @@ class AnalyticsRecord:
             raise AnalyticsInputError("analytics counts must be a tuple")
         if len(self.counts) < 1 or len(self.counts) > MAXIMUM_COUNTS_PER_RESULT:
             raise AnalyticsInputError("an analytics result carries an unadmitted count")
-        checked = tuple(
-            item.validated() for item in self.counts if isinstance(item, MetricCount)
-        )
+        checked = tuple(item.validated() for item in self.counts if isinstance(item, MetricCount))
         if len(checked) != len(self.counts):
             raise AnalyticsInputError("analytics counts need MetricCount instances")
         _check_duplicate_labels(checked)
@@ -608,9 +606,7 @@ def _check_duplicate_labels(counts: tuple[MetricCount, ...]) -> None:
         seen.add(item.label)
 
 
-def _check_expected_labels(
-    metric_name: MetricName, counts: tuple[MetricCount, ...]
-) -> None:
+def _check_expected_labels(metric_name: MetricName, counts: tuple[MetricCount, ...]) -> None:
     if metric_name is MetricName.REVIEW_STATUS_COUNTS:
         expected = ("draft", "reviewed", "finalized")
     elif metric_name is MetricName.REVIEW_SUGGESTION_COUNTS:
