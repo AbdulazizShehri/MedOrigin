@@ -818,7 +818,7 @@ def synthesize_with_backend(
     if kind != "draft":
         raise DraftBackendError("a backend kind is not admitted here")
     spans = tuple(item.validated() for item in span_plan if isinstance(item, DraftSpan))
-    if len(spans) != len(span_plan):
+    if len(spans) != len(span_plan) or any(not isinstance(item, DraftSpan) for item in spans):
         raise DraftBackendError("a span plan needs DraftSpan instances")
     draft_id = draft_id_for(workspace_id, session_id, transcript_id, checked_template, bundle)
     return Draft(

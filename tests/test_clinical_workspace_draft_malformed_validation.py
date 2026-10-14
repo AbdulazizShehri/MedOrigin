@@ -75,3 +75,33 @@ def test_draft_rejects_unexpected_span_validation_result(
     monkeypatch.setattr(draft_mod.DraftSpan, "validated", lambda _self: None)
     with pytest.raises(DraftInputError, match="DraftSpan"):
         draft.validated()
+
+
+def test_backend_rejects_unexpected_span_plan_validation_result(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    span = draft_mod.DraftSpan(
+        span_id="span-1",
+        text="synthetic",
+        status=draft_mod.SupportStatus.UNSUPPORTED,
+        sources=(),
+        relation_note="",
+        failure_reason="",
+        abstention_reason="",
+    )
+    monkeypatch.setattr(draft_mod.DraftSpan, "validated", lambda _self: None)
+    with pytest.raises(draft_mod.DraftBackendError, match="span plan"):
+        draft_mod.synthesize_with_backend(
+            WORKSPACE,
+            SESSION,
+            TRANSCRIPT,
+            draft_mod.TRANSCRIPT_REVISION,
+            "synthetic input",
+            (),
+            draft_mod.expected_template(),
+            "sha256:" + "b" * 64,
+            draft_mod.ModelIdentity(draft_mod.MODEL_ID, draft_mod.MODEL_REVISION),
+            draft_mod.RuntimeIdentity(draft_mod.RUNTIME_NAME, draft_mod.RUNTIME_VERSION),
+            (span,),
+            draft_mod.mock_draft_backend,
+        )
