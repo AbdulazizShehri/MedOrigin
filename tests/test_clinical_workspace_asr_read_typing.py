@@ -26,6 +26,18 @@ _ADMITTED_READ_FUNCTIONS = {
     "transcript_from_document",
     "read_transcript",
     "store_transcript",
+    "_admit_model_snapshot",
+    "_admit_runtime_contract",
+    "mock_backend",
+    "transcribe_with_backend",
+    "transcribe_synthetic",
+    "_admit_snapshot_dir",
+    "_git_blob_id",
+    "_verify_git_blob",
+    "_verify_snapshot_weight",
+    "verify_local_snapshot",
+    "_audio_bytes_to_waveform",
+    "adapter_contract_version",
 }
 
 
