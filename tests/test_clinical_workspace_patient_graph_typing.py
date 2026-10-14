@@ -29,6 +29,13 @@ _PUBLIC = {
     "read_view",
     "delete_node",
     "delete_edge",
+    "admit_node",
+    "admit_edge",
+    "rebuild_graph",
+    "explain_path",
+    "edges_affected_by_source",
+    "nodes_affected_by_source",
+    "timeline_for_view",
 }
 _CLASSES = {"GraphNode", "GraphEdgeSource", "GraphEdge", "GraphView", "PathExplanation"}
 
