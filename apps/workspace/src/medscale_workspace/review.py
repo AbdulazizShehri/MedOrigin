@@ -806,9 +806,7 @@ def _admit_suggestion_set(suggestions: object) -> tuple[SuggestionRecord, ...]:
         raise ReviewSuggestionError("review suggestions must be a tuple")
     if len(suggestions) > MAXIMUM_SUGGESTIONS:
         raise ReviewSuggestionError("a review carries an unadmitted suggestion count")
-    checked = tuple(
-        item.validated() for item in suggestions if isinstance(item, SuggestionRecord)
-    )
+    checked = tuple(item.validated() for item in suggestions if isinstance(item, SuggestionRecord))
     if len(checked) != len(suggestions):
         raise ReviewSuggestionError("review suggestions need SuggestionRecord instances")
     _check_duplicate_suggestion_ids(checked)
