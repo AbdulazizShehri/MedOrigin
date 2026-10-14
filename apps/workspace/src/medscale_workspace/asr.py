@@ -106,7 +106,7 @@ class AsrManifest:
     local_files_only: bool
     allow_download: bool
 
-    def validated(self):
+    def validated(self) -> AsrManifest:
         """Fail closed unless every member matches the expected identities."""
         if self.model_id != MODEL_ID:
             raise AsrManifestError("the manifest model id is not admitted here")
@@ -148,7 +148,7 @@ class AsrManifest:
             raise AsrManifestError("the manifest must forbid automatic download")
         return self
 
-    def to_document(self):
+    def to_document(self) -> dict[str, object]:
         """Return the canonical manifest document."""
         admitted = self.validated()
         return {
@@ -169,12 +169,12 @@ class AsrManifest:
             "weight_size_bytes": admitted.weight_size_bytes,
         }
 
-    def canonical_bytes(self):
+    def canonical_bytes(self) -> bytes:
         """Return the deterministic ASCII encoding of this manifest."""
         return _canonical_bytes(self.to_document())
 
     @staticmethod
-    def from_document(document):
+    def from_document(document: object) -> AsrManifest:
         """Re-admit a serialized manifest, refusing any drifted member."""
         if not isinstance(document, dict):
             raise AsrManifestError("a stored manifest must be a JSON object")
@@ -216,7 +216,7 @@ class AsrManifest:
         ).validated()
 
 
-def expected_manifest():
+def expected_manifest() -> AsrManifest:
     """Return the manifest bound to the ratified ADR identities."""
     return AsrManifest(
         model_id=MODEL_ID,
@@ -237,7 +237,7 @@ def expected_manifest():
     ).validated()
 
 
-def verify_manifest(manifest):
+def verify_manifest(manifest: object) -> AsrManifest:
     """Fail closed unless the manifest matches the expected identities."""
     if not isinstance(manifest, AsrManifest):
         raise AsrManifestError("a manifest must be an AsrManifest instance")
@@ -253,7 +253,7 @@ class AsrSegment:
     end_s: float
     text: str
 
-    def validated(self):
+    def validated(self) -> AsrSegment:
         """Fail closed unless the segment identity, times, and text are admitted."""
         if not isinstance(self.index, int) or isinstance(self.index, bool):
             raise AsrInputError("a segment index must be an integer")
@@ -270,7 +270,7 @@ class AsrSegment:
         text = _admit_text(self.text, MAXIMUM_TEXT_CHARS, "segment text")
         return AsrSegment(index=self.index, start_s=start, end_s=end, text=text)
 
-    def to_document(self):
+    def to_document(self) -> dict[str, object]:
         """Return the canonical segment document."""
         admitted = self.validated()
         return {
@@ -281,7 +281,7 @@ class AsrSegment:
         }
 
     @staticmethod
-    def from_document(document):
+    def from_document(document: object) -> AsrSegment:
         """Re-admit a serialized segment, refusing any drifted member."""
         if not isinstance(document, dict):
             raise AsrInputError("a stored segment must be a JSON object")
@@ -306,7 +306,7 @@ class AsrResult:
     input_revision: str
     status: AsrStatus
     transcript: str
-    segments: tuple
+    segments: tuple[AsrSegment, ...]
     requested_language: str
     detected_language: str
     model_id: str
@@ -317,7 +317,7 @@ class AsrResult:
     result_occurred_at: str
     reason: str
 
-    def validated(self):
+    def validated(self) -> AsrResult:
         """Fail closed unless the result typing and bindings are admitted."""
         if not isinstance(self.workspace_id, UUID):
             raise AsrInputError("a workspace id must be a UUID value")
@@ -383,7 +383,7 @@ class AsrResult:
             reason=reason,
         )
 
-    def to_document(self):
+    def to_document(self) -> dict[str, object]:
         """Return the canonical transcript document."""
         admitted = self.validated()
         return {
@@ -407,12 +407,12 @@ class AsrResult:
             "workspace_id": str(admitted.workspace_id),
         }
 
-    def canonical_bytes(self):
+    def canonical_bytes(self) -> bytes:
         """Return the deterministic ASCII encoding of this result."""
         return _canonical_bytes(self.to_document())
 
     @staticmethod
-    def from_document(document):
+    def from_document(document: object) -> AsrResult:
         """Re-admit a serialized result, refusing any drifted member."""
         if not isinstance(document, dict):
             raise AsrInputError("a stored transcript must be a JSON object")
@@ -473,7 +473,7 @@ class AsrResult:
         ).validated()
 
 
-def transcript_id_for(workspace_id, session_id, input_id):
+def transcript_id_for(workspace_id: object, session_id: object, input_id: object) -> UUID:
     """Return the deterministic transcript identity for one input."""
     if not isinstance(workspace_id, UUID):
         raise AsrInputError("a workspace id must be a UUID value")
@@ -484,7 +484,7 @@ def transcript_id_for(workspace_id, session_id, input_id):
     return uuid5(ASR_NAMESPACE, f"{workspace_id}:{session_id}:{input_id}")
 
 
-def transcript_binding(workspace_id, transcript_id):
+def transcript_binding(workspace_id: object, transcript_id: object) -> ObjectBinding:
     """Return the store binding of one transcript revision."""
     if not isinstance(workspace_id, UUID):
         raise AsrInputError("a workspace id must be a UUID value")
@@ -498,24 +498,24 @@ def transcript_binding(workspace_id, transcript_id):
     )
 
 
-def transcript_payload_bytes(result):
+def transcript_payload_bytes(result: object) -> bytes:
     """Return the canonical storage payload of one result."""
     if not isinstance(result, AsrResult):
         raise AsrInputError("a transcript payload needs an AsrResult instance")
     return _canonical_bytes(result.to_document())
 
 
-def transcript_from_document(document):
+def transcript_from_document(document: object) -> AsrResult:
     """Re-admit a serialized transcript document."""
     return AsrResult.from_document(document)
 
 
-def _canonical_bytes(document):
+def _canonical_bytes(document: object) -> bytes:
     encoded = json.dumps(document, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
     return encoded.encode("ascii")
 
 
-def _admit_hex_digest(raw, length, label):
+def _admit_hex_digest(raw: object, length: int, label: str) -> str:
     if not isinstance(raw, str):
         raise AsrManifestError(f"{label} must be a string")
     if len(raw) != length:
@@ -526,35 +526,35 @@ def _admit_hex_digest(raw, length, label):
     return raw
 
 
-def _string_member(document, name):
+def _string_member(document: dict[str, object], name: str) -> str:
     value = document.get(name)
     if not isinstance(value, str):
         raise AsrManifestError(f"stored member {name} must be a string")
     return value
 
 
-def _integer_member(document, name):
+def _integer_member(document: dict[str, object], name: str) -> int:
     value = document.get(name)
     if not isinstance(value, int) or isinstance(value, bool):
         raise AsrManifestError(f"stored member {name} must be an integer")
     return value
 
 
-def _bool_member(document, name):
+def _bool_member(document: dict[str, object], name: str) -> bool:
     value = document.get(name)
     if not isinstance(value, bool):
         raise AsrManifestError(f"stored member {name} must be a boolean")
     return value
 
 
-def _number_member(document, name):
+def _number_member(document: dict[str, object], name: str) -> float | int:
     value = document.get(name)
     if not isinstance(value, (int, float)) or isinstance(value, bool):
         raise AsrInputError(f"stored member {name} must be a number")
     return value
 
 
-def _admit_seconds(raw, label):
+def _admit_seconds(raw: object, label: str) -> float:
     if not isinstance(raw, (int, float)) or isinstance(raw, bool):
         raise AsrTimestampError(f"{label} must be a number")
     value = float(raw)
@@ -565,7 +565,7 @@ def _admit_seconds(raw, label):
     return value
 
 
-def _admit_text(raw, maximum, label):
+def _admit_text(raw: object, maximum: int, label: str) -> str:
     if not isinstance(raw, str):
         raise AsrInputError(f"{label} must be a string")
     if not raw.strip():
@@ -577,7 +577,7 @@ def _admit_text(raw, maximum, label):
     return raw
 
 
-def _admit_audio_bytes(raw):
+def _admit_audio_bytes(raw: object) -> bytes:
     if not isinstance(raw, bytes):
         raise AsrInputError("an audio payload must be bytes")
     if not raw:
@@ -587,19 +587,19 @@ def _admit_audio_bytes(raw):
     return raw
 
 
-def _admit_requested_language(raw):
+def _admit_requested_language(raw: str) -> str:
     if raw not in REQUESTED_LANGUAGES:
         raise AsrLanguageError("a requested language is not admitted here")
     return raw
 
 
-def _admit_detected_language(raw):
+def _admit_detected_language(raw: str) -> str:
     if raw not in DETECTED_LANGUAGES:
         raise AsrLanguageError("a detected language is not admitted here")
     return raw
 
 
-def _admit_occurred_at(raw):
+def _admit_occurred_at(raw: object) -> str:
     if not isinstance(raw, str):
         raise AsrTimestampError("an occurrence time must be a string")
     value = raw.strip()
@@ -615,7 +615,7 @@ def _admit_occurred_at(raw):
     return value
 
 
-def _admit_input_revision(raw):
+def _admit_input_revision(raw: object) -> str:
     if not isinstance(raw, str):
         raise AsrInputError("an input revision must be a string")
     value = raw.strip()
@@ -631,7 +631,7 @@ def _admit_input_revision(raw):
     return value
 
 
-def _admit_reason(raw):
+def _admit_reason(raw: object) -> str:
     if not isinstance(raw, str):
         raise AsrInputError("a reason must be a string")
     if not raw.strip():
@@ -643,7 +643,7 @@ def _admit_reason(raw):
     return raw
 
 
-def _admit_actor(raw):
+def _admit_actor(raw: object) -> str:
     if not isinstance(raw, str):
         raise AsrInputError("an actor id must be a string")
     value = raw.strip()
@@ -659,7 +659,7 @@ def _admit_actor(raw):
     return value
 
 
-def _check_segment_order(segments):
+def _check_segment_order(segments: tuple[AsrSegment, ...]) -> None:
     """Fail closed unless segment indexes order and times do not overlap."""
     previous_end = 0.0
     for expected, segment in enumerate(segments):
@@ -816,7 +816,9 @@ def transcribe_synthetic(
     )
 
 
-def store_transcript(store, trail, result, actor_id, occurred_at):
+def store_transcript(
+    store: object, trail: object, result: object, actor_id: object, occurred_at: object
+) -> ObjectBinding:
     """Store one transcript with provenance and audit, failing closed."""
     if not isinstance(store, WorkspaceStore):
         raise AsrInputError("a workspace store is required")
@@ -865,7 +867,7 @@ def store_transcript(store, trail, result, actor_id, occurred_at):
     return binding
 
 
-def read_transcript(store, transcript_id):
+def read_transcript(store: object, transcript_id: object) -> AsrResult:
     """Read and verify one stored transcript against its provenance digest."""
     if not isinstance(store, WorkspaceStore):
         raise AsrInputError("a workspace store is required")
