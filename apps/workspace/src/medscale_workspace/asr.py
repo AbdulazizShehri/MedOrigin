@@ -922,7 +922,7 @@ SNAPSHOT_PROCESSOR_FILE = "preprocessor_config.json"
 SNAPSHOT_TOKENIZER_FILE = "tokenizer.json"
 
 
-def _require_asr_runtime():
+def _require_asr_runtime() -> tuple[object, object]:
     """Import torch and transformers lazily and bind exact versions."""
     try:
         import torch as torch_mod
@@ -1077,11 +1077,15 @@ def _audio_bytes_to_waveform(audio_bytes: object) -> list[float]:
 class TransformersWhisperBackend:
     """Local-only Transformers Whisper backend bound to the pinned snapshot."""
 
-    def __init__(self, snapshot_dir, manifest):
+    def __init__(self, snapshot_dir: object, manifest: object) -> None:
         """Load processor and model from the verified local snapshot only."""
         verified = verify_manifest(manifest)
         snapshot_path = verify_local_snapshot(snapshot_dir, verified)
-        transformers_mod, torch_mod = _require_asr_runtime()
+        _require_asr_runtime()
+        # Heavy imports stay local to the qualified backend, not the shell.
+        import torch as torch_mod
+        import transformers as transformers_mod
+
         snapshot_text = str(snapshot_path)
         if snapshot_text == MODEL_ID:
             raise AsrInputError("a model id is never a local snapshot path")
@@ -1117,7 +1121,9 @@ class TransformersWhisperBackend:
         self._transformers = transformers_mod
         self._torch = torch_mod
 
-    def __call__(self, audio_bytes, manifest, requested_language):
+    def __call__(
+        self, audio_bytes: object, manifest: object, requested_language: str
+    ) -> tuple[str, str, tuple[AsrSegment, ...], str, str]:
         """Run local inference and return a validation-ready tuple."""
         verified = verify_manifest(manifest)
         if verified.to_document() != self._manifest.to_document():
@@ -1170,17 +1176,17 @@ class TransformersWhisperBackend:
 
 
 def transcribe_with_transformers(
-    workspace_id,
-    session_id,
-    input_id,
-    input_revision,
-    audio_bytes,
-    requested_language,
-    input_occurred_at,
-    result_occurred_at,
-    manifest,
-    snapshot_dir,
-):
+    workspace_id: object,
+    session_id: object,
+    input_id: object,
+    input_revision: object,
+    audio_bytes: object,
+    requested_language: str,
+    input_occurred_at: object,
+    result_occurred_at: object,
+    manifest: object,
+    snapshot_dir: object,
+) -> AsrResult:
     """Transcribe through the real local backend under the protected contract."""
     verified = verify_manifest(manifest)
     backend = TransformersWhisperBackend(snapshot_dir, verified)
