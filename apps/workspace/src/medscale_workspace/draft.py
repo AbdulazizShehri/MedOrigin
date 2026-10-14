@@ -833,18 +833,18 @@ def synthesize_with_backend(
 
 
 def synthesize_synthetic(
-    workspace_id,
-    session_id,
-    transcript_id,
-    transcript_revision,
-    transcript_text,
-    segments,
-    template,
-    input_bundle_digest,
-    model,
-    runtime,
-    span_plan,
-):
+    workspace_id: object,
+    session_id: object,
+    transcript_id: object,
+    transcript_revision: object,
+    transcript_text: object,
+    segments: object,
+    template: object,
+    input_bundle_digest: object,
+    model: object,
+    runtime: object,
+    span_plan: object,
+) -> Draft:
     """Build a draft with the deterministic placeholder backend."""
     return synthesize_with_backend(
         workspace_id,
