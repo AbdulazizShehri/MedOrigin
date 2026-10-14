@@ -670,7 +670,7 @@ def _check_segment_order(segments: tuple[AsrSegment, ...]) -> None:
         previous_end = segment.end_s
 
 
-def _admit_model_snapshot(present, revision):
+def _admit_model_snapshot(present: object, revision: object) -> str:
     if present is not True:
         raise AsrModelUnavailableError("the local model snapshot is absent")
     if not isinstance(revision, str):
@@ -682,7 +682,9 @@ def _admit_model_snapshot(present, revision):
     return revision
 
 
-def _admit_runtime_contract(trust_remote_code, local_files_only, allow_download):
+def _admit_runtime_contract(
+    trust_remote_code: object, local_files_only: object, allow_download: object
+) -> None:
     if trust_remote_code is not False:
         raise AsrBackendError("remote code is never admitted on the protected path")
     if local_files_only is not True:
@@ -691,7 +693,9 @@ def _admit_runtime_contract(trust_remote_code, local_files_only, allow_download)
         raise AsrBackendError("automatic download is never admitted on the protected path")
 
 
-def mock_backend(audio_bytes, manifest, requested_language):
+def mock_backend(
+    audio_bytes: object, manifest: object, requested_language: str
+) -> tuple[str, str, tuple[AsrSegment, ...], str, str]:
     """Deterministic synthetic backend with mock outputs only, never a model."""
     verify_manifest(manifest)
     payload = _admit_audio_bytes(audio_bytes)
@@ -710,22 +714,22 @@ def mock_backend(audio_bytes, manifest, requested_language):
 
 
 def transcribe_with_backend(
-    workspace_id,
-    session_id,
-    input_id,
-    input_revision,
-    audio_bytes,
-    requested_language,
-    input_occurred_at,
-    result_occurred_at,
-    manifest,
-    model_snapshot_present,
-    model_snapshot_revision,
-    trust_remote_code,
-    local_files_only,
-    allow_download,
-    backend,
-):
+    workspace_id: object,
+    session_id: object,
+    input_id: object,
+    input_revision: object,
+    audio_bytes: object,
+    requested_language: str,
+    input_occurred_at: object,
+    result_occurred_at: object,
+    manifest: object,
+    model_snapshot_present: object,
+    model_snapshot_revision: object,
+    trust_remote_code: object,
+    local_files_only: object,
+    allow_download: object,
+    backend: object,
+) -> AsrResult:
     """Transcribe through an injected backend under the protected contract."""
     verified = verify_manifest(manifest)
     _admit_model_snapshot(model_snapshot_present, model_snapshot_revision)
@@ -781,21 +785,21 @@ def transcribe_with_backend(
 
 
 def transcribe_synthetic(
-    workspace_id,
-    session_id,
-    input_id,
-    input_revision,
-    audio_bytes,
-    requested_language,
-    input_occurred_at,
-    result_occurred_at,
-    manifest,
-    model_snapshot_present,
-    model_snapshot_revision,
-    trust_remote_code,
-    local_files_only,
-    allow_download,
-):
+    workspace_id: object,
+    session_id: object,
+    input_id: object,
+    input_revision: object,
+    audio_bytes: object,
+    requested_language: str,
+    input_occurred_at: object,
+    result_occurred_at: object,
+    manifest: object,
+    model_snapshot_present: object,
+    model_snapshot_revision: object,
+    trust_remote_code: object,
+    local_files_only: object,
+    allow_download: object,
+) -> AsrResult:
     """Transcribe with the deterministic synthetic backend."""
     return transcribe_with_backend(
         workspace_id,
@@ -941,7 +945,7 @@ def _require_asr_runtime():
     return (transformers_mod, torch_mod)
 
 
-def _admit_snapshot_dir(raw):
+def _admit_snapshot_dir(raw: object) -> Path:
     """Admit a local snapshot directory and never a Hub identity."""
     if isinstance(raw, Path):
         candidate = raw
@@ -966,7 +970,7 @@ def _admit_snapshot_dir(raw):
     return candidate
 
 
-def _git_blob_id(path):
+def _git_blob_id(path: Path | str) -> str:
     """Return the git blob SHA1 for one snapshot file."""
     import hashlib as hashlib_mod
 
@@ -976,7 +980,7 @@ def _git_blob_id(path):
     return digest
 
 
-def _verify_git_blob(path, expected, label):
+def _verify_git_blob(path: Path | str, expected: str, label: str) -> str:
     """Fail closed unless one snapshot file matches its manifest blob."""
     actual = _git_blob_id(path)
     if actual != expected:
@@ -984,7 +988,7 @@ def _verify_git_blob(path, expected, label):
     return actual
 
 
-def _verify_snapshot_weight(weight_path, manifest):
+def _verify_snapshot_weight(weight_path: Path, manifest: AsrManifest) -> Path:
     """Fail closed unless the weight file size and SHA256 match."""
     import hashlib as hashlib_mod
 
@@ -1007,7 +1011,7 @@ def _verify_snapshot_weight(weight_path, manifest):
     return weight_path
 
 
-def verify_local_snapshot(snapshot_dir, manifest):
+def verify_local_snapshot(snapshot_dir: object, manifest: object) -> Path:
     """Verify a local snapshot directory against its manifest."""
     verified = verify_manifest(manifest)
     if ADAPTER_CONTRACT_VERSION != PRODUCER_VERSION:
@@ -1024,7 +1028,7 @@ def verify_local_snapshot(snapshot_dir, manifest):
     return snapshot_path
 
 
-def _audio_bytes_to_waveform(audio_bytes):
+def _audio_bytes_to_waveform(audio_bytes: object) -> list[float]:
     """Convert admitted audio bytes to mono float32 samples at 16000 Hz."""
     payload = _admit_audio_bytes(audio_bytes)
     import io as io_mod
@@ -1199,6 +1203,6 @@ def transcribe_with_transformers(
     )
 
 
-def adapter_contract_version():
+def adapter_contract_version() -> str:
     """Return the governed adapter contract version."""
     return ADAPTER_CONTRACT_VERSION
