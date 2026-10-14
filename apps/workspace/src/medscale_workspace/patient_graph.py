@@ -783,16 +783,16 @@ def view_binding(workspace_id: object, view_id: object) -> ObjectBinding:
 
 
 def admit_node(
-    store,
-    trail,
-    workspace_id,
-    node_key,
-    node_kind,
-    label,
-    source_id,
-    actor_id,
-    occurred_at,
-):
+    store: object,
+    trail: object,
+    workspace_id: object,
+    node_key: object,
+    node_kind: object,
+    label: object,
+    source_id: object,
+    actor_id: object,
+    occurred_at: object,
+) -> ObjectBinding:
     """Admit one derived graph node bound to one corpus source revision."""
     if not isinstance(store, WorkspaceStore):
         raise GraphInputError("a workspace store is required")
@@ -892,19 +892,19 @@ def read_node(store: object, node_id: object) -> GraphNode:
 
 
 def admit_edge(
-    store,
-    trail,
-    workspace_id,
-    source_node_id,
-    target_node_id,
-    relationship,
-    epistemic,
-    source_ids,
-    actor_id,
-    occurred_at,
-    claim_set_id=None,
-    claim_id=None,
-):
+    store: object,
+    trail: object,
+    workspace_id: object,
+    source_node_id: object,
+    target_node_id: object,
+    relationship: object,
+    epistemic: object,
+    source_ids: object,
+    actor_id: object,
+    occurred_at: object,
+    claim_set_id: object = None,
+    claim_id: object = None,
+) -> ObjectBinding:
     """Admit one derived graph edge with mandatory epistemic state."""
     if not isinstance(store, WorkspaceStore):
         raise GraphInputError("a workspace store is required")
@@ -1096,7 +1096,15 @@ def read_edge(store: object, edge_id: object) -> GraphEdge:
     return edge.validated()
 
 
-def rebuild_graph(store, trail, workspace_id, node_ids, edge_ids, actor_id, occurred_at):
+def rebuild_graph(
+    store: object,
+    trail: object,
+    workspace_id: object,
+    node_ids: object,
+    edge_ids: object,
+    actor_id: object,
+    occurred_at: object,
+) -> ObjectBinding:
     """Rebuild one frozen graph view from exact admitted members.
 
     Inputs are sorted deterministically, so reordered inputs yield the identical
@@ -1237,7 +1245,13 @@ def read_view(store: object, view_id: object) -> GraphView:
     return view.validated()
 
 
-def explain_path(store, source_node_id, target_node_id, max_depth=8, view_id=None):
+def explain_path(
+    store: object,
+    source_node_id: object,
+    target_node_id: object,
+    max_depth: int = 8,
+    view_id: object = None,
+) -> PathExplanation:
     """Explain one deterministic path with inspectable provenance.
 
     Breadth-first search over current edges (or over one frozen view when
@@ -1291,8 +1305,8 @@ def explain_path(store, source_node_id, target_node_id, max_depth=8, view_id=Non
         revisions = store.object_revisions(WorkspaceObjectType.GRAPH_EDGE)
         candidate_ids = tuple(object_id for object_id, _revision in revisions)
         candidate_ids = tuple(sorted(candidate_ids, key=str))
-    adjacency: dict[str, list] = {}
-    current_edges: dict[str, object] = {}
+    adjacency: dict[str, list[GraphEdge]] = {}
+    current_edges: dict[str, GraphEdge] = {}
     for edge_id in candidate_ids:
         try:
             edge = read_edge(store, edge_id)
@@ -1309,9 +1323,9 @@ def explain_path(store, source_node_id, target_node_id, max_depth=8, view_id=Non
         adjacency[key] = sorted(adjacency[key], key=lambda item: str(item.edge_id))
     start = str(source_node.node_id)
     goal = str(target_node.node_id)
-    queue: list[tuple[str, tuple]] = [(start, ())]
+    queue: list[tuple[str, tuple[GraphEdge, ...]]] = [(start, ())]
     visited: set[str] = {start}
-    found: tuple | None = None
+    found: tuple[GraphEdge, ...] | None = None
     while queue:
         current, path = queue.pop(0)
         if len(path) > max_depth:
@@ -1356,7 +1370,7 @@ def explain_path(store, source_node_id, target_node_id, max_depth=8, view_id=Non
     ).validated()
 
 
-def edges_affected_by_source(store, source_id):
+def edges_affected_by_source(store: object, source_id: object) -> tuple[UUID, ...]:
     """List current edge identities bound to one corpus source, in sorted order."""
     if not isinstance(store, WorkspaceStore):
         raise GraphInputError("a workspace store is required")
@@ -1376,7 +1390,7 @@ def edges_affected_by_source(store, source_id):
     return tuple(sorted(affected, key=str))
 
 
-def nodes_affected_by_source(store, source_id):
+def nodes_affected_by_source(store: object, source_id: object) -> tuple[UUID, ...]:
     """List current node identities bound to one corpus source, in sorted order."""
     if not isinstance(store, WorkspaceStore):
         raise GraphInputError("a workspace store is required")
@@ -1592,7 +1606,7 @@ def _string_member(document: dict[str, object], name: str) -> str:
     return value
 
 
-def timeline_for_view(store, view_id):
+def timeline_for_view(store: object, view_id: object) -> tuple[tuple[UUID, ...], tuple[UUID, ...]]:
     """Return one deterministic timeline ordering of a view's nodes.
 
     Nodes are ordered by node key string order as the synthetic timeline proxy;
