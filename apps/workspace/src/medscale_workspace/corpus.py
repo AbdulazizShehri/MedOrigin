@@ -74,7 +74,7 @@ class CorpusSource:
     content_digest: str
     text: str
 
-    def validated(self):
+    def validated(self) -> CorpusSource:
         if not isinstance(self.workspace_id, UUID):
             raise CorpusInputError("a workspace id must be a UUID value")
         corpus_key = _admit_identifier(self.corpus_key, "corpus key")
@@ -103,7 +103,7 @@ class CorpusSource:
             text=text,
         )
 
-    def to_document(self):
+    def to_document(self) -> dict[str, object]:
         admitted = self.validated()
         return {
             "content_digest": admitted.content_digest,
@@ -120,7 +120,7 @@ class CorpusSource:
         }
 
     @staticmethod
-    def from_document(document):
+    def from_document(document: object) -> CorpusSource:
         if not isinstance(document, dict):
             raise CorpusInputError("a stored source must be a JSON object")
         expected = {
@@ -160,7 +160,9 @@ class CorpusSource:
         ).validated()
 
 
-def source_id_for(workspace_id, corpus_key, locator, source_revision):
+def source_id_for(
+    workspace_id: object, corpus_key: object, locator: object, source_revision: object
+) -> UUID:
     """Return the deterministic identity of one corpus source revision."""
     if not isinstance(workspace_id, UUID):
         raise CorpusInputError("a workspace id must be a UUID value")
@@ -173,7 +175,7 @@ def source_id_for(workspace_id, corpus_key, locator, source_revision):
     )
 
 
-def source_binding(workspace_id, source_id):
+def source_binding(workspace_id: object, source_id: object) -> ObjectBinding:
     """Return the store binding of one corpus source."""
     if not isinstance(workspace_id, UUID):
         raise CorpusInputError("a workspace id must be a UUID value")
@@ -187,14 +189,14 @@ def source_binding(workspace_id, source_id):
     )
 
 
-def source_payload_bytes(source):
+def source_payload_bytes(source: object) -> bytes:
     """Return the canonical storage payload of one corpus source."""
     if not isinstance(source, CorpusSource):
         raise CorpusInputError("a source payload needs a CorpusSource instance")
     return _canonical_bytes(source.to_document())
 
 
-def corpus_id_for(workspace_id, corpus_key):
+def corpus_id_for(workspace_id: object, corpus_key: object) -> UUID:
     """Return the deterministic identity of one named corpus."""
     if not isinstance(workspace_id, UUID):
         raise CorpusInputError("a workspace id must be a UUID value")
@@ -206,18 +208,18 @@ def corpus_id_for(workspace_id, corpus_key):
 
 
 def admit_source(
-    store,
-    trail,
-    workspace_id,
-    corpus_key,
-    locator,
-    title,
-    source_revision,
-    source_date,
-    text,
-    actor_id,
-    occurred_at,
-):
+    store: object,
+    trail: object,
+    workspace_id: object,
+    corpus_key: object,
+    locator: object,
+    title: str,
+    source_revision: object,
+    source_date: str,
+    text: str,
+    actor_id: object,
+    occurred_at: object,
+) -> ObjectBinding:
     """Admit one synthetic evidence source revision, failing closed."""
     if not isinstance(store, WorkspaceStore):
         raise CorpusInputError("a workspace store is required")
@@ -268,7 +270,7 @@ def admit_source(
     return binding
 
 
-def read_source(store, source_id):
+def read_source(store: object, source_id: object) -> CorpusSource:
     """Read and verify one stored corpus source."""
     if not isinstance(store, WorkspaceStore):
         raise CorpusInputError("a workspace store is required")
@@ -297,11 +299,11 @@ def read_source(store, source_id):
     return source.validated()
 
 
-def _digest_of_text(text):
+def _digest_of_text(text: str) -> str:
     return "sha256:" + hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
-def _admit_identifier(raw, label):
+def _admit_identifier(raw: object, label: str) -> str:
     if not isinstance(raw, str):
         raise CorpusInputError(f"{label} must be a string")
     value = raw.strip()
@@ -317,7 +319,7 @@ def _admit_identifier(raw, label):
     return value
 
 
-def _admit_title(raw):
+def _admit_title(raw: object) -> str:
     if not isinstance(raw, str):
         raise CorpusInputError("source title must be a string")
     value = raw.strip()
@@ -333,7 +335,7 @@ def _admit_title(raw):
     return " ".join(value.split())
 
 
-def _admit_source_date(raw):
+def _admit_source_date(raw: object) -> str:
     if not isinstance(raw, str):
         raise CorpusInputError("source date must be a string")
     value = raw.strip()
@@ -351,7 +353,7 @@ def _admit_source_date(raw):
     return value
 
 
-def _admit_digest(raw):
+def _admit_digest(raw: object) -> str:
     if not isinstance(raw, str) or not raw.startswith("sha256:"):
         raise CorpusInputError("content digest must be a sha256: digest")
     hex_part = raw[len("sha256:") :]
@@ -360,7 +362,7 @@ def _admit_digest(raw):
     return raw
 
 
-def _admit_evidence_text(raw):
+def _admit_evidence_text(raw: object) -> str:
     if not isinstance(raw, str):
         raise CorpusInputError("evidence text must be a string")
     value = raw.strip()
@@ -378,11 +380,11 @@ def _admit_evidence_text(raw):
     return value
 
 
-def _admit_actor(raw):
+def _admit_actor(raw: object) -> str:
     return _admit_identifier(raw, "actor id")
 
 
-def _admit_occurred_at(raw):
+def _admit_occurred_at(raw: object) -> str:
     if not isinstance(raw, str):
         raise CorpusInputError("a corpus occurrence time must be a string")
     value = raw.strip()
@@ -397,13 +399,13 @@ def _admit_occurred_at(raw):
     return value
 
 
-def _canonical_bytes(document):
+def _canonical_bytes(document: object) -> bytes:
     return json.dumps(document, sort_keys=True, separators=(",", ":"), ensure_ascii=True).encode(
         "ascii"
     )
 
 
-def _string_member(document, name):
+def _string_member(document: dict[str, object], name: str) -> str:
     value = document[name]
     if not isinstance(value, str):
         raise CorpusInputError(f"a stored {name} must be a string")
