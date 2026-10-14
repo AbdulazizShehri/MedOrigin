@@ -33,6 +33,7 @@ from medscale_workspace.audit import AuditEventType, AuditObjectRef, AuditTrail
 from medscale_workspace.binding import ObjectBinding
 from medscale_workspace.data_class import synthetic_data_class_value
 from medscale_workspace.errors import (
+    CorpusInputError,
     ObjectNotFoundError,
     RetrievalConflictError,
     RetrievalInputError,
@@ -88,7 +89,7 @@ class SnapshotEntry:
     source_revision: str
     content_digest: str
 
-    def validated(self):
+    def validated(self) -> SnapshotEntry:
         if not isinstance(self.source_id, UUID):
             raise SnapshotInputError("a snapshot source id must be a UUID value")
         revision = _admit_identifier(self.source_revision, "snapshot source revision")
@@ -99,7 +100,7 @@ class SnapshotEntry:
             content_digest=digest,
         )
 
-    def to_document(self):
+    def to_document(self) -> dict[str, object]:
         admitted = self.validated()
         return {
             "content_digest": admitted.content_digest,
@@ -108,7 +109,7 @@ class SnapshotEntry:
         }
 
     @staticmethod
-    def from_document(document):
+    def from_document(document: object) -> SnapshotEntry:
         if not isinstance(document, dict):
             raise SnapshotInputError("a stored snapshot entry must be a JSON object")
         expected = {"content_digest", "source_id", "source_revision"}
@@ -133,12 +134,12 @@ class SnapshotManifest:
     corpus_id: UUID
     corpus_key: str
     snapshot_id: UUID
-    entries: tuple
+    entries: tuple[SnapshotEntry, ...]
     index_identity: str
     ranking_identity: str
     schema_version: str
 
-    def validated(self):
+    def validated(self) -> SnapshotManifest:
         if not isinstance(self.workspace_id, UUID):
             raise SnapshotInputError("a workspace id must be a UUID value")
         if not isinstance(self.corpus_id, UUID):
@@ -151,9 +152,9 @@ class SnapshotManifest:
         if len(self.entries) < 1 or len(self.entries) > MAXIMUM_SOURCES_PER_SNAPSHOT:
             raise SnapshotInputError("a snapshot carries an unadmitted entry count")
         checked = tuple(
-            item.validated() if isinstance(item, SnapshotEntry) else None for item in self.entries
+            item.validated() for item in self.entries if isinstance(item, SnapshotEntry)
         )
-        if any(item is None for item in checked):
+        if len(checked) != len(self.entries):
             raise SnapshotInputError("snapshot entries need SnapshotEntry instances")
         _check_duplicate_source_ids(checked)
         index_identity = _admit_identifier(self.index_identity, "index identity")
@@ -182,7 +183,7 @@ class SnapshotManifest:
             schema_version=schema_version,
         )
 
-    def to_document(self):
+    def to_document(self) -> dict[str, object]:
         admitted = self.validated()
         return {
             "corpus_id": str(admitted.corpus_id),
@@ -198,7 +199,7 @@ class SnapshotManifest:
         }
 
     @staticmethod
-    def from_document(document):
+    def from_document(document: object) -> SnapshotManifest:
         if not isinstance(document, dict):
             raise SnapshotInputError("a stored snapshot must be a JSON object")
         expected = {
@@ -254,7 +255,7 @@ class QuerySpec:
     match_mode: MatchMode
     schema_version: str
 
-    def validated(self):
+    def validated(self) -> QuerySpec:
         if not isinstance(self.workspace_id, UUID):
             raise RetrievalInputError("a workspace id must be a UUID value")
         if not isinstance(self.snapshot_id, UUID):
@@ -287,7 +288,7 @@ class QuerySpec:
             schema_version=schema_version,
         )
 
-    def to_document(self):
+    def to_document(self) -> dict[str, object]:
         admitted = self.validated()
         return {
             "data_class": synthetic_data_class_value(),
@@ -303,7 +304,7 @@ class QuerySpec:
         }
 
     @staticmethod
-    def from_document(document):
+    def from_document(document: object) -> QuerySpec:
         if not isinstance(document, dict):
             raise RetrievalInputError("a stored query must be a JSON object")
         expected = {
@@ -357,7 +358,7 @@ class ScoredResult:
     score: int
     text: str
 
-    def validated(self):
+    def validated(self) -> ScoredResult:
         if not isinstance(self.source_id, UUID):
             raise RetrievalInputError("a result source id must be a UUID value")
         revision = _admit_identifier(self.source_revision, "result source revision")
@@ -374,7 +375,7 @@ class ScoredResult:
             text=text,
         )
 
-    def to_document(self):
+    def to_document(self) -> dict[str, object]:
         admitted = self.validated()
         return {
             "rank": admitted.rank,
@@ -386,7 +387,7 @@ class ScoredResult:
         }
 
     @staticmethod
-    def from_document(document):
+    def from_document(document: object) -> ScoredResult:
         if not isinstance(document, dict):
             raise RetrievalInputError("a stored result hit must be a JSON object")
         expected = {"rank", "score", "source_date", "source_id", "source_revision", "text"}
@@ -418,9 +419,9 @@ class ResultSet:
     query_id: UUID
     snapshot_id: UUID
     result_id: UUID
-    results: tuple
+    results: tuple[ScoredResult, ...]
 
-    def validated(self):
+    def validated(self) -> ResultSet:
         if not isinstance(self.workspace_id, UUID):
             raise RetrievalInputError("a workspace id must be a UUID value")
         if not isinstance(self.query_id, UUID):
@@ -436,10 +437,8 @@ class ResultSet:
             raise RetrievalInputError("result hits must be a tuple")
         if len(self.results) > MAXIMUM_RESULTS:
             raise RetrievalInputError("a result set carries an unadmitted hit count")
-        checked = tuple(
-            item.validated() if isinstance(item, ScoredResult) else None for item in self.results
-        )
-        if any(item is None for item in checked):
+        checked = tuple(item.validated() for item in self.results if isinstance(item, ScoredResult))
+        if len(checked) != len(self.results):
             raise RetrievalInputError("result hits need ScoredResult instances")
         _check_result_order(checked)
         return ResultSet(
@@ -450,7 +449,7 @@ class ResultSet:
             results=checked,
         )
 
-    def to_document(self):
+    def to_document(self) -> dict[str, object]:
         admitted = self.validated()
         return {
             "data_class": synthetic_data_class_value(),
@@ -463,7 +462,7 @@ class ResultSet:
         }
 
     @staticmethod
-    def from_document(document):
+    def from_document(document: object) -> ResultSet:
         if not isinstance(document, dict):
             raise RetrievalInputError("a stored result set must be a JSON object")
         expected = {
@@ -501,7 +500,11 @@ class ResultSet:
         ).validated()
 
 
-def snapshot_id_for(workspace_id, corpus_id, entries):
+def snapshot_id_for(
+    workspace_id: object,
+    corpus_id: object,
+    entries: list[SnapshotEntry] | tuple[SnapshotEntry, ...],
+) -> UUID:
     """Return the deterministic identity of one frozen snapshot member set."""
     if not isinstance(workspace_id, UUID):
         raise SnapshotInputError("a workspace id must be a UUID value")
@@ -522,7 +525,13 @@ def snapshot_id_for(workspace_id, corpus_id, entries):
     )
 
 
-def query_id_for(workspace_id, snapshot_id, normalized_query, result_limit, match_mode):
+def query_id_for(
+    workspace_id: object,
+    snapshot_id: object,
+    normalized_query: object,
+    result_limit: object,
+    match_mode: object,
+) -> UUID:
     """Return the deterministic identity of one query semantics."""
     if not isinstance(workspace_id, UUID):
         raise RetrievalInputError("a workspace id must be a UUID value")
@@ -538,14 +547,14 @@ def query_id_for(workspace_id, snapshot_id, normalized_query, result_limit, matc
     )
 
 
-def result_id_for(query_id):
+def result_id_for(query_id: object) -> UUID:
     """Return the deterministic identity of one query result set."""
     if not isinstance(query_id, UUID):
         raise RetrievalInputError("a query id must be a UUID value")
     return uuid5(RESULT_NAMESPACE, str(query_id))
 
 
-def snapshot_binding(workspace_id, snapshot_id):
+def snapshot_binding(workspace_id: object, snapshot_id: object) -> ObjectBinding:
     """Return the store binding of one snapshot manifest."""
     if not isinstance(workspace_id, UUID):
         raise SnapshotInputError("a workspace id must be a UUID value")
@@ -559,7 +568,7 @@ def snapshot_binding(workspace_id, snapshot_id):
     )
 
 
-def query_binding(workspace_id, query_id):
+def query_binding(workspace_id: object, query_id: object) -> ObjectBinding:
     """Return the store binding of one query record."""
     if not isinstance(workspace_id, UUID):
         raise RetrievalInputError("a workspace id must be a UUID value")
@@ -573,7 +582,7 @@ def query_binding(workspace_id, query_id):
     )
 
 
-def result_binding(workspace_id, result_id):
+def result_binding(workspace_id: object, result_id: object) -> ObjectBinding:
     """Return the store binding of one result set."""
     if not isinstance(workspace_id, UUID):
         raise RetrievalInputError("a workspace id must be a UUID value")
@@ -587,7 +596,7 @@ def result_binding(workspace_id, result_id):
     )
 
 
-def normalize_query_text(query_text):
+def normalize_query_text(query_text: object) -> str:
     """Return the deterministic normalized form of one query text."""
     admitted = _admit_query_text(query_text)
     tokens = _tokenize(admitted.lower())
@@ -596,7 +605,15 @@ def normalize_query_text(query_text):
     return " ".join(tokens)
 
 
-def admit_snapshot(store, trail, workspace_id, corpus_key, source_ids, actor_id, occurred_at):
+def admit_snapshot(
+    store: object,
+    trail: object,
+    workspace_id: object,
+    corpus_key: object,
+    source_ids: object,
+    actor_id: object,
+    occurred_at: object,
+) -> ObjectBinding:
     """Freeze one retrieval snapshot over admitted corpus sources."""
     if not isinstance(store, WorkspaceStore):
         raise SnapshotInputError("a workspace store is required")
@@ -623,7 +640,7 @@ def admit_snapshot(store, trail, workspace_id, corpus_key, source_ids, actor_id,
     for source_id in source_ids:
         try:
             source = corpus_mod.read_source(store, source_id)
-        except corpus_mod.CorpusInputError as error:
+        except CorpusInputError as error:
             raise SnapshotError("a snapshot member source is absent in this store") from error
         if source.corpus_key != key:
             raise SnapshotError("a snapshot member belongs to another corpus")
@@ -668,8 +685,15 @@ def admit_snapshot(store, trail, workspace_id, corpus_key, source_ids, actor_id,
 
 
 def execute_query(
-    store, trail, snapshot_id, query_text, result_limit, match_mode, actor_id, occurred_at
-):
+    store: object,
+    trail: object,
+    snapshot_id: object,
+    query_text: str,
+    result_limit: object,
+    match_mode: object,
+    actor_id: object,
+    occurred_at: object,
+) -> ObjectBinding:
     """Execute one admitted query against a frozen snapshot and store the result."""
     if not isinstance(store, WorkspaceStore):
         raise RetrievalInputError("a workspace store is required")
@@ -765,7 +789,7 @@ def execute_query(
     return result_binding_value
 
 
-def replay_query(store, query_id):
+def replay_query(store: object, query_id: object) -> ResultSet:
     """Recompute one stored query result and refuse any divergence."""
     if not isinstance(store, WorkspaceStore):
         raise RetrievalInputError("a workspace store is required")
@@ -789,7 +813,7 @@ def replay_query(store, query_id):
     return stored
 
 
-def read_snapshot(store, snapshot_id):
+def read_snapshot(store: object, snapshot_id: object) -> SnapshotManifest:
     """Read and verify one stored snapshot manifest."""
     if not isinstance(store, WorkspaceStore):
         raise SnapshotInputError("a workspace store is required")
@@ -818,7 +842,7 @@ def read_snapshot(store, snapshot_id):
     return manifest.validated()
 
 
-def read_query(store, query_id):
+def read_query(store: object, query_id: object) -> QuerySpec:
     """Read and verify one stored query record."""
     if not isinstance(store, WorkspaceStore):
         raise RetrievalInputError("a workspace store is required")
@@ -847,7 +871,7 @@ def read_query(store, query_id):
     return query.validated()
 
 
-def read_result(store, result_id):
+def read_result(store: object, result_id: object) -> ResultSet:
     """Read and verify one stored result set."""
     if not isinstance(store, WorkspaceStore):
         raise RetrievalInputError("a workspace store is required")
@@ -876,13 +900,19 @@ def read_result(store, result_id):
     return result.validated()
 
 
-def _rank_sources(store, manifest, normalized_query, result_limit, match_mode):
+def _rank_sources(
+    store: WorkspaceStore,
+    manifest: SnapshotManifest,
+    normalized_query: str,
+    result_limit: int,
+    match_mode: MatchMode,
+) -> tuple[ScoredResult, ...]:
     query_tokens = normalized_query.split(" ")
     scored = []
     for entry in manifest.entries:
         try:
             source = corpus_mod.read_source(store, entry.source_id)
-        except corpus_mod.CorpusInputError as error:
+        except CorpusInputError as error:
             raise RetrievalReplayError(
                 "a snapshot member source is absent in this store"
             ) from error
@@ -916,7 +946,7 @@ def _rank_sources(store, manifest, normalized_query, result_limit, match_mode):
     return tuple(hits)
 
 
-def _tokenize(text):
+def _tokenize(text: str) -> list[str]:
     tokens = []
     current = []
     for character in text:
@@ -930,7 +960,7 @@ def _tokenize(text):
     return tokens
 
 
-def _check_duplicate_source_ids(entries):
+def _check_duplicate_source_ids(entries: tuple[SnapshotEntry, ...]) -> None:
     seen = set()
     for item in entries:
         if item.source_id in seen:
@@ -938,7 +968,7 @@ def _check_duplicate_source_ids(entries):
         seen.add(item.source_id)
 
 
-def _check_result_order(results):
+def _check_result_order(results: tuple[ScoredResult, ...]) -> None:
     for position, item in enumerate(results, start=1):
         if item.rank != position:
             raise RetrievalInputError("result ranks must be dense from one")
@@ -949,7 +979,7 @@ def _check_result_order(results):
             raise RetrievalInputError("result hits must be ordered by score then source")
 
 
-def _admit_identifier(raw, label):
+def _admit_identifier(raw: object, label: str) -> str:
     if not isinstance(raw, str):
         raise RetrievalInputError(f"{label} must be a string")
     value = raw.strip()
@@ -965,7 +995,7 @@ def _admit_identifier(raw, label):
     return value
 
 
-def _admit_digest(raw):
+def _admit_digest(raw: object) -> str:
     if not isinstance(raw, str) or not raw.startswith("sha256:"):
         raise SnapshotInputError("content digest must be a sha256: digest")
     hex_part = raw[len("sha256:") :]
@@ -974,7 +1004,7 @@ def _admit_digest(raw):
     return raw
 
 
-def _admit_query_text(raw):
+def _admit_query_text(raw: object) -> str:
     if not isinstance(raw, str):
         raise RetrievalInputError("query text must be a string")
     value = raw.strip()
@@ -992,7 +1022,7 @@ def _admit_query_text(raw):
     return value
 
 
-def _admit_normalized_query(raw):
+def _admit_normalized_query(raw: object) -> str:
     if not isinstance(raw, str):
         raise RetrievalInputError("a normalized query must be a string")
     value = raw.strip()
@@ -1007,7 +1037,7 @@ def _admit_normalized_query(raw):
     return value
 
 
-def _admit_result_limit(raw):
+def _admit_result_limit(raw: object) -> int:
     if isinstance(raw, bool) or not isinstance(raw, int):
         raise RetrievalInputError("a result limit must be an integer")
     if raw < 1 or raw > MAXIMUM_RESULTS:
@@ -1015,7 +1045,7 @@ def _admit_result_limit(raw):
     return raw
 
 
-def _admit_rank(raw):
+def _admit_rank(raw: object) -> int:
     if isinstance(raw, bool) or not isinstance(raw, int):
         raise RetrievalInputError("a result rank must be an integer")
     if raw < 1:
@@ -1023,7 +1053,7 @@ def _admit_rank(raw):
     return raw
 
 
-def _admit_score(raw):
+def _admit_score(raw: object) -> int:
     if isinstance(raw, bool) or not isinstance(raw, int):
         raise RetrievalInputError("a result score must be an integer")
     if raw < 0:
@@ -1031,7 +1061,7 @@ def _admit_score(raw):
     return raw
 
 
-def _admit_result_date(raw):
+def _admit_result_date(raw: object) -> str:
     if not isinstance(raw, str):
         raise RetrievalInputError("a result source date must be a string")
     value = raw.strip()
@@ -1045,7 +1075,7 @@ def _admit_result_date(raw):
     return value
 
 
-def _admit_evidence_text(raw):
+def _admit_evidence_text(raw: object) -> str:
     if not isinstance(raw, str):
         raise RetrievalInputError("evidence text must be a string")
     value = raw.strip()
@@ -1063,11 +1093,11 @@ def _admit_evidence_text(raw):
     return value
 
 
-def _admit_actor(raw):
+def _admit_actor(raw: object) -> str:
     return _admit_identifier(raw, "actor id")
 
 
-def _admit_occurred_at(raw):
+def _admit_occurred_at(raw: object) -> str:
     if not isinstance(raw, str):
         raise RetrievalInputError("a retrieval occurrence time must be a string")
     value = raw.strip()
@@ -1084,13 +1114,13 @@ def _admit_occurred_at(raw):
     return value
 
 
-def _canonical_bytes(document):
+def _canonical_bytes(document: object) -> bytes:
     return json.dumps(document, sort_keys=True, separators=(",", ":"), ensure_ascii=True).encode(
         "ascii"
     )
 
 
-def _string_member(document, name):
+def _string_member(document: dict[str, object], name: str) -> str:
     value = document[name]
     if not isinstance(value, str):
         raise RetrievalInputError(f"a stored {name} must be a string")
