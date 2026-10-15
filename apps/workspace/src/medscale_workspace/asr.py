@@ -106,7 +106,7 @@ class AsrManifest:
     local_files_only: bool
     allow_download: bool
 
-    def validated(self):
+    def validated(self) -> AsrManifest:
         """Fail closed unless every member matches the expected identities."""
         if self.model_id != MODEL_ID:
             raise AsrManifestError("the manifest model id is not admitted here")
@@ -148,7 +148,7 @@ class AsrManifest:
             raise AsrManifestError("the manifest must forbid automatic download")
         return self
 
-    def to_document(self):
+    def to_document(self) -> dict[str, object]:
         """Return the canonical manifest document."""
         admitted = self.validated()
         return {
@@ -169,12 +169,12 @@ class AsrManifest:
             "weight_size_bytes": admitted.weight_size_bytes,
         }
 
-    def canonical_bytes(self):
+    def canonical_bytes(self) -> bytes:
         """Return the deterministic ASCII encoding of this manifest."""
         return _canonical_bytes(self.to_document())
 
     @staticmethod
-    def from_document(document):
+    def from_document(document: object) -> AsrManifest:
         """Re-admit a serialized manifest, refusing any drifted member."""
         if not isinstance(document, dict):
             raise AsrManifestError("a stored manifest must be a JSON object")
@@ -216,7 +216,7 @@ class AsrManifest:
         ).validated()
 
 
-def expected_manifest():
+def expected_manifest() -> AsrManifest:
     """Return the manifest bound to the ratified ADR identities."""
     return AsrManifest(
         model_id=MODEL_ID,
@@ -237,7 +237,7 @@ def expected_manifest():
     ).validated()
 
 
-def verify_manifest(manifest):
+def verify_manifest(manifest: object) -> AsrManifest:
     """Fail closed unless the manifest matches the expected identities."""
     if not isinstance(manifest, AsrManifest):
         raise AsrManifestError("a manifest must be an AsrManifest instance")
@@ -253,7 +253,7 @@ class AsrSegment:
     end_s: float
     text: str
 
-    def validated(self):
+    def validated(self) -> AsrSegment:
         """Fail closed unless the segment identity, times, and text are admitted."""
         if not isinstance(self.index, int) or isinstance(self.index, bool):
             raise AsrInputError("a segment index must be an integer")
@@ -270,7 +270,7 @@ class AsrSegment:
         text = _admit_text(self.text, MAXIMUM_TEXT_CHARS, "segment text")
         return AsrSegment(index=self.index, start_s=start, end_s=end, text=text)
 
-    def to_document(self):
+    def to_document(self) -> dict[str, object]:
         """Return the canonical segment document."""
         admitted = self.validated()
         return {
@@ -281,7 +281,7 @@ class AsrSegment:
         }
 
     @staticmethod
-    def from_document(document):
+    def from_document(document: object) -> AsrSegment:
         """Re-admit a serialized segment, refusing any drifted member."""
         if not isinstance(document, dict):
             raise AsrInputError("a stored segment must be a JSON object")
@@ -306,7 +306,7 @@ class AsrResult:
     input_revision: str
     status: AsrStatus
     transcript: str
-    segments: tuple
+    segments: tuple[AsrSegment, ...]
     requested_language: str
     detected_language: str
     model_id: str
@@ -317,7 +317,7 @@ class AsrResult:
     result_occurred_at: str
     reason: str
 
-    def validated(self):
+    def validated(self) -> AsrResult:
         """Fail closed unless the result typing and bindings are admitted."""
         if not isinstance(self.workspace_id, UUID):
             raise AsrInputError("a workspace id must be a UUID value")
@@ -344,7 +344,11 @@ class AsrResult:
             raise AsrInputError("result segments must be a tuple")
         if len(self.segments) > MAXIMUM_SEGMENTS:
             raise AsrInputError("a result carries too many segments")
+        if any(not isinstance(segment, AsrSegment) for segment in self.segments):
+            raise AsrInputError("result segments need AsrSegment instances")
         checked = tuple(segment.validated() for segment in self.segments)
+        if any(not isinstance(segment, AsrSegment) for segment in checked):
+            raise AsrInputError("result segments need AsrSegment instances")
         if self.status is AsrStatus.SUCCESS:
             if self.reason != "":
                 raise AsrInputError("a success must not carry a reason")
@@ -383,7 +387,7 @@ class AsrResult:
             reason=reason,
         )
 
-    def to_document(self):
+    def to_document(self) -> dict[str, object]:
         """Return the canonical transcript document."""
         admitted = self.validated()
         return {
@@ -407,12 +411,12 @@ class AsrResult:
             "workspace_id": str(admitted.workspace_id),
         }
 
-    def canonical_bytes(self):
+    def canonical_bytes(self) -> bytes:
         """Return the deterministic ASCII encoding of this result."""
         return _canonical_bytes(self.to_document())
 
     @staticmethod
-    def from_document(document):
+    def from_document(document: object) -> AsrResult:
         """Re-admit a serialized result, refusing any drifted member."""
         if not isinstance(document, dict):
             raise AsrInputError("a stored transcript must be a JSON object")
@@ -473,7 +477,7 @@ class AsrResult:
         ).validated()
 
 
-def transcript_id_for(workspace_id, session_id, input_id):
+def transcript_id_for(workspace_id: object, session_id: object, input_id: object) -> UUID:
     """Return the deterministic transcript identity for one input."""
     if not isinstance(workspace_id, UUID):
         raise AsrInputError("a workspace id must be a UUID value")
@@ -484,7 +488,7 @@ def transcript_id_for(workspace_id, session_id, input_id):
     return uuid5(ASR_NAMESPACE, f"{workspace_id}:{session_id}:{input_id}")
 
 
-def transcript_binding(workspace_id, transcript_id):
+def transcript_binding(workspace_id: object, transcript_id: object) -> ObjectBinding:
     """Return the store binding of one transcript revision."""
     if not isinstance(workspace_id, UUID):
         raise AsrInputError("a workspace id must be a UUID value")
@@ -498,24 +502,24 @@ def transcript_binding(workspace_id, transcript_id):
     )
 
 
-def transcript_payload_bytes(result):
+def transcript_payload_bytes(result: object) -> bytes:
     """Return the canonical storage payload of one result."""
     if not isinstance(result, AsrResult):
         raise AsrInputError("a transcript payload needs an AsrResult instance")
     return _canonical_bytes(result.to_document())
 
 
-def transcript_from_document(document):
+def transcript_from_document(document: object) -> AsrResult:
     """Re-admit a serialized transcript document."""
     return AsrResult.from_document(document)
 
 
-def _canonical_bytes(document):
+def _canonical_bytes(document: object) -> bytes:
     encoded = json.dumps(document, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
     return encoded.encode("ascii")
 
 
-def _admit_hex_digest(raw, length, label):
+def _admit_hex_digest(raw: object, length: int, label: str) -> str:
     if not isinstance(raw, str):
         raise AsrManifestError(f"{label} must be a string")
     if len(raw) != length:
@@ -526,35 +530,35 @@ def _admit_hex_digest(raw, length, label):
     return raw
 
 
-def _string_member(document, name):
+def _string_member(document: dict[str, object], name: str) -> str:
     value = document.get(name)
     if not isinstance(value, str):
         raise AsrManifestError(f"stored member {name} must be a string")
     return value
 
 
-def _integer_member(document, name):
+def _integer_member(document: dict[str, object], name: str) -> int:
     value = document.get(name)
     if not isinstance(value, int) or isinstance(value, bool):
         raise AsrManifestError(f"stored member {name} must be an integer")
     return value
 
 
-def _bool_member(document, name):
+def _bool_member(document: dict[str, object], name: str) -> bool:
     value = document.get(name)
     if not isinstance(value, bool):
         raise AsrManifestError(f"stored member {name} must be a boolean")
     return value
 
 
-def _number_member(document, name):
+def _number_member(document: dict[str, object], name: str) -> float | int:
     value = document.get(name)
     if not isinstance(value, (int, float)) or isinstance(value, bool):
         raise AsrInputError(f"stored member {name} must be a number")
     return value
 
 
-def _admit_seconds(raw, label):
+def _admit_seconds(raw: object, label: str) -> float:
     if not isinstance(raw, (int, float)) or isinstance(raw, bool):
         raise AsrTimestampError(f"{label} must be a number")
     value = float(raw)
@@ -565,7 +569,7 @@ def _admit_seconds(raw, label):
     return value
 
 
-def _admit_text(raw, maximum, label):
+def _admit_text(raw: object, maximum: int, label: str) -> str:
     if not isinstance(raw, str):
         raise AsrInputError(f"{label} must be a string")
     if not raw.strip():
@@ -577,7 +581,7 @@ def _admit_text(raw, maximum, label):
     return raw
 
 
-def _admit_audio_bytes(raw):
+def _admit_audio_bytes(raw: object) -> bytes:
     if not isinstance(raw, bytes):
         raise AsrInputError("an audio payload must be bytes")
     if not raw:
@@ -587,19 +591,19 @@ def _admit_audio_bytes(raw):
     return raw
 
 
-def _admit_requested_language(raw):
+def _admit_requested_language(raw: str) -> str:
     if raw not in REQUESTED_LANGUAGES:
         raise AsrLanguageError("a requested language is not admitted here")
     return raw
 
 
-def _admit_detected_language(raw):
+def _admit_detected_language(raw: str) -> str:
     if raw not in DETECTED_LANGUAGES:
         raise AsrLanguageError("a detected language is not admitted here")
     return raw
 
 
-def _admit_occurred_at(raw):
+def _admit_occurred_at(raw: object) -> str:
     if not isinstance(raw, str):
         raise AsrTimestampError("an occurrence time must be a string")
     value = raw.strip()
@@ -615,7 +619,7 @@ def _admit_occurred_at(raw):
     return value
 
 
-def _admit_input_revision(raw):
+def _admit_input_revision(raw: object) -> str:
     if not isinstance(raw, str):
         raise AsrInputError("an input revision must be a string")
     value = raw.strip()
@@ -631,7 +635,7 @@ def _admit_input_revision(raw):
     return value
 
 
-def _admit_reason(raw):
+def _admit_reason(raw: object) -> str:
     if not isinstance(raw, str):
         raise AsrInputError("a reason must be a string")
     if not raw.strip():
@@ -643,7 +647,7 @@ def _admit_reason(raw):
     return raw
 
 
-def _admit_actor(raw):
+def _admit_actor(raw: object) -> str:
     if not isinstance(raw, str):
         raise AsrInputError("an actor id must be a string")
     value = raw.strip()
@@ -659,7 +663,7 @@ def _admit_actor(raw):
     return value
 
 
-def _check_segment_order(segments):
+def _check_segment_order(segments: tuple[AsrSegment, ...]) -> None:
     """Fail closed unless segment indexes order and times do not overlap."""
     previous_end = 0.0
     for expected, segment in enumerate(segments):
@@ -670,7 +674,7 @@ def _check_segment_order(segments):
         previous_end = segment.end_s
 
 
-def _admit_model_snapshot(present, revision):
+def _admit_model_snapshot(present: object, revision: object) -> str:
     if present is not True:
         raise AsrModelUnavailableError("the local model snapshot is absent")
     if not isinstance(revision, str):
@@ -682,7 +686,9 @@ def _admit_model_snapshot(present, revision):
     return revision
 
 
-def _admit_runtime_contract(trust_remote_code, local_files_only, allow_download):
+def _admit_runtime_contract(
+    trust_remote_code: object, local_files_only: object, allow_download: object
+) -> None:
     if trust_remote_code is not False:
         raise AsrBackendError("remote code is never admitted on the protected path")
     if local_files_only is not True:
@@ -691,7 +697,9 @@ def _admit_runtime_contract(trust_remote_code, local_files_only, allow_download)
         raise AsrBackendError("automatic download is never admitted on the protected path")
 
 
-def mock_backend(audio_bytes, manifest, requested_language):
+def mock_backend(
+    audio_bytes: object, manifest: object, requested_language: str
+) -> tuple[str, str, tuple[AsrSegment, ...], str, str]:
     """Deterministic synthetic backend with mock outputs only, never a model."""
     verify_manifest(manifest)
     payload = _admit_audio_bytes(audio_bytes)
@@ -710,22 +718,22 @@ def mock_backend(audio_bytes, manifest, requested_language):
 
 
 def transcribe_with_backend(
-    workspace_id,
-    session_id,
-    input_id,
-    input_revision,
-    audio_bytes,
-    requested_language,
-    input_occurred_at,
-    result_occurred_at,
-    manifest,
-    model_snapshot_present,
-    model_snapshot_revision,
-    trust_remote_code,
-    local_files_only,
-    allow_download,
-    backend,
-):
+    workspace_id: object,
+    session_id: object,
+    input_id: object,
+    input_revision: object,
+    audio_bytes: object,
+    requested_language: str,
+    input_occurred_at: object,
+    result_occurred_at: object,
+    manifest: object,
+    model_snapshot_present: object,
+    model_snapshot_revision: object,
+    trust_remote_code: object,
+    local_files_only: object,
+    allow_download: object,
+    backend: object,
+) -> AsrResult:
     """Transcribe through an injected backend under the protected contract."""
     verified = verify_manifest(manifest)
     _admit_model_snapshot(model_snapshot_present, model_snapshot_revision)
@@ -781,21 +789,21 @@ def transcribe_with_backend(
 
 
 def transcribe_synthetic(
-    workspace_id,
-    session_id,
-    input_id,
-    input_revision,
-    audio_bytes,
-    requested_language,
-    input_occurred_at,
-    result_occurred_at,
-    manifest,
-    model_snapshot_present,
-    model_snapshot_revision,
-    trust_remote_code,
-    local_files_only,
-    allow_download,
-):
+    workspace_id: object,
+    session_id: object,
+    input_id: object,
+    input_revision: object,
+    audio_bytes: object,
+    requested_language: str,
+    input_occurred_at: object,
+    result_occurred_at: object,
+    manifest: object,
+    model_snapshot_present: object,
+    model_snapshot_revision: object,
+    trust_remote_code: object,
+    local_files_only: object,
+    allow_download: object,
+) -> AsrResult:
     """Transcribe with the deterministic synthetic backend."""
     return transcribe_with_backend(
         workspace_id,
@@ -816,7 +824,9 @@ def transcribe_synthetic(
     )
 
 
-def store_transcript(store, trail, result, actor_id, occurred_at):
+def store_transcript(
+    store: object, trail: object, result: object, actor_id: object, occurred_at: object
+) -> ObjectBinding:
     """Store one transcript with provenance and audit, failing closed."""
     if not isinstance(store, WorkspaceStore):
         raise AsrInputError("a workspace store is required")
@@ -865,7 +875,7 @@ def store_transcript(store, trail, result, actor_id, occurred_at):
     return binding
 
 
-def read_transcript(store, transcript_id):
+def read_transcript(store: object, transcript_id: object) -> AsrResult:
     """Read and verify one stored transcript against its provenance digest."""
     if not isinstance(store, WorkspaceStore):
         raise AsrInputError("a workspace store is required")
@@ -916,7 +926,7 @@ SNAPSHOT_PROCESSOR_FILE = "preprocessor_config.json"
 SNAPSHOT_TOKENIZER_FILE = "tokenizer.json"
 
 
-def _require_asr_runtime():
+def _require_asr_runtime() -> tuple[object, object]:
     """Import torch and transformers lazily and bind exact versions."""
     try:
         import torch as torch_mod
@@ -939,7 +949,7 @@ def _require_asr_runtime():
     return (transformers_mod, torch_mod)
 
 
-def _admit_snapshot_dir(raw):
+def _admit_snapshot_dir(raw: object) -> Path:
     """Admit a local snapshot directory and never a Hub identity."""
     if isinstance(raw, Path):
         candidate = raw
@@ -964,7 +974,7 @@ def _admit_snapshot_dir(raw):
     return candidate
 
 
-def _git_blob_id(path):
+def _git_blob_id(path: Path | str) -> str:
     """Return the git blob SHA1 for one snapshot file."""
     import hashlib as hashlib_mod
 
@@ -974,7 +984,7 @@ def _git_blob_id(path):
     return digest
 
 
-def _verify_git_blob(path, expected, label):
+def _verify_git_blob(path: Path | str, expected: str, label: str) -> str:
     """Fail closed unless one snapshot file matches its manifest blob."""
     actual = _git_blob_id(path)
     if actual != expected:
@@ -982,7 +992,7 @@ def _verify_git_blob(path, expected, label):
     return actual
 
 
-def _verify_snapshot_weight(weight_path, manifest):
+def _verify_snapshot_weight(weight_path: Path, manifest: AsrManifest) -> Path:
     """Fail closed unless the weight file size and SHA256 match."""
     import hashlib as hashlib_mod
 
@@ -1005,7 +1015,7 @@ def _verify_snapshot_weight(weight_path, manifest):
     return weight_path
 
 
-def verify_local_snapshot(snapshot_dir, manifest):
+def verify_local_snapshot(snapshot_dir: object, manifest: object) -> Path:
     """Verify a local snapshot directory against its manifest."""
     verified = verify_manifest(manifest)
     if ADAPTER_CONTRACT_VERSION != PRODUCER_VERSION:
@@ -1022,7 +1032,7 @@ def verify_local_snapshot(snapshot_dir, manifest):
     return snapshot_path
 
 
-def _audio_bytes_to_waveform(audio_bytes):
+def _audio_bytes_to_waveform(audio_bytes: object) -> list[float]:
     """Convert admitted audio bytes to mono float32 samples at 16000 Hz."""
     payload = _admit_audio_bytes(audio_bytes)
     import io as io_mod
@@ -1071,11 +1081,15 @@ def _audio_bytes_to_waveform(audio_bytes):
 class TransformersWhisperBackend:
     """Local-only Transformers Whisper backend bound to the pinned snapshot."""
 
-    def __init__(self, snapshot_dir, manifest):
+    def __init__(self, snapshot_dir: object, manifest: object) -> None:
         """Load processor and model from the verified local snapshot only."""
         verified = verify_manifest(manifest)
         snapshot_path = verify_local_snapshot(snapshot_dir, verified)
-        transformers_mod, torch_mod = _require_asr_runtime()
+        _require_asr_runtime()
+        # Heavy imports stay local to the qualified backend, not the shell.
+        import torch as torch_mod
+        import transformers as transformers_mod
+
         snapshot_text = str(snapshot_path)
         if snapshot_text == MODEL_ID:
             raise AsrInputError("a model id is never a local snapshot path")
@@ -1111,7 +1125,9 @@ class TransformersWhisperBackend:
         self._transformers = transformers_mod
         self._torch = torch_mod
 
-    def __call__(self, audio_bytes, manifest, requested_language):
+    def __call__(
+        self, audio_bytes: object, manifest: object, requested_language: str
+    ) -> tuple[str, str, tuple[AsrSegment, ...], str, str]:
         """Run local inference and return a validation-ready tuple."""
         verified = verify_manifest(manifest)
         if verified.to_document() != self._manifest.to_document():
@@ -1164,17 +1180,17 @@ class TransformersWhisperBackend:
 
 
 def transcribe_with_transformers(
-    workspace_id,
-    session_id,
-    input_id,
-    input_revision,
-    audio_bytes,
-    requested_language,
-    input_occurred_at,
-    result_occurred_at,
-    manifest,
-    snapshot_dir,
-):
+    workspace_id: object,
+    session_id: object,
+    input_id: object,
+    input_revision: object,
+    audio_bytes: object,
+    requested_language: str,
+    input_occurred_at: object,
+    result_occurred_at: object,
+    manifest: object,
+    snapshot_dir: object,
+) -> AsrResult:
     """Transcribe through the real local backend under the protected contract."""
     verified = verify_manifest(manifest)
     backend = TransformersWhisperBackend(snapshot_dir, verified)
@@ -1197,6 +1213,6 @@ def transcribe_with_transformers(
     )
 
 
-def adapter_contract_version():
+def adapter_contract_version() -> str:
     """Return the governed adapter contract version."""
     return ADAPTER_CONTRACT_VERSION
