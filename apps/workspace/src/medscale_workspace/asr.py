@@ -344,7 +344,11 @@ class AsrResult:
             raise AsrInputError("result segments must be a tuple")
         if len(self.segments) > MAXIMUM_SEGMENTS:
             raise AsrInputError("a result carries too many segments")
+        if any(not isinstance(segment, AsrSegment) for segment in self.segments):
+            raise AsrInputError("result segments need AsrSegment instances")
         checked = tuple(segment.validated() for segment in self.segments)
+        if any(not isinstance(segment, AsrSegment) for segment in checked):
+            raise AsrInputError("result segments need AsrSegment instances")
         if self.status is AsrStatus.SUCCESS:
             if self.reason != "":
                 raise AsrInputError("a success must not carry a reason")
