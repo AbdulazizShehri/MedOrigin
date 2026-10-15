@@ -594,13 +594,24 @@ def validate_payload(resource_type, fhir_id, payload_text):
     if not isinstance(resource_type, FhirResourceType):
         raise FhirInputError("a FHIR resource type is not admitted here")
     admitted_id = _admit_identifier(fhir_id, "FHIR resource id")
-    if isinstance(payload_text, str) and len(payload_text.encode("utf-8")) > MAXIMUM_RESOURCE_BYTES:
+    if not isinstance(payload_text, (str, bytes, bytearray)):
+        return _parse_failed_report(resource_type, admitted_id, "the payload is not JSON")
+    if len(payload_text) > MAXIMUM_RESOURCE_BYTES:
         return _parse_failed_report(
             resource_type, admitted_id, "the payload exceeds the admitted resource size"
         )
+    if isinstance(payload_text, str):
+        try:
+            encoded_size = len(payload_text.encode("utf-8"))
+        except UnicodeEncodeError:
+            return _parse_failed_report(resource_type, admitted_id, "the payload is not JSON")
+        if encoded_size > MAXIMUM_RESOURCE_BYTES:
+            return _parse_failed_report(
+                resource_type, admitted_id, "the payload exceeds the admitted resource size"
+            )
     try:
         payload = json.loads(payload_text)
-    except (TypeError, json.JSONDecodeError):
+    except (TypeError, UnicodeDecodeError, json.JSONDecodeError):
         return _parse_failed_report(resource_type, admitted_id, "the payload is not JSON")
     return _validate_parsed_payload(resource_type, admitted_id, payload)
 
