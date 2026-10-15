@@ -795,7 +795,7 @@ def _admit_span_set(spans: object) -> tuple[SpanReview, ...]:
     if len(spans) < 1 or len(spans) > MAXIMUM_SPANS:
         raise ReviewSupportError("a review carries an unadmitted span count")
     checked = tuple(item.validated() for item in spans if isinstance(item, SpanReview))
-    if len(checked) != len(spans):
+    if len(checked) != len(spans) or any(not isinstance(item, SpanReview) for item in checked):
         raise ReviewSupportError("review spans need SpanReview instances")
     _check_duplicate_span_ids(checked)
     return checked
@@ -807,7 +807,9 @@ def _admit_suggestion_set(suggestions: object) -> tuple[SuggestionRecord, ...]:
     if len(suggestions) > MAXIMUM_SUGGESTIONS:
         raise ReviewSuggestionError("a review carries an unadmitted suggestion count")
     checked = tuple(item.validated() for item in suggestions if isinstance(item, SuggestionRecord))
-    if len(checked) != len(suggestions):
+    if len(checked) != len(suggestions) or any(
+        not isinstance(item, SuggestionRecord) for item in checked
+    ):
         raise ReviewSuggestionError("review suggestions need SuggestionRecord instances")
     _check_duplicate_suggestion_ids(checked)
     return checked
