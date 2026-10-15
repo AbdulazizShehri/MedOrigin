@@ -689,6 +689,8 @@ def _freeze_value(value: object, depth: int) -> object:
     if value is None or isinstance(value, bool):
         return value
     if isinstance(value, (int, float)):
+        if isinstance(value, float) and not (float("-inf") < value < float("inf")):
+            raise ConnectorInputError("connector numbers must be finite")
         return value
     if isinstance(value, str):
         if len(value) > MAXIMUM_VALUE_CHARS:
@@ -699,10 +701,10 @@ def _freeze_value(value: object, depth: int) -> object:
             raise ConnectorInputError("a connector list value carries too many members")
         return tuple(_freeze_value(item, depth + 1) for item in value)
     if isinstance(value, dict):
+        if any(not isinstance(name, str) for name in value):
+            raise ConnectorInputError("a connector object key must be a string")
         frozen = []
         for name in sorted(value):
-            if not isinstance(name, str):
-                raise ConnectorInputError("a connector object key must be a string")
             frozen.append((name, _freeze_value(value[name], depth + 1)))
         return tuple(frozen)
     raise ConnectorInputError("a connector value has an unadmitted JSON type")
