@@ -1034,7 +1034,9 @@ def _admit_items(raw: object) -> tuple[ExportSourceDescriptor, ...]:
     if not raw or len(raw) > MAXIMUM_EXPORT_ITEMS:
         raise ExportStagingInputError("an export needs 1 to 64 source items")
     items = tuple(item.validated() for item in raw if isinstance(item, ExportSourceDescriptor))
-    if len(items) != len(raw):
+    if len(items) != len(raw) or any(
+        not isinstance(item, ExportSourceDescriptor) for item in items
+    ):
         raise ExportStagingInputError("an export item needs an ExportSourceDescriptor instance")
     identities = [(item.object_id, item.object_kind, item.object_revision) for item in items]
     if len(set(identities)) != len(identities):
