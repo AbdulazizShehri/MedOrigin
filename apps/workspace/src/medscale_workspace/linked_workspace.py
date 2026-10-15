@@ -507,7 +507,9 @@ class WorkspaceLink:
         if len(self.sources) > MAXIMUM_SOURCES_PER_LINK:
             raise LinkedInputError("a link carries an unadmitted source count")
         checked = tuple(item.validated() for item in self.sources if isinstance(item, LinkSource))
-        if len(checked) != len(self.sources):
+        if len(checked) != len(self.sources) or any(
+            not isinstance(item, LinkSource) for item in checked
+        ):
             raise LinkedInputError("link sources need LinkSource instances")
         seen = set()
         for item in checked:
@@ -658,7 +660,7 @@ def link_id_for(
     if not isinstance(sources, tuple) or not sources:
         raise LinkedInputError("a link needs a non-empty tuple of sources")
     checked = tuple(item.validated() for item in sources if isinstance(item, LinkSource))
-    if len(checked) != len(sources):
+    if len(checked) != len(sources) or any(not isinstance(item, LinkSource) for item in checked):
         raise LinkedInputError("link sources need LinkSource instances")
     ordered = tuple(sorted(checked, key=lambda item: str(item.source_id)))
     method = _admit_identifier(method, "derivation method")
@@ -1259,7 +1261,7 @@ def _validated_research_refs(raw: object) -> tuple[ResearchRef, ...]:
     if len(raw) > MAXIMUM_RESEARCH_REFS:
         raise LinkedInputError("a member carries an unadmitted research reference count")
     checked = tuple(item.validated() for item in raw if isinstance(item, ResearchRef))
-    if len(checked) != len(raw):
+    if len(checked) != len(raw) or any(not isinstance(item, ResearchRef) for item in checked):
         raise LinkedInputError("research references need ResearchRef instances")
     seen = set()
     for item in checked:
