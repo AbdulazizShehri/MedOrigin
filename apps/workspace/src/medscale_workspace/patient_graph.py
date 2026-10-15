@@ -680,7 +680,9 @@ def edge_id_for(
     if not isinstance(sources, tuple) or not sources:
         raise GraphInputError("an edge needs a non-empty tuple of sources")
     checked = tuple(item.validated() for item in sources if isinstance(item, GraphEdgeSource))
-    if len(checked) != len(sources):
+    if len(checked) != len(sources) or any(
+        not isinstance(item, GraphEdgeSource) for item in checked
+    ):
         raise GraphInputError("edge sources need GraphEdgeSource instances")
     ordered = tuple(sorted(checked, key=lambda item: str(item.source_id)))
     method = _admit_identifier(derivation_method, "derivation method")
