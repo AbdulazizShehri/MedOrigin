@@ -154,7 +154,9 @@ class SnapshotManifest:
         checked = tuple(
             item.validated() for item in self.entries if isinstance(item, SnapshotEntry)
         )
-        if len(checked) != len(self.entries):
+        if len(checked) != len(self.entries) or any(
+            not isinstance(item, SnapshotEntry) for item in checked
+        ):
             raise SnapshotInputError("snapshot entries need SnapshotEntry instances")
         _check_duplicate_source_ids(checked)
         index_identity = _admit_identifier(self.index_identity, "index identity")
@@ -438,7 +440,9 @@ class ResultSet:
         if len(self.results) > MAXIMUM_RESULTS:
             raise RetrievalInputError("a result set carries an unadmitted hit count")
         checked = tuple(item.validated() for item in self.results if isinstance(item, ScoredResult))
-        if len(checked) != len(self.results):
+        if len(checked) != len(self.results) or any(
+            not isinstance(item, ScoredResult) for item in checked
+        ):
             raise RetrievalInputError("result hits need ScoredResult instances")
         _check_result_order(checked)
         return ResultSet(
