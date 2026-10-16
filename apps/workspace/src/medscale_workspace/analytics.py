@@ -152,7 +152,9 @@ class AnalyticsRecord:
         if len(self.counts) < 1 or len(self.counts) > MAXIMUM_COUNTS_PER_RESULT:
             raise AnalyticsInputError("an analytics result carries an unadmitted count")
         checked = tuple(item.validated() for item in self.counts if isinstance(item, MetricCount))
-        if len(checked) != len(self.counts):
+        if len(checked) != len(self.counts) or any(
+            not isinstance(item, MetricCount) for item in checked
+        ):
             raise AnalyticsInputError("analytics counts need MetricCount instances")
         _check_duplicate_labels(checked)
         _check_expected_labels(self.metric_name, checked)
