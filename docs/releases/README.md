@@ -52,6 +52,7 @@ flowchart LR
 
 | Document | Covers |
 |---|---|
+| [software_release_track.md](software_release_track.md) | Founder-prioritized synthetic-only package/developer-preview track, with independent scientific/clinical boundaries and evidence gates |
 | [artifact_lifecycle.md](artifact_lifecycle.md) | Every artifact class, its states and gates |
 | [versioning.md](versioning.md) | Binding version schemes for package, models, datasets, benchmarks, schemas, docs, ADRs |
 | [release_process.md](release_process.md) | The release procedure + all checklists (incl. deprecation, retraction) |
