@@ -91,6 +91,7 @@ The `medscale` CLI and Python import paths are **intentional compatibility names
 | [Research Loop specification](specs/mesc-research-loop-v1/README.md) | Evidence-first execution model and scientific gates |
 | [Brand transition](docs/BRAND_TRANSITION.md) | MedOrigin identity, legacy package names, and migration policy |
 | [Synthetic-only software release track](docs/releases/software_release_track.md) | Independent package/developer-preview gate; separate from scientific and clinical qualification |
+| [Developer package install guide](docs/releases/developer_package_install.md) | Independently build and smoke the Core and Workspace Python wheels using synthetic data only |
 | [Third-party provenance](THIRD_PARTY_NOTICES.md) | Attribution and rules for using external sources |
 
 ## Contributing
