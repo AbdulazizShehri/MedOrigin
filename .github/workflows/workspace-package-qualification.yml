@@ -50,6 +50,24 @@ jobs:
           test "$(find "${RUNNER_TEMP}/workspace-dist" -maxdepth 1 -type f -name 'medscale_workspace-*.tar.gz' | wc -l)" -eq 1
           (cd "${RUNNER_TEMP}/workspace-dist" && sha256sum -- *.whl *.tar.gz)
 
+      - name: Verify embedded Apache-2.0 license bytes in independent Workspace wheel
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import os
+          from pathlib import Path
+          from zipfile import ZipFile
+
+          wheels = list((Path(os.environ["RUNNER_TEMP"]) / "workspace-dist").glob("medscale_workspace-*.whl"))
+          assert len(wheels) == 1, wheels
+          with ZipFile(wheels[0]) as archive:
+              members = [name for name in archive.namelist() if name.endswith(".dist-info/licenses/LICENSE")]
+              assert len(members) == 1, members
+              assert archive.read(members[0]) == Path("LICENSE").read_bytes(), "Workspace wheel license mismatch"
+          print("WORKSPACE_LICENSE_BUNDLED_PASS")
+          PY
+
       - name: Install exact wheel with declared pinned runtime dependency
         shell: bash
         run: |
