@@ -71,6 +71,16 @@ jobs:
           uv run python scripts/mrl_closeout_evidence.py
           --verify specs/mesc-research-loop-v1/closeout-evidence-v1.json
 
+      # CW-001: the root configuration and lockfile are frozen research evidence.
+      # Type-check Workspace separately, using the same pinned CW-002 AEAD
+      # dependency as the existing pytest-shard job, without syncing or editing
+      # root pyproject.toml or uv.lock.
+      - name: Install CW-002 Workspace AEAD typing dependency
+        run: uv pip install --python .venv "cryptography==50.0.1"
+
+      - name: Mypy (strict Workspace)
+        run: uv run --no-sync mypy --strict --no-incremental apps/workspace/src/medscale_workspace
+
   pytest-shard:
     name: pytest shard ${{ matrix.shard }} (py${{ matrix.python-version }})
     needs: static
