@@ -58,10 +58,13 @@ from medscale_workspace.errors import (
     ClaimConflictError,
     ClaimInputError,
     ClaimRevisionError,
+    CorpusInputError,
     LinkConflictError,
     LinkInputError,
     LinkRevisionError,
     ObjectNotFoundError,
+    RetrievalInputError,
+    SnapshotInputError,
     StoreConflictError,
     StrengthConflictError,
     StrengthInputError,
@@ -184,7 +187,7 @@ class ClaimCitation:
     citation_text: str
     state: CitationState
 
-    def validated(self):
+    def validated(self) -> ClaimCitation:
         citation_text = _admit_citation_text(self.citation_text)
         if not isinstance(self.state, CitationState):
             raise ClaimInputError("a citation state is not admitted here")
@@ -192,7 +195,7 @@ class ClaimCitation:
             raise ClaimInputError("a stored claim citation is never a resolved link")
         return ClaimCitation(citation_text=citation_text, state=self.state)
 
-    def to_document(self):
+    def to_document(self) -> dict[str, object]:
         admitted = self.validated()
         return {
             "citation_text": admitted.citation_text,
@@ -200,7 +203,7 @@ class ClaimCitation:
         }
 
     @staticmethod
-    def from_document(document):
+    def from_document(document: object) -> ClaimCitation:
         if not isinstance(document, dict):
             raise ClaimInputError("a stored citation must be a JSON object")
         expected = {"citation_text", "state"}
@@ -223,9 +226,9 @@ class Claim:
     claim_id: UUID
     claim_index: int
     claim_text: str
-    citations: tuple
+    citations: tuple[ClaimCitation, ...]
 
-    def validated(self):
+    def validated(self) -> Claim:
         if not isinstance(self.claim_id, UUID):
             raise ClaimInputError("a claim id must be a UUID value")
         claim_index = _admit_claim_index(self.claim_index)
@@ -247,7 +250,7 @@ class Claim:
             citations=checked,
         )
 
-    def to_document(self):
+    def to_document(self) -> dict[str, object]:
         admitted = self.validated()
         return {
             "citations": [item.to_document() for item in admitted.citations],
@@ -257,7 +260,7 @@ class Claim:
         }
 
     @staticmethod
-    def from_document(document):
+    def from_document(document: object) -> Claim:
         if not isinstance(document, dict):
             raise ClaimInputError("a stored claim must be a JSON object")
         expected = {"citations", "claim_id", "claim_index", "claim_text"}
@@ -289,9 +292,9 @@ class ClaimSet:
     workspace_id: UUID
     set_id: UUID
     answer_text: str
-    claims: tuple
+    claims: tuple[Claim, ...]
 
-    def validated(self):
+    def validated(self) -> ClaimSet:
         if not isinstance(self.workspace_id, UUID):
             raise ClaimInputError("a workspace id must be a UUID value")
         if not isinstance(self.set_id, UUID):
@@ -301,10 +304,8 @@ class ClaimSet:
             raise ClaimInputError("claim-set claims must be a tuple")
         if len(self.claims) < 1 or len(self.claims) > MAXIMUM_CLAIMS_PER_SET:
             raise ClaimInputError("a claim set carries an unadmitted claim count")
-        checked = tuple(
-            item.validated() if isinstance(item, Claim) else None for item in self.claims
-        )
-        if any(item is None for item in checked):
+        checked = tuple(item.validated() for item in self.claims if isinstance(item, Claim))
+        if len(checked) != len(self.claims) or any(not isinstance(item, Claim) for item in checked):
             raise ClaimInputError("claim-set claims need Claim instances")
         expected_ids = tuple(
             claim_id_for(self.workspace_id, self.set_id, position, item.claim_text)
@@ -325,7 +326,7 @@ class ClaimSet:
             claims=checked,
         )
 
-    def to_document(self):
+    def to_document(self) -> dict[str, object]:
         admitted = self.validated()
         return {
             "answer_text": admitted.answer_text,
@@ -338,7 +339,7 @@ class ClaimSet:
         }
 
     @staticmethod
-    def from_document(document):
+    def from_document(document: object) -> ClaimSet:
         if not isinstance(document, dict):
             raise ClaimInputError("a stored claim set must be a JSON object")
         expected = {
@@ -402,7 +403,7 @@ class ClaimSourceLink:
     char_start: int
     char_end: int
 
-    def validated(self):
+    def validated(self) -> ClaimSourceLink:
         if not isinstance(self.workspace_id, UUID):
             raise LinkInputError("a workspace id must be a UUID value")
         if not isinstance(self.set_id, UUID):
@@ -470,7 +471,7 @@ class ClaimSourceLink:
             char_end=char_end,
         )
 
-    def to_document(self):
+    def to_document(self) -> dict[str, object]:
         admitted = self.validated()
         return {
             "char_end": admitted.char_end,
@@ -495,7 +496,7 @@ class ClaimSourceLink:
         }
 
     @staticmethod
-    def from_document(document):
+    def from_document(document: object) -> ClaimSourceLink:
         if not isinstance(document, dict):
             raise LinkInputError("a stored link must be a JSON object")
         expected = {
@@ -569,19 +570,19 @@ class LinkFreshness:
     link_id: UUID
     state: FreshnessState
 
-    def validated(self):
+    def validated(self) -> LinkFreshness:
         if not isinstance(self.link_id, UUID):
             raise StrengthInputError("a freshness link id must be a UUID value")
         if not isinstance(self.state, FreshnessState):
             raise StrengthInputError("a freshness state is not admitted here")
         return LinkFreshness(link_id=self.link_id, state=self.state)
 
-    def to_document(self):
+    def to_document(self) -> dict[str, object]:
         admitted = self.validated()
         return {"link_id": str(admitted.link_id), "state": admitted.state.value}
 
     @staticmethod
-    def from_document(document):
+    def from_document(document: object) -> LinkFreshness:
         if not isinstance(document, dict):
             raise StrengthInputError("stored freshness must be a JSON object")
         expected = {"link_id", "state"}
@@ -609,11 +610,11 @@ class Assessment:
     assessed_at: str
     assessed_date: str
     freshness_limit_days: int
-    link_ids: tuple
-    freshness: tuple
+    link_ids: tuple[UUID, ...]
+    freshness: tuple[LinkFreshness, ...]
     reason: str
 
-    def validated(self):
+    def validated(self) -> Assessment:
         if not isinstance(self.workspace_id, UUID):
             raise StrengthInputError("a workspace id must be a UUID value")
         if not isinstance(self.set_id, UUID):
@@ -687,7 +688,7 @@ class Assessment:
             reason=reason,
         )
 
-    def to_document(self):
+    def to_document(self) -> dict[str, object]:
         admitted = self.validated()
         return {
             "assessed_at": admitted.assessed_at,
@@ -709,7 +710,7 @@ class Assessment:
         }
 
     @staticmethod
-    def from_document(document):
+    def from_document(document: object) -> Assessment:
         if not isinstance(document, dict):
             raise StrengthInputError("a stored assessment must be a JSON object")
         expected = {
@@ -774,7 +775,7 @@ class Assessment:
         ).validated()
 
 
-def claim_set_id_for(workspace_id, answer_text):
+def claim_set_id_for(workspace_id: object, answer_text: object) -> UUID:
     """Return the deterministic identity of one answer decomposition."""
     if not isinstance(workspace_id, UUID):
         raise ClaimInputError("a workspace id must be a UUID value")
@@ -782,7 +783,9 @@ def claim_set_id_for(workspace_id, answer_text):
     return uuid5(CLAIM_SET_NAMESPACE, ":".join((str(workspace_id), admitted)))
 
 
-def claim_id_for(workspace_id, set_id, claim_index, claim_text):
+def claim_id_for(
+    workspace_id: object, set_id: object, claim_index: object, claim_text: object
+) -> UUID:
     """Return the deterministic identity of one claim inside a claim set."""
     if not isinstance(workspace_id, UUID):
         raise ClaimInputError("a workspace id must be a UUID value")
@@ -797,19 +800,19 @@ def claim_id_for(workspace_id, set_id, claim_index, claim_text):
 
 
 def link_id_for(
-    workspace_id,
-    set_id,
-    claim_id,
-    source_id,
-    source_revision,
-    snapshot_id,
-    query_id,
-    result_id,
-    stance,
-    citation_text,
-    char_start,
-    char_end,
-):
+    workspace_id: object,
+    set_id: object,
+    claim_id: object,
+    source_id: object,
+    source_revision: object,
+    snapshot_id: object,
+    query_id: object,
+    result_id: object,
+    stance: object,
+    citation_text: object,
+    char_start: object,
+    char_end: object,
+) -> UUID:
     """Return the deterministic identity of one claim-source link."""
     if not isinstance(workspace_id, UUID):
         raise LinkInputError("a workspace id must be a UUID value")
@@ -853,16 +856,16 @@ def link_id_for(
 
 
 def assessment_id_for(
-    workspace_id,
-    claim_id,
-    verdict,
-    evidence_method,
-    evidence_method_version,
-    assessed_date,
-    freshness_limit_days,
-    link_ids,
-    reason,
-):
+    workspace_id: object,
+    claim_id: object,
+    verdict: object,
+    evidence_method: object,
+    evidence_method_version: object,
+    assessed_date: object,
+    freshness_limit_days: object,
+    link_ids: object,
+    reason: object,
+) -> UUID:
     """Return the deterministic identity of one strength assessment."""
     if not isinstance(workspace_id, UUID):
         raise StrengthInputError("a workspace id must be a UUID value")
@@ -901,7 +904,7 @@ def assessment_id_for(
     )
 
 
-def claim_set_binding(workspace_id, set_id):
+def claim_set_binding(workspace_id: object, set_id: object) -> ObjectBinding:
     """Return the store binding of one claim set."""
     if not isinstance(workspace_id, UUID):
         raise ClaimInputError("a workspace id must be a UUID value")
@@ -915,7 +918,7 @@ def claim_set_binding(workspace_id, set_id):
     )
 
 
-def link_binding(workspace_id, link_id):
+def link_binding(workspace_id: object, link_id: object) -> ObjectBinding:
     """Return the store binding of one claim-source link."""
     if not isinstance(workspace_id, UUID):
         raise LinkInputError("a workspace id must be a UUID value")
@@ -929,7 +932,7 @@ def link_binding(workspace_id, link_id):
     )
 
 
-def assessment_binding(workspace_id, assessment_id):
+def assessment_binding(workspace_id: object, assessment_id: object) -> ObjectBinding:
     """Return the store binding of one strength assessment."""
     if not isinstance(workspace_id, UUID):
         raise StrengthInputError("a workspace id must be a UUID value")
@@ -943,7 +946,9 @@ def assessment_binding(workspace_id, assessment_id):
     )
 
 
-def freshness_of(source_date, assessed_date, freshness_limit_days):
+def freshness_of(
+    source_date: object, assessed_date: object, freshness_limit_days: object
+) -> FreshnessState:
     """Return the represented freshness of one source at assessment time."""
     source_date = _admit_source_date(source_date, StrengthInputError)
     assessed_date = _admit_assessment_date(assessed_date)
@@ -959,8 +964,15 @@ def freshness_of(source_date, assessed_date, freshness_limit_days):
 
 
 def admit_claim_set(
-    store, trail, workspace_id, answer_text, claim_texts, citations_per_claim, actor_id, occurred_at
-):
+    store: object,
+    trail: object,
+    workspace_id: object,
+    answer_text: object,
+    claim_texts: object,
+    citations_per_claim: object,
+    actor_id: object,
+    occurred_at: object,
+) -> ObjectBinding:
     """Decompose one answer into claims with unresolved citations, failing closed."""
     if not isinstance(store, WorkspaceStore):
         raise ClaimInputError("a workspace store is required")
@@ -1031,7 +1043,7 @@ def admit_claim_set(
     return binding
 
 
-def read_claim_set(store, set_id):
+def read_claim_set(store: object, set_id: object) -> ClaimSet:
     """Read and verify one stored claim set."""
     if not isinstance(store, WorkspaceStore):
         raise ClaimInputError("a workspace store is required")
@@ -1061,22 +1073,22 @@ def read_claim_set(store, set_id):
 
 
 def admit_link(
-    store,
-    trail,
-    workspace_id,
-    claim_set_id,
-    claim_id,
-    source_id,
-    snapshot_id,
-    stance,
-    query_id,
-    result_id,
-    char_start,
-    char_end,
-    citation_text,
-    actor_id,
-    occurred_at,
-):
+    store: object,
+    trail: object,
+    workspace_id: object,
+    claim_set_id: object,
+    claim_id: object,
+    source_id: object,
+    snapshot_id: object,
+    stance: object,
+    query_id: object,
+    result_id: object,
+    char_start: object,
+    char_end: object,
+    citation_text: object,
+    actor_id: object,
+    occurred_at: object,
+) -> ObjectBinding:
     """Bind one claim to one admitted evidence source revision, failing closed."""
     if not isinstance(store, WorkspaceStore):
         raise LinkInputError("a workspace store is required")
@@ -1107,13 +1119,13 @@ def admit_link(
         raise LinkInputError("a link citation does not match a recorded citation")
     try:
         source = corpus_mod.read_source(store, source_id)
-    except corpus_mod.CorpusInputError as error:
+    except CorpusInputError as error:
         raise LinkRevisionError("the linked source is absent in this store") from error
     if not isinstance(snapshot_id, UUID):
         raise LinkInputError("a link snapshot id must be a UUID value")
     try:
         manifest = retrieval_mod.read_snapshot(store, snapshot_id)
-    except retrieval_mod.SnapshotInputError as error:
+    except SnapshotInputError as error:
         raise LinkRevisionError("the linked snapshot is absent in this store") from error
     _require_snapshot_membership(manifest, source)
     if query_id is not None or result_id is not None:
@@ -1121,13 +1133,13 @@ def admit_link(
             raise LinkInputError("a link query context needs both query and result")
         try:
             query = retrieval_mod.read_query(store, query_id)
-        except retrieval_mod.RetrievalInputError as error:
+        except RetrievalInputError as error:
             raise LinkRevisionError("the linked query is absent in this store") from error
         if query.snapshot_id != manifest.snapshot_id:
             raise LinkRevisionError("the linked query belongs to another snapshot")
         try:
             result = retrieval_mod.read_result(store, result_id)
-        except retrieval_mod.RetrievalInputError as error:
+        except RetrievalInputError as error:
             raise LinkRevisionError("the linked result is absent in this store") from error
         if result.query_id != query.query_id:
             raise LinkRevisionError("the linked result belongs to another query")
@@ -1204,7 +1216,7 @@ def admit_link(
     return binding
 
 
-def read_link(store, link_id):
+def read_link(store: object, link_id: object) -> ClaimSourceLink:
     """Read and verify one stored claim-source link."""
     if not isinstance(store, WorkspaceStore):
         raise LinkInputError("a workspace store is required")
@@ -1234,21 +1246,21 @@ def read_link(store, link_id):
 
 
 def assess_claim(
-    store,
-    trail,
-    workspace_id,
-    claim_set_id,
-    claim_id,
-    verdict,
-    link_ids,
-    evidence_method,
-    evidence_method_version,
-    assessed_at,
-    freshness_limit_days,
-    reason,
-    actor_id,
-    occurred_at,
-):
+    store: object,
+    trail: object,
+    workspace_id: object,
+    claim_set_id: object,
+    claim_id: object,
+    verdict: object,
+    link_ids: object,
+    evidence_method: object,
+    evidence_method_version: object,
+    assessed_at: object,
+    freshness_limit_days: object,
+    reason: object,
+    actor_id: object,
+    occurred_at: object,
+) -> ObjectBinding:
     """Record one deterministic strength verdict over explicit links, failing closed.
 
     The verdict is checked mechanically against the stances and the freshness of
@@ -1384,7 +1396,7 @@ def assess_claim(
     return binding
 
 
-def read_assessment(store, assessment_id):
+def read_assessment(store: object, assessment_id: object) -> Assessment:
     """Read one stored assessment and re-verify it against its linked evidence."""
     if not isinstance(store, WorkspaceStore):
         raise StrengthInputError("a workspace store is required")
@@ -1447,11 +1459,11 @@ def read_assessment(store, assessment_id):
     return assessment.validated()
 
 
-def _verify_link_bindings(store, link):
+def _verify_link_bindings(store: WorkspaceStore, link: ClaimSourceLink) -> ClaimSourceLink:
     """Re-verify one link against the corpus, snapshot, query, and result stores."""
     try:
         source = corpus_mod.read_source(store, link.source_id)
-    except corpus_mod.CorpusInputError as error:
+    except CorpusInputError as error:
         raise LinkRevisionError("the linked source is absent in this store") from error
     if source.source_revision != link.source_revision:
         raise LinkRevisionError("the linked source revision changed")
@@ -1459,7 +1471,7 @@ def _verify_link_bindings(store, link):
         raise LinkRevisionError("the linked source content changed")
     try:
         manifest = retrieval_mod.read_snapshot(store, link.snapshot_id)
-    except retrieval_mod.SnapshotInputError as error:
+    except SnapshotInputError as error:
         raise LinkRevisionError("the linked snapshot is absent in this store") from error
     _require_snapshot_membership(manifest, source)
     if link.query_id is not None or link.result_id is not None:
@@ -1467,13 +1479,13 @@ def _verify_link_bindings(store, link):
             raise LinkInputError("a link query context needs both query and result")
         try:
             query = retrieval_mod.read_query(store, link.query_id)
-        except retrieval_mod.RetrievalInputError as error:
+        except RetrievalInputError as error:
             raise LinkRevisionError("the linked query is absent in this store") from error
         if query.snapshot_id != manifest.snapshot_id:
             raise LinkRevisionError("the linked query belongs to another snapshot")
         try:
             result = retrieval_mod.read_result(store, link.result_id)
-        except retrieval_mod.RetrievalInputError as error:
+        except RetrievalInputError as error:
             raise LinkRevisionError("the linked result is absent in this store") from error
         if result.query_id != query.query_id:
             raise LinkRevisionError("the linked result belongs to another query")
@@ -1484,7 +1496,9 @@ def _verify_link_bindings(store, link):
     return link
 
 
-def _require_snapshot_membership(manifest, source):
+def _require_snapshot_membership(
+    manifest: retrieval_mod.SnapshotManifest, source: corpus_mod.CorpusSource
+) -> retrieval_mod.SnapshotEntry:
     for entry in manifest.entries:
         if entry.source_id == source.source_id:
             if entry.source_revision != source.source_revision:
@@ -1495,7 +1509,12 @@ def _require_snapshot_membership(manifest, source):
     raise LinkRevisionError("the linked snapshot does not contain the source")
 
 
-def _check_verdict_rule(verdict, links, freshness, reason):
+def _check_verdict_rule(
+    verdict: object,
+    links: tuple[ClaimSourceLink, ...],
+    freshness: tuple[LinkFreshness, ...],
+    reason: str,
+) -> StrengthVerdict:
     """Fail closed unless a verdict follows from its linked evidence stances."""
     if not isinstance(verdict, StrengthVerdict):
         raise StrengthVerdictError("an assessment verdict is not admitted here")
@@ -1557,7 +1576,7 @@ def _check_verdict_rule(verdict, links, freshness, reason):
     return verdict
 
 
-def _require_reason_member(reason, members):
+def _require_reason_member(reason: str, members: type[StrEnum]) -> str:
     try:
         members(reason)
     except ValueError as error:
@@ -1565,7 +1584,7 @@ def _require_reason_member(reason, members):
     return reason
 
 
-def _assessment_source_refs(links):
+def _assessment_source_refs(links: tuple[ClaimSourceLink, ...]) -> tuple[SourceRef, ...]:
     refs = []
     seen = set()
     for link in links:
@@ -1584,32 +1603,32 @@ def _assessment_source_refs(links):
     return tuple(refs)
 
 
-def _read_claim_set_for_link(store, claim_set_id):
+def _read_claim_set_for_link(store: object, claim_set_id: object) -> ClaimSet:
     try:
         return read_claim_set(store, claim_set_id)
     except (ClaimInputError, ClaimRevisionError) as error:
         raise LinkInputError("the linked claim set is absent in this store") from error
 
 
-def _find_claim(claim_set, claim_id):
+def _find_claim(claim_set: ClaimSet, claim_id: UUID) -> Claim:
     for claim in claim_set.claims:
         if claim.claim_id == claim_id:
             return claim
     raise LinkInputError("the linked claim is absent in its claim set")
 
 
-def _find_claim_for_assessment(claim_set, claim_id):
+def _find_claim_for_assessment(claim_set: ClaimSet, claim_id: UUID) -> Claim:
     for claim in claim_set.claims:
         if claim.claim_id == claim_id:
             return claim
     raise StrengthInputError("the assessed claim is absent in its claim set")
 
 
-def _split_date(value):
+def _split_date(value: str) -> tuple[int, int, int]:
     return (int(value[0:4]), int(value[5:7]), int(value[8:10]))
 
 
-def _days_from_civil_tuple(parts):
+def _days_from_civil_tuple(parts: tuple[int, int, int]) -> int:
     year, month, day = parts
     adjusted_year = year - 1 if month <= 2 else year
     era = adjusted_year // 400
@@ -1620,7 +1639,7 @@ def _days_from_civil_tuple(parts):
     return era * 146097 + day_of_era - 719468
 
 
-def _admit_identifier(raw, label, error_cls):
+def _admit_identifier(raw: object, label: str, error_cls: type[Exception]) -> str:
     if not isinstance(raw, str):
         raise error_cls(f"a {label} must be a string")
     value = raw.strip()
@@ -1636,7 +1655,7 @@ def _admit_identifier(raw, label, error_cls):
     return value
 
 
-def _admit_answer_text(raw):
+def _admit_answer_text(raw: object) -> str:
     if not isinstance(raw, str):
         raise ClaimInputError("answer text must be a string")
     value = raw.strip()
@@ -1654,7 +1673,7 @@ def _admit_answer_text(raw):
     return value
 
 
-def _admit_claim_text(raw):
+def _admit_claim_text(raw: object) -> str:
     if not isinstance(raw, str):
         raise ClaimInputError("claim text must be a string")
     value = raw.strip()
@@ -1672,7 +1691,7 @@ def _admit_claim_text(raw):
     return value
 
 
-def _admit_claim_index(raw):
+def _admit_claim_index(raw: object) -> int:
     if isinstance(raw, bool) or not isinstance(raw, int):
         raise ClaimInputError("a claim index must be an integer")
     if raw < 0:
@@ -1680,7 +1699,7 @@ def _admit_claim_index(raw):
     return raw
 
 
-def _admit_citation_text(raw):
+def _admit_citation_text(raw: object) -> str:
     if not isinstance(raw, str):
         raise ClaimInputError("citation text must be a string")
     value = raw.strip()
@@ -1696,7 +1715,7 @@ def _admit_citation_text(raw):
     return value
 
 
-def _admit_optional_citation(raw):
+def _admit_optional_citation(raw: object) -> str:
     if not isinstance(raw, str):
         raise LinkInputError("a link citation must be a string")
     value = raw.strip()
@@ -1705,7 +1724,7 @@ def _admit_optional_citation(raw):
     return _admit_link_citation_text(value)
 
 
-def _admit_link_citation_text(value):
+def _admit_link_citation_text(value: str) -> str:
     if len(value) > MAXIMUM_CITATION_CHARS:
         raise LinkInputError("a link citation is longer than the admitted maximum")
     if not value.isascii():
@@ -1716,7 +1735,7 @@ def _admit_link_citation_text(value):
     return value
 
 
-def _admit_digest(raw):
+def _admit_digest(raw: object) -> str:
     if not isinstance(raw, str) or not raw.startswith("sha256:"):
         raise LinkInputError("content digest must be a sha256: digest")
     hex_part = raw[len("sha256:") :]
@@ -1725,7 +1744,7 @@ def _admit_digest(raw):
     return raw
 
 
-def _admit_source_date(raw, error_cls):
+def _admit_source_date(raw: object, error_cls: type[Exception]) -> str:
     if not isinstance(raw, str):
         raise error_cls("a source date must be a string")
     value = raw.strip()
@@ -1735,7 +1754,7 @@ def _admit_source_date(raw, error_cls):
     return value
 
 
-def _admit_assessment_date(raw):
+def _admit_assessment_date(raw: object) -> str:
     if not isinstance(raw, str):
         raise StrengthInputError("an assessed date must be a string")
     value = raw.strip()
@@ -1743,7 +1762,7 @@ def _admit_assessment_date(raw):
     return value
 
 
-def _require_calendar_date(value, label, error_cls):
+def _require_calendar_date(value: str, label: str, error_cls: type[Exception]) -> str:
     if len(value) != 10 or value[4:5] != "-" or value[7:8] != "-":
         raise error_cls(f"{label} must be empty or YYYY-MM-DD")
     for index in (0, 1, 2, 3, 5, 6, 8, 9):
@@ -1759,7 +1778,7 @@ def _require_calendar_date(value, label, error_cls):
     return value
 
 
-def _admit_optional_uuid(raw, label):
+def _admit_optional_uuid(raw: object, label: str) -> UUID | None:
     if raw is None:
         return None
     if not isinstance(raw, UUID):
@@ -1767,7 +1786,7 @@ def _admit_optional_uuid(raw, label):
     return raw
 
 
-def _admit_range_bound(raw, label):
+def _admit_range_bound(raw: object, label: str) -> int:
     if raw is None:
         return -1
     if isinstance(raw, bool) or not isinstance(raw, int):
@@ -1777,7 +1796,7 @@ def _admit_range_bound(raw, label):
     return raw
 
 
-def _admit_freshness_limit(raw):
+def _admit_freshness_limit(raw: object) -> int:
     if isinstance(raw, bool) or not isinstance(raw, int):
         raise StrengthInputError("a freshness limit must be an integer")
     if raw < 0 or raw > MAXIMUM_FRESHNESS_LIMIT_DAYS:
@@ -1785,7 +1804,7 @@ def _admit_freshness_limit(raw):
     return raw
 
 
-def _admit_reason(verdict, raw):
+def _admit_reason(verdict: StrengthVerdict, raw: object) -> str:
     if not isinstance(raw, str):
         raise StrengthInputError("a verdict reason must be a string")
     if verdict in (
@@ -1816,7 +1835,7 @@ def _admit_reason(verdict, raw):
     return raw
 
 
-def _admit_occurred_at(raw, error_cls):
+def _admit_occurred_at(raw: object, error_cls: type[Exception]) -> str:
     if not isinstance(raw, str):
         raise error_cls("an occurrence time must be a string")
     value = raw.strip()
@@ -1831,7 +1850,7 @@ def _admit_occurred_at(raw, error_cls):
     return value
 
 
-def _check_duplicate_citation_texts(citations):
+def _check_duplicate_citation_texts(citations: tuple[ClaimCitation, ...]) -> None:
     seen = set()
     for item in citations:
         if item.citation_text in seen:
@@ -1839,27 +1858,27 @@ def _check_duplicate_citation_texts(citations):
         seen.add(item.citation_text)
 
 
-def _canonical_bytes(document):
+def _canonical_bytes(document: object) -> bytes:
     return json.dumps(document, sort_keys=True, separators=(",", ":"), ensure_ascii=True).encode(
         "ascii"
     )
 
 
-def _string_member(document, name):
+def _string_member(document: dict[str, object], name: str) -> str:
     value = document[name]
     if not isinstance(value, str):
         raise LinkInputError(f"a stored {name} must be a string")
     return value
 
 
-def _integer_member(document, name):
+def _integer_member(document: dict[str, object], name: str) -> int:
     value = document[name]
     if isinstance(value, bool) or not isinstance(value, int):
         raise LinkInputError(f"a stored {name} must be an integer")
     return value
 
 
-def _optional_uuid_member(document, name):
+def _optional_uuid_member(document: dict[str, object], name: str) -> UUID | None:
     value = document[name]
     if value == "":
         return None
@@ -1871,7 +1890,7 @@ def _optional_uuid_member(document, name):
         raise LinkInputError(f"a stored {name} is not admitted") from error
 
 
-def _parse_uuid_member(value):
+def _parse_uuid_member(value: object) -> UUID:
     if not isinstance(value, str):
         raise StrengthInputError("a stored assessment link id must be a string")
     try:
