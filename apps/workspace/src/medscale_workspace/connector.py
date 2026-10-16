@@ -109,14 +109,14 @@ class ConnectorManifest:
     connector_id: UUID
     manifest_name: str
     manifest_version: str
-    capabilities: tuple
-    destinations: tuple
+    capabilities: tuple[ConnectorCapability, ...]
+    destinations: tuple[str, ...]
     timeout_ms: int
     max_retries: int
     offline: bool
     credential_id: str | None
 
-    def validated(self):
+    def validated(self) -> ConnectorManifest:
         if not isinstance(self.connector_id, UUID):
             raise ConnectorInputError("a connector identity must be a UUID value")
         manifest_name = _admit_identifier(self.manifest_name, "connector name")
@@ -150,7 +150,7 @@ class ConnectorManifest:
             credential_id=credential_id,
         )
 
-    def to_document(self):
+    def to_document(self) -> dict[str, object]:
         return {
             "connector_id": str(self.connector_id),
             "manifest_name": self.manifest_name,
@@ -182,10 +182,10 @@ class ConnectorEnvelope:
     query_digest: str
     source_version: str
     retrieved_at: str
-    payload: tuple
+    payload: tuple[tuple[str, object], ...]
     content_digest: str | None
 
-    def validated(self):
+    def validated(self) -> ConnectorEnvelope:
         if not isinstance(self.workspace_id, UUID):
             raise ConnectorInputError("a connector workspace id must be a UUID value")
         if not isinstance(self.envelope_id, UUID):
@@ -218,7 +218,7 @@ class ConnectorEnvelope:
             content_digest=content_digest,
         )
 
-    def to_document(self):
+    def to_document(self) -> dict[str, object]:
         return {
             "workspace_id": str(self.workspace_id),
             "envelope_id": str(self.envelope_id),
@@ -239,7 +239,7 @@ class ConnectorEnvelope:
         }
 
     @staticmethod
-    def from_document(document):
+    def from_document(document: object) -> ConnectorEnvelope:
         if not isinstance(document, dict):
             raise ConnectorInputError("a stored connector envelope must be a JSON object")
         expected = (
@@ -316,19 +316,25 @@ class ConnectorEnvelope:
         ).validated()
 
 
-def connector_id_for(manifest_name):
+def connector_id_for(manifest_name: object) -> UUID:
     """Return the deterministic identity of one named connector."""
     admitted = _admit_identifier(manifest_name, "connector name")
     return uuid5(CONNECTOR_NAMESPACE, admitted)
 
 
-def manifest_digest_for(manifest):
+def manifest_digest_for(manifest: ConnectorManifest) -> str:
     """Return the digest binding one validated manifest revision."""
     admitted = manifest.validated()
     return content_digest_of(_canonical_bytes(admitted.to_document()))
 
 
-def envelope_id_for(workspace_id, connector_id, destination, query, source_version):
+def envelope_id_for(
+    workspace_id: object,
+    connector_id: object,
+    destination: object,
+    query: object,
+    source_version: object,
+) -> UUID:
     """Return the deterministic identity of one connector fetch result."""
     if not isinstance(workspace_id, UUID):
         raise ConnectorInputError("a workspace id must be a UUID value")
@@ -352,7 +358,7 @@ def envelope_id_for(workspace_id, connector_id, destination, query, source_versi
     )
 
 
-def envelope_binding(workspace_id, envelope_id):
+def envelope_binding(workspace_id: object, envelope_id: object) -> ObjectBinding:
     """Return the store binding of one admitted connector envelope."""
     if not isinstance(workspace_id, UUID):
         raise ConnectorInputError("a workspace id must be a UUID value")
@@ -367,15 +373,15 @@ def envelope_binding(workspace_id, envelope_id):
 
 
 def admit_manifest(
-    manifest_name,
-    manifest_version,
-    capabilities,
-    destinations,
-    timeout_ms,
-    max_retries,
-    offline=False,
-    credential_id=None,
-):
+    manifest_name: str,
+    manifest_version: str,
+    capabilities: tuple[ConnectorCapability, ...],
+    destinations: tuple[str, ...],
+    timeout_ms: int,
+    max_retries: int,
+    offline: bool = False,
+    credential_id: str | None = None,
+) -> ConnectorManifest:
     """Validate one connector manifest without storing anything."""
     if not isinstance(capabilities, tuple):
         raise ConnectorInputError("a connector manifest needs a capability tuple")
@@ -394,18 +400,25 @@ def admit_manifest(
     ).validated()
 
 
+class FixtureReadTransport:
+    """Static read-only fixture interface; runtime methods remain fail-closed."""
+
+    def fetch(self, *, destination: str, query: str, timeout_ms: int) -> object:
+        raise NotImplementedError
+
+
 def fetch_envelope(
-    store,
-    trail,
-    workspace_id,
-    manifest,
-    transport,
-    destination,
-    query,
-    capability,
-    actor_id,
-    occurred_at,
-):
+    store: WorkspaceStore,
+    trail: AuditTrail,
+    workspace_id: UUID,
+    manifest: ConnectorManifest,
+    transport: FixtureReadTransport,
+    destination: object,
+    query: object,
+    capability: object,
+    actor_id: object,
+    occurred_at: object,
+) -> ObjectBinding:
     """Fetch one read-only connector result through a fixture transport.
 
     Offline connectors are refused without touching the transport. Temporary
@@ -524,7 +537,7 @@ def fetch_envelope(
     return binding
 
 
-def read_envelope(store, envelope_id):
+def read_envelope(store: object, envelope_id: object) -> ConnectorEnvelope:
     """Read and verify one stored connector envelope."""
     if not isinstance(store, WorkspaceStore):
         raise ConnectorInputError("a workspace store is required")
@@ -556,7 +569,9 @@ def read_envelope(store, envelope_id):
     return envelope.validated()
 
 
-def delete_envelope(store, trail, envelope_id, actor_id, occurred_at):
+def delete_envelope(
+    store: object, trail: object, envelope_id: object, actor_id: object, occurred_at: object
+) -> ObjectBinding:
     """Delete one admitted connector envelope; the audit trail survives."""
     if not isinstance(store, WorkspaceStore):
         raise ConnectorInputError("a workspace store is required")
@@ -575,7 +590,7 @@ def delete_envelope(store, trail, envelope_id, actor_id, occurred_at):
     return binding
 
 
-def _admit_response(response):
+def _admit_response(response: object) -> tuple[str, str, tuple[tuple[str, object], ...]]:
     if not isinstance(response, dict):
         raise ConnectorInputError("a connector response must be a JSON object")
     for name in ("source_version", "retrieved_at", "payload"):
@@ -592,7 +607,7 @@ def _admit_response(response):
     return source_version, retrieved_at, (("value", payload),)
 
 
-def _admit_capability(raw):
+def _admit_capability(raw: object) -> ConnectorCapability:
     if isinstance(raw, ConnectorCapability):
         return raw
     if isinstance(raw, str):
@@ -603,7 +618,7 @@ def _admit_capability(raw):
     raise ConnectorInputError("a connector capability must be admitted here")
 
 
-def _admit_destination(raw):
+def _admit_destination(raw: object) -> str:
     value = _admit_path(raw, "connector destination")
     if "://" not in value:
         raise ConnectorInputError("a connector destination needs a scheme")
@@ -620,7 +635,7 @@ def _admit_destination(raw):
     return value
 
 
-def _admit_query(raw):
+def _admit_query(raw: object) -> str:
     if not isinstance(raw, str):
         raise ConnectorInputError("a connector query must be a string")
     value = raw.strip()
@@ -636,7 +651,7 @@ def _admit_query(raw):
     return value
 
 
-def _admit_version(raw):
+def _admit_version(raw: object) -> str:
     if not isinstance(raw, str):
         raise ConnectorInputError("a connector version must be a string")
     value = raw.strip()
@@ -652,7 +667,7 @@ def _admit_version(raw):
     return value
 
 
-def _admit_timeout(raw):
+def _admit_timeout(raw: object) -> int:
     if not isinstance(raw, int) or isinstance(raw, bool):
         raise ConnectorInputError("a connector timeout must be an integer of milliseconds")
     if raw < MINIMUM_TIMEOUT_MS or raw > MAXIMUM_TIMEOUT_MS:
@@ -660,7 +675,7 @@ def _admit_timeout(raw):
     return raw
 
 
-def _admit_retries(raw):
+def _admit_retries(raw: object) -> int:
     if not isinstance(raw, int) or isinstance(raw, bool):
         raise ConnectorInputError("a connector retry bound must be an integer")
     if raw < 0 or raw > MAXIMUM_RETRIES:
@@ -668,12 +683,14 @@ def _admit_retries(raw):
     return raw
 
 
-def _freeze_value(value, depth):
+def _freeze_value(value: object, depth: int) -> object:
     if depth > MAXIMUM_VALUE_DEPTH:
         raise ConnectorInputError("a connector value is nested too deeply")
     if value is None or isinstance(value, bool):
         return value
     if isinstance(value, (int, float)):
+        if isinstance(value, float) and not (float("-inf") < value < float("inf")):
+            raise ConnectorInputError("connector numbers must be finite")
         return value
     if isinstance(value, str):
         if len(value) > MAXIMUM_VALUE_CHARS:
@@ -684,16 +701,16 @@ def _freeze_value(value, depth):
             raise ConnectorInputError("a connector list value carries too many members")
         return tuple(_freeze_value(item, depth + 1) for item in value)
     if isinstance(value, dict):
+        if any(not isinstance(name, str) for name in value):
+            raise ConnectorInputError("a connector object key must be a string")
         frozen = []
         for name in sorted(value):
-            if not isinstance(name, str):
-                raise ConnectorInputError("a connector object key must be a string")
             frozen.append((name, _freeze_value(value[name], depth + 1)))
         return tuple(frozen)
     raise ConnectorInputError("a connector value has an unadmitted JSON type")
 
 
-def _validated_payload_entry(entry):
+def _validated_payload_entry(entry: object) -> tuple[str, object]:
     if not isinstance(entry, tuple) or len(entry) != 2:
         raise ConnectorInputError("connector payload needs key/value entries")
     name, value = entry
@@ -701,7 +718,7 @@ def _validated_payload_entry(entry):
     return (name, _freeze_value(_thaw_value(value), 0))
 
 
-def _thaw_value(value):
+def _thaw_value(value: object) -> object:
     if isinstance(value, tuple):
         if value and all(
             isinstance(item, tuple) and len(item) == 2 and isinstance(item[0], str)
@@ -714,12 +731,12 @@ def _thaw_value(value):
     return value
 
 
-def _payload_entry_to_document(entry):
+def _payload_entry_to_document(entry: tuple[str, object]) -> dict[str, object]:
     name, value = entry
     return {"key": name, "value": _payload_value_to_json(value)}
 
 
-def _payload_entry_from_document(document):
+def _payload_entry_from_document(document: object) -> tuple[str, object]:
     if not isinstance(document, dict):
         raise ConnectorInputError("a stored connector payload entry must be a JSON object")
     if "key" not in document or "value" not in document:
@@ -729,7 +746,7 @@ def _payload_entry_from_document(document):
     return (document["key"], _payload_value_from_json(document["value"]))
 
 
-def _payload_value_to_json(value):
+def _payload_value_to_json(value: object) -> object:
     if isinstance(value, tuple):
         if value and all(
             isinstance(item, tuple) and len(item) == 2 and isinstance(item[0], str)
@@ -745,7 +762,7 @@ def _payload_value_to_json(value):
     return value
 
 
-def _payload_value_from_json(document):
+def _payload_value_from_json(document: object) -> object:
     if isinstance(document, dict) and set(document) == {"object"}:
         frozen = []
         for name in sorted(document["object"]):
@@ -756,7 +773,7 @@ def _payload_value_from_json(document):
     return document
 
 
-def _admit_identifier(raw, label):
+def _admit_identifier(raw: object, label: str) -> str:
     if not isinstance(raw, str):
         raise ConnectorInputError(f"{label} must be a string")
     value = raw.strip()
@@ -772,7 +789,7 @@ def _admit_identifier(raw, label):
     return value
 
 
-def _admit_digest(raw):
+def _admit_digest(raw: object) -> str:
     if not isinstance(raw, str) or not raw.startswith("sha256:"):
         raise ConnectorInputError("content digest must be a sha256: digest")
     hex_part = raw[len("sha256:") :]
@@ -781,7 +798,7 @@ def _admit_digest(raw):
     return raw
 
 
-def _admit_occurred_at(raw):
+def _admit_occurred_at(raw: object) -> str:
     if not isinstance(raw, str):
         raise ConnectorInputError("a connector occurrence time must be a string")
     value = raw.strip()
@@ -796,7 +813,7 @@ def _admit_occurred_at(raw):
     return value
 
 
-def _admit_path(raw, label):
+def _admit_path(raw: object, label: str) -> str:
     if not isinstance(raw, str):
         raise ConnectorInputError(f"a {label} must be a string")
     value = raw.strip()
@@ -814,7 +831,7 @@ def _admit_path(raw, label):
     return value
 
 
-def _canonical_bytes(document):
+def _canonical_bytes(document: object) -> bytes:
     return json.dumps(document, sort_keys=True, separators=(",", ":"), ensure_ascii=True).encode(
         "ascii"
     )
