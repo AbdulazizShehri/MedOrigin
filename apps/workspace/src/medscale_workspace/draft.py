@@ -132,7 +132,7 @@ class TemplateIdentity:
     template_revision: str
     template_digest: str
 
-    def validated(self):
+    def validated(self) -> TemplateIdentity:
         template_id = _admit_identifier(self.template_id, "template id")
         revision = _admit_identifier(self.template_revision, "template revision")
         digest = _admit_digest(self.template_digest, "template digest")
@@ -147,7 +147,7 @@ class TemplateIdentity:
             template_id=template_id, template_revision=revision, template_digest=digest
         )
 
-    def to_document(self):
+    def to_document(self) -> dict[str, object]:
         admitted = self.validated()
         return {
             "template_digest": admitted.template_digest,
@@ -156,7 +156,7 @@ class TemplateIdentity:
         }
 
     @staticmethod
-    def from_document(document):
+    def from_document(document: object) -> TemplateIdentity:
         if not isinstance(document, dict):
             raise DraftTemplateError("a stored template must be a JSON object")
         expected = {"template_digest", "template_id", "template_revision"}
@@ -176,7 +176,7 @@ class ModelIdentity:
     model_id: str
     model_revision: str
 
-    def validated(self):
+    def validated(self) -> ModelIdentity:
         model_id = _admit_identifier(self.model_id, "model id")
         revision = _admit_identifier(self.model_revision, "model revision")
         if revision in MUTABLE_REVISIONS:
@@ -187,12 +187,12 @@ class ModelIdentity:
             raise DraftRevisionError("the model revision is mismatched")
         return ModelIdentity(model_id=model_id, model_revision=revision)
 
-    def to_document(self):
+    def to_document(self) -> dict[str, object]:
         admitted = self.validated()
         return {"model_id": admitted.model_id, "model_revision": admitted.model_revision}
 
     @staticmethod
-    def from_document(document):
+    def from_document(document: object) -> ModelIdentity:
         if not isinstance(document, dict):
             raise DraftRevisionError("a stored model identity must be a JSON object")
         expected = {"model_id", "model_revision"}
@@ -211,7 +211,7 @@ class RuntimeIdentity:
     runtime_name: str
     runtime_version: str
 
-    def validated(self):
+    def validated(self) -> RuntimeIdentity:
         name = _admit_identifier(self.runtime_name, "runtime name")
         version = _admit_identifier(self.runtime_version, "runtime version")
         if name != RUNTIME_NAME:
@@ -220,12 +220,12 @@ class RuntimeIdentity:
             raise DraftRevisionError("the runtime version is mismatched")
         return RuntimeIdentity(runtime_name=name, runtime_version=version)
 
-    def to_document(self):
+    def to_document(self) -> dict[str, object]:
         admitted = self.validated()
         return {"runtime_name": admitted.runtime_name, "runtime_version": admitted.runtime_version}
 
     @staticmethod
-    def from_document(document):
+    def from_document(document: object) -> RuntimeIdentity:
         if not isinstance(document, dict):
             raise DraftRevisionError("a stored runtime identity must be a JSON object")
         expected = {"runtime_name", "runtime_version"}
@@ -244,7 +244,7 @@ class TranscriptReference:
     transcript_id: UUID
     transcript_revision: str
 
-    def validated(self):
+    def validated(self) -> TranscriptReference:
         if not isinstance(self.transcript_id, UUID):
             raise DraftInputError("a transcript id must be a UUID value")
         revision = _admit_identifier(self.transcript_revision, "transcript revision")
@@ -252,7 +252,7 @@ class TranscriptReference:
             raise DraftRevisionError("the transcript revision is mismatched")
         return TranscriptReference(transcript_id=self.transcript_id, transcript_revision=revision)
 
-    def to_document(self):
+    def to_document(self) -> dict[str, object]:
         admitted = self.validated()
         return {
             "transcript_id": str(admitted.transcript_id),
@@ -260,7 +260,7 @@ class TranscriptReference:
         }
 
     @staticmethod
-    def from_document(document):
+    def from_document(document: object) -> TranscriptReference:
         if not isinstance(document, dict):
             raise DraftInputError("a stored transcript reference must be a JSON object")
         expected = {"transcript_id", "transcript_revision"}
@@ -285,7 +285,7 @@ class SourceRange:
     char_end: int
     source_digest: str
 
-    def validated(self):
+    def validated(self) -> SourceRange:
         if not isinstance(self.segment_index, int) or isinstance(self.segment_index, bool):
             raise DraftInputError("a segment index must be an integer")
         if self.segment_index < 0:
@@ -305,7 +305,7 @@ class SourceRange:
             source_digest=digest,
         )
 
-    def to_document(self):
+    def to_document(self) -> dict[str, object]:
         admitted = self.validated()
         return {
             "char_end": admitted.char_end,
@@ -315,7 +315,7 @@ class SourceRange:
         }
 
     @staticmethod
-    def from_document(document):
+    def from_document(document: object) -> SourceRange:
         if not isinstance(document, dict):
             raise DraftInputError("a stored source range must be a JSON object")
         expected = {"char_end", "char_start", "segment_index", "source_digest"}
@@ -338,7 +338,7 @@ class SourceReference:
     source_range: SourceRange
     relation: SupportRelation
 
-    def validated(self):
+    def validated(self) -> SourceReference:
         if not isinstance(self.transcript_id, UUID):
             raise DraftInputError("a transcript id must be a UUID value")
         revision = _admit_identifier(self.transcript_revision, "transcript revision")
@@ -358,7 +358,7 @@ class SourceReference:
             relation=self.relation,
         )
 
-    def to_document(self):
+    def to_document(self) -> dict[str, object]:
         admitted = self.validated()
         return {
             "relation": admitted.relation.value,
@@ -368,7 +368,7 @@ class SourceReference:
         }
 
     @staticmethod
-    def from_document(document):
+    def from_document(document: object) -> SourceReference:
         if not isinstance(document, dict):
             raise DraftInputError("a stored source reference must be a JSON object")
         expected = {"relation", "source_range", "transcript_id", "transcript_revision"}
@@ -400,12 +400,12 @@ class DraftSpan:
     span_id: str
     text: str
     status: SupportStatus
-    sources: tuple
+    sources: tuple[SourceReference, ...]
     relation_note: str
     failure_reason: str
     abstention_reason: str
 
-    def validated(self):
+    def validated(self) -> DraftSpan:
         span_id = _admit_identifier(self.span_id, "span id")
         text = _admit_span_text(self.text)
         if not isinstance(self.status, SupportStatus):
@@ -413,9 +413,11 @@ class DraftSpan:
         if not isinstance(self.sources, tuple):
             raise DraftInputError("span sources must be a tuple")
         checked = tuple(
-            item.validated() if isinstance(item, SourceReference) else None for item in self.sources
+            item.validated() for item in self.sources if isinstance(item, SourceReference)
         )
-        if any(item is None for item in checked):
+        if len(checked) != len(self.sources) or any(
+            not isinstance(item, SourceReference) for item in checked
+        ):
             raise DraftInputError("span sources need SourceReference instances")
         note = _admit_optional_text(self.relation_note, MAXIMUM_REASON_CHARS, "relation note")
         if self.status is SupportStatus.SUPPORTED:
@@ -456,7 +458,7 @@ class DraftSpan:
             abstention_reason=self.abstention_reason,
         )
 
-    def to_document(self):
+    def to_document(self) -> dict[str, object]:
         admitted = self.validated()
         return {
             "abstention_reason": admitted.abstention_reason,
@@ -469,7 +471,7 @@ class DraftSpan:
         }
 
     @staticmethod
-    def from_document(document):
+    def from_document(document: object) -> DraftSpan:
         if not isinstance(document, dict):
             raise DraftInputError("a stored span must be a JSON object")
         expected = {
@@ -516,9 +518,9 @@ class Draft:
     model: ModelIdentity
     runtime: RuntimeIdentity
     status: DraftStatus
-    spans: tuple
+    spans: tuple[DraftSpan, ...]
 
-    def validated(self):
+    def validated(self) -> Draft:
         if not isinstance(self.workspace_id, UUID):
             raise DraftInputError("a workspace id must be a UUID value")
         if not isinstance(self.session_id, UUID):
@@ -553,10 +555,10 @@ class Draft:
             raise DraftInputError("draft spans must be a tuple")
         if len(self.spans) < 1 or len(self.spans) > MAXIMUM_SPANS:
             raise DraftInputError("a draft carries an unadmitted span count")
-        checked = tuple(
-            item.validated() if isinstance(item, DraftSpan) else None for item in self.spans
-        )
-        if any(item is None for item in checked):
+        checked = tuple(item.validated() for item in self.spans if isinstance(item, DraftSpan))
+        if len(checked) != len(self.spans) or any(
+            not isinstance(item, DraftSpan) for item in checked
+        ):
             raise DraftInputError("draft spans need DraftSpan instances")
         _check_duplicate_span_ids(checked)
         return Draft(
@@ -573,7 +575,7 @@ class Draft:
             spans=checked,
         )
 
-    def to_document(self):
+    def to_document(self) -> dict[str, object]:
         admitted = self.validated()
         return {
             "data_class": synthetic_data_class_value(),
@@ -591,11 +593,11 @@ class Draft:
             "workspace_id": str(admitted.workspace_id),
         }
 
-    def canonical_bytes(self):
+    def canonical_bytes(self) -> bytes:
         return _canonical_bytes(self.to_document())
 
     @staticmethod
-    def from_document(document):
+    def from_document(document: object) -> Draft:
         if not isinstance(document, dict):
             raise DraftInputError("a stored draft must be a JSON object")
         expected = {
@@ -657,7 +659,7 @@ class Draft:
         ).validated()
 
 
-def expected_template():
+def expected_template() -> TemplateIdentity:
     """Return the governed template identity for the deterministic path."""
     return TemplateIdentity(
         template_id=TEMPLATE_ID,
@@ -666,14 +668,19 @@ def expected_template():
     ).validated()
 
 
-def verify_template(template):
+def verify_template(template: object) -> TemplateIdentity:
     """Fail closed unless the template is the governed identity."""
     if not isinstance(template, TemplateIdentity):
         raise DraftTemplateError("a template needs a TemplateIdentity instance")
     return template.validated()
 
 
-def input_bundle_digest_for(transcript_id, transcript_revision, transcript_digest, template):
+def input_bundle_digest_for(
+    transcript_id: object,
+    transcript_revision: object,
+    transcript_digest: object,
+    template: object,
+) -> str:
     """Return the deterministic input bundle digest bound to a draft."""
     if not isinstance(transcript_id, UUID):
         raise DraftInputError("a transcript id must be a UUID value")
@@ -691,7 +698,13 @@ def input_bundle_digest_for(transcript_id, transcript_revision, transcript_diges
     return "sha256:" + hashlib.sha256(_canonical_bytes(document)).hexdigest()
 
 
-def draft_id_for(workspace_id, session_id, transcript_id, template, input_bundle_digest):
+def draft_id_for(
+    workspace_id: object,
+    session_id: object,
+    transcript_id: object,
+    template: object,
+    input_bundle_digest: object,
+) -> UUID:
     """Return the deterministic draft identity for one input bundle."""
     if not isinstance(workspace_id, UUID):
         raise DraftInputError("a workspace id must be a UUID value")
@@ -716,7 +729,7 @@ def draft_id_for(workspace_id, session_id, transcript_id, template, input_bundle
     )
 
 
-def draft_binding(workspace_id, draft_id):
+def draft_binding(workspace_id: object, draft_id: object) -> ObjectBinding:
     """Return the store binding of one draft revision."""
     if not isinstance(workspace_id, UUID):
         raise DraftInputError("a workspace id must be a UUID value")
@@ -730,14 +743,19 @@ def draft_binding(workspace_id, draft_id):
     )
 
 
-def draft_payload_bytes(draft):
+def draft_payload_bytes(draft: object) -> bytes:
     """Return the canonical storage payload of one draft."""
     if not isinstance(draft, Draft):
         raise DraftInputError("a draft payload needs a Draft instance")
     return _canonical_bytes(draft.to_document())
 
 
-def mock_draft_backend(transcript_text, segments, template, requested_sections):
+def mock_draft_backend(
+    transcript_text: object,
+    segments: object,
+    template: object,
+    requested_sections: object,
+) -> tuple[str, tuple[object, ...], str]:
     """Deterministic placeholder backend with fixed outputs only, never a model."""
     checked_template = verify_template(template)
     if not isinstance(transcript_text, str):
@@ -754,19 +772,19 @@ def mock_draft_backend(transcript_text, segments, template, requested_sections):
 
 
 def synthesize_with_backend(
-    workspace_id,
-    session_id,
-    transcript_id,
-    transcript_revision,
-    transcript_text,
-    segments,
-    template,
-    input_bundle_digest,
-    model,
-    runtime,
-    span_plan,
-    backend,
-):
+    workspace_id: object,
+    session_id: object,
+    transcript_id: object,
+    transcript_revision: object,
+    transcript_text: object,
+    segments: object,
+    template: object,
+    input_bundle_digest: object,
+    model: object,
+    runtime: object,
+    span_plan: object,
+    backend: object,
+) -> Draft:
     """Build a draft through an injected backend under the deterministic contract."""
     if not isinstance(workspace_id, UUID):
         raise DraftInputError("a workspace id must be a UUID value")
@@ -799,8 +817,8 @@ def synthesize_with_backend(
     kind, _sections, _marker = out
     if kind != "draft":
         raise DraftBackendError("a backend kind is not admitted here")
-    spans = tuple(item.validated() if isinstance(item, DraftSpan) else None for item in span_plan)
-    if any(item is None for item in spans):
+    spans = tuple(item.validated() for item in span_plan if isinstance(item, DraftSpan))
+    if len(spans) != len(span_plan) or any(not isinstance(item, DraftSpan) for item in spans):
         raise DraftBackendError("a span plan needs DraftSpan instances")
     draft_id = draft_id_for(workspace_id, session_id, transcript_id, checked_template, bundle)
     return Draft(
@@ -819,18 +837,18 @@ def synthesize_with_backend(
 
 
 def synthesize_synthetic(
-    workspace_id,
-    session_id,
-    transcript_id,
-    transcript_revision,
-    transcript_text,
-    segments,
-    template,
-    input_bundle_digest,
-    model,
-    runtime,
-    span_plan,
-):
+    workspace_id: object,
+    session_id: object,
+    transcript_id: object,
+    transcript_revision: object,
+    transcript_text: object,
+    segments: object,
+    template: object,
+    input_bundle_digest: object,
+    model: object,
+    runtime: object,
+    span_plan: object,
+) -> Draft:
     """Build a draft with the deterministic placeholder backend."""
     return synthesize_with_backend(
         workspace_id,
@@ -848,7 +866,7 @@ def synthesize_synthetic(
     )
 
 
-def validate_draft_support(store, draft):
+def validate_draft_support(store: object, draft: object) -> Draft:
     """Mechanically validate every support claim of a draft against its transcript."""
     if not isinstance(store, WorkspaceStore):
         raise DraftInputError("a workspace store is required")
@@ -885,7 +903,9 @@ def validate_draft_support(store, draft):
     return admitted
 
 
-def store_draft(store, trail, draft, actor_id, occurred_at):
+def store_draft(
+    store: object, trail: object, draft: object, actor_id: object, occurred_at: object
+) -> ObjectBinding:
     """Store one draft with provenance and audit, failing closed."""
     if not isinstance(store, WorkspaceStore):
         raise DraftInputError("a workspace store is required")
@@ -923,7 +943,7 @@ def store_draft(store, trail, draft, actor_id, occurred_at):
     return binding
 
 
-def read_draft(store, draft_id):
+def read_draft(store: object, draft_id: object) -> Draft:
     """Read and verify one stored draft against its provenance digest."""
     if not isinstance(store, WorkspaceStore):
         raise DraftInputError("a workspace store is required")
@@ -952,7 +972,7 @@ def read_draft(store, draft_id):
     return validate_draft_support(store, draft)
 
 
-def _expected_template_digest():
+def _expected_template_digest() -> str:
     document = {
         "intended_sections": list(TEMPLATE_SECTIONS),
         "output_contract": "draft-spans-with-support-status",
@@ -963,7 +983,7 @@ def _expected_template_digest():
     return "sha256:" + hashlib.sha256(_canonical_bytes(document)).hexdigest()
 
 
-def _provenance_source_refs(draft):
+def _provenance_source_refs(draft: Draft) -> tuple[SourceRef, ...]:
     refs = []
     seen = set()
     for span in draft.spans:
@@ -998,7 +1018,9 @@ def _provenance_source_refs(draft):
     return tuple(refs)
 
 
-def _validate_span_against_transcript(span, transcript_id, texts):
+def _validate_span_against_transcript(
+    span: DraftSpan, transcript_id: UUID, texts: tuple[str, ...]
+) -> DraftSpan:
     if span.status in (SupportStatus.SUPPORTED, SupportStatus.PARTIALLY_SUPPORTED):
         if len(span.sources) < 1:
             raise DraftSupportError("a backed span needs at least one source")
@@ -1040,7 +1062,7 @@ def _validate_span_against_transcript(span, transcript_id, texts):
     return span
 
 
-def _check_duplicate_span_ids(spans):
+def _check_duplicate_span_ids(spans: tuple[DraftSpan, ...]) -> None:
     seen = set()
     for span in spans:
         if span.span_id in seen:
@@ -1048,7 +1070,7 @@ def _check_duplicate_span_ids(spans):
         seen.add(span.span_id)
 
 
-def _check_duplicate_source_ranges(sources):
+def _check_duplicate_source_ranges(sources: tuple[SourceReference, ...]) -> None:
     seen = set()
     for source in sources:
         key = (
@@ -1062,12 +1084,12 @@ def _check_duplicate_source_ranges(sources):
         seen.add(key)
 
 
-def _canonical_bytes(document):
+def _canonical_bytes(document: object) -> bytes:
     encoded = json.dumps(document, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
     return encoded.encode("ascii")
 
 
-def _admit_identifier(raw, label):
+def _admit_identifier(raw: object, label: str) -> str:
     if not isinstance(raw, str):
         raise DraftInputError("a " + label + " must be a string")
     value = raw.strip()
@@ -1083,7 +1105,7 @@ def _admit_identifier(raw, label):
     return value
 
 
-def _admit_digest(raw, label):
+def _admit_digest(raw: object, label: str) -> str:
     if not isinstance(raw, str):
         raise DraftInputError("a " + label + " must be a string")
     value = raw.strip()
@@ -1104,7 +1126,7 @@ def _admit_digest(raw, label):
     return value
 
 
-def _admit_span_text(raw):
+def _admit_span_text(raw: object) -> str:
     if not isinstance(raw, str):
         raise DraftInputError("a span text must be a string")
     if not raw.strip():
@@ -1116,7 +1138,7 @@ def _admit_span_text(raw):
     return raw
 
 
-def _admit_optional_text(raw, maximum, label):
+def _admit_optional_text(raw: object, maximum: int, label: str) -> str:
     if not isinstance(raw, str):
         raise DraftInputError("a " + label + " must be a string")
     if len(raw) > maximum:
@@ -1126,7 +1148,7 @@ def _admit_optional_text(raw, maximum, label):
     return raw
 
 
-def _admit_failure_reason(raw):
+def _admit_failure_reason(raw: object) -> FailureReason:
     if not isinstance(raw, str):
         raise DraftInputError("a failure reason must be a string")
     try:
@@ -1135,7 +1157,7 @@ def _admit_failure_reason(raw):
         raise DraftInputError("a failure reason is not admitted here") from error
 
 
-def _admit_abstention_reason(raw):
+def _admit_abstention_reason(raw: object) -> AbstentionReason:
     if not isinstance(raw, str):
         raise DraftInputError("an abstention reason must be a string")
     try:
@@ -1144,7 +1166,7 @@ def _admit_abstention_reason(raw):
         raise DraftInputError("an abstention reason is not admitted here") from error
 
 
-def _admit_actor(raw):
+def _admit_actor(raw: object) -> str:
     if not isinstance(raw, str):
         raise DraftInputError("an actor id must be a string")
     value = raw.strip()
@@ -1160,7 +1182,7 @@ def _admit_actor(raw):
     return value
 
 
-def _admit_occurred_at(raw):
+def _admit_occurred_at(raw: object) -> str:
     if not isinstance(raw, str):
         raise DraftInputError("an occurrence time must be a string")
     value = raw.strip()
@@ -1176,14 +1198,14 @@ def _admit_occurred_at(raw):
     return value
 
 
-def _string_member(document, name):
+def _string_member(document: dict[str, object], name: str) -> str:
     value = document.get(name)
     if not isinstance(value, str):
         raise DraftInputError("stored member " + name + " must be a string")
     return value
 
 
-def _integer_member(document, name):
+def _integer_member(document: dict[str, object], name: str) -> int:
     value = document.get(name)
     if not isinstance(value, int) or isinstance(value, bool):
         raise DraftInputError("stored member " + name + " must be an integer")

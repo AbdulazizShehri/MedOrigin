@@ -129,7 +129,7 @@ class DatasetCollectionDescriptor:
     view_ids: tuple[UUID, ...]
     interface_version: str
 
-    def validated(self):
+    def validated(self) -> DatasetCollectionDescriptor:
         name = _admit_name(self.collection_name)
         members = _admit_view_ids(self.view_ids)
         version = _admit_collection_interface_version(self.interface_version)
@@ -150,7 +150,7 @@ class DatasetCollectionRecord:
     view_ids: tuple[UUID, ...]
     interface_version: str
 
-    def validated(self):
+    def validated(self) -> DatasetCollectionRecord:
         if not isinstance(self.workspace_id, UUID):
             raise DatasetCollectionInputError("a workspace id must be a UUID value")
         if not isinstance(self.collection_id, UUID):
@@ -171,7 +171,7 @@ class DatasetCollectionRecord:
             interface_version=version,
         )
 
-    def to_document(self):
+    def to_document(self) -> dict[str, object]:
         admitted = self.validated()
         return {
             "collection_id": str(admitted.collection_id),
@@ -187,11 +187,11 @@ class DatasetCollectionRecord:
             "workspace_id": str(admitted.workspace_id),
         }
 
-    def canonical_bytes(self):
+    def canonical_bytes(self) -> bytes:
         return _canonical_bytes(self.to_document())
 
     @staticmethod
-    def from_document(document):
+    def from_document(document: object) -> DatasetCollectionRecord:
         if not isinstance(document, dict):
             raise DatasetCollectionInputError("a stored collection must be a JSON object")
         expected = {
@@ -262,7 +262,7 @@ class ExportSourceDescriptor:
     object_kind: WorkspaceObjectType
     object_revision: str
 
-    def validated(self):
+    def validated(self) -> ExportSourceDescriptor:
         if not isinstance(self.object_id, UUID):
             raise ExportStagingInputError("an export source identity must be a UUID value")
         kind = _admit_source_kind(self.object_kind)
@@ -291,7 +291,7 @@ class ExportManifestRecord:
     deidentification_output_digest: str
     interface_version: str
 
-    def validated(self):
+    def validated(self) -> ExportManifestRecord:
         if not isinstance(self.workspace_id, UUID):
             raise ExportStagingInputError("a workspace id must be a UUID value")
         if not isinstance(self.export_id, UUID):
@@ -334,7 +334,7 @@ class ExportManifestRecord:
             interface_version=version,
         )
 
-    def to_document(self):
+    def to_document(self) -> dict[str, object]:
         admitted = self.validated()
         return {
             "consent_scope": admitted.consent_scope,
@@ -366,11 +366,11 @@ class ExportManifestRecord:
             "workspace_id": str(admitted.workspace_id),
         }
 
-    def canonical_bytes(self):
+    def canonical_bytes(self) -> bytes:
         return _canonical_bytes(self.to_document())
 
     @staticmethod
-    def from_document(document):
+    def from_document(document: object) -> ExportManifestRecord:
         if not isinstance(document, dict):
             raise ExportStagingInputError("a stored export manifest must be a JSON object")
         expected = {
@@ -448,17 +448,19 @@ class ExportManifestRecord:
         ).validated()
 
 
-def dataset_collection_data_class_value():
+def dataset_collection_data_class_value() -> str:
     """Return the wire value of the public dataset-collection data class."""
     return _collection_data_class_value()
 
 
-def export_manifest_data_class_value():
+def export_manifest_data_class_value() -> str:
     """Return the wire value of the export-quarantine manifest data class."""
     return _export_data_class_value()
 
 
-def admit_dataset_collection(collection_name, view_ids, interface_version):
+def admit_dataset_collection(
+    collection_name: str, view_ids: object, interface_version: str
+) -> DatasetCollectionDescriptor:
     """Admit one caller-supplied dataset collection request with an exact member set.
 
     The request carries exactly a collection name, a tuple of view identities,
@@ -474,7 +476,9 @@ def admit_dataset_collection(collection_name, view_ids, interface_version):
     ).validated()
 
 
-def collection_id_for(workspace_id, collection_name, view_ids, interface_version):
+def collection_id_for(
+    workspace_id: object, collection_name: object, view_ids: object, interface_version: object
+) -> UUID:
     """Return the deterministic collection identity for one exact pinned input set."""
     if not isinstance(workspace_id, UUID):
         raise DatasetCollectionInputError("a workspace id must be a UUID value")
@@ -494,7 +498,7 @@ def collection_id_for(workspace_id, collection_name, view_ids, interface_version
     )
 
 
-def dataset_collection_binding(workspace_id, collection_id):
+def dataset_collection_binding(workspace_id: object, collection_id: object) -> ObjectBinding:
     """Return the store binding of one dataset collection."""
     if not isinstance(workspace_id, UUID):
         raise DatasetCollectionInputError("a workspace id must be a UUID value")
@@ -508,14 +512,21 @@ def dataset_collection_binding(workspace_id, collection_id):
     )
 
 
-def collection_payload_bytes(record):
+def collection_payload_bytes(record: object) -> bytes:
     """Return the canonical storage payload of one dataset collection."""
     if not isinstance(record, DatasetCollectionRecord):
         raise DatasetCollectionInputError("a collection payload needs a DatasetCollectionRecord")
     return _canonical_bytes(record.to_document())
 
 
-def store_dataset_collection(store, trail, workspace_id, descriptor, actor_id, occurred_at):
+def store_dataset_collection(
+    store: object,
+    trail: object,
+    workspace_id: object,
+    descriptor: object,
+    actor_id: object,
+    occurred_at: object,
+) -> ObjectBinding:
     """Pin one collection of dataset-manifest views as an immutable workspace record.
 
     Every member view is re-read through the existing versioned read interface
@@ -605,20 +616,24 @@ def store_dataset_collection(store, trail, workspace_id, descriptor, actor_id, o
     return dataset_collection_binding(workspace_id, record.collection_id)
 
 
-def read_dataset_collection(store, collection_id):
+def read_dataset_collection(
+    store: WorkspaceStore, collection_id: object
+) -> DatasetCollectionRecord:
     """Read and verify one stored dataset collection with every member view still current."""
     record = _read_collection_record(store, collection_id)
     _current_collection_views(store, record)
     return record
 
 
-def list_collection_views(store, collection_id):
+def list_collection_views(
+    store: WorkspaceStore, collection_id: object
+) -> tuple[research_view_mod.ResearchViewRecord, ...]:
     """Resolve every pinned view of one stored dataset collection, read-only."""
     record = _read_collection_record(store, collection_id)
     return _current_collection_views(store, record)
 
 
-def _read_collection_record(store, collection_id):
+def _read_collection_record(store: object, collection_id: object) -> DatasetCollectionRecord:
     if not isinstance(store, WorkspaceStore):
         raise DatasetCollectionInputError("a workspace store is required")
     if not isinstance(collection_id, UUID):
@@ -651,7 +666,9 @@ def _read_collection_record(store, collection_id):
     return record.validated()
 
 
-def _current_collection_views(store, record):
+def _current_collection_views(
+    store: WorkspaceStore, record: DatasetCollectionRecord
+) -> tuple[research_view_mod.ResearchViewRecord, ...]:
     views = []
     for member in record.view_ids:
         try:
@@ -664,7 +681,9 @@ def _current_collection_views(store, record):
     return tuple(views)
 
 
-def delete_dataset_collection(store, trail, collection_id, actor_id, occurred_at):
+def delete_dataset_collection(
+    store: object, trail: object, collection_id: object, actor_id: object, occurred_at: object
+) -> ObjectBinding:
     """Delete one dataset collection; the audit trail survives."""
     if not isinstance(store, WorkspaceStore):
         raise DatasetCollectionInputError("a workspace store is required")
@@ -683,7 +702,9 @@ def delete_dataset_collection(store, trail, collection_id, actor_id, occurred_at
     return binding
 
 
-def admit_export_source(object_id, object_kind, object_revision):
+def admit_export_source(
+    object_id: object, object_kind: object, object_revision: str
+) -> ExportSourceDescriptor:
     """Admit one caller-supplied export source reference with an exact member set.
 
     The reference carries exactly a source identity, a closed source kind, and
@@ -700,16 +721,16 @@ def admit_export_source(object_id, object_kind, object_revision):
 
 
 def export_id_for(
-    workspace_id,
-    items,
-    payload_digests,
-    quarantine_target,
-    consent_scope,
-    source_rights,
-    deidentification_method,
-    deidentification_version,
-    interface_version,
-):
+    workspace_id: object,
+    items: object,
+    payload_digests: object,
+    quarantine_target: object,
+    consent_scope: object,
+    source_rights: object,
+    deidentification_method: object,
+    deidentification_version: object,
+    interface_version: object,
+) -> UUID:
     """Return the deterministic export identity for one exact pinned input set."""
     if not isinstance(workspace_id, UUID):
         raise ExportStagingInputError("a workspace id must be a UUID value")
@@ -750,7 +771,7 @@ def export_id_for(
     )
 
 
-def export_binding(workspace_id, export_id):
+def export_binding(workspace_id: object, export_id: object) -> ObjectBinding:
     """Return the store binding of one export manifest."""
     if not isinstance(workspace_id, UUID):
         raise ExportStagingInputError("a workspace id must be a UUID value")
@@ -764,7 +785,7 @@ def export_binding(workspace_id, export_id):
     )
 
 
-def export_payload_bytes(record):
+def export_payload_bytes(record: object) -> bytes:
     """Return the canonical storage payload of one export manifest."""
     if not isinstance(record, ExportManifestRecord):
         raise ExportStagingInputError("an export payload needs an ExportManifestRecord instance")
@@ -772,23 +793,23 @@ def export_payload_bytes(record):
 
 
 def stage_export_manifest(
-    store,
-    trail,
-    workspace_id,
-    items,
+    store: object,
+    trail: object,
+    workspace_id: object,
+    items: object,
     *,
-    target_path,
-    quarantine_root,
-    research_core_roots,
-    consent_scope,
-    source_rights,
-    deidentification_method,
-    deidentification_version,
-    explicit_export_request,
-    interface_version,
-    actor_id,
-    occurred_at,
-):
+    target_path: object,
+    quarantine_root: object,
+    research_core_roots: object,
+    consent_scope: object,
+    source_rights: object,
+    deidentification_method: object,
+    deidentification_version: object,
+    explicit_export_request: object,
+    interface_version: object,
+    actor_id: object,
+    occurred_at: object,
+) -> ObjectBinding:
     """Stage one export manifest in Domain X from already-stored source revisions.
 
     Every source payload is re-read and its digest recomputed here; the stored
@@ -903,7 +924,7 @@ def stage_export_manifest(
     return export_binding(workspace_id, record.export_id)
 
 
-def read_export_manifest(store, export_id):
+def read_export_manifest(store: WorkspaceStore, export_id: object) -> ExportManifestRecord:
     """Read and verify one staged export manifest with every staged source still current."""
     record = _read_export_record(store, export_id)
     for item, digest in zip(record.items, record.payload_digests, strict=True):
@@ -916,7 +937,7 @@ def read_export_manifest(store, export_id):
     return record
 
 
-def _read_export_record(store, export_id):
+def _read_export_record(store: object, export_id: object) -> ExportManifestRecord:
     if not isinstance(store, WorkspaceStore):
         raise ExportStagingInputError("a workspace store is required")
     if not isinstance(export_id, UUID):
@@ -947,7 +968,9 @@ def _read_export_record(store, export_id):
     return record.validated()
 
 
-def delete_export_manifest(store, trail, export_id, actor_id, occurred_at):
+def delete_export_manifest(
+    store: object, trail: object, export_id: object, actor_id: object, occurred_at: object
+) -> ObjectBinding:
     """Delete one export manifest; the audit trail survives."""
     if not isinstance(store, WorkspaceStore):
         raise ExportStagingInputError("a workspace store is required")
@@ -966,15 +989,15 @@ def delete_export_manifest(store, trail, export_id, actor_id, occurred_at):
     return binding
 
 
-def _collection_data_class_value():
+def _collection_data_class_value() -> str:
     return admit_data_class("PUBLIC").value
 
 
-def _export_data_class_value():
+def _export_data_class_value() -> str:
     return admit_data_class("EXPORT_QUARANTINE").value
 
 
-def _admit_name(raw):
+def _admit_name(raw: object) -> str:
     if not isinstance(raw, str):
         raise DatasetCollectionInputError("a collection name must be a string")
     value = raw.strip()
@@ -992,7 +1015,7 @@ def _admit_name(raw):
     return value
 
 
-def _admit_view_ids(raw):
+def _admit_view_ids(raw: object) -> tuple[UUID, ...]:
     if not isinstance(raw, tuple):
         raise DatasetCollectionInputError("collection members must be a tuple of view identities")
     if not raw or len(raw) > MAXIMUM_COLLECTION_MEMBERS:
@@ -1005,32 +1028,33 @@ def _admit_view_ids(raw):
     return raw
 
 
-def _admit_items(raw):
+def _admit_items(raw: object) -> tuple[ExportSourceDescriptor, ...]:
     if not isinstance(raw, tuple):
         raise ExportStagingInputError("export items must be a tuple of source references")
     if not raw or len(raw) > MAXIMUM_EXPORT_ITEMS:
         raise ExportStagingInputError("an export needs 1 to 64 source items")
-    items = tuple(
-        item.validated() if isinstance(item, ExportSourceDescriptor) else _refuse_item()
-        for item in raw
-    )
+    items = tuple(item.validated() for item in raw if isinstance(item, ExportSourceDescriptor))
+    if len(items) != len(raw) or any(
+        not isinstance(item, ExportSourceDescriptor) for item in items
+    ):
+        raise ExportStagingInputError("an export item needs an ExportSourceDescriptor instance")
     identities = [(item.object_id, item.object_kind, item.object_revision) for item in items]
     if len(set(identities)) != len(identities):
         raise ExportStagingInputError("an export must not repeat a source item")
     return items
 
 
-def _refuse_item():
+def _refuse_item() -> None:
     raise ExportStagingInputError("an export item needs an ExportSourceDescriptor instance")
 
 
-def _admit_digests(raw, count):
+def _admit_digests(raw: object, count: int) -> tuple[str, ...]:
     if not isinstance(raw, tuple) or len(raw) != count:
         raise ExportStagingInputError("export digests must match the export items")
     return tuple(_admit_digest(digest) for digest in raw)
 
 
-def _admit_source_kind(raw):
+def _admit_source_kind(raw: object) -> WorkspaceObjectType:
     if isinstance(raw, WorkspaceObjectType):
         member = raw
     elif isinstance(raw, str):
@@ -1045,7 +1069,7 @@ def _admit_source_kind(raw):
     return member
 
 
-def _admit_revision(raw):
+def _admit_revision(raw: object) -> str:
     if not isinstance(raw, str):
         raise ExportStagingInputError("an export source revision must be a string")
     value = raw.strip()
@@ -1063,7 +1087,7 @@ def _admit_revision(raw):
     return value
 
 
-def _admit_digest(raw):
+def _admit_digest(raw: object) -> str:
     if not isinstance(raw, str):
         raise ExportStagingInputError("an export digest must be a string")
     value = raw.strip()
@@ -1078,7 +1102,7 @@ def _admit_digest(raw):
     return value
 
 
-def _admit_path_value(raw):
+def _admit_path_value(raw: object) -> str:
     if not isinstance(raw, str):
         raise ExportStagingInputError("an export path must be a string")
     value = raw.strip()
@@ -1091,7 +1115,7 @@ def _admit_path_value(raw):
     return value
 
 
-def _admit_research_roots(raw):
+def _admit_research_roots(raw: object) -> tuple[str, ...]:
     if not isinstance(raw, tuple) or not raw or len(raw) > MAXIMUM_RESEARCH_ROOTS:
         raise ExportStagingInputError("at least one Research Core root must be declared")
     for root in raw:
@@ -1099,7 +1123,7 @@ def _admit_research_roots(raw):
     return raw
 
 
-def _admit_consent_scope(raw):
+def _admit_consent_scope(raw: object) -> str:
     if not isinstance(raw, str):
         raise ExportStagingInputError("an export consent scope must be a string")
     value = raw.strip()
@@ -1108,7 +1132,7 @@ def _admit_consent_scope(raw):
     return value
 
 
-def _admit_source_rights(raw):
+def _admit_source_rights(raw: object) -> str:
     if not isinstance(raw, str):
         raise ExportStagingInputError("export source rights must be a string")
     value = raw.strip()
@@ -1117,7 +1141,7 @@ def _admit_source_rights(raw):
     return value
 
 
-def _admit_deidentification_method(raw):
+def _admit_deidentification_method(raw: object) -> str:
     if not isinstance(raw, str):
         raise ExportStagingInputError("a de-identification method must be a string")
     value = raw.strip()
@@ -1126,7 +1150,7 @@ def _admit_deidentification_method(raw):
     return value
 
 
-def _admit_deidentification_version(raw):
+def _admit_deidentification_version(raw: object) -> str:
     if not isinstance(raw, str):
         raise ExportStagingInputError("a de-identification version must be a string")
     value = raw.strip()
@@ -1135,7 +1159,7 @@ def _admit_deidentification_version(raw):
     return value
 
 
-def _admit_interface_version(raw):
+def _admit_interface_version(raw: object) -> str:
     if not isinstance(raw, str):
         raise ExportStagingInputError("an interface version must be a string")
     value = raw.strip()
@@ -1150,7 +1174,7 @@ def _admit_interface_version(raw):
     return value
 
 
-def _admit_collection_interface_version(raw):
+def _admit_collection_interface_version(raw: object) -> str:
     if not isinstance(raw, str):
         raise DatasetCollectionInputError("an interface version must be a string")
     value = raw.strip()
@@ -1165,7 +1189,7 @@ def _admit_collection_interface_version(raw):
     return value
 
 
-def _admit_identifier(raw, label):
+def _admit_identifier(raw: object, label: str) -> str:
     if not isinstance(raw, str):
         raise ExportStagingInputError(f"{label} must be a string")
     value = raw.strip()
@@ -1181,7 +1205,7 @@ def _admit_identifier(raw, label):
     return value
 
 
-def _admit_occurred_at(raw):
+def _admit_occurred_at(raw: object) -> str:
     value = _admit_identifier(raw, "staging occurrence time")
     if len(value) > MAXIMUM_OCCURRED_AT_CHARS:
         raise ExportStagingInputError("a staging occurrence time is longer than admitted")
@@ -1190,7 +1214,7 @@ def _admit_occurred_at(raw):
     return value
 
 
-def _admit_collection_identifier(raw, label):
+def _admit_collection_identifier(raw: object, label: str) -> str:
     if not isinstance(raw, str):
         raise DatasetCollectionInputError(f"{label} must be a string")
     value = raw.strip()
@@ -1206,7 +1230,7 @@ def _admit_collection_identifier(raw, label):
     return value
 
 
-def _admit_collection_occurred_at(raw):
+def _admit_collection_occurred_at(raw: object) -> str:
     value = _admit_collection_identifier(raw, "collection occurrence time")
     if len(value) > MAXIMUM_OCCURRED_AT_CHARS:
         raise DatasetCollectionInputError("a collection occurrence time is longer than admitted")
@@ -1217,7 +1241,9 @@ def _admit_collection_occurred_at(raw):
     return value
 
 
-def _recorded_payload_digest(store, workspace_id, item):
+def _recorded_payload_digest(
+    store: WorkspaceStore, workspace_id: UUID, item: ExportSourceDescriptor
+) -> str:
     binding = ObjectBinding(
         workspace_id=workspace_id,
         object_id=item.object_id,
@@ -1231,7 +1257,9 @@ def _recorded_payload_digest(store, workspace_id, item):
     return content_digest_of(raw)
 
 
-def _items_section(items, digests):
+def _items_section(
+    items: tuple[ExportSourceDescriptor, ...], digests: tuple[str, ...]
+) -> list[dict[str, str]]:
     return [
         {
             "object_id": str(item.object_id),
@@ -1243,7 +1271,7 @@ def _items_section(items, digests):
     ]
 
 
-def _export_item_from_document(document):
+def _export_item_from_document(document: object) -> ExportSourceDescriptor:
     if not isinstance(document, dict):
         raise ExportStagingInputError("a stored export item must be a JSON object")
     if set(document) != {"object_id", "object_kind", "object_revision", "payload_digest"}:
@@ -1261,13 +1289,13 @@ def _export_item_from_document(document):
     ).validated()
 
 
-def _canonical_bytes(document):
+def _canonical_bytes(document: object) -> bytes:
     return json.dumps(document, sort_keys=True, separators=(",", ":"), ensure_ascii=True).encode(
         "ascii"
     )
 
 
-def _string_member(document, name, error_class):
+def _string_member(document: dict[str, object], name: str, error_class: type[Exception]) -> str:
     value = document[name]
     if not isinstance(value, str):
         raise error_class(f"a stored {name} must be a string")

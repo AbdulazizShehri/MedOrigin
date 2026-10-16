@@ -35,6 +35,7 @@ from medscale_workspace.audit import AuditTrail
 from medscale_workspace.binding import ObjectBinding
 from medscale_workspace.data_class import synthetic_data_class_value
 from medscale_workspace.errors import (
+    CorpusInputError,
     GraphInputError,
     GraphStaleError,
     LinkedConflictError,
@@ -126,12 +127,12 @@ class ResearchRef:
     artifact_id: str
     artifact_version: str
 
-    def validated(self):
+    def validated(self) -> ResearchRef:
         artifact_id = _admit_identifier(self.artifact_id, "artifact id")
         artifact_version = _admit_identifier(self.artifact_version, "artifact version")
         return ResearchRef(artifact_id=artifact_id, artifact_version=artifact_version)
 
-    def to_document(self):
+    def to_document(self) -> dict[str, object]:
         admitted = self.validated()
         return {
             "artifact_id": admitted.artifact_id,
@@ -139,7 +140,7 @@ class ResearchRef:
         }
 
     @staticmethod
-    def from_document(document):
+    def from_document(document: object) -> ResearchRef:
         if not isinstance(document, dict):
             raise LinkedInputError("a stored research reference must be a JSON object")
         expected = {"artifact_id", "artifact_version"}
@@ -159,13 +160,13 @@ class LinkedDocument:
     document_id: UUID
     document_key: str
     title: str
-    sections: tuple
+    sections: tuple[str, ...]
     source_id: UUID
     source_revision: str
     content_digest: str
-    research_refs: tuple
+    research_refs: tuple[ResearchRef, ...]
 
-    def validated(self):
+    def validated(self) -> LinkedDocument:
         if not isinstance(self.workspace_id, UUID):
             raise LinkedInputError("a workspace id must be a UUID value")
         if not isinstance(self.document_id, UUID):
@@ -197,7 +198,7 @@ class LinkedDocument:
             research_refs=refs,
         )
 
-    def to_document(self):
+    def to_document(self) -> dict[str, object]:
         admitted = self.validated()
         return {
             "content_digest": admitted.content_digest,
@@ -215,7 +216,7 @@ class LinkedDocument:
         }
 
     @staticmethod
-    def from_document(document):
+    def from_document(document: object) -> LinkedDocument:
         if not isinstance(document, dict):
             raise LinkedInputError("a stored document must be a JSON object")
         expected = {
@@ -273,14 +274,14 @@ class LinkedTable:
     table_id: UUID
     table_key: str
     title: str
-    columns: tuple
-    rows: tuple
+    columns: tuple[str, ...]
+    rows: tuple[tuple[str, ...], ...]
     source_id: UUID
     source_revision: str
     content_digest: str
-    research_refs: tuple
+    research_refs: tuple[ResearchRef, ...]
 
-    def validated(self):
+    def validated(self) -> LinkedTable:
         if not isinstance(self.workspace_id, UUID):
             raise LinkedInputError("a workspace id must be a UUID value")
         if not isinstance(self.table_id, UUID):
@@ -320,7 +321,7 @@ class LinkedTable:
             research_refs=refs,
         )
 
-    def to_document(self):
+    def to_document(self) -> dict[str, object]:
         admitted = self.validated()
         return {
             "columns": list(admitted.columns),
@@ -339,7 +340,7 @@ class LinkedTable:
         }
 
     @staticmethod
-    def from_document(document):
+    def from_document(document: object) -> LinkedTable:
         if not isinstance(document, dict):
             raise LinkedInputError("a stored table must be a JSON object")
         expected = {
@@ -405,19 +406,19 @@ class MemberRef:
     member_type: LinkedMemberType
     member_id: UUID
 
-    def validated(self):
+    def validated(self) -> MemberRef:
         if not isinstance(self.member_type, LinkedMemberType):
             raise LinkedInputError("a member type is not admitted here")
         if not isinstance(self.member_id, UUID):
             raise LinkedInputError("a member id must be a UUID value")
         return MemberRef(member_type=self.member_type, member_id=self.member_id)
 
-    def to_document(self):
+    def to_document(self) -> dict[str, object]:
         admitted = self.validated()
         return {"member_id": str(admitted.member_id), "member_type": admitted.member_type.value}
 
     @staticmethod
-    def from_document(document):
+    def from_document(document: object) -> MemberRef:
         if not isinstance(document, dict):
             raise LinkedInputError("a stored member reference must be a JSON object")
         expected = {"member_id", "member_type"}
@@ -439,14 +440,14 @@ class LinkSource:
     source_revision: str
     content_digest: str
 
-    def validated(self):
+    def validated(self) -> LinkSource:
         if not isinstance(self.source_id, UUID):
             raise LinkedInputError("a link source id must be a UUID value")
         revision = _admit_identifier(self.source_revision, "source revision")
         digest = _admit_digest(self.content_digest)
         return LinkSource(source_id=self.source_id, source_revision=revision, content_digest=digest)
 
-    def to_document(self):
+    def to_document(self) -> dict[str, object]:
         admitted = self.validated()
         return {
             "content_digest": admitted.content_digest,
@@ -455,7 +456,7 @@ class LinkSource:
         }
 
     @staticmethod
-    def from_document(document):
+    def from_document(document: object) -> LinkSource:
         if not isinstance(document, dict):
             raise LinkedInputError("a stored link source must be a JSON object")
         expected = {"content_digest", "source_id", "source_revision"}
@@ -481,12 +482,12 @@ class WorkspaceLink:
     source_member: MemberRef
     target_member: MemberRef
     link_kind: LinkKind
-    sources: tuple
+    sources: tuple[LinkSource, ...]
     derivation_method: str
     derivation_version: str
     link_schema_version: int
 
-    def validated(self):
+    def validated(self) -> WorkspaceLink:
         if not isinstance(self.workspace_id, UUID):
             raise LinkedInputError("a workspace id must be a UUID value")
         if not isinstance(self.link_id, UUID):
@@ -505,10 +506,10 @@ class WorkspaceLink:
             raise LinkedInputError("a link needs a non-empty tuple of sources")
         if len(self.sources) > MAXIMUM_SOURCES_PER_LINK:
             raise LinkedInputError("a link carries an unadmitted source count")
-        checked = tuple(
-            item.validated() if isinstance(item, LinkSource) else None for item in self.sources
-        )
-        if any(item is None for item in checked):
+        checked = tuple(item.validated() for item in self.sources if isinstance(item, LinkSource))
+        if len(checked) != len(self.sources) or any(
+            not isinstance(item, LinkSource) for item in checked
+        ):
             raise LinkedInputError("link sources need LinkSource instances")
         seen = set()
         for item in checked:
@@ -550,7 +551,7 @@ class WorkspaceLink:
             link_schema_version=schema,
         )
 
-    def to_document(self):
+    def to_document(self) -> dict[str, object]:
         admitted = self.validated()
         return {
             "data_class": synthetic_data_class_value(),
@@ -568,7 +569,7 @@ class WorkspaceLink:
         }
 
     @staticmethod
-    def from_document(document):
+    def from_document(document: object) -> WorkspaceLink:
         if not isinstance(document, dict):
             raise LinkedInputError("a stored link must be a JSON object")
         expected = {
@@ -618,7 +619,7 @@ class WorkspaceLink:
         ).validated()
 
 
-def document_id_for(workspace_id, document_key, source_revision):
+def document_id_for(workspace_id: object, document_key: object, source_revision: object) -> UUID:
     """Return the deterministic identity of one linked document."""
     if not isinstance(workspace_id, UUID):
         raise LinkedInputError("a workspace id must be a UUID value")
@@ -627,7 +628,7 @@ def document_id_for(workspace_id, document_key, source_revision):
     return uuid5(DOCUMENT_NAMESPACE, ":".join((str(workspace_id), key, revision)))
 
 
-def table_id_for(workspace_id, table_key, source_revision):
+def table_id_for(workspace_id: object, table_key: object, source_revision: object) -> UUID:
     """Return the deterministic identity of one linked table."""
     if not isinstance(workspace_id, UUID):
         raise LinkedInputError("a workspace id must be a UUID value")
@@ -636,7 +637,15 @@ def table_id_for(workspace_id, table_key, source_revision):
     return uuid5(TABLE_NAMESPACE, ":".join((str(workspace_id), key, revision)))
 
 
-def link_id_for(workspace_id, source_member, target_member, link_kind, sources, method, version):
+def link_id_for(
+    workspace_id: object,
+    source_member: object,
+    target_member: object,
+    link_kind: object,
+    sources: object,
+    method: object,
+    version: object,
+) -> UUID:
     """Return the deterministic identity of one workspace link."""
     if not isinstance(workspace_id, UUID):
         raise LinkedInputError("a workspace id must be a UUID value")
@@ -650,8 +659,8 @@ def link_id_for(workspace_id, source_member, target_member, link_kind, sources, 
         raise LinkedInputError("a link kind is not admitted here")
     if not isinstance(sources, tuple) or not sources:
         raise LinkedInputError("a link needs a non-empty tuple of sources")
-    checked = tuple(item.validated() if isinstance(item, LinkSource) else None for item in sources)
-    if any(item is None for item in checked):
+    checked = tuple(item.validated() for item in sources if isinstance(item, LinkSource))
+    if len(checked) != len(sources) or any(not isinstance(item, LinkSource) for item in checked):
         raise LinkedInputError("link sources need LinkSource instances")
     ordered = tuple(sorted(checked, key=lambda item: str(item.source_id)))
     method = _admit_identifier(method, "derivation method")
@@ -678,7 +687,7 @@ def link_id_for(workspace_id, source_member, target_member, link_kind, sources, 
     )
 
 
-def document_binding(workspace_id, document_id):
+def document_binding(workspace_id: object, document_id: object) -> ObjectBinding:
     """Return the store binding of one linked document."""
     if not isinstance(workspace_id, UUID):
         raise LinkedInputError("a workspace id must be a UUID value")
@@ -692,7 +701,7 @@ def document_binding(workspace_id, document_id):
     )
 
 
-def table_binding(workspace_id, table_id):
+def table_binding(workspace_id: object, table_id: object) -> ObjectBinding:
     """Return the store binding of one linked table."""
     if not isinstance(workspace_id, UUID):
         raise LinkedInputError("a workspace id must be a UUID value")
@@ -706,7 +715,7 @@ def table_binding(workspace_id, table_id):
     )
 
 
-def link_binding(workspace_id, link_id):
+def link_binding(workspace_id: object, link_id: object) -> ObjectBinding:
     """Return the store binding of one workspace link."""
     if not isinstance(workspace_id, UUID):
         raise LinkedInputError("a workspace id must be a UUID value")
@@ -720,7 +729,7 @@ def link_binding(workspace_id, link_id):
     )
 
 
-def member_binding(workspace_id, member):
+def member_binding(workspace_id: object, member: object) -> ObjectBinding:
     """Return the store binding of one linked member."""
     if not isinstance(workspace_id, UUID):
         raise LinkedInputError("a workspace id must be a UUID value")
@@ -746,17 +755,17 @@ def member_binding(workspace_id, member):
 
 
 def admit_document(
-    store,
-    trail,
-    workspace_id,
-    document_key,
-    title,
-    sections,
-    source_id,
-    actor_id,
-    occurred_at,
-    research_refs=(),
-):
+    store: object,
+    trail: object,
+    workspace_id: object,
+    document_key: object,
+    title: object,
+    sections: object,
+    source_id: object,
+    actor_id: object,
+    occurred_at: object,
+    research_refs: object = (),
+) -> ObjectBinding:
     """Admit one derived workspace document bound to one corpus source."""
     if not isinstance(store, WorkspaceStore):
         raise LinkedInputError("a workspace store is required")
@@ -777,7 +786,7 @@ def admit_document(
     moment = _admit_occurred_at(occurred_at)
     try:
         source = corpus_mod.read_source(store, source_id)
-    except corpus_mod.CorpusInputError as error:
+    except CorpusInputError as error:
         raise LinkedRevisionError("the document source is absent in this store") from error
     document = LinkedDocument(
         workspace_id=workspace_id,
@@ -815,7 +824,7 @@ def admit_document(
     return binding
 
 
-def read_document(store, document_id):
+def read_document(store: object, document_id: object) -> LinkedDocument:
     """Read and verify one stored document with its source still current."""
     if not isinstance(store, WorkspaceStore):
         raise LinkedInputError("a workspace store is required")
@@ -843,7 +852,7 @@ def read_document(store, document_id):
     record.verify_payload(raw)
     try:
         source = corpus_mod.read_source(store, document.source_id)
-    except corpus_mod.CorpusInputError as error:
+    except CorpusInputError as error:
         raise LinkedStaleError("a document source is no longer present") from error
     if source.source_revision != document.source_revision:
         raise LinkedStaleError("a document source revision no longer matches")
@@ -853,18 +862,18 @@ def read_document(store, document_id):
 
 
 def admit_table(
-    store,
-    trail,
-    workspace_id,
-    table_key,
-    title,
-    columns,
-    rows,
-    source_id,
-    actor_id,
-    occurred_at,
-    research_refs=(),
-):
+    store: object,
+    trail: object,
+    workspace_id: object,
+    table_key: object,
+    title: object,
+    columns: object,
+    rows: object,
+    source_id: object,
+    actor_id: object,
+    occurred_at: object,
+    research_refs: object = (),
+) -> ObjectBinding:
     """Admit one derived workspace table bound to one corpus source."""
     if not isinstance(store, WorkspaceStore):
         raise LinkedInputError("a workspace store is required")
@@ -887,7 +896,7 @@ def admit_table(
     moment = _admit_occurred_at(occurred_at)
     try:
         source = corpus_mod.read_source(store, source_id)
-    except corpus_mod.CorpusInputError as error:
+    except CorpusInputError as error:
         raise LinkedRevisionError("the table source is absent in this store") from error
     checked_columns = tuple(_admit_column(item) for item in columns)
     table = LinkedTable(
@@ -927,7 +936,7 @@ def admit_table(
     return binding
 
 
-def read_table(store, table_id):
+def read_table(store: object, table_id: object) -> LinkedTable:
     """Read and verify one stored table with its source still current."""
     if not isinstance(store, WorkspaceStore):
         raise LinkedInputError("a workspace store is required")
@@ -955,7 +964,7 @@ def read_table(store, table_id):
     record.verify_payload(raw)
     try:
         source = corpus_mod.read_source(store, table.source_id)
-    except corpus_mod.CorpusInputError as error:
+    except CorpusInputError as error:
         raise LinkedStaleError("a table source is no longer present") from error
     if source.source_revision != table.source_revision:
         raise LinkedStaleError("a table source revision no longer matches")
@@ -964,7 +973,7 @@ def read_table(store, table_id):
     return table.validated()
 
 
-def verify_member(store, member):
+def verify_member(store: object, member: object) -> ObjectBinding:
     """Verify one linked member is present and current, returning its binding."""
     if not isinstance(store, WorkspaceStore):
         raise LinkedInputError("a workspace store is required")
@@ -993,16 +1002,16 @@ def verify_member(store, member):
 
 
 def admit_link(
-    store,
-    trail,
-    workspace_id,
-    source_member,
-    target_member,
-    link_kind,
-    source_ids,
-    actor_id,
-    occurred_at,
-):
+    store: object,
+    trail: object,
+    workspace_id: object,
+    source_member: object,
+    target_member: object,
+    link_kind: object,
+    source_ids: object,
+    actor_id: object,
+    occurred_at: object,
+) -> ObjectBinding:
     """Admit one derived link between two current workspace members."""
     if not isinstance(store, WorkspaceStore):
         raise LinkedInputError("a workspace store is required")
@@ -1047,7 +1056,7 @@ def admit_link(
     for source_id in source_ids:
         try:
             source = corpus_mod.read_source(store, source_id)
-        except corpus_mod.CorpusInputError as error:
+        except CorpusInputError as error:
             raise LinkedRevisionError("a link source is absent in this store") from error
         bound.append(
             LinkSource(
@@ -1103,7 +1112,7 @@ def admit_link(
     return binding
 
 
-def read_link(store, link_id):
+def read_link(store: object, link_id: object) -> WorkspaceLink:
     """Read and verify one stored link with members and sources current."""
     if not isinstance(store, WorkspaceStore):
         raise LinkedInputError("a workspace store is required")
@@ -1140,7 +1149,7 @@ def read_link(store, link_id):
     for bound in link.sources:
         try:
             source = corpus_mod.read_source(store, bound.source_id)
-        except corpus_mod.CorpusInputError as error:
+        except CorpusInputError as error:
             raise LinkedStaleError("a link source is no longer present") from error
         if source.source_revision != bound.source_revision:
             raise LinkedStaleError("a link source revision no longer matches")
@@ -1149,7 +1158,7 @@ def read_link(store, link_id):
     return link.validated()
 
 
-def resolve_link(store, link_id):
+def resolve_link(store: object, link_id: object) -> WorkspaceLink:
     """Resolve one link to its verified endpoints, failing closed on staleness."""
     link = read_link(store, link_id)
     verify_member(store, link.source_member)
@@ -1157,7 +1166,7 @@ def resolve_link(store, link_id):
     return link
 
 
-def links_for_member(store, member):
+def links_for_member(store: object, member: object) -> tuple[UUID, ...]:
     """List current link identities touching one member, in sorted order."""
     if not isinstance(store, WorkspaceStore):
         raise LinkedInputError("a workspace store is required")
@@ -1176,7 +1185,9 @@ def links_for_member(store, member):
     return tuple(sorted(found, key=str))
 
 
-def delete_link(store, trail, link_id, actor_id, occurred_at):
+def delete_link(
+    store: object, trail: object, link_id: object, actor_id: object, occurred_at: object
+) -> int:
     """Delete one link revision and its provenance while keeping audit events."""
     if not isinstance(store, WorkspaceStore):
         raise LinkedInputError("a workspace store is required")
@@ -1201,7 +1212,9 @@ def delete_link(store, trail, link_id, actor_id, occurred_at):
     return removed
 
 
-def delete_member(store, trail, member, actor_id, occurred_at):
+def delete_member(
+    store: object, trail: object, member: object, actor_id: object, occurred_at: object
+) -> int:
     """Delete one member, its incident links, and their provenance records."""
     if not isinstance(store, WorkspaceStore):
         raise LinkedInputError("a workspace store is required")
@@ -1234,7 +1247,7 @@ def delete_member(store, trail, member, actor_id, occurred_at):
     return removed
 
 
-def _read_graph_member(store, member):
+def _read_graph_member(store: WorkspaceStore, member: MemberRef) -> object:
     if member.member_type is LinkedMemberType.GRAPH_NODE:
         return graph_mod.read_node(store, member.member_id)
     if member.member_type is LinkedMemberType.GRAPH_EDGE:
@@ -1242,13 +1255,13 @@ def _read_graph_member(store, member):
     return graph_mod.read_view(store, member.member_id)
 
 
-def _validated_research_refs(raw):
+def _validated_research_refs(raw: object) -> tuple[ResearchRef, ...]:
     if not isinstance(raw, tuple):
         raise LinkedInputError("research references must be a tuple")
     if len(raw) > MAXIMUM_RESEARCH_REFS:
         raise LinkedInputError("a member carries an unadmitted research reference count")
-    checked = tuple(item.validated() if isinstance(item, ResearchRef) else None for item in raw)
-    if any(item is None for item in checked):
+    checked = tuple(item.validated() for item in raw if isinstance(item, ResearchRef))
+    if len(checked) != len(raw) or any(not isinstance(item, ResearchRef) for item in checked):
         raise LinkedInputError("research references need ResearchRef instances")
     seen = set()
     for item in checked:
@@ -1259,7 +1272,7 @@ def _validated_research_refs(raw):
     return checked
 
 
-def _validated_row(raw, width):
+def _validated_row(raw: object, width: int) -> tuple[str, ...]:
     if not isinstance(raw, tuple):
         raise LinkedInputError("a table row must be a tuple")
     if len(raw) != width:
@@ -1267,11 +1280,11 @@ def _validated_row(raw, width):
     return tuple(_admit_cell(item) for item in raw)
 
 
-def _reject_table_row():
+def _reject_table_row() -> tuple[str, ...]:
     raise LinkedInputError("a table row must be a JSON array")
 
 
-def _admit_identifier(raw, label):
+def _admit_identifier(raw: object, label: str) -> str:
     if not isinstance(raw, str):
         raise LinkedInputError(f"{label} must be a string")
     value = raw.strip()
@@ -1287,7 +1300,7 @@ def _admit_identifier(raw, label):
     return value
 
 
-def _admit_key(raw, label):
+def _admit_key(raw: object, label: str) -> str:
     if not isinstance(raw, str):
         raise LinkedInputError(f"a {label} must be a string")
     value = raw.strip()
@@ -1303,7 +1316,7 @@ def _admit_key(raw, label):
     return value
 
 
-def _admit_title(raw):
+def _admit_title(raw: object) -> str:
     if not isinstance(raw, str):
         raise LinkedInputError("a title must be a string")
     value = raw.strip()
@@ -1319,7 +1332,7 @@ def _admit_title(raw):
     return " ".join(value.split())
 
 
-def _admit_section(raw):
+def _admit_section(raw: object) -> str:
     if not isinstance(raw, str):
         raise LinkedInputError("a section must be a string")
     value = raw.strip()
@@ -1337,7 +1350,7 @@ def _admit_section(raw):
     return value
 
 
-def _admit_column(raw):
+def _admit_column(raw: object) -> str:
     if not isinstance(raw, str):
         raise LinkedInputError("a column name must be a string")
     value = raw.strip()
@@ -1353,7 +1366,7 @@ def _admit_column(raw):
     return value
 
 
-def _admit_cell(raw):
+def _admit_cell(raw: object) -> str:
     if not isinstance(raw, str):
         raise LinkedInputError("a cell must be a string")
     value = raw.strip()
@@ -1367,7 +1380,7 @@ def _admit_cell(raw):
     return value
 
 
-def _admit_digest(raw):
+def _admit_digest(raw: object) -> str:
     if not isinstance(raw, str) or not raw.startswith("sha256:"):
         raise LinkedInputError("content digest must be a sha256: digest")
     hex_part = raw[len("sha256:") :]
@@ -1376,7 +1389,7 @@ def _admit_digest(raw):
     return raw
 
 
-def _admit_occurred_at(raw):
+def _admit_occurred_at(raw: object) -> str:
     if not isinstance(raw, str):
         raise LinkedInputError("a linked occurrence time must be a string")
     value = raw.strip()
@@ -1391,20 +1404,20 @@ def _admit_occurred_at(raw):
     return value
 
 
-def _canonical_bytes(document):
+def _canonical_bytes(document: object) -> bytes:
     return json.dumps(document, sort_keys=True, separators=(",", ":"), ensure_ascii=True).encode(
         "ascii"
     )
 
 
-def _string_member(document, name):
+def _string_member(document: dict[str, object], name: str) -> str:
     value = document[name]
     if not isinstance(value, str):
         raise LinkedInputError(f"a stored {name} must be a string")
     return value
 
 
-def _string_member_value(value):
+def _string_member_value(value: object) -> str:
     if not isinstance(value, str):
         raise LinkedInputError("a stored text member must be a string")
     return value
