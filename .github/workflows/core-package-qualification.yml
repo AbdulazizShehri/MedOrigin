@@ -1,0 +1,93 @@
+name: Research Core package qualification
+
+# Developer-only read-only CI: no tag, release, upload, credentials or publishing.
+# Qualify the installed wheel; do not mistake a source-tree import for one.
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/core-package-qualification.yml"
+      - "src/medscale/**"
+      - "pyproject.toml"
+      - "README.md"
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/core-package-qualification.yml"
+      - "src/medscale/**"
+      - "pyproject.toml"
+      - "README.md"
+
+permissions:
+  contents: read
+
+jobs:
+  installed-core-wheel:
+    name: installed core wheel (py${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12"]
+    steps:
+      - name: Checkout without persisted credentials
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install uv without cache
+        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        with:
+          enable-cache: false
+
+      - name: Install Python minor
+        run: uv python install "${{ matrix.python-version }}"
+
+      - name: Build exact Research Core wheel and sdist
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "${RUNNER_TEMP}/core-dist"
+          uv build --out-dir "${RUNNER_TEMP}/core-dist"
+          test "$(find "${RUNNER_TEMP}/core-dist" -maxdepth 1 -type f -name 'medscale-*.whl' | wc -l)" -eq 1
+          test "$(find "${RUNNER_TEMP}/core-dist" -maxdepth 1 -type f -name 'medscale-*.tar.gz' | wc -l)" -eq 1
+          (cd "${RUNNER_TEMP}/core-dist" && sha256sum -- *.whl *.tar.gz)
+
+      - name: Clean-install actual Research Core wheel, no dependency resolution
+        shell: bash
+        run: |
+          set -euo pipefail
+          wheel="$(find "${RUNNER_TEMP}/core-dist" -maxdepth 1 -type f -name 'medscale-*.whl' -print -quit)"
+          test -n "$wheel"
+          uv venv --python "${{ matrix.python-version }}" "${RUNNER_TEMP}/core-install"
+          uv pip install --python "${RUNNER_TEMP}/core-install/bin/python" --no-deps "$wheel"
+          uv pip check --python "${RUNNER_TEMP}/core-install/bin/python"
+
+      - name: Smoke installed metadata, imported module and CLI outside checkout
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "${RUNNER_TEMP}"
+          "${RUNNER_TEMP}/core-install/bin/python" - <<'PY'
+          import importlib.metadata as metadata
+          from pathlib import Path
+          import subprocess
+          import sys
+
+          import medscale
+
+          dist_version = metadata.version("medscale")
+          assert dist_version
+          assert "site-packages" in Path(medscale.__file__).parts
+          cli = Path(sys.executable).parent / "medscale"
+          version = subprocess.run(
+              [str(cli), "--version"], check=True, text=True, capture_output=True
+          )
+          assert version.stdout.strip() == f"medscale {dist_version}"
+          help_result = subprocess.run(
+              [str(cli), "--help"], check=True, text=True, capture_output=True
+          )
+          assert help_result.stdout.strip()
+          print(f"CORE_WHEEL_PASS py={sys.version.split()[0]} dist={dist_version}")
+          PY
