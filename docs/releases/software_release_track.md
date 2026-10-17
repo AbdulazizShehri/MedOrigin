@@ -3,6 +3,7 @@
 - **Status:** Founder-prioritized planning / release-candidate qualification track; not a publication approval
 - **Direction date:** 2026-10-16
 - **Tracking:** [Issue #574](https://github.com/TheHalfMoon/MedOrigin/issues/574)
+- **Successor version decision:** [Proposal and frozen-input impact dossier](successor_version_decision_574.md) — requires independent founder approval; no authorized new version or tag
 - **Authority:** [ADR-0010](../adr/0010-release-architecture.md), [release process](release_process.md), [R1–R7](../governance/rules.md), and canonical specifications continue to govern; this document cannot override them
 
 ## Why there are two lanes
