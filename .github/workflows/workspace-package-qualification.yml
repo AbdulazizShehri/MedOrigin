@@ -8,11 +8,13 @@ on:
     paths:
       - ".github/workflows/workspace-package-qualification.yml"
       - "apps/workspace/**"
+      - "LICENSE"
   push:
     branches: [main]
     paths:
       - ".github/workflows/workspace-package-qualification.yml"
       - "apps/workspace/**"
+      - "LICENSE"
 
 permissions:
   contents: read
@@ -66,6 +68,28 @@ jobs:
               assert len(members) == 1, members
               assert archive.read(members[0]) == Path("LICENSE").read_bytes(), "Workspace wheel license mismatch"
           print("WORKSPACE_LICENSE_BUNDLED_PASS")
+          PY
+
+      - name: Verify embedded Apache-2.0 license bytes in Workspace sdist
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import os
+          from pathlib import Path
+          from tarfile import open as taropen
+
+          dist = Path(os.environ["RUNNER_TEMP"]) / "workspace-dist"
+          sdists = list(dist.glob("medscale_workspace-*.tar.gz"))
+          assert len(sdists) == 1, sdists
+          license_bytes = Path("LICENSE").read_bytes()
+          assert Path("apps/workspace/LICENSE").read_bytes() == license_bytes
+
+          with taropen(sdists[0], "r:gz") as archive:
+              members = [m for m in archive.getmembers() if m.isfile() and m.name.endswith("/LICENSE")]
+              assert len(members) == 1, [m.name for m in members]
+              assert archive.extractfile(members[0]).read() == license_bytes
+          print("WORKSPACE_SDIST_LICENSE_PASS")
           PY
 
       - name: Install exact wheel with declared pinned runtime dependency
