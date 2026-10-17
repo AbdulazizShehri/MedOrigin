@@ -10,6 +10,8 @@ on:
       - "src/medscale/**"
       - "pyproject.toml"
       - "README.md"
+      - "LICENSE"
+      - "apps/workspace/LICENSE"
   push:
     branches: [main]
     paths:
@@ -17,6 +19,8 @@ on:
       - "src/medscale/**"
       - "pyproject.toml"
       - "README.md"
+      - "LICENSE"
+      - "apps/workspace/LICENSE"
 
 permissions:
   contents: read
@@ -53,6 +57,42 @@ jobs:
           test "$(find "${RUNNER_TEMP}/core-dist" -maxdepth 1 -type f -name 'medscale-*.whl' | wc -l)" -eq 1
           test "$(find "${RUNNER_TEMP}/core-dist" -maxdepth 1 -type f -name 'medscale-*.tar.gz' | wc -l)" -eq 1
           (cd "${RUNNER_TEMP}/core-dist" && sha256sum -- *.whl *.tar.gz)
+
+      - name: Verify bundled Apache-2.0 license bytes in Core wheel and sdist
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import os
+          from email.parser import Parser
+          from pathlib import Path
+          from tarfile import open as taropen
+          from zipfile import ZipFile
+
+          license_bytes = Path("LICENSE").read_bytes()
+          assert Path("apps/workspace/LICENSE").read_bytes() == license_bytes
+          dist = Path(os.environ["RUNNER_TEMP"]) / "core-dist"
+          wheels = list(dist.glob("medscale-*.whl"))
+          sdists = list(dist.glob("medscale-*.tar.gz"))
+          assert len(wheels) == len(sdists) == 1, (wheels, sdists)
+
+          with ZipFile(wheels[0]) as archive:
+              members = [n for n in archive.namelist() if n.endswith(".dist-info/licenses/LICENSE")]
+              assert len(members) == 1, members
+              assert archive.read(members[0]) == license_bytes
+              meta_files = [n for n in archive.namelist() if n.endswith(".dist-info/METADATA")]
+              assert len(meta_files) == 1, meta_files
+              metadata = Parser().parsestr(archive.read(meta_files[0]).decode("utf-8"))
+              assert metadata["License-Expression"] == "Apache-2.0"
+
+          with taropen(sdists[0], "r:gz") as archive:
+              prefix = sdists[0].name.removesuffix(".tar.gz")
+              for name in (f"{prefix}/LICENSE", f"{prefix}/apps/workspace/LICENSE"):
+                  member = archive.getmember(name)
+                  assert member.isfile(), name
+                  assert archive.extractfile(member).read() == license_bytes, name
+          print("CORE_LICENSE_ARCHIVES_PASS")
+          PY
 
       - name: Clean-install actual Research Core wheel, no dependency resolution
         shell: bash
