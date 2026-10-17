@@ -17,12 +17,21 @@ The repository currently contains these release-related automation surfaces:
 
 1. **Tag path (`v*`)** — quality gate → wheel/sdist build → exact artifact download → clean installed-wheel smoke → installed package metadata/CLI/tag version consistency → GitHub Release creation.
 2. **Fail-closed TestPyPI distribution edge** — after successful GitHub Release creation, the job downloads the exact same-run `dist-${{ github.ref_name }}` artifact and uses the SHA-pinned official PyPA Trusted Publishing action against TestPyPI. It performs no checkout or rebuild. It is tag-only, references the `testpypi` environment, scopes `id-token: write` to the publication job, and additionally requires `vars.TESTPYPI_PUBLISH_ENABLED == 'true'`.
-3. **PR-safe workflow qualification** when `release.yml` changes — build wheel/sdist, compute SHA-256 checksums, upload the qualification artifact, download it in dependent jobs, verify byte identity, and install the exact wheel into a fresh Python 3.11 environment without a source checkout. The current v0.2.0 qualification requires installed metadata version `0.2.0` and matching `medscale --version` output. Required repository tests also inspect the TestPyPI job contract without invoking the publisher.
+3. **Non-publishing artifact qualification** — PR-safe when `release.yml` changes, or via manually initiated `workflow_dispatch` on canonical `main` only. Both paths build wheel/sdist, compute SHA-256 checksums, upload a run-scoped qualification artifact, download the exact bytes in dependent jobs, verify byte identity, and clean-install the exact wheel on Python 3.11 without a source checkout. The current 0.2.0 source-baseline qualification requires installed metadata version `0.2.0` and matching `medscale --version` output. Manual dispatch does **not** run any tag-driven release, publishing, or OIDC job; only a separately authorized version/tag may activate those paths. Contract tests enforce this separation.
 4. Third-party Actions referenced by immutable commit SHA.
 
 The clean-install jobs intentionally do not check out repository source. Their
 `medscale --version` success therefore comes from the downloaded wheel installed into
 the fresh environment rather than an in-tree `src/` import.
+
+Once this workflow revision is protected-merged, a read-only exact-main qualification
+can be requested with `gh workflow run release.yml --ref main` (or the GitHub Actions
+**Run workflow** control with `main` selected). Record the run ID, source commit,
+job results and artifact SHA-256 values in the release tracker. The qualification
+artifact expires after one day, so preserve relevant checksums and links promptly.
+Dispatch on a tag or any branch other than `main` runs none of the qualification
+jobs; tag-driven release and publisher jobs require the separate `push` event and
+cannot be enabled by dispatch.
 
 The tag-path gate does not hard-code `0.2.0`: it derives the installed version from
 `importlib.metadata`, requires the CLI to report that same version, and requires

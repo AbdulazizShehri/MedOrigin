@@ -62,3 +62,31 @@ def test_testpypi_publish_job_reuses_exact_artifact_without_rebuild_or_secret() 
         "twine",
     ):
         assert forbidden not in block
+
+
+def test_manual_main_qualification_never_opens_tag_or_publish_jobs() -> None:
+    text = _workflow_text()
+    triggers = text.split("permissions:", maxsplit=1)[0]
+    assert "  workflow_dispatch:" in triggers
+    assert "  push:\n    tags:" in triggers
+    assert "permissions:\n  contents: read" in text.split("jobs:", maxsplit=1)[0]
+
+    allowed = (
+        "github.event_name == 'pull_request' || "
+        "(github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main')"
+    )
+    for job_id in ("pr-artifact-build", "pr-artifact-roundtrip", "pr-clean-wheel-smoke"):
+        block = _job_block(text, job_id)
+        assert f"if: {allowed}" in block
+        assert "gh release" not in block
+        assert "softprops/action-gh-release@" not in block
+        assert "pypa/gh-action-pypi-publish@" not in block
+
+    for job_id in ("quality", "build", "install-smoke", "github-release", "testpypi-publish"):
+        block = _job_block(text, job_id)
+        assert "github.event_name == 'push'" in block
+        assert "workflow_dispatch" not in block
+
+    artifact = "release-action-roundtrip-" + "${{ github.run_id }}-${{ github.run_attempt }}"
+    assert text.count(artifact) == 3
+    assert "github.event.pull_request.number" not in text
