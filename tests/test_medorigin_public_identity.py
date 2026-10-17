@@ -70,6 +70,18 @@ def test_security_and_docs_link_to_current_home() -> None:
     assert "(vision/MEDORIGIN_OVERVIEW.md)" in docs_index
 
 
+def test_release_governance_status_matches_accepted_adrs() -> None:
+    """The public docs index must not downgrade accepted release governance."""
+    docs_index = _text("docs/README.md")
+    for identifier, filename, title in [
+        ("0010", "0010-release-architecture.md", "release architecture"),
+        ("0011", "0011-versioning-licensing.md", "versioning & licensing"),
+    ]:
+        adr = _text(f"docs/adr/{filename}")
+        assert "- **Status:** Accepted" in adr
+        assert f"[{identifier} {title}](adr/{filename}) *(Accepted)*" in docs_index
+
+
 def test_public_brand_does_not_erase_legacy_compatibility() -> None:
     """Branding is not a license to alter source-bound package/API identities."""
     policy = _text("docs/BRAND_TRANSITION.md")
