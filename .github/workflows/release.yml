@@ -8,6 +8,8 @@ on:
     branches: [main]
     paths:
       - '.github/workflows/release.yml'
+  # Read-only artifact round-trip on exact protected main without publishing a tag.
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -145,7 +147,7 @@ jobs:
 
   pr-artifact-build:
     name: PR-safe build and upload qualification
-    if: github.event_name == 'pull_request'
+    if: github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main')
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -170,13 +172,13 @@ jobs:
       - name: Upload qualification artifact
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: release-action-roundtrip-${{ github.event.pull_request.number }}
+          name: release-action-roundtrip-${{ github.run_id }}-${{ github.run_attempt }}
           path: roundtrip-payload/
           retention-days: 1
 
   pr-artifact-roundtrip:
     name: PR-safe download and byte-identity qualification
-    if: github.event_name == 'pull_request'
+    if: github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main')
     needs: pr-artifact-build
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -184,7 +186,7 @@ jobs:
       - name: Download qualification artifact
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
-          name: release-action-roundtrip-${{ github.event.pull_request.number }}
+          name: release-action-roundtrip-${{ github.run_id }}-${{ github.run_attempt }}
           path: roundtrip
       - name: Verify byte identity
         shell: bash
@@ -196,7 +198,7 @@ jobs:
 
   pr-clean-wheel-smoke:
     name: PR-safe clean installed-wheel qualification
-    if: github.event_name == 'pull_request'
+    if: github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main')
     needs: pr-artifact-build
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -209,7 +211,7 @@ jobs:
       - name: Download exact qualification artifact
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
-          name: release-action-roundtrip-${{ github.event.pull_request.number }}
+          name: release-action-roundtrip-${{ github.run_id }}-${{ github.run_attempt }}
           path: roundtrip
       - name: Install exact wheel and verify current CLI version
         shell: bash
