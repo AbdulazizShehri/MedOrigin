@@ -35,6 +35,23 @@ validate under the current code; **old-on-new and new-on-old validators
 were not both compatible**. A no-downgrade policy is required, and no
 historical receipt may be rewritten in place.
 
+### Fail-closed freeze integrity safeguard (candidate, subject to governance)
+
+A read-only old-v0.2-to-v0.3 differential proved that running the newer
+`medscale dataset freeze` against an existing historical dataset would
+**silently overwrite the old manifest and checksum receipts** and then pass
+validation, erasing the earlier bytes. The candidate therefore rejects
+`freeze` when existing `checksums/*.sha256` evidence is present, or an
+existing manifest carries a nonempty `dataset_fingerprint` or is unreadable.
+This is a deliberate, test-covered **fail-closed behavior change** under
+ADR-0030, not proof that old artifacts are importable. The ordinary
+pre-freeze `manifest --write` workflow may still generate its unsigned
+draft before the first freeze. To migrate an older artifact, preserve
+its original bytes and use a distinct new dataset identity and a
+separately approved append-only migration protocol; do not re-freeze it
+in place. The founder's acceptance of this successor-policy change
+under ADR-0017/0020 is still required before merging this PR.
+
 ### Open compatibility gates
 
 - [ ] Validate full execution, persisted identifiers and semantic behavior

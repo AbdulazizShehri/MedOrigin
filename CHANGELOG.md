@@ -11,7 +11,9 @@ All notable changes to this project are documented here. The format is based on
 - Source package metadata and `medscale --version` are staged as `0.3.0`
   in a review branch only; the historical `v0.2.0` tag is immutable.
 - Corrected `dataset freeze` final manifest-checksum ordering and normalized
-  generated text output to LF. The historical v0.2.0 freezer can produce
+  generated text output to LF. The successor also refuses to re-freeze
+  an existing checksummed/fingerprinted dataset, preventing silent
+  historical evidence overwrite; fresh dataset identities remain writable. The historical v0.2.0 freezer can produce
   self-inconsistent checksums; old validators may reject new manifests.
   This is **not** transparent binary or persisted-data compatibility. Do not
   rewrite historical dataset receipts to pretend prior files were valid.

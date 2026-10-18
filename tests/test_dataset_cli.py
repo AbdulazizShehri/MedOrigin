@@ -132,6 +132,16 @@ def test_dataset_freeze_produces_self_consistent_checksums(
         encoding="utf-8",
     )
 
+    # An unsigned manifest --write draft remains eligible for its first
+    # freeze; the safeguard only protects immutable receipts.
+    assert main(["manifest", "medscale-dataset-v1", "--root", str(root), "--write"]) == 0
+    assert (
+        json.loads((dataset_dir / "manifest.json").read_text(encoding="utf-8"))[
+            "dataset_fingerprint"
+        ]
+        == ""
+    )
+
     exit_code = main(
         [
             "freeze",
@@ -153,3 +163,43 @@ def test_dataset_freeze_produces_self_consistent_checksums(
     assert json.loads(manifest_bytes)["dataset_fingerprint"]
     assert b"\r" not in manifest_bytes
     assert exit_code == 0
+
+    # Once checksum receipts exist, refreezing must not rewrite a historical
+    # or current artifact, even when the original receipt is now invalid.
+    original_checksum = (dataset_dir / "checksums" / "manifest.json.sha256").read_bytes()
+    original_manifest = manifest_bytes
+    freeze_args = [
+        "freeze",
+        "medscale-dataset-v1",
+        "--root",
+        str(root),
+        "--created-at",
+        "2026-07-13T00:00:00+00:00",
+    ]
+    assert main(freeze_args) == 2
+    assert (dataset_dir / "manifest.json").read_bytes() == original_manifest
+    assert (dataset_dir / "checksums" / "manifest.json.sha256").read_bytes() == original_checksum
+
+    # A corrupt historical receipt is not eligible for in-place "repair."
+    bad_checksum = b"0" * 64 + b"\n"
+    (dataset_dir / "checksums" / "manifest.json.sha256").write_bytes(bad_checksum)
+    assert main(freeze_args) == 2
+    assert (dataset_dir / "manifest.json").read_bytes() == original_manifest
+    assert (dataset_dir / "checksums" / "manifest.json.sha256").read_bytes() == bad_checksum
+
+
+def test_dataset_freeze_refuses_existing_protected_manifest_without_checksums(
+    tmp_path: Path,
+) -> None:
+    """Damaged or fingerprinted manifests must never be silently repaired."""
+    for name, raw in (
+        ("malformed", b"{truncated historical bytes"),
+        ("fingerprinted", b'{"dataset_fingerprint": "historical-immutable"}'),
+    ):
+        dataset_dir = tmp_path / name
+        dataset_dir.mkdir()
+        path = dataset_dir / "manifest.json"
+        path.write_bytes(raw)
+        assert main(["freeze", name, "--root", str(tmp_path)]) == 2
+        assert path.read_bytes() == raw
+        assert not (dataset_dir / "checksums").exists()
