@@ -106,7 +106,9 @@ def test_wheel_contains_fhir_module_without_click_dependency(pr0_wheel: Path) ->
         pytest.fail("wheel packaging regression: wheel metadata unreadable")
     assert any(name.endswith("medscale/cli/fhir.py") for name in names)
     assert "Name: medscale" in metadata_text
-    assert "Version: 0.2.0" in metadata_text
+    from medscale.__about__ import __version__ as package_version
+
+    assert f"Version: {package_version}" in metadata_text
     assert "Requires-Dist: click\n" not in metadata_text
 
 

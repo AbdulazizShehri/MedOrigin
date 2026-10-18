@@ -1,6 +1,7 @@
 # MedOrigin — Successor Software Version Decision Dossier
 
-- **Status:** PROPOSED FOR FOUNDER REVIEW — not a version authorization, release candidate, tag, or publication grant
+- **Status:** Historical version-decision dossier dated 2026-10-17; v0.3.0 engineering preparation is now staged for review separately, but no tag/publication authorization has been granted
+- **2026-10-18 staging update:** [Core v0.3.0 candidate qualification](v0_3_0_candidate_qualification.md) tracks a source-version/CITATION candidate with no release date, exact CI and package build checks, preserved frozen root files and explicitly open cross-version/migration gates. The 2026-10-17 base-main snapshots and prohibitions below describe what this **dossier alone** authorizes, not the later founder-directed *preparation-only* step. Neither staging nor the document grants public release or changes to the frozen research source inputs.
 - **Prepared:** 2026-10-17
 - **Source for this assessment:** protected `main` at `41469c0626b1a4c57536fdb9920f538841d6dd25`
 - **Tracker:** [Software release #574](https://github.com/TheHalfMoon/MedOrigin/issues/574)

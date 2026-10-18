@@ -6,6 +6,28 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
+### Planned MedOrigin developer package v0.3.0 — CANDIDATE, NOT RELEASED
+
+- Source package metadata and `medscale --version` are staged as `0.3.0`
+  in a review branch only; the historical `v0.2.0` tag is immutable.
+- Corrected `dataset freeze` final manifest-checksum ordering and normalized
+  generated text output to LF. The historical v0.2.0 freezer can produce
+  self-inconsistent checksums; old validators may reject new manifests.
+  This is **not** transparent binary or persisted-data compatibility. Do not
+  rewrite historical dataset receipts to pretend prior files were valid.
+- Existing seven legacy CLI help surfaces and all 11 exported public API
+  symbols with 24 public method signatures were independently compared with
+  historical v0.2.0 on synthetic-only Windows probes and matched exactly.
+  Those checks do not prove all execution or migration semantics.
+- Developer-only Core wheel/sdist, no clinician GUI, no PHI or production EHR
+  use, no clinical efficacy claims, and no real model-feasibility qualification.
+- Current frozen research-root metadata may still carry legacy MESC project
+  URLs. Updating `pyproject.toml` and its lock requires separately governed
+  byte-identity reconciliation; no silent build overlay is permitted.
+- Publication/tagging, final release notes/date, upstream distribution,
+  synthetic data migration, and independent scientific/clinical gates are
+  NOT AUTHORIZED by this candidate branch.
+
 ### Branding
 
 - Renamed the GitHub project to **MedOrigin** (formerly MESC / MedScale) with an evidence-first public identity.

@@ -12,8 +12,9 @@ authors:
 repository-code: "https://github.com/TheHalfMoon/MedOrigin"
 url: "https://github.com/TheHalfMoon/MedOrigin"
 license: Apache-2.0
-version: 0.2.0
-date-released: "2026-07-13"
+# Candidate package identity only: no release date until an authorized tagged release.
+# Historical v0.2.0 date and tag remain preserved in RELEASES.md.
+version: 0.3.0
 keywords:
   - healthcare
   - FHIR

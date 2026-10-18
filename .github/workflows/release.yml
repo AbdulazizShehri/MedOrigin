@@ -168,7 +168,10 @@ jobs:
         run: |
           mkdir roundtrip-payload
           cp dist/* roundtrip-payload/
-          (cd roundtrip-payload && sha256sum *.whl *.tar.gz > SHA256SUMS)
+          # Pin the SOURCE version beside the exact built wheel. The payload
+          # integrity gate binds this separately from the wheel METADATA version.
+          uv run --no-sync python -c 'from medscale.__about__ import __version__; print(__version__)' > roundtrip-payload/SOURCE_VERSION
+          (cd roundtrip-payload && sha256sum *.whl *.tar.gz SOURCE_VERSION > SHA256SUMS)
       - name: Upload qualification artifact
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
@@ -221,5 +224,9 @@ jobs:
           uv venv --python 3.11 .venv
           uv pip install --python .venv/bin/python --no-deps "$wheel"
           installed_version="$(.venv/bin/python -c 'from importlib.metadata import version; print(version("medscale"))')"
-          test "$installed_version" = "0.2.0"
+          test -f roundtrip/SOURCE_VERSION
+          (cd roundtrip && sha256sum -c SHA256SUMS)
+          expected_version="$(cat roundtrip/SOURCE_VERSION)"
+          test -n "$expected_version"
+          test "$installed_version" = "$expected_version"
           test "$(.venv/bin/medscale --version)" = "medscale ${installed_version}"
