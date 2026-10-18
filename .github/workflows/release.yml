@@ -97,7 +97,12 @@ jobs:
     name: GitHub Release
     needs: [quality, build, install-smoke]
     runs-on: ubuntu-latest
-    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    # Explicit operator-controlled activation is required in addition to a tag.
+    # A passing build is never equivalent to permission to publish.
+    if: >-
+      github.event_name == 'push' &&
+      startsWith(github.ref, 'refs/tags/v') &&
+      vars.GITHUB_RELEASE_PUBLISH_ENABLED == 'true'
     permissions:
       contents: write
     steps:

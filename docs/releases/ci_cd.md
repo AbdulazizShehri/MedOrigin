@@ -11,13 +11,13 @@ The repository currently contains these release-related automation surfaces:
 
 - `.github/workflows/ci.yml` — Python 3.11/3.12 quality gate with locked sync, Ruff, Ruff format, strict Mypy, Pytest with coverage, documentation link hygiene, machine-state integrity checks where applicable, and `medscale check`.
 - `.github/workflows/codeql.yml` — code scanning.
-- `.github/workflows/release.yml` — SHA-pinned package-release workflow.
+- `.github/workflows/release.yml` — SHA-pinned package-release workflow with fail-closed explicit operator-controlled GitHub Release activation.
 
 `release.yml` currently provides:
 
-1. **Tag path (`v*`)** — quality gate → wheel/sdist build → exact artifact download → clean installed-wheel smoke → installed package metadata/CLI/tag version consistency → GitHub Release creation.
+1. **Tag path (`v*`)** — quality gate → wheel/sdist build → exact artifact download → clean installed-wheel smoke → installed package metadata/CLI/tag version consistency. **GitHub Release creation additionally requires `GITHUB_RELEASE_PUBLISH_ENABLED == 'true'` as a separate operator-controlled repository variable; an authorized tag alone is not a publication grant.** The variable must remain unset until specifically approved. Its value is not independently verified by this file.
 2. **Fail-closed TestPyPI distribution edge** — after successful GitHub Release creation, the job downloads the exact same-run `dist-${{ github.ref_name }}` artifact and uses the SHA-pinned official PyPA Trusted Publishing action against TestPyPI. It performs no checkout or rebuild. It is tag-only, references the `testpypi` environment, scopes `id-token: write` to the publication job, and additionally requires `vars.TESTPYPI_PUBLISH_ENABLED == 'true'`.
-3. **Non-publishing artifact qualification** — PR-safe when `release.yml` changes, or via manually initiated `workflow_dispatch` on canonical `main` only. Both paths build wheel/sdist, compute SHA-256 checksums, upload a run-scoped qualification artifact, download the exact bytes in dependent jobs, verify byte identity, and clean-install the exact wheel on Python 3.11 without a source checkout. The current 0.2.0 source-baseline qualification requires installed metadata version `0.2.0` and matching `medscale --version` output. Manual dispatch does **not** run any tag-driven release, publishing, or OIDC job; only a separately authorized version/tag may activate those paths. Contract tests enforce this separation.
+3. **Non-publishing artifact qualification** — PR-safe when `release.yml` changes, or via manually initiated `workflow_dispatch` on canonical `main` only. Both paths build wheel/sdist, compute SHA-256 checksums, upload a run-scoped qualification artifact, download the exact bytes in dependent jobs, verify byte identity, and clean-install the exact wheel on Python 3.11 without a source checkout. The v0.3.0 candidate branch's PR-safe qualification requires installed metadata, `medscale --version` and the SHA-256-bound source `SOURCE_VERSION` to match exactly, with no hardcoded historic package version. Manual dispatch does **not** run any tag-driven release, publishing, or OIDC job; only a separately authorized version/tag may activate those paths. Contract tests enforce this separation.
 4. Third-party Actions referenced by immutable commit SHA.
 
 The clean-install jobs intentionally do not check out repository source. Their
@@ -72,7 +72,7 @@ implemented repository automation only.
 | Wheel + sdist build | Implemented | Tag path and PR-safe qualification |
 | Artifact upload/download byte-identity qualification | Implemented | PR-safe workflow self-qualification |
 | Clean installed-wheel CLI smoke (`medscale --version`) | Implemented in tag and PR-safe workflow paths | Exact built wheel, fresh venv, no source checkout |
-| GitHub Release creation from `v*` tags | Implemented workflow path | Requires an authorized tag push; workflow existence is not release authority |
+| GitHub Release creation from `v*` tags | Implemented but disabled by default behind `GITHUB_RELEASE_PUBLISH_ENABLED == 'true'` | Requires authorized tag plus separate explicit operator approval to enable the publication variable; workflow existence is not release authority |
 | TestPyPI Trusted Publishing repository path | Implemented by ALIGN-24 and PR-qualified | Disabled unless explicit enable guard is true; external Environment/Trusted Publisher still requires independent evidence |
 | TestPyPI external activation | Not verified or enabled by repository work | Requires protected `testpypi` Environment, matching Trusted Publisher, operator approval, and explicit enable variable |
 | PyPI publication | Not implemented | Separate publication authority required |
@@ -80,6 +80,8 @@ implemented repository automation only.
 | Hosted documentation deployment | Not currently justified | Add only with a concrete consumer/provider and scoped authority |
 
 ## External activation and future publication constraints
+
+The GitHub Release job is additionally gated by `GITHUB_RELEASE_PUBLISH_ENABLED` (unset by default). The operator must approve publication separately from staging or pushing a tag; don't enable it as part of routine candidate CI. A successful tag build alone is not authorization to create a GitHub Release.
 
 The TestPyPI job uses GitHub Trusted Publishing/OIDC, job-local least privilege,
 `environment: testpypi`, exact artifact reuse, and the official PyPA publishing action

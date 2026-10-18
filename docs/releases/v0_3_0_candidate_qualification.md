@@ -54,7 +54,11 @@ historical receipt may be rewritten in place.
 The PR-safe release workflow must hash-bind a source-derived
 `SOURCE_VERSION` in the artifact payload, verify it in the clean wheel
 smoke along with installed package metadata/CLI, and **never** invoke a
-tag/GitHub Release/TestPyPI step for an ordinary PR. No publisher variable
+tag/GitHub Release/TestPyPI step for an ordinary PR. A tag push cannot
+publish a GitHub Release unless the separately approved
+`GITHUB_RELEASE_PUBLISH_ENABLED` repository variable is explicitly `true`;
+TestPyPI remains separately guarded by `TESTPYPI_PUBLISH_ENABLED` and its
+external environment/trusted-publisher requirements. No publisher variable
 or environment is enabled by this document.
 
 Core research lock/static prerequisites remain **byte-identical**:
