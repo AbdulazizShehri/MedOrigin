@@ -83,6 +83,33 @@ def _freeze_command(dataset_dir: Path, created_at: str) -> int:
     dataset_dir = dataset_dir.resolve()
     if not dataset_dir.exists():
         return _common.fail(f"dataset directory not found: {dataset_dir}")
+
+    # ADR-0030: freeze is an immutable receipt operation, not a repair tool.
+    # In particular, re-freezing a historical v0.2.0 dataset would silently
+    # replace its stale manifest checksum and destroy the original evidence.
+    checksum_dir = dataset_dir / "checksums"
+    if checksum_dir.exists() and any(checksum_dir.glob("*.sha256")):
+        return _common.fail(
+            f"refusing to overwrite existing dataset checksums: {checksum_dir}",
+            hint="preserve frozen evidence; create a new dataset identity for migration",
+        )
+    manifest_path = dataset_dir / "manifest.json"
+    if manifest_path.exists():
+        try:
+            existing_manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        except (OSError, UnicodeError, json.JSONDecodeError):
+            return _common.fail(
+                f"refusing to overwrite unreadable existing manifest: {manifest_path}",
+                hint="preserve existing evidence; use a fresh dataset identity",
+            )
+        if not isinstance(existing_manifest, dict) or existing_manifest.get(
+            "dataset_fingerprint"
+        ) not in (None, ""):
+            return _common.fail(
+                f"refusing to overwrite a frozen dataset manifest: {manifest_path}",
+                hint="preserve existing evidence; use a fresh dataset identity",
+            )
+
     records_path = _layout.corpus_path(dataset_dir.parent).resolve()
     records = _load_records(records_path)
     dataset_id = dataset_dir.name

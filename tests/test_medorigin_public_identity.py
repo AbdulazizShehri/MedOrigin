@@ -53,13 +53,17 @@ def test_readme_points_to_current_repository_and_describes_limits() -> None:
 
 
 def test_citation_uses_current_repository_without_inventing_release() -> None:
-    """The citation should reference MedOrigin but retain the historical release."""
+    """Candidate citation must not falsely claim a release date."""
     citation = _text("CITATION.cff")
     assert 'title: "MedOrigin: Verifiable medical AI research infrastructure"' in citation
     assert f'repository-code: "{_HOME}"' in citation
     assert f'url: "{_HOME}"' in citation
-    assert "version: 0.2.0" in citation
-    assert 'date-released: "2026-07-13"' in citation
+    from medscale.__about__ import __version__ as package_version
+
+    assert f"version: {package_version}" in citation
+    assert "date-released:" not in citation
+    assert "v0.2.0" in _text("RELEASES.md")
+    assert "2026-07-13" in _text("RELEASES.md")
 
 
 def test_security_and_docs_link_to_current_home() -> None:

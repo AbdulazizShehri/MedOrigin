@@ -39,10 +39,13 @@ Production PyPI and Hugging Face publication remain separately gated.
 - [ ] `TESTPYPI_PUBLISH_ENABLED` is set true only by an explicit operator decision after those external prerequisites are verified
 - [ ] External PyPI distribution occurs only after its own separately governed trusted-publishing path exists and is authorized
 
-The PR-safe release-workflow qualification for the current baseline also requires the
-installed package version to remain `0.2.0`. The tag path is intentionally
+The PR-safe release-workflow qualification on the staged v0.3.0 candidate derives
+its expected package version from the SHA-256-bound source `SOURCE_VERSION`, matching
+installed wheel metadata and CLI rather than hard-coding `0.2.0`. The tag path is
 version-generic: it derives the wheel's installed metadata and rejects a tag whose
-`vX.Y.Z` value does not match that metadata.
+`vX.Y.Z` value does not match that metadata. GitHub Release creation is additionally
+disabled unless the operator separately enables `GITHUB_RELEASE_PUBLISH_ENABLED`;
+this flag is not set by a passing PR or by tagging.
 
 The clean-wheel gate and ALIGN-24 TestPyPI repository contract are qualification, not
 publication authority. They prove artifact and workflow invariants; they do not create

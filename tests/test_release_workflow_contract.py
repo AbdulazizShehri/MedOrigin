@@ -27,6 +27,13 @@ def test_testpypi_publish_job_is_fail_closed_and_least_privilege() -> None:
     block = _job_block(text, "testpypi-publish")
     compact = " ".join(line.strip() for line in block.splitlines())
 
+    release_block = _job_block(text, "github-release")
+    assert "needs: [quality, build, install-smoke]" in release_block
+    assert "vars.GITHUB_RELEASE_PUBLISH_ENABLED == 'true'" in release_block
+    assert "github.event_name == 'push'" in release_block
+    assert "startsWith(github.ref, 'refs/tags/v')" in release_block
+    assert "contents: write" in release_block
+
     assert "needs: github-release" in block
     assert "github.event_name == 'push'" in block
     assert "startsWith(github.ref, 'refs/tags/v')" in block
