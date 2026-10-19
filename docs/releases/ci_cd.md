@@ -81,6 +81,8 @@ implemented repository automation only.
 
 ## External activation and future publication constraints
 
+The tag-only installed-wheel smoke also fails closed if any actual installed wheel `Project-URL` metadata field (`Homepage`, `Repository`, `Documentation`, `Issues`) does not match the canonical MedOrigin repository URL. This prevents a future operator-approved tag from unintentionally publishing a wheel that still advertises the legacy frozen `MESC` root URLs. It does **not** modify or override the frozen `pyproject.toml`; publication remains blocked until an authorized successor root-input reconciliation is completed and the resulting artifact requalified. A PR-safe smoke does not enforce canonical public URLs because the current source candidate is intentionally not an approved distribution.
+
 The GitHub Release job is additionally gated by `GITHUB_RELEASE_PUBLISH_ENABLED` (unset by default). The operator must approve publication separately from staging or pushing a tag; don't enable it as part of routine candidate CI. A successful tag build alone is not authorization to create a GitHub Release.
 
 The TestPyPI job uses GitHub Trusted Publishing/OIDC, job-local least privilege,
