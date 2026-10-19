@@ -50,19 +50,28 @@ draft before the first freeze. To migrate an older artifact, preserve
 its original bytes and use a distinct new dataset identity and a
 separately approved append-only migration protocol; do not re-freeze it
 in place. The founder's acceptance of this successor-policy change
-under ADR-0017/0020 is still required before merging this PR.
+under ADR-0017/0020 is addressed for the *bounded source-candidate safety default*
+by the [compatibility disposition](v0_3_0_compatibility_disposition_574.md).
+This does not authorize a historical-data migration, publication or a change
+to frozen root package metadata; those require separate accepted decisions.
 
 ### Open compatibility gates
 
 - [ ] Validate full execution, persisted identifiers and semantic behavior
   of every historically stable CLI/API surface under Python 3.11 and 3.12.
-- [ ] Approve any append-only legacy dataset import/migration format
-  policy under ADR-0017/0020; never silently rewrite historic evidence.
-- [ ] Decide if the four legacy project URLs in the **frozen**
-  `pyproject.toml` are acceptable as redirects temporarily, or record
-  an explicit successor-root-input identity/reconciliation authorization.
-- [ ] Verify this exact PR head under all CI/CodeQL and applicable
-  optional-backend/release-source smoke checks; capture exact hashes.
+- [x] State the fail-closed no-rewrite/no-auto-migration *source-candidate*
+  policy in [compatibility disposition](v0_3_0_compatibility_disposition_574.md).
+- [ ] Obtain separate approval for any future append-only historical
+  import/migration format under ADR-0017/0020; do not imply it exists.
+- [x] Disclose the four historic MESC URL redirects as a *temporary,
+  unpublished-source* limitation in the
+  [compatibility disposition](v0_3_0_compatibility_disposition_574.md).
+- [ ] Obtain a governed successor root-input reconciliation before
+  an official MedOrigin-branded release; frozen evidence stays immutable.
+- [x] Verify source-candidate head `7408827680bfa6999bfe5c3ae97ef735cec2c7f8`
+  in CI, CodeQL, installed-wheel matrix and nonpublishing artifact round-trip;
+  all completed successfully (see PR #584 exact-head receipts).
+- [ ] Requalify any later changed head before its merge/release decision.
 - [ ] Obtain explicit final version/tag/public-GitHub-Release approval
   and CI-only publication authorization separately.
 
