@@ -33,6 +33,7 @@ Production PyPI and Hugging Face publication remain separately gated.
 - [ ] The release workflow downloads the exact built wheel and installs it into a fresh Python 3.11 venv without source checkout
 - [ ] Installed package metadata version and `medscale --version` agree
 - [ ] Tag `vX.Y.Z` exactly matches the installed package version `X.Y.Z` before GitHub Release creation
+- [ ] Installed wheel `Project-URL` fields (`Homepage`, `Repository`, `Documentation`, `Issues`) use canonical MedOrigin addresses, with an approved frozen-source root metadata identity; historical MESC redirects alone cannot satisfy this guard
 - [ ] GitHub Release contains the qualified artifacts plus the applicable release evidence
 - [ ] Any TestPyPI distribution reuses the exact same-run qualified `dist-<tag>` artifact and performs no rebuild
 - [ ] TestPyPI Trusted Publisher identity and protected `testpypi` GitHub Environment are independently evidenced before enablement

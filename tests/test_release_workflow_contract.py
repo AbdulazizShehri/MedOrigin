@@ -97,3 +97,79 @@ def test_manual_main_qualification_never_opens_tag_or_publish_jobs() -> None:
     artifact = "release-action-roundtrip-" + "${{ github.run_id }}-${{ github.run_attempt }}"
     assert text.count(artifact) == 3
     assert "github.event.pull_request.number" not in text
+
+
+def _installed_wheel_url_guard_script() -> str:
+    """Extract the actual published-tag installed-wheel guard, not a copy."""
+    from textwrap import dedent
+
+    block = _job_block(_workflow_text(), "install-smoke")
+    assert "Verify installed wheel canonical MedOrigin URLs before publication" in block
+    marker = ".venv/bin/python - <<'PY'\n"
+    assert block.count(marker) == 1
+    script = block.split(marker, maxsplit=1)[1].split("\n          PY", maxsplit=1)[0]
+    return dedent(script)
+
+
+def test_tag_release_rejects_stale_or_missing_wheel_metadata_urls() -> None:
+    """Check fail-closed release logic against real in-memory METADATA messages."""
+    from email.message import Message
+    from unittest.mock import patch
+
+    import pytest
+
+    canonical = "https://github.com/TheHalfMoon/MedOrigin"
+    labels = {
+        "Homepage": canonical,
+        "Repository": canonical,
+        "Documentation": canonical + "/tree/main/docs",
+        "Issues": canonical + "/issues",
+    }
+    script = _installed_wheel_url_guard_script()
+    assert "from importlib.metadata import metadata" in script
+    assert 'metadata("medscale")' in script
+
+    def run_guard(values: dict[str, str]) -> None:
+        msg = Message()
+        for key, value in values.items():
+            msg["Project-URL"] = f"{key}, {value}"
+        with patch("importlib.metadata.metadata", return_value=msg) as read_metadata:
+            exec(compile(script, "release.yml:tag-wheel-metadata-guard", "exec"), {})
+        read_metadata.assert_called_once_with("medscale")
+
+    # The complete canonical candidate may pass a future authorized release.
+    run_guard(labels)
+
+    # Today's exact wheel would be blocked, even if tag+publication guards
+    # were enabled: it still advertises the frozen MESC package URL values.
+    for broken_key in labels:
+        stale = dict(labels)
+        stale[broken_key] = labels[broken_key].replace("/MedOrigin", "/MESC")
+        with pytest.raises(SystemExit, match=broken_key):
+            run_guard(stale)
+
+        missing = {key: url for key, url in labels.items() if key != broken_key}
+        with pytest.raises(SystemExit, match=broken_key):
+            run_guard(missing)
+
+    # Duplicate metadata must not be accepted through last-write-wins.
+    duplicate = Message()
+    for key, url in labels.items():
+        duplicate["Project-URL"] = f"{key}, {url}"
+    duplicate["Project-URL"] = f"Homepage, {canonical}"
+    with (
+        patch("importlib.metadata.metadata", return_value=duplicate),
+        pytest.raises(SystemExit, match="duplicate"),
+    ):
+        exec(compile(script, "release.yml:tag-wheel-metadata-guard", "exec"), {})
+
+
+def test_tag_release_requires_qualified_wheel_url_gate_before_github_release() -> None:
+    text = _workflow_text()
+    smoke = _job_block(text, "install-smoke")
+    release = _job_block(text, "github-release")
+    assert "needs: build" in smoke
+    assert "Verify installed wheel canonical MedOrigin URLs before publication" in smoke
+    assert "uv pip install --python .venv/bin/python --no-deps" in smoke
+    assert "needs: [quality, build, install-smoke]" in release
+    assert "vars.GITHUB_RELEASE_PUBLISH_ENABLED == 'true'" in release

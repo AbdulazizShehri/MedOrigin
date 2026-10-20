@@ -92,6 +92,33 @@ jobs:
           test -n "$installed_version"
           test "$(.venv/bin/medscale --version)" = "medscale ${installed_version}"
           test "$GITHUB_REF_NAME" = "v${installed_version}"
+      - name: Verify installed wheel canonical MedOrigin URLs before publication
+        shell: bash
+        run: |
+          # Inspect the actual installed wheel METADATA, not the source checkout.
+          # A release must not claim the old MESC repository identity.
+          .venv/bin/python - <<'PY'
+          from importlib.metadata import metadata
+
+          expected = {
+              "Homepage": "https://github.com/TheHalfMoon/MedOrigin",
+              "Repository": "https://github.com/TheHalfMoon/MedOrigin",
+              "Documentation": "https://github.com/TheHalfMoon/MedOrigin/tree/main/docs",
+              "Issues": "https://github.com/TheHalfMoon/MedOrigin/issues",
+          }
+          actual = {}
+          for entry in metadata("medscale").get_all("Project-URL") or []:
+              key, separator, url = entry.partition(", ")
+              if not separator or key in actual:
+                  raise SystemExit("Invalid or duplicate wheel Project-URL entry")
+              actual[key] = url
+          for key, expected_url in expected.items():
+              if actual.get(key) != expected_url:
+                  raise SystemExit(
+                      f"Release blocked: {key} Project-URL is not canonical MedOrigin"
+                  )
+          print("Installed wheel public project URLs: canonical MedOrigin")
+          PY
 
   github-release:
     name: GitHub Release
