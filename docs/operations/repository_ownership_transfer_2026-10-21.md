@@ -60,6 +60,16 @@ All seven exports returned valid JSON with source metadata only. No token or rep
 
 **Recovery limit:** The Git bundle recovers Git refs and objects, but **not** GitHub-hosted PR/issue numbers, comment threads, review decisions, Actions run/log/asset records, permissions, and repository settings. Those remain subject to GitHub's native transfer and separate administrative metadata backup/verification. This backup predates the transfer-runbook PR branch updates; re-snapshot Git and essential platform state immediately before actual transfer. It is not proof of a completed migration.
 
+## 0B. Latest follow-up after the founder's acknowledgement (preparation only)
+
+**2026-10-21 read-only status recheck:**
+- PR #586 remains open/non-draft with exact HEAD `6bbd0f206187826867eb16473e92870b3062f9c4`; CI run [39604867335](https://github.com/TheHalfMoon/MedOrigin/actions/runs/39604867335) moved to `in_progress`. Its Python 3.11 and 3.12 static jobs and six pytest shards had succeeded at inspection; the remaining py3.11 and py3.12 shard 2 jobs had not finished. The exact-head CodeQL run succeeded; this is **not** a full CI PASS.
+- PR #587 initial documentation CI run [39610785206](https://github.com/TheHalfMoon/MedOrigin/actions/runs/39610785206) failed from trailing whitespace reported by `git diff --check` in this new runbook, not from source/test changes. The branch was updated with commit `445db13df889b31ab48681a8b680267b8a2d665f` to remove all 90 trailing whitespace characters. Latest exact-head CI still requires confirmation. No scientific, packaging or workflow file changed.
+- Source-account admin read: **94** GitHub Actions artifacts exist in the API at inspection; they have finite retention and are not a permanent backup. Code scanning alerts endpoint was readable with at least one result on the inspected page; secret scanning alert page had zero results; Dependabot alerts endpoint was inaccessible. These are snapshot observations, not an assertion that there are no vulnerabilities or that all historical artifacts are preserved.
+- GitHub App installation inventory could **not** be read with the available personal-token endpoint (`user/installations` failed). Check the GitHub UI settings and external providers before cutover; do not claim absence of apps.
+
+**Approval boundary:** The founder's acknowledgment to continue does NOT constitute explicit permission to execute the repository transfer. Transfer and any release remain unauthorized.
+
 ## 1. Transfer preservation matrix
 
 | Object / behavior | Platform behavior | Required verification |
