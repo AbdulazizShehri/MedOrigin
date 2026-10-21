@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import hashlib
 import json
+from importlib import import_module
 from pathlib import Path
 
 import pytest
-from scripts import audit_successor_package_metadata_574 as audit
+
+audit = import_module("scripts.audit_successor_package_metadata_574")
 
 
 def _sha(data: bytes) -> str:
