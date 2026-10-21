@@ -4,12 +4,18 @@ from __future__ import annotations
 
 import hashlib
 import json
-from importlib import import_module
+from importlib.util import module_from_spec, spec_from_file_location
 from pathlib import Path
 
 import pytest
 
-audit = import_module("scripts.audit_successor_package_metadata_574")
+_SOURCE = (
+    Path(__file__).resolve().parents[1] / "scripts" / "audit_successor_package_metadata_574.py"
+)
+_SPEC = spec_from_file_location("audit_successor_package_metadata_574", _SOURCE)
+assert _SPEC is not None and _SPEC.loader is not None
+audit = module_from_spec(_SPEC)
+_SPEC.loader.exec_module(audit)
 
 
 def _sha(data: bytes) -> str:
