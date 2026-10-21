@@ -47,6 +47,11 @@ def _root(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
             ),
             encoding="utf-8",
         )
+    monkeypatch.setattr(
+        audit,
+        "_FROZEN_MANIFEST_SHA256",
+        {rel: _sha((tmp_path / rel).read_bytes()) for rel in audit._MANIFESTS},
+    )
     return tmp_path
 
 
@@ -96,7 +101,7 @@ def test_audit_rejects_tampered_historical_manifest_without_writing(
     src["sources"][0]["sha256"] = "0" * 64
     path.write_text(json.dumps(src), encoding="utf-8")
     before = _all_files(root)
-    with pytest.raises(audit.AuditError, match="bindings mismatch"):
+    with pytest.raises(audit.AuditError, match="historical manifest SHA-256 mismatch"):
         audit.audit(root, expected_project_sha=_sha(_project()))
     assert _all_files(root) == before
 
@@ -108,6 +113,7 @@ def test_non_object_manifest_fails_closed(
     root = _root(tmp_path, monkeypatch)
     path = root / audit._MANIFESTS[0]
     path.write_bytes(content)
+    monkeypatch.setitem(audit._FROZEN_MANIFEST_SHA256, audit._MANIFESTS[0], _sha(content))
     before = _all_files(root)
     with pytest.raises(audit.AuditError, match="invalid static prerequisite manifest"):
         audit.audit(root, expected_project_sha=_sha(_project()))
@@ -128,3 +134,17 @@ def test_audit_rejects_modified_root_and_lock(
     lock.write_bytes(lock.read_bytes() + b"X")
     with pytest.raises(audit.AuditError, match="frozen root"):
         audit.audit(root, expected_project_sha=_sha(original))
+
+
+def test_unbound_manifest_content_mutation_is_rejected(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = _root(tmp_path, monkeypatch)
+    path = root / audit._MANIFESTS[1]
+    original = json.loads(path.read_text(encoding="utf-8"))
+    original["unexpected_nonbinding_field"] = "unauthorized drift"
+    path.write_text(json.dumps(original, sort_keys=True), encoding="utf-8")
+    before = _all_files(root)
+    with pytest.raises(audit.AuditError, match="historical manifest SHA-256 mismatch"):
+        audit.audit(root, expected_project_sha=_sha(_project()))
+    assert _all_files(root) == before

@@ -27,6 +27,10 @@ _MANIFESTS = (
     "specs/mesc-experiment-0/mrl-0809-static-prerequisites-v1.json",
     "specs/mesc-experiment-0/mrl-0809-static-prerequisites-v2.json",
 )
+_FROZEN_MANIFEST_SHA256 = {
+    _MANIFESTS[0]: "7773967611e42c3d74338a1ec7c9004f661843df809865f6c6d455923fea89d1",
+    _MANIFESTS[1]: "56de494cf30b6d3dd3aa005e63d55ea7490f7645dd37cbb388188d635813a36d",
+}
 
 
 class AuditError(ValueError):
@@ -84,6 +88,8 @@ def audit(root: Path, *, expected_project_sha: str = _FROZEN_PROJECT_SHA256) -> 
     manifest_evidence: list[dict[str, str]] = []
     for rel in _MANIFESTS:
         data = (root / rel).read_bytes()
+        if _sha(data) != _FROZEN_MANIFEST_SHA256[rel]:
+            raise AuditError(f"immutable historical manifest SHA-256 mismatch: {rel}")
         try:
             obj = json.loads(data)
         except (UnicodeError, json.JSONDecodeError) as exc:
