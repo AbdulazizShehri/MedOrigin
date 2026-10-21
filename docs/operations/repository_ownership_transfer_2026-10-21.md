@@ -25,6 +25,7 @@ Evidence:
 - GitHub Actions API reported 6,835 cumulative workflow runs as a snapshot count, **not** a promise of permanently retained logs or artifacts.
 - The branches collection returned at least 300 branches across its first three 100-item pages; a full paginated ref inventory is required immediately before cutover.
 - The repository is public and unarchived. No action has modified visibility.
+- **Independent immutable-input byte check (2026-10-21):** via the authorized Windows `Abdulaziz` device, authenticated `gh api` retrieved the current source bytes of all four frozen inputs; SHA-256 was computed in memory directly from the GitHub-provided Base64 content, with **four out of four exact digest matches** to the recorded research identities: `pyproject.toml` (5,230 bytes), `uv.lock` (641,372 bytes), v1 manifest (2,751 bytes), and v2 manifest (4,261 bytes). No repository file or disk-backed research input was changed.
 
 **Unverified configuration:** Repository secrets (values must never be exported), environment gates/secrets, Actions variables/policies, all GitHub App installations and external providers, webhooks, deploy keys, GitHub Projects v2 associations, discussion categories, all collaborators, security/code-scanning settings, and complete branch/tag/ref list. The connector does not provide administration reads for every endpoint. This is a live-preflight blocker, not proof of absence.
 
@@ -125,12 +126,12 @@ Evidence:
 ### Gate 9 — Append-only scientific provenance and package identity
 
 **Prerequisite:** Transfer verified; original frozen files intact; separate founder decision for any change to canonical research root identity.  
-**Actions:** Treat historic root `pyproject.toml`, `uv.lock` and MRL-0809 v1/v2 prerequisite manifests as permanent predecessor evidence. Their **recorded** SHA256 values are:
+**Actions:** Treat historic root `pyproject.toml`, `uv.lock` and MRL-0809 v1/v2 prerequisite manifests as permanent predecessor evidence. Their **independently verified** SHA256 values (checked against GitHub contents on 2026-10-21) are:
 - `pyproject.toml`: `c36c33208236dafb136a147dfff0060d592e23daab4b4240521d4747d23ea510`;
 - `uv.lock`: `6fa0e0b49d19e305032ecd04940db0b9e252dd23b6fbec588b224f739048efc4`;
 - v1 manifest: `7773967611e42c3d74338a1ec7c9004f661843df809865f6c6d455923fea89d1`;
 - v2 manifest: `56de494cf30b6d3dd3aa005e63d55ea7490f7645dd37cbb388188d635813a36d`.
-Recompute and compare each exact SHA against source bytes at the same immutable commit; do not substitute PR descriptions for independently verified digests. Existing `pyproject.toml` has four `TheHalfMoon/MESC` `Project-URL` fields; the current tag-publish guard separately requires four `TheHalfMoon/MedOrigin` URLs. Both identities must remain **fail-closed** for future public releases until an explicitly accepted new successor input exists. After a separate root-input authorization, create **new** successor source/lock metadata and append-only lineage describing predecessor repo ID, original Git commit/tree, exact historic SHA bindings, four changed URLs to `AbdulazizShehri/MedOrigin`, new hashes, reproducibility environment and provenance validation. Update forward-facing `CITATION.cff`, README, docs, security contact, active links, current `Project-URL` metadata and release wheel guard on a scoped PR, with tests and clean source/wheel/sdist qualification; **never rewrite past manifests, tags, old commit authors or scientific results**. Keep `medscale` CLI/import and developer version `0.3.0` unless independently decided otherwise.  
+Recompute and compare each exact SHA again at cutover; the 2026-10-21 independent source-byte verification does not excuse a fresh identity check at transfer time. Existing `pyproject.toml` has four `TheHalfMoon/MESC` `Project-URL` fields; the current tag-publish guard separately requires four `TheHalfMoon/MedOrigin` URLs. Both identities must remain **fail-closed** for future public releases until an explicitly accepted new successor input exists. After a separate root-input authorization, create **new** successor source/lock metadata and append-only lineage describing predecessor repo ID, original Git commit/tree, exact historic SHA bindings, four changed URLs to `AbdulazizShehri/MedOrigin`, new hashes, reproducibility environment and provenance validation. Update forward-facing `CITATION.cff`, README, docs, security contact, active links, current `Project-URL` metadata and release wheel guard on a scoped PR, with tests and clean source/wheel/sdist qualification; **never rewrite past manifests, tags, old commit authors or scientific results**. Keep `medscale` CLI/import and developer version `0.3.0` unless independently decided otherwise.  
 **Risks:** Scientific trust-root corruption, false package attribution, broken historical citations, temporary release guard mismatch, accidental external distribution.  
 **Verification:** Original input and manifests' SHA remain byte-identical, predecessor/successor lineage explicit, legacy citations still resolvable, fully new package metadata and guards match `AbdulazizShehri/MedOrigin`, independent tests pass; redistribution notices/licenses maintained.  
 **Done when:** Repository ownership is correct; scientific history untouched; successor metadata plan independently accepted and then verified before any separate public release.
@@ -162,6 +163,7 @@ PR #586's scientific source-audit work is separable from *ownership*. Ownership 
 
 - [x] Read-only source and target account identity inspected.
 - [x] Current main SHA, PR, issues, available tags/releases and ruleset inspected.
+- [x] All four MRL-0809 immutable source/manifest SHA-256 values independently verified from current GitHub file bytes on Windows (read-only).
 - [x] Old hosted pytest import failure diagnosed; current PR exact-head CI status disclosed.
 - [x] Preparation runbook proposed without changing historical research inputs.
 - [ ] Complete private/admin-only pre-transfer inventory and tested backup.
