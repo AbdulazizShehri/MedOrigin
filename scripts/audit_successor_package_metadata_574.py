@@ -88,6 +88,8 @@ def audit(root: Path, *, expected_project_sha: str = _FROZEN_PROJECT_SHA256) -> 
             obj = json.loads(data)
         except (UnicodeError, json.JSONDecodeError) as exc:
             raise AuditError(f"invalid static prerequisite manifest: {rel}") from exc
+        if not isinstance(obj, dict):
+            raise AuditError(f"invalid static prerequisite manifest: {rel}")
         sources = obj.get("sources")
         if not isinstance(sources, list):
             raise AuditError(f"missing sources list: {rel}")

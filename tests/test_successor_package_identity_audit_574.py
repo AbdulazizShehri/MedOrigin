@@ -101,6 +101,19 @@ def test_audit_rejects_tampered_historical_manifest_without_writing(
     assert _all_files(root) == before
 
 
+@pytest.mark.parametrize("content", [b"null", b"[]", b"42", b'"wrong"'])
+def test_non_object_manifest_fails_closed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, content: bytes
+) -> None:
+    root = _root(tmp_path, monkeypatch)
+    path = root / audit._MANIFESTS[0]
+    path.write_bytes(content)
+    before = _all_files(root)
+    with pytest.raises(audit.AuditError, match="invalid static prerequisite manifest"):
+        audit.audit(root, expected_project_sha=_sha(_project()))
+    assert _all_files(root) == before
+
+
 def test_audit_rejects_modified_root_and_lock(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
