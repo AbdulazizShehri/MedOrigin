@@ -40,6 +40,15 @@ and hashes, document predecessor/successor lineage, edit the metadata on a
 new scoped branch, and qualify the exact source plus wheel/sdist again.
 Do not use a hidden wheel metadata overlay or rewrite frozen inputs in place.
 
+Read-only root-identity preflight: `python scripts/audit_successor_package_metadata_574.py`
+checks the original SHA-256 of both frozen root inputs and the immutable v1/v2
+MRL-0809 prerequisite manifests, and calculates the *in-memory only* successor
+`pyproject.toml` SHA-256 after replacing exactly four legacy `Project-URL` lines.
+It fails closed if any prerequisite has drifted and does **not** write files,
+modify manifests, reconcile research authority or grant a tag/release. This
+preflight is valid only against an archived copy of the frozen old root; a
+future approved successor root requires separately governed source lineage.
+
 ## Qualification versus publication
 
 Source candidate `medscale 0.3.0` retains the `medscale` import and CLI,
