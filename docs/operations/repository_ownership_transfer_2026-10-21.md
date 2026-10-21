@@ -29,6 +29,23 @@ Evidence:
 
 **Admin-level inventory follow-up (2026-10-21; read-only `gh api` as `TheHalfMoon` on authorized Windows):** 0 repository Action secrets; 0 repository Action variables; 0 environments; 0 repository webhooks; 0 deploy keys; 1 collaborator login (`TheHalfMoon`); 0 milestones; 12 labels (first-page count); Actions enabled; workflow default token permission `read` and workflow PR-review approval disabled. Repo flags: `has_projects=true`, `has_discussions=false`, `has_wiki=true`, `has_pages=false`, `forks_count=0`, `has_issues=true`. Secret scanning and push protection enabled; Dependabot security updates and extra secret-pattern/validity checks disabled in current settings. The Pages endpoint did not resolve, consistent with `has_pages=false`. **These are observed inventories, not assertions that third-party installations/trusted-publisher registrations are absent.** Remaining not fully verified: all GitHub App installations and external providers, standalone GitHub Projects v2 boards/automations, independent registry/OIDC trust, full paginated Git refs/labels, historic Actions artifact inventory and code-scanning policy details. Organization-level secrets are not applicable to a personal-account source, but third-party integrations must still be checked. Those remain cutover gates.
 
+## 0A. Independently tested Git recovery bundle — completed 2026-10-21
+
+This is a **real, verified local backup**, not a proposed future step. An isolated `git clone --mirror` was created from the live public source repository using authorized Windows machine `Abdulaziz`, with no existing worktrees modified. The original source was protected `main` SHA `76e68c9b61a2210607022ff4c44465bd447c6800`.
+
+- Branch refs: **596**; tag refs: **2** (`v0.1.0`, `v0.2.0`).
+- All Git references recorded by `git for-each-ref`: **1,123** (includes non-branch refs retained in the mirror).
+- Self-contained `git bundle create --all` file: `MedOrigin-2026-10-21-all-refs.bundle`; size **11,700,519 bytes**.
+- Independent bundle SHA-256: `3f690dd2b9ae0eac66e6f85bbfdc3cca6e6bcaf640d1f88903766ca5ef14047c`.
+- `git bundle verify`: exit 0, complete history.
+- Fresh `git clone --mirror <bundle> restore-test.git`: **successful**.
+- Exact comparison of original mirror refs against freshly restored refs: **zero discrepancies across all 1,123 ref-name/SHA pairs**.
+- Restored main SHA: `76e68c9b61a2210607022ff4c44465bd447c6800`.
+- `git fsck --full --no-reflogs` on restored Git object store: **exit 0**.
+- Temporary source mirror and test-restore directory were deleted after verification. The required recovery `.bundle` and SHA-addressed ref inventory remain in an access-controlled backup folder on the authorized Windows machine until transfer and independent post-transfer acceptance. No complete recovery archive was uploaded to the public repository, and no secret was committed.
+
+**Recovery limit:** The Git bundle recovers Git refs and objects, but **not** GitHub-hosted PR/issue numbers, comment threads, review decisions, Actions run/log/asset records, permissions, and repository settings. Those remain subject to GitHub's native transfer and separate administrative metadata backup/verification. This backup predates the transfer-runbook PR branch updates; re-snapshot Git and essential platform state immediately before actual transfer. It is not proof of a completed migration.
+
 ## 1. Transfer preservation matrix
 
 | Object / behavior | Platform behavior | Required verification |
@@ -167,7 +184,8 @@ PR #586's scientific source-audit work is separable from *ownership*. Ownership 
 - [x] Admin-level counts for repository secrets, variables, environments, webhooks, deploy keys, collaborators, labels, milestones, basic features, secret scanning, and Actions permissions inspected without exposing credentials.
 - [x] Old hosted pytest import failure diagnosed; current PR exact-head CI status disclosed.
 - [x] Preparation runbook proposed without changing historical research inputs.
-- [ ] Complete private/admin-only pre-transfer inventory and tested backup.
+- [x] Create and restore-test a self-contained full-ref Git bundle (1,123 refs, zero discrepancies, fsck clean); retain it securely until post-transfer verification.
+- [ ] Finish independent GitHub platform-metadata backup, external integration inventory, target and full cutover inventory.
 - [ ] Resolve or preserve PR #586 with exact-head qualifications and transfer-aware successor scope.
 - [ ] Explicit founder approval for ownership transfer.
 - [ ] Actual transfer submitted by source admin and accepted by destination.
