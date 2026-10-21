@@ -44,6 +44,20 @@ This is a **real, verified local backup**, not a proposed future step. An isolat
 - `git fsck --full --no-reflogs` on restored Git object store: **exit 0**.
 - Temporary source mirror and test-restore directory were deleted after verification. The required recovery `.bundle` and SHA-addressed ref inventory remain in an access-controlled backup folder on the authorized Windows machine until transfer and independent post-transfer acceptance. No complete recovery archive was uploaded to the public repository, and no secret was committed.
 
+**Independent GitHub platform-metadata exports — completed 2026-10-21.** The source account's authenticated GitHub API saved the following *local, controlled-access* JSON snapshots alongside the verified Git bundle. These supplement GitHub-native transfer for audit/recovery; they are **not** a replayable complete GitHub restore and do not reproduce the original stable GitHub identifiers if manually reimported.
+
+| JSON snapshot | Records | SHA-256 |
+| --- | ---: | --- |
+| `github-issues-all.json` (includes PRs in GitHub Issues API) | 587 | `7f214308b05142aef713db31030c39ad71bb547a06117739d694701c607f6e35` |
+| `github-pulls-all.json` | 522 | `5eaf4575f581e98021383da7cc3f1aeeccdb7ae81f69cb55f082f2795f026bbc` |
+| `github-issue-comments-all.json` | 3,017 | `89fad5fc52fca6b2f1f757e7a158ccebc0730073bd6a1906a7a742491965ae9a` |
+| `github-pr-review-comments-all.json` | 640 | `79532ee5b18afc12203389f5e070653960c2389560a16016059d9e227993dcbd` |
+| `github-releases-all.json` | 1 | `f1f6db2bb071e836576990796341c2358b65d7cffcbbb25c4dc9b05d966b9f37` |
+| `github-rulesets.json` | 1 | `e4e2a9f386be5371e20befc2fe9bb61bea01bb5fde5e0d58b4647339f5204c3a` |
+| `github-labels-all.json` | 12 | `40afd565122275038cd137a289be0a35a211e7773ba23e81e6b5adad8647ae3b` |
+
+All seven exports returned valid JSON with source metadata only. No token or repository secret value was intentionally exported. Outstanding completeness limitations: individual PR review decision history/threads, standalone GitHub Projects, all workflow artifacts and original checks/logs, GitHub Apps and third-party integration authorizations, fork/LFS validation, and GitHub setting snapshots beyond the captured ruleset/administrative counts. These must be checked at cutover. The old source state is live and can change: these are point-in-time snapshots, not a freeze.
+
 **Recovery limit:** The Git bundle recovers Git refs and objects, but **not** GitHub-hosted PR/issue numbers, comment threads, review decisions, Actions run/log/asset records, permissions, and repository settings. Those remain subject to GitHub's native transfer and separate administrative metadata backup/verification. This backup predates the transfer-runbook PR branch updates; re-snapshot Git and essential platform state immediately before actual transfer. It is not proof of a completed migration.
 
 ## 1. Transfer preservation matrix
@@ -185,7 +199,8 @@ PR #586's scientific source-audit work is separable from *ownership*. Ownership 
 - [x] Old hosted pytest import failure diagnosed; current PR exact-head CI status disclosed.
 - [x] Preparation runbook proposed without changing historical research inputs.
 - [x] Create and restore-test a self-contained full-ref Git bundle (1,123 refs, zero discrepancies, fsck clean); retain it securely until post-transfer verification.
-- [ ] Finish independent GitHub platform-metadata backup, external integration inventory, target and full cutover inventory.
+- [x] Export seven platform metadata collections with checksummed local JSON (issues/PRs, comments, releases, rulesets, labels).
+- [ ] Finish remaining PR review histories, GitHub Apps and third-party integration inventory, target and full cutover inventory.
 - [ ] Resolve or preserve PR #586 with exact-head qualifications and transfer-aware successor scope.
 - [ ] Explicit founder approval for ownership transfer.
 - [ ] Actual transfer submitted by source admin and accepted by destination.
