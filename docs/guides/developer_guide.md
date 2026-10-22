@@ -18,7 +18,7 @@ How to work in the MedOrigin repository. The `medscale` Python package and comma
 ## Setup
 
 ```bash
-git clone https://github.com/TheHalfMoon/MedOrigin.git
+git clone https://github.com/AbdulazizShehri/MedOrigin.git
 cd MedOrigin
 uv sync
 uv run pre-commit install
