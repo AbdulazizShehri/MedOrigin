@@ -1,6 +1,6 @@
 # MedOrigin architecture
 
-**Status:** Current architectural overview  
+**Status:** Current architectural overview
 **Audience:** Contributors, maintainers, and research engineers
 
 MedOrigin is organized around verifiable outputs, explicit data boundaries,
