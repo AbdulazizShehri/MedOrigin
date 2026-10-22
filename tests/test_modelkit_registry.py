@@ -76,6 +76,19 @@ def test_extraction_baselines_are_encoders() -> None:
         assert entry.kind is ModelKind.ENCODER
 
 
+def test_extraction_registry_only_exposes_concrete_verified_baselines() -> None:
+    """Do not offer a non-executable model-family placeholder to callers."""
+    baselines = extraction_baselines()
+    assert {entry.model_id for entry in baselines} == {
+        "bio-clinicalbert",
+        "pubmedbert-base",
+    }
+    assert not any(entry.model_id.endswith("-family") for entry in baselines)
+    assert all(entry.hf_id.count("/") == 1 for entry in baselines)
+    for entry in baselines:
+        assert get_entry(entry.model_id) is entry
+
+
 def test_no_duplicate_ids() -> None:
     ids = [entry.model_id for entry in REGISTRY]
     assert len(ids) == len(set(ids))
