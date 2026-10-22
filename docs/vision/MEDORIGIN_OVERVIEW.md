@@ -21,12 +21,18 @@ Read the [roadmap](../../ROADMAP.md), [research-loop task ledger](../../specs/me
 
 ## Identity and continuity
 
-**MedOrigin** is the current project, GitHub repository, and public documentation identity. The software previously used the names **MESC / MedScale**. Those names remain in original scientific decisions, historical citations, fixed experiment identifiers, code paths and reproducibility receipts, where rewriting would misrepresent what actually ran.
+**MedOrigin** is the sole current public project and repository identity.
+Existing Python import and command paths remain stable for backward compatibility;
+use `uv run medscale --help` for the current developer CLI. Technical identifiers,
+experiment receipts, and earlier versioned decisions remain immutable where they
+are required for reproducibility.
 
-The Python distribution, import package, and command remain **`medscale`** for backward compatibility. Changing public APIs or frozen model names requires a separately tested compatibility migration rather than a search-and-replace.
-
-The founding normative [Research Vision](MEDSCALE_RESEARCH_VISION.md) and [Strategic Blueprint](MEDSCALE_STRATEGIC_BLUEPRINT_V1.md) retain their original titles as authentic source records. The current project interpretation, including adopted Clinical Workspace additions, is reflected in [the roadmap](../../ROADMAP.md) and ratified ADRs.
+See the [MedOrigin architecture](../architecture/medorigin_architecture.md),
+[compatibility policy](../BRAND_TRANSITION.md), and [roadmap](../../ROADMAP.md)
+for a clear distinction between public product identity and historical research
+records. Proposed public API renames require a compatibility plan, tests, and
+their own governed approval.
 
 ## Get started and contribute
 
-Clone [TheHalfMoon/MedOrigin](https://github.com/TheHalfMoon/MedOrigin), follow the [developer guide](../guides/developer_guide.md), and validate every research assertion through actual test and evidence artifacts. Read the [identity policy](../BRAND_TRANSITION.md), [contributing](../../CONTRIBUTING.md), and [third-party provenance policy](../../THIRD_PARTY_NOTICES.md). Reusing externally sourced code requires rights review and preservation of applicable notices; branding does not erase upstream authorship.
+Clone [MedOrigin](https://github.com/AbdulazizShehri/MedOrigin), follow the [developer guide](../guides/developer_guide.md), and validate every research assertion through actual test and evidence artifacts. Read the [identity policy](../BRAND_TRANSITION.md), [contributing](../../CONTRIBUTING.md), and [third-party provenance policy](../../THIRD_PARTY_NOTICES.md). Reusing externally sourced code requires rights review and preservation of applicable notices; branding does not erase upstream authorship.

@@ -21,7 +21,7 @@ layers below and makes their claims verifiable; it competes with none of them.
 | Ecosystem layer | Examples | MedOrigin's relation |
 |---|---|---|
 | Foundation models | MedGemma, BioMistral, PubMedBERT, ClinicalBERT | Evaluation subjects; Tier-1 generative models are adapter bases |
-| Resources | OpenMed, Hugging Face (medical) | Optional eval-time adapters + distribution mirror (ADR-0007, ADR-0010) |
+| Model and artifact sources | Verified, individually identified research models | Evaluation-only candidates with explicit license, revision, and evidence requirements |
 | Standards | FHIR, openEHR, SNOMED, ICD | FHIR canonical; others via boundary adapters / interface (ADR-0008) |
 | Evidence | PubMed, ClinicalTrials.gov, Cochrane | Ingestion sources for litdb (licence-gated; Cochrane metadata-only) |
 | **Evaluation** | **MedScale-Bench** | **MedScale owns this** |
@@ -56,7 +56,21 @@ extraction.
 | **Extraction / NER baseline** | T-EXTRACT non-LLM baseline; RQ5 span fixtures | Encoder token-classifiers |
 | **Embedding / retrieval** | Deferred (no v0 RAG); only where provenance is checkable | Encoders — H2+ |
 
-## 3. Registry entries (verified 2026-07-10)
+## 3. Active registry entries
+
+The registry entries below are research/evaluation candidates with recorded
+licenses and source identifiers; they are **not MedOrigin-developed models**
+and their presence is not an endorsement, download instruction, or permission
+to publish their weights.
+
+**Registry maintenance (2026-10-22):** a prior unpinned, family-level NER
+placeholder was retired from the live executable catalogue because it did
+not identify a concrete model revision or reproducible runtime integration.
+Two individually identified encoder baselines remain. The original research
+decision and comparative notes remain unchanged in historical ADRs and
+architecture records; removing a non-executable catalogue placeholder is
+not deletion of provenance.
+
 
 | Model | Kind | Licence (tier) | Role | Provenance / note |
 |---|---|---|---|---|
@@ -64,7 +78,7 @@ extraction.
 | MedGemma 4B / 27B, MedSigLIP | Generative / multimodal | HAI-DEF (T2) | Eval/comparison; base only via ADR | Google Health AI Developer Foundations terms (passthrough) |
 | Bio_ClinicalBERT | Encoder | MIT (T1) | Extraction/NER baseline | Trained on **MIMIC-III** (de-identified, credentialed). Weights are a released MIT artifact — using them as a baseline does **not** put MIMIC data into MedScale (R2 intact); provenance stated for transparency |
 | PubMedBERT / BiomedBERT | Encoder | MIT (T1) | Extraction/NER baseline; embedding (H2+) | Pretrained on public PubMed + PMC |
-| OpenMed NER models | Encoder | Apache-2.0 (T1) | Extraction/NER baseline (ADR-0007) | Local-first; pinned by revision + SHA |
+
 | Qwen3 (0.6B–32B) | Generative | Apache-2.0 (T1) | Generative base candidate; comparison | Active family; 32K ctx; licence verified at 8B card |
 | Mistral-7B-Instruct-v0.3 | Generative | Apache-2.0 (T1) | Generative base candidate; comparison | ⚠️ newer Mistral models may be MRL — verify per model, never per family |
 | DeepSeek-R1 | Generative MoE | MIT (T1, licence only) | Comparison (API/hosted) — far beyond compute ceiling | Distillation explicitly permitted; **R1-Distill variants inherit their base licence** (Qwen2.5→T1, Llama→T2) |
