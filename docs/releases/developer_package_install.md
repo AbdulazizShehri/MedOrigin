@@ -1,7 +1,7 @@
 # MedOrigin — Install the synthetic-only developer packages
 
 - **Status:** Developer/source-checkout installation instructions and test evidence, **not** an authorized new GitHub Release, package-index publication or clinical deployment.
-- **Tracking:** [Software release candidate, Issue #574](https://github.com/TheHalfMoon/MedOrigin/issues/574)
+- **Tracking:** [Software release candidate, Issue #574](https://github.com/AbdulazizShehri/MedOrigin/issues/574)
 - **Release policy:** [Software release track](software_release_track.md), [versioning](versioning.md), [ADR-0010](../adr/0010-release-architecture.md)
 - **Supported Python minors:** 3.11 and 3.12 are tested in Linux CI and on Windows. The Workspace package metadata currently allows Python 3.11–3.14.
 
@@ -19,7 +19,7 @@ These versions describe the current **source baseline**, not authorization to ov
 Use a clean checkout of the **specific, reviewed commit**. The following are examples for Unix shells with Python 3.11 or 3.12 and pip available. Wheel *building* can download backend/build dependencies; the Workspace wheel *installation* resolves `cryptography==50.0.1` and its required dependencies. **Offline runtime** means no network or EHR connector is used by the synthetic shell; it does not mean dependency installation is offline.
 
 ```bash
-git clone https://github.com/TheHalfMoon/MedOrigin.git
+git clone https://github.com/AbdulazizShehri/MedOrigin.git
 cd MedOrigin
 git rev-parse HEAD  # record this exact source identity
 python -m pip wheel --no-deps --wheel-dir build/core .
@@ -61,9 +61,9 @@ The expected shell output is exactly:
 
 ## Independent verified evidence — not release receipts
 
-At protected source commit `3f1992a408b8b97ff709506d472a28c86daed449` on Windows, source-built separate Core and Workspace wheels were installed in fresh Python 3.11.15 and 3.12.13 environments and passed version/import/CLI/synthetic-shell smoke. Exact outputs and local artifact SHA-256 values are in [Issue #574](https://github.com/TheHalfMoon/MedOrigin/issues/574).
+At protected source commit `3f1992a408b8b97ff709506d472a28c86daed449` on Windows, source-built separate Core and Workspace wheels were installed in fresh Python 3.11.15 and 3.12.13 environments and passed version/import/CLI/synthetic-shell smoke. Exact outputs and local artifact SHA-256 values are in [Issue #574](https://github.com/AbdulazizShehri/MedOrigin/issues/574).
 
-The [Workspace CI qualification](../../.github/workflows/workspace-package-qualification.yml) was introduced in [PR #576](https://github.com/TheHalfMoon/MedOrigin/pull/576) and merged after **16/16 exact-head required checks passed**. Before its update to latest main, two real Linux CI jobs proved independently installed Workspace wheels on Python 3.11.17 and 3.12.15, each with a correct synthetic shell. Their artifacts matched each other by SHA-256:
+The [Workspace CI qualification](../../.github/workflows/workspace-package-qualification.yml) was introduced in [PR #576](https://github.com/AbdulazizShehri/MedOrigin/pull/576) and merged after **16/16 exact-head required checks passed**. Before its update to latest main, two real Linux CI jobs proved independently installed Workspace wheels on Python 3.11.17 and 3.12.15, each with a correct synthetic shell. Their artifacts matched each other by SHA-256:
 
 | Linux-built artifact | SHA-256 (qualification build, not a published release) |
 | --- | --- |
