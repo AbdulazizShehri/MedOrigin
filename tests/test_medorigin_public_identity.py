@@ -88,6 +88,37 @@ def test_security_and_docs_link_to_current_home() -> None:
         assert "- **Status:** Accepted" in adr
 
 
+@pytest.mark.parametrize(
+    "path",
+    [
+        "docs/guides/developer_guide.md",
+        "docs/guides/research_quickstart.md",
+        "docs/releases/developer_package_install.md",
+    ],
+)
+def test_active_install_guides_use_current_repo_owner(path: str) -> None:
+    """Contributor setup must clone the owner of the live GitHub repository."""
+    guide = _text(path)
+    assert f"git clone {_HOME}.git" in guide
+    assert _OLD_HOME not in guide
+
+
+def test_active_release_tracking_uses_current_owner() -> None:
+    """Release planning links must refer to the transferred repository."""
+    document = _text("docs/releases/software_release_track.md")
+    assert f"{_HOME}/issues/" in document
+    assert _OLD_HOME not in document
+
+
+def test_public_roadmap_retains_governance_and_not_private_strategy() -> None:
+    """Keep the already-merged public roadmap rather than restore older plans."""
+    document = _text("ROADMAP.md")
+    assert "# MedOrigin Roadmap" in document
+    assert "[GOVERNANCE.md](GOVERNANCE.md)" in document
+    assert "not an unpublished strategic or engineering roadmap" in document
+    assert _OLD_HOME not in document
+
+
 def test_public_brand_does_not_erase_legacy_compatibility() -> None:
     """Branding is not a license to alter source-bound package/API identities."""
     policy = _text("docs/BRAND_TRANSITION.md")

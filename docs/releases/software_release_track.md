@@ -2,7 +2,7 @@
 
 - **Status:** Founder-prioritized planning / release-candidate qualification track; not a publication approval
 - **Direction date:** 2026-10-16
-- **Tracking:** [Issue #574](https://github.com/TheHalfMoon/MedOrigin/issues/574)
+- **Tracking:** [Issue #574](https://github.com/AbdulazizShehri/MedOrigin/issues/574)
 - **Successor version decision:** [Proposal and frozen-input impact dossier](successor_version_decision_574.md) — requires independent founder approval; no authorized new version or tag
 - **Authority:** [ADR-0010](../adr/0010-release-architecture.md), [release process](release_process.md), [R1–R7](../governance/rules.md), and canonical specifications continue to govern; this document cannot override them
 
@@ -12,7 +12,7 @@ A blocked GPU runtime-feasibility experiment is not, by itself, a defect in the 
 
 **Lane A — Software release candidate:** qualify and document source, the existing `medscale` Python package/CLI and any separately installable synthetic Workspace developer interfaces as they actually exist. Passing tests is necessary but not enough: verify the artifact installed in a clean environment, compatibility, trust boundaries, licensing, release CI and reproducibility.
 
-**Lane B — Research and clinical:** MRL-0809, MRL-0899, real GPU candidate feasibility, experiments, training/model promotion, clinical pilots, PHI and real-world evaluation remain separate and unmet unless their own canonical evidence gates are proven. The Colab T4 memory failure and proposed Kaggle follow-up in [#429](https://github.com/TheHalfMoon/MedOrigin/issues/429), [#450](https://github.com/TheHalfMoon/MedOrigin/issues/450), and [#545](https://github.com/TheHalfMoon/MedOrigin/issues/545) do not block **planning or validating Lane A**. They still block any scientific-execution-readiness claim.
+**Lane B — Research and clinical:** MRL-0809, MRL-0899, real GPU candidate feasibility, experiments, training/model promotion, clinical pilots, PHI and real-world evaluation remain separate and unmet unless their own canonical evidence gates are proven. The Colab T4 memory failure and proposed Kaggle follow-up in [#429](https://github.com/AbdulazizShehri/MedOrigin/issues/429), [#450](https://github.com/AbdulazizShehri/MedOrigin/issues/450), and [#545](https://github.com/AbdulazizShehri/MedOrigin/issues/545) do not block **planning or validating Lane A**. They still block any scientific-execution-readiness claim.
 
 A **shared security, licensing, integrity, PHI/no-backflow, or build defect** discovered while pursuing either lane can block the software candidate. Separate lanes are not an exemption from necessary engineering checks.
 
@@ -32,7 +32,7 @@ The historical `v0.2.0` tag and its [release record](../../RELEASES.md) are immu
 
 The tracker records concrete execution evidence, not optimistic checkmarks. Keep every item **open** until the linked exact-head results exist.
 
-1. **Scope and dependency closure:** reconcile the normal protected merges of FHIR input-safety [#568](https://github.com/TheHalfMoon/MedOrigin/pull/568) and strict Workspace MyPy [#569](https://github.com/TheHalfMoon/MedOrigin/pull/569). [#464](https://github.com/TheHalfMoon/MedOrigin/issues/464) package-version single-sourcing and the centralized `SYNTHETIC` constant **are already implemented on main** (68 focused tests passed on 2026-10-16); do not duplicate their repair. Preserve the frozen research root files.
+1. **Scope and dependency closure:** reconcile the normal protected merges of FHIR input-safety [#568](https://github.com/AbdulazizShehri/MedOrigin/pull/568) and strict Workspace MyPy [#569](https://github.com/AbdulazizShehri/MedOrigin/pull/569). [#464](https://github.com/AbdulazizShehri/MedOrigin/issues/464) package-version single-sourcing and the centralized `SYNTHETIC` constant **are already implemented on main** (68 focused tests passed on 2026-10-16); do not duplicate their repair. Preserve the frozen research root files.
 2. **Exact artifact and version:** decide an authorized successor package version and compatible Workspace source/packaging scope; preserve `v0.2.0`. If a package-version update requires frozen research inputs (`pyproject.toml` / `uv.lock`), obtain and record the explicit evidence reconciliation **before** editing them.
 3. **Offline shell and installed-artifact journey:** Core and Workspace independently pass preliminary clean-wheel imports/CLI/synthetic-shell smokes on Python 3.11/3.12 ([commands and bounded evidence](developer_package_install.md)); Workspace has a read-only GitHub-hosted Linux build + sdist + installed-wheel CI matrix. **Remaining:** qualify the *final versioned Core wheel and sdist* through the [exact-artifact release workflow](../../.github/workflows/release.yml) and protected final-head/tag tests, with version/CLI identity and immutable receipts. No claim of independent clinical app or network-free installation.
 4. **Trust and quality:** require full protected exact-head CI (including both Python quality jobs and all shards), CodeQL, applicable optional-extras/packaging checks, licenses/attributions, credentials and no-network boundaries, no-PHI/no-backflow contract tests, and review-thread resolution.
