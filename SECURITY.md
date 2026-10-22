@@ -10,7 +10,7 @@ software security and data-boundary integrity seriously.
 
 Please report suspected vulnerabilities **privately**, not via public issues:
 
-- Use GitHub's [private vulnerability reporting](https://github.com/TheHalfMoon/MedOrigin/security/advisories/new), or
+- Use GitHub's [private vulnerability reporting](https://github.com/AbdulazizShehri/MedOrigin/security/advisories/new), or
 - Email **alshehriofficial@gmail.com** with the details and reproduction steps.
 
 We aim to acknowledge reports within **7 days** and to provide a remediation timeline
@@ -22,8 +22,8 @@ disclosure.
 - Any path by which **real patient data / PHI could enter** MedOrigin training,
   evaluation, or benchmark data (this violates the one-way PHI boundary and is treated as
   a top-severity issue).
-- Any mechanism by which MedOrigin could take a **dependency on Afia** or leak restricted,
-  non-permissively-licensed content into the repository.
+- Any dependency or integration that violates the one-way research/workspace boundary,
+  or introduces restricted, unlicensed, or improperly attributed material.
 - Standard software vulnerabilities (code execution, dependency CVEs, supply-chain
   risks in the toolchain).
 

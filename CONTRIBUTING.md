@@ -15,19 +15,25 @@ MedOrigin preserves these invariants at all times:
 - **Synthetic-only, PHI-free.** No real patient data enters training, evaluation, or
   benchmarks — ever (Rule R2).
 - **No LLM-as-judge in any primary metric** (Rule R5). Headline metrics are executable.
-- **One-way dependency.** MedOrigin must never depend on Afia.
+- **One-way dependency.** Clinical Workspace information must not flow back into the research/training system; external project dependencies must remain explicit, licensed, and reviewed.
 - **Permissive licensing.** Anything shipped must permit derivative models and
   commercial use (Rule R3).
 - **Reproducibility.** No result without a script and a committed artifact (Rule R7).
 
 A change that violates any invariant will not be merged, regardless of quality.
 
+## How to participate
+
+Start with a [discussion](https://github.com/AbdulazizShehri/MedOrigin/discussions) for larger ideas or an [issue](https://github.com/AbdulazizShehri/MedOrigin/issues/new/choose) for a focused change. Contributors can help with setup instructions, API documentation, reproducible tests, FHIR fixtures, accessibility, translations, and scientific tooling. Do not submit real patient data or unlicensed code. See [governance](GOVERNANCE.md), [support](SUPPORT.md), and [the Code of Conduct](CODE_OF_CONDUCT.md).
+
+Small documentation-only contributions are welcome; report the checks you actually ran, and mark unavailable checks explicitly rather than inventing results. Maintainers decide merge readiness according to the protected branch and scientific safety rules.
+
 ## Development setup
 
 MedOrigin uses [uv](https://docs.astral.sh/uv/) and Python 3.11.
 
 ```bash
-git clone https://github.com/TheHalfMoon/MedOrigin.git
+git clone https://github.com/AbdulazizShehri/MedOrigin.git
 cd MedOrigin
 uv sync
 uv run pre-commit install
@@ -51,9 +57,11 @@ The pre-commit hooks run the same checks. Do not bypass them.
 
 ## Workflow
 
-1. **Trace your work.** Every change maps to an issue and, for research work, a research
-   question (RQ1–RQ7) and a horizon. Work that maps to nothing is out of scope until the
-   [Research Vision](docs/vision/MEDSCALE_RESEARCH_VISION.md) is amended.
+1. **Trace your work.** Every change maps to an issue. Research changes also require a
+   research question (RQ1–RQ7), horizon, and accepted scope in the
+   [Research Vision](docs/vision/MEDSCALE_RESEARCH_VISION.md). Documentation, accessibility,
+   tests, and onboarding improvements need a clear issue and acceptance criteria, not
+   an invented research claim.
 2. **One ticket at a time** (Rule R4). Finish, verify, commit — do not open the next.
 3. **Branch** from `main`; keep the change small and focused.
 4. **Test deterministically.** New behavior needs a deterministic test with a fixed seed.
@@ -80,3 +88,15 @@ response with an identifier, `verified_at`, and `source_api`. See the
 ## Reporting issues
 
 Use the issue templates. For security or PHI concerns, follow [SECURITY](SECURITY.md).
+## Private planning and agent settings
+
+Do not add unpublished founder strategy, internal roadmaps, supplier research,
+budgets, private decisions, or agent-specific instructions to this public
+repository. Keep those items in access-controlled internal workspaces. Local
+editor and agent files are intentionally ignored by Git. This restriction does
+not permit deleting original research provenance, required third-party
+attribution, or versioned scientific protocols already needed for verification.
+
+Public issues and pull requests should contain only actionable, non-sensitive
+technical details and measured evidence. Do not post credentials, patient data,
+or private plans in issues or CI logs.

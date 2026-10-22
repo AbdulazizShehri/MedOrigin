@@ -12,7 +12,8 @@ from pathlib import Path
 import pytest
 
 _REPO = Path(__file__).resolve().parents[1]
-_HOME = "https://github.com/TheHalfMoon/MedOrigin"
+_HOME = "https://github.com/AbdulazizShehri/MedOrigin"
+_OLD_HOME = "https://github.com/TheHalfMoon/MedOrigin"
 
 
 def _text(path: str) -> str:
@@ -50,6 +51,7 @@ def test_readme_points_to_current_repository_and_describes_limits() -> None:
     # Historical links are valid in archival records, but not as today's clone URL.
     assert "git clone https://github.com/TheHalfMoon/MESC" not in readme
     assert "git clone https://github.com/TheHalfMoon/MedScale" not in readme
+    assert _OLD_HOME not in readme
 
 
 def test_citation_uses_current_repository_without_inventing_release() -> None:
@@ -72,13 +74,18 @@ def test_security_and_docs_link_to_current_home() -> None:
     docs_index = _text("docs/README.md")
     assert "(BRAND_TRANSITION.md)" in docs_index
     assert "(vision/MEDORIGIN_OVERVIEW.md)" in docs_index
-    for identifier, filename, title in [
-        ("0010", "0010-release-architecture.md", "release architecture"),
-        ("0011", "0011-versioning-licensing.md", "versioning & licensing"),
-    ]:
+    assert "(architecture/medorigin_architecture.md)" in docs_index
+    assert "(../GOVERNANCE.md)" in docs_index
+    assert "(../CONTRIBUTING.md)" in docs_index
+    assert _OLD_HOME not in docs_index
+    # Original decisions are preserved but do not require the landing page
+    # to advertise historical working titles or vendor comparisons.
+    for filename in (
+        "0010-release-architecture.md",
+        "0011-versioning-licensing.md",
+    ):
         adr = _text(f"docs/adr/{filename}")
         assert "- **Status:** Accepted" in adr
-        assert f"[{identifier} {title}](adr/{filename}) *(Accepted)*" in docs_index
 
 
 def test_public_brand_does_not_erase_legacy_compatibility() -> None:
@@ -88,6 +95,8 @@ def test_public_brand_does_not_erase_legacy_compatibility() -> None:
     readme = _text("README.md")
     assert "The Python distribution, import package, and command remain `medscale`." in policy
     assert "MESC" in policy and "MedScale" in policy
-    assert "`medscale`" in overview
+    assert "uv run medscale --help" in overview
     assert "`medscale`" in readme
     assert "not a finished desktop or web application" in overview
+    assert "OpenMed" not in _text("docs/README.md")
+    assert "OpenMed" not in _text("docs/architecture/medorigin_architecture.md")
