@@ -44,6 +44,7 @@ Read-only root-identity preflight: `python scripts/audit_successor_package_metad
 checks the original SHA-256 of both frozen root inputs and the immutable v1/v2
 MRL-0809 prerequisite manifests, and calculates the *in-memory only* successor
 `pyproject.toml` SHA-256 after replacing exactly four legacy `Project-URL` lines.
+The proposed new URL base is `https://github.com/AbdulazizShehri/MedOrigin`, reflecting the completed native repository transfer; predecessor URLs are observed only to verify the unaltered frozen input.
 It fails closed if any prerequisite has drifted and does **not** write files,
 modify manifests, reconcile research authority or grant a tag/release. This
 preflight is valid only against an archived copy of the frozen old root; a
