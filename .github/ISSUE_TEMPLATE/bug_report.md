@@ -1,9 +1,13 @@
 ---
 name: Bug report
-about: Report a defect in MedScale
+about: Report a reproducible defect in MedOrigin
 title: "[bug] "
 labels: ["bug"]
 ---
+
+## Safety reminder
+
+Do not include real patient information, credentials, or security exploit details. Report vulnerabilities privately via [SECURITY.md](../../SECURITY.md).
 
 ## What happened
 
@@ -21,6 +25,6 @@ uv run ...
 
 ## Environment
 
-- MedScale version / commit:
+- MedOrigin commit / package version:
 - Python version:
 - OS:

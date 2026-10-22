@@ -1,5 +1,11 @@
 blank_issues_enabled: false
 contact_links:
-  - name: MedScale documentation
-    url: https://github.com/TheHalfMoon/MESC/tree/main/docs
-    about: Read the Strategic Blueprint, research questions, and governance first.
+  - name: Questions and community discussion
+    url: https://github.com/AbdulazizShehri/MedOrigin/discussions
+    about: Ask for help, exchange ideas, or discuss proposals before filing an issue.
+  - name: MedOrigin documentation
+    url: https://github.com/AbdulazizShehri/MedOrigin/tree/main/docs
+    about: Review the documentation, contributor guide, and project scope.
+  - name: Private security reports
+    url: https://github.com/AbdulazizShehri/MedOrigin/security/advisories/new
+    about: Report vulnerabilities privately. Never disclose patient information in an issue.

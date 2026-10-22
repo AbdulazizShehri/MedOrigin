@@ -262,7 +262,7 @@ def check_repository(root: Path) -> tuple[LinkProblem, ...]:
 
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Validate repository-local links in MedScale public Markdown sources."
+        description="Validate repository-local links in MedOrigin public Markdown sources."
     )
     parser.add_argument(
         "--root",

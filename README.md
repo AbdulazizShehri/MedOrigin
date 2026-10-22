@@ -7,13 +7,13 @@
 
 Evidence-native medical AI research infrastructure and a local-first clinical workspace foundation.
 
-[![CI](https://github.com/TheHalfMoon/MedOrigin/actions/workflows/ci.yml/badge.svg)](https://github.com/TheHalfMoon/MedOrigin/actions/workflows/ci.yml)
-[![CodeQL](https://github.com/TheHalfMoon/MedOrigin/actions/workflows/codeql.yml/badge.svg)](https://github.com/TheHalfMoon/MedOrigin/actions/workflows/codeql.yml)
+[![CI](https://github.com/AbdulazizShehri/MedOrigin/actions/workflows/ci.yml/badge.svg)](https://github.com/AbdulazizShehri/MedOrigin/actions/workflows/ci.yml)
+[![CodeQL](https://github.com/AbdulazizShehri/MedOrigin/actions/workflows/codeql.yml/badge.svg)](https://github.com/AbdulazizShehri/MedOrigin/actions/workflows/codeql.yml)
 [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 [![Python 3.11+](https://img.shields.io/badge/Python-3.11%2B-3776AB.svg)](pyproject.toml)
 [![Status: Research](https://img.shields.io/badge/status-active%20research-orange.svg)](ROADMAP.md)
 
-[Overview](#overview) · [Architecture](#architecture) · [Project status](#project-status) · [Get started](#get-started) · [Documentation](#documentation) · [Contributing](CONTRIBUTING.md)
+[Overview](#overview) · [Architecture](#architecture) · [Get started](#get-started) · [Documentation](#documentation) · [Community](#community) · [Contribute](CONTRIBUTING.md)
 
 </div>
 
@@ -59,7 +59,7 @@ MedOrigin is **an active research platform**, not a finished clinical product.
 
 - **Engineering:** Clinical Workspace units `CW-000` through `CW-020` are canonically closed for their authorized synthetic-only scope. `CW-021` has **not** been authorized.
 - **Scientific readiness:** `MRL-0809` (trusted real-runtime feasibility) and `MRL-0899` (real-experiment readiness) are still open. Scientific success is not inferred from test success.
-- **Free GPU routes:** Colab Recovery-3 is stopped after a consumed, failed preflight exception; Kaggle remains separately governed and unqualified for scientific execution.
+- **Runtime qualification:** External experiment compute routes remain unqualified or blocked. No training, model promotion, or scientific result is inferred without independently verified execution evidence.
 - **Release:** The existing Python distribution and command remain `medscale` for compatibility. The **MedOrigin** branding does not rename frozen protocols or previously published artifacts.
 
 See the [canonical roadmap](ROADMAP.md), [research task ledger](specs/mesc-research-loop-v1/tasks.md), [workspace task ledger](specs/medscale-clinical-workspace-v1/tasks.md), and [brand transition policy](docs/BRAND_TRANSITION.md). Those sources and their exact verification records take precedence over this summary.
@@ -69,7 +69,7 @@ See the [canonical roadmap](ROADMAP.md), [research task ledger](specs/mesc-resea
 Requirements: Python 3.11+ (the package currently supports 3.11–3.14), [uv](https://docs.astral.sh/uv/), and Git.
 
 ```bash
-git clone https://github.com/TheHalfMoon/MedOrigin.git
+git clone https://github.com/AbdulazizShehri/MedOrigin.git
 cd MedOrigin
 uv sync
 uv run medscale --help
@@ -94,14 +94,22 @@ The `medscale` CLI and Python import paths are **intentional compatibility names
 | [Developer package install guide](docs/releases/developer_package_install.md) | Independently build and smoke the Core and Workspace Python wheels using synthetic data only |
 | [Third-party provenance](THIRD_PARTY_NOTICES.md) | Attribution and rules for using external sources |
 
-## Contributing
+## Community
 
-Read [CONTRIBUTING.md](CONTRIBUTING.md), [SECURITY.md](SECURITY.md), the [Code of Conduct](CODE_OF_CONDUCT.md), and [governance rules R1–R7](docs/governance/rules.md). Every significant claim needs the actual tests and review evidence; failures and missing qualifications are first-class results.
+MedOrigin is openly developed: feedback, reproducible bug reports, documentation, accessible onboarding, interoperability discussions, and carefully reviewed code contributions are welcome. You do **not** need a medical or machine-learning background to help with developer experience, tests, and documentation.
 
-**Security reports belong in [private vulnerability reporting](https://github.com/TheHalfMoon/MedOrigin/security/advisories/new), not public issues.**
+- **Ask questions and propose ideas:** [GitHub Discussions](https://github.com/AbdulazizShehri/MedOrigin/discussions) and [support options](SUPPORT.md).
+- **Report bugs or propose improvements:** [GitHub Issues](https://github.com/AbdulazizShehri/MedOrigin/issues/new/choose). Please never post patient data, credentials, or security vulnerabilities in public issues.
+- **Make a contribution:** read [CONTRIBUTING.md](CONTRIBUTING.md) and use a focused pull request with reproducible checks.
+- **Understand project decisions:** [Community governance](GOVERNANCE.md), [Code of Conduct](CODE_OF_CONDUCT.md), and [research rules](docs/governance/rules.md).
+- **Explore the work:** see the [roadmap](ROADMAP.md) and [documentation index](docs/README.md) for implemented, planned, and gated work.
+
+Changes affecting clinical claims, scientific evidence, model promotion, or data boundaries receive additional review. Open participation does **not** imply clinical readiness or permission to use real patient data.
+
+**Security reports belong in [private vulnerability reporting](https://github.com/AbdulazizShehri/MedOrigin/security/advisories/new), not public issues.**
 
 ## License & citation
 
 This repository is distributed under [Apache-2.0](LICENSE), subject to any file-level third-party notices and the licenses of optional external model or dataset artifacts. Permissions for source reuse do **not** remove legal attribution or license obligations. See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) and [CITATION.cff](CITATION.cff).
 
-*MedOrigin was previously developed under the MESC / MedScale project names. Historical identifiers and research evidence are retained intentionally.*
+*Compatibility and research-history identifiers are documented in the [identity policy](docs/BRAND_TRANSITION.md); attribution and reproducibility records are preserved.*

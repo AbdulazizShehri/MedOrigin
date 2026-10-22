@@ -30,4 +30,4 @@ It is appropriate to design MedOrigin's own UX, architecture, names, schemas, do
 
 The existing source history and research evidence stay preserved through the MedOrigin rebrand. A future donor-integration PR must include a concrete third-party inventory instead of an unverifiable blanket statement that every dependency or reference has been imported.
 
-For security concerns, use [private vulnerability reporting](https://github.com/TheHalfMoon/MedOrigin/security/advisories/new).
+For security concerns, use [private vulnerability reporting](https://github.com/AbdulazizShehri/MedOrigin/security/advisories/new).

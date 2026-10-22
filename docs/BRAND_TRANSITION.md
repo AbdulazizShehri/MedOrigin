@@ -1,11 +1,11 @@
 # MedOrigin — Identity and Compatibility Policy
 
-**Status:** Public-brand transition only. No scientific protocol, frozen source, execution grant, or release authorization is amended by this document.
+**Status:** Current public identity and source-compatibility policy. No scientific protocol, frozen source, execution grant, or release authorization is amended by this document.
 
 ## Public identity
 
 - Product and repository: **MedOrigin**
-- Canonical GitHub home: https://github.com/TheHalfMoon/MedOrigin
+- Canonical GitHub home: https://github.com/AbdulazizShehri/MedOrigin
 - Brand proposition: **Every medical AI output deserves an origin.**
 - Focus: evidence-native research infrastructure + local-first Clinical Workspace
 - Product posture: transparent research software, not a medical device or PHI-ready application
@@ -22,7 +22,7 @@ Use **MedOrigin** in new public-facing product documentation, repository metadat
 
 ## Verified residual-name audit
 
-The 2026-10-11 source audit found legacy names in 1,263 of 1,431 tracked files. Many occurrences are technical or frozen identities: `src/medscale`, executable tests, dependency lockfiles, `specs/`, research notebooks, provider and model receipts, and prior decisions. This is **not** a safe repository-wide string-replacement task. Historical GitHub URLs are preserved only in original evidence; new clone instructions use `TheHalfMoon/MedOrigin`.
+The 2026-10-11 source audit found legacy names in 1,263 of 1,431 tracked files. Many occurrences are technical or frozen identities: `src/medscale`, executable tests, dependency lockfiles, `specs/`, research notebooks, provider and model receipts, and prior decisions. This is **not** a safe repository-wide string-replacement task. Historical GitHub URLs remain in original evidence; current installation, citation, and contribution instructions use `AbdulazizShehri/MedOrigin`.
 
 The outstanding package/API migration needs compatibility shims, dependency/lockfile review, tests and independent authorization when scientific source-bound contracts would change. No old source authorship or historical identity may be erased merely for cosmetic branding.
 

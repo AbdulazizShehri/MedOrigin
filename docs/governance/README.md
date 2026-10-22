@@ -1,28 +1,26 @@
-# Governance
+# MedOrigin governance reference
 
-- **Status:** Placeholder (directory established during Foundation Consolidation)
-- **Date:** 2026-07-09
+MedOrigin welcomes outside contributions while preserving verifiable science, data
+isolation, public project records, and protected-branch reviews.
 
-This directory holds MedScale's governance instruments — the rules and policies that keep
-the research program honest, reproducible, and scope-disciplined. It is the home for
-program-level documents that are *not* tied to a single research question or ticket.
+For the **community decision process**, maintainer roles, proposals, and conduct,
+start with the repository [GOVERNANCE.md](../../GOVERNANCE.md). For contribution
+workflow see [CONTRIBUTING.md](../../CONTRIBUTING.md); for confidential issues
+see [SECURITY.md](../../SECURITY.md).
 
-## Intended contents (to be authored; not yet present)
+## Canonical policies
 
-| Document | Purpose | Status |
-|---|---|---|
-| [`rules.md`](rules.md) (R1–R7) | Canonical definition of the program rules referenced across the docs | ✅ Created |
-| [`roles_and_authority.md`](roles_and_authority.md) | Founder/architect role separation, roadmap authority, review cadence, report format (binding addendum) | ✅ Created |
-| `licensing_policy.md` + licence ADR | Formalize the permissive, derivative-plus-commercial-use licence stance (Apache-2.0 is the working assumption) | Missing — pending licence ADR |
-| `citation_policy.md` | Consolidate Rule R1 (no citations from memory; live-API provenance) as a standalone policy | Referenced in `../research/reproducibility_policy.md` |
-| `dataset_policy.md` | Consolidate the synthetic-only / per-directory `LICENSE.md` / PHI-boundary rules | Referenced in `../research/reproducibility_policy.md` |
-| `contributing.md` | Contribution model and review gates for external open-source contributors | Missing — to author |
+| Document | Governs |
+| --- | --- |
+| [Program rules R1–R7](rules.md) | Scientific correctness, synthetic-only datasets, reproducibility, and release constraints |
+| [Roles and authority](roles_and_authority.md) | Research/architecture decision authorities and nondelegable governance |
+| [Contributor guide](../../CONTRIBUTING.md) | Issue and PR workflow, tests, traceability |
+| [Third-party notices](../../THIRD_PARTY_NOTICES.md) | Software reuse, licensing, copyrights, and required attribution |
+| [Code of Conduct](../../CODE_OF_CONDUCT.md) | Respectful participation and reporting |
+| [Community governance](../../GOVERNANCE.md) | Public proposals, maintainer decisions, appeals, stewardship |
 
-## Related canonical documents
-
-- `../vision/MEDSCALE_STRATEGIC_BLUEPRINT_V1.md` — §15 Governance
-- `../vision/MEDSCALE_RESEARCH_VISION.md` — §9 Change control
-- `../research/reproducibility_policy.md` — operational reproducibility principles
-- `../adr/` — Architecture Decision Records
-
-> This is a documentation placeholder. No engineering content lives here.
+Historical specifications and signed research evidence are not rewritten for a
+cosmetic rebrand. Public discussion is encouraged, but neither an issue nor a PR
+can authorize PHI ingestion, clinical deployment, external publishing, or changes
+to frozen scientific evidence. Those requests follow the accepted research rules
+and any applicable ADR/release gate.
