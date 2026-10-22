@@ -88,6 +88,38 @@ def test_security_and_docs_link_to_current_home() -> None:
         assert "- **Status:** Accepted" in adr
 
 
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "docs/guides/developer_guide.md",
+        "docs/guides/research_quickstart.md",
+        "docs/releases/developer_package_install.md",
+    ],
+)
+def test_active_install_guides_use_current_repo_owner(path: str) -> None:
+    """Contributor setup must clone the owner of the live GitHub repository."""
+    guide = _text(path)
+    assert f"git clone {_HOME}.git" in guide
+    assert _OLD_HOME not in guide
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "ROADMAP.md",
+        "docs/releases/software_release_track.md",
+    ],
+)
+def test_current_roadmap_and_release_docs_have_canonical_issue_links(
+    path: str,
+) -> None:
+    """Current tracking links must not refer to a predecessor owner."""
+    document = _text(path)
+    assert f"{_HOME}/issues/" in document
+    assert _OLD_HOME not in document
+
+
 def test_public_brand_does_not_erase_legacy_compatibility() -> None:
     """Branding is not a license to alter source-bound package/API identities."""
     policy = _text("docs/BRAND_TRANSITION.md")
