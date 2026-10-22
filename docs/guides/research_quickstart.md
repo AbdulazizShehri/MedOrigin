@@ -6,7 +6,7 @@ code reading required.*
 ## 1. Install (once)
 
 ```bash
-git clone https://github.com/TheHalfMoon/MedOrigin.git
+git clone https://github.com/AbdulazizShehri/MedOrigin.git
 cd MedOrigin
 uv sync          # Python 3.11+, no runtime dependencies
 ```
