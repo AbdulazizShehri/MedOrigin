@@ -41,6 +41,20 @@ are welcome.
 - [Software release track](releases/software_release_track.md) — independent synthetic-only developer-package gates
 - [Program rules](governance/rules.md) and [research scope](vision/MEDSCALE_RESEARCH_VISION.md)
 
+## Canonical sources & precedence
+
+Repository documentation describes what exists, not what is scientifically or
+clinically approved. For conflicts in scope or interpretation:
+
+1. The [research scope](vision/MEDSCALE_RESEARCH_VISION.md) governs permitted work.
+2. Accepted [architecture decisions](adr/) govern their recorded decisions.
+3. The [program rules](governance/rules.md), specifications, and exact test/evidence
+   records govern verified status and acceptance.
+4. The [roadmap](../ROADMAP.md) describes direction; it does not supersede
+   executable checks or scientific evidence.
+
+Original research records retain their own citation history and identifiers.
+
 ## Record integrity and compatibility
 
 This page highlights the **current MedOrigin project**, rather than treating
