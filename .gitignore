@@ -44,3 +44,18 @@ Desktop.ini
 data/raw/
 artifacts/raw/
 research-data/raw/
+# Local-only agent/editor instructions and private planning data.
+# Scientific evidence already tracked in specs/ remains tracked.
+AGENTS.md
+AGENT.md
+CLAUDE.md
+CURSOR.md
+cursor.md
+GEMINI.md
+.cursorrules
+.cursor/
+.claude/
+.codex/
+.opencode/
+.internal/
+private-planning/
