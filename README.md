@@ -59,7 +59,7 @@ MedOrigin is **an active research platform**, not a finished clinical product.
 
 - **Engineering:** Clinical Workspace units `CW-000` through `CW-020` are canonically closed for their authorized synthetic-only scope. `CW-021` has **not** been authorized.
 - **Scientific readiness:** `MRL-0809` (trusted real-runtime feasibility) and `MRL-0899` (real-experiment readiness) are still open. Scientific success is not inferred from test success.
-- **Free GPU routes:** Colab Recovery-3 is stopped after a consumed, failed preflight exception; Kaggle remains separately governed and unqualified for scientific execution.
+- **Runtime qualification:** External experiment compute routes remain unqualified or blocked. No training, model promotion, or scientific result is inferred without independently verified execution evidence.
 - **Release:** The existing Python distribution and command remain `medscale` for compatibility. The **MedOrigin** branding does not rename frozen protocols or previously published artifacts.
 
 See the [canonical roadmap](ROADMAP.md), [research task ledger](specs/mesc-research-loop-v1/tasks.md), [workspace task ledger](specs/medscale-clinical-workspace-v1/tasks.md), and [brand transition policy](docs/BRAND_TRANSITION.md). Those sources and their exact verification records take precedence over this summary.
