@@ -16,7 +16,7 @@ from typing import Any
 _FROZEN_PROJECT_SHA256 = "c36c33208236dafb136a147dfff0060d592e23daab4b4240521d4747d23ea510"
 _FROZEN_LOCK_SHA256 = "6fa0e0b49d19e305032ecd04940db0b9e252dd23b6fbec588b224f739048efc4"
 _OLD = "https://github.com/TheHalfMoon/MESC"
-_NEW = "https://github.com/TheHalfMoon/MedOrigin"
+_NEW = "https://github.com/AbdulazizShehri/MedOrigin"
 _URLS = {
     "Homepage": "",
     "Repository": "",
