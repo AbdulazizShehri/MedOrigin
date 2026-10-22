@@ -80,7 +80,7 @@ ADR-0038 is canonically effective after PR #460 protected merge and fresh-main q
 
 ## Synthetic-only software release track (founder direction, 2026-10-16)
 
-The [software release track](docs/releases/software_release_track.md) and [Issue #574](https://github.com/TheHalfMoon/MedOrigin/issues/574) distinguish independently qualifiable **developer/package delivery** from the unfinished **scientific experiment** and **clinical production** tracks. This is a prioritization and planning decision, **not a release/tag grant** or change to an Accepted ADR, frozen protocol, data boundary, or scientific evidence requirement.
+The [software release track](docs/releases/software_release_track.md) and [Issue #574](https://github.com/AbdulazizShehri/MedOrigin/issues/574) distinguish independently qualifiable **developer/package delivery** from the unfinished **scientific experiment** and **clinical production** tracks. This is a prioritization and planning decision, **not a release/tag grant** or change to an Accepted ADR, frozen protocol, data boundary, or scientific evidence requirement.
 
 A bounded software candidate may be qualified with offline synthetic-only workflows and honest limitations **without first closing MRL-0809 or MRL-0899**. Shared security, licensing, provenance, reproducibility, branch protection, clean installation, and artifact gates are still mandatory. No current entry here claims that a new release candidate has passed, that a clinician-facing GUI exists, or that the package can accept PHI.
 
