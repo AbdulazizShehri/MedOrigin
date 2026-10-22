@@ -88,7 +88,6 @@ def test_security_and_docs_link_to_current_home() -> None:
         assert "- **Status:** Accepted" in adr
 
 
-
 @pytest.mark.parametrize(
     "path",
     [
