@@ -88,3 +88,15 @@ response with an identifier, `verified_at`, and `source_api`. See the
 ## Reporting issues
 
 Use the issue templates. For security or PHI concerns, follow [SECURITY](SECURITY.md).
+## Private planning and agent settings
+
+Do not add unpublished founder strategy, internal roadmaps, supplier research,
+budgets, private decisions, or agent-specific instructions to this public
+repository. Keep those items in access-controlled internal workspaces. Local
+editor and agent files are intentionally ignored by Git. This restriction does
+not permit deleting original research provenance, required third-party
+attribution, or versioned scientific protocols already needed for verification.
+
+Public issues and pull requests should contain only actionable, non-sensitive
+technical details and measured evidence. Do not post credentials, patient data,
+or private plans in issues or CI logs.

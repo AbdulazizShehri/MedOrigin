@@ -103,19 +103,19 @@ def test_active_install_guides_use_current_repo_owner(path: str) -> None:
     assert _OLD_HOME not in guide
 
 
-@pytest.mark.parametrize(
-    "path",
-    [
-        "ROADMAP.md",
-        "docs/releases/software_release_track.md",
-    ],
-)
-def test_current_roadmap_and_release_docs_have_canonical_issue_links(
-    path: str,
-) -> None:
-    """Current tracking links must not refer to a predecessor owner."""
-    document = _text(path)
+def test_active_release_tracking_uses_current_owner() -> None:
+    """Release planning links must refer to the transferred repository."""
+    document = _text("docs/releases/software_release_track.md")
     assert f"{_HOME}/issues/" in document
+    assert _OLD_HOME not in document
+
+
+def test_public_roadmap_retains_governance_and_not_private_strategy() -> None:
+    """Keep the already-merged public roadmap rather than restore older plans."""
+    document = _text("ROADMAP.md")
+    assert "# MedOrigin Roadmap" in document
+    assert "[GOVERNANCE.md](GOVERNANCE.md)" in document
+    assert "not an unpublished strategic or engineering roadmap" in document
     assert _OLD_HOME not in document
 
 
