@@ -73,6 +73,7 @@ def test_audit_proposes_exact_four_urls_without_writing(
     root = _root(tmp_path, monkeypatch)
     before = _all_files(root)
     report = audit.audit(root, expected_project_sha=_sha(_project()))
+    assert audit._NEW == "https://github.com/AbdulazizShehri/MedOrigin"
     assert report["release_authorized"] is False
     assert report["status"] == "proposal_only_no_files_written"
     assert report["original_project_sha256"] == _sha(_project())
@@ -82,9 +83,9 @@ def test_audit_proposes_exact_four_urls_without_writing(
     assert len(report["historical_manifest_evidence"]) == 2
     assert _all_files(root) == before
     proposal = audit.propose_canonical_project_bytes(_project())
-    assert proposal.count(b"TheHalfMoon/MedOrigin") == 4
+    assert proposal.count(b"AbdulazizShehri/MedOrigin") == 4
     assert b"TheHalfMoon/MESC" not in proposal
-    assert proposal.replace(b"TheHalfMoon/MedOrigin", b"TheHalfMoon/MESC") == _project()
+    assert proposal.replace(b"AbdulazizShehri/MedOrigin", b"TheHalfMoon/MESC") == _project()
 
 
 @pytest.mark.parametrize(
