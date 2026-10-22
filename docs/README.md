@@ -14,6 +14,14 @@ authorize a standalone hosted documentation site, GitHub Pages deployment, Read 
 MkDocs/Sphinx/Jekyll deployment, DNS/domain routing, or documentation publication authority.
 Any hosted rendering/deployment decision remains separately scoped.
 
+## Community and contribution
+
+- [Get started](../README.md#get-started) and [ask for help](../SUPPORT.md).
+- [Community governance](../GOVERNANCE.md) explains proposals, maintainer decisions, and scope controls.
+- [Contributing guide](../CONTRIBUTING.md) covers local checks, review, and safe synthetic-only examples.
+- [Code of Conduct](../CODE_OF_CONDUCT.md) sets participation standards.
+- [Third-party notices](../THIRD_PARTY_NOTICES.md) describe licensing and attribution requirements.
+
 ## Reading order
 
 1. [README](../README.md) — what MedOrigin is, in one page.
