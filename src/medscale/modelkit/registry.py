@@ -204,17 +204,6 @@ REGISTRY: Final[tuple[ModelEntry, ...]] = (
         params_b=0.11,
         note="public PubMed+PMC pretrain; embedding role is H2+",
     ),
-    ModelEntry(
-        "openmed-ner-family",
-        "OpenMed",
-        ModelKind.ENCODER,
-        "Apache-2.0",
-        1,
-        (Role.EXTRACTION_BASELINE,),
-        _VERIFIED,
-        "https://huggingface.co/OpenMed",
-        note="family entry (1,511+ models); pin concrete model + revision + SHA at use (ADR-0007)",
-    ),
 )
 
 
