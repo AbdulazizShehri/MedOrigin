@@ -9,10 +9,10 @@ type: software
 authors:
   - family-names: Alshehri
     given-names: Abdulaziz
-repository-code: "https://github.com/TheHalfMoon/MedOrigin"
-url: "https://github.com/TheHalfMoon/MedOrigin"
+repository-code: "https://github.com/AbdulazizShehri/MedOrigin"
+url: "https://github.com/AbdulazizShehri/MedOrigin"
 license: Apache-2.0
-# Candidate package identity only: no release date until an authorized tagged release.
+# Developer package version is not a claim of a published release; see RELEASES.md.
 # Historical v0.2.0 date and tag remain preserved in RELEASES.md.
 version: 0.3.0
 keywords:
