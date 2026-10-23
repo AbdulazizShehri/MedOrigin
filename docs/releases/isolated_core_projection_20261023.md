@@ -19,7 +19,13 @@ per-file hashes for all archived source. The read-only
 `scripts/check_sdist_publication_scope.py` verifies that record against
 actual tarball contents, plus byte-identical Core/Workspace Apache-2.0
 license files. It rejects hostile archives and extra research/Workspace
-payloads. All outputs explicitly state publication is not authorized.
+payloads. With `--verify-source-checkout`, it also independently reconstructs
+the exact permitted `pyproject.toml` projection from the Git-committed
+frozen root (only four Project-URL substitutions and one sdist allowlist).
+An attacker cannot make an unauthorized metadata/dependency edit acceptable
+by changing both the archive and its self-declared SHA-256 receipt; the
+rehashed-metadata adversarial regression now explicitly tests this rejection.
+All outputs explicitly state publication is not authorized.
 
 The canonical Research Core wheel stays named `medscale` version `0.3.0`
 for compatibility; MedOrigin is the public project and GitHub repository name.

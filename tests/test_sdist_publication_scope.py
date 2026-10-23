@@ -156,3 +156,71 @@ def test_corrupt_archive_is_rejected(tmp_path: Path) -> None:
     status, result = _run(path)
     assert status == 2
     assert result["status"] == "BLOCKED"
+
+
+def test_rehashed_project_metadata_cannot_override_committed_root(tmp_path: Path) -> None:
+    """An attacker must not authorize arbitrary metadata by editing its receipt."""
+    stage_dir = tmp_path / "staged"
+    staged = subprocess.run(
+        [
+            sys.executable,
+            str(ROOT / "scripts/stage_medorigin_core_projection.py"),
+            "--out",
+            str(stage_dir),
+        ],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert staged.returncode == 0, staged.stderr
+
+    def pack(name: str) -> Path:
+        destination = tmp_path / name
+        with tarfile.open(destination, "w:gz") as archive:
+            for path in sorted(p for p in stage_dir.rglob("*") if p.is_file()):
+                relative = path.relative_to(stage_dir).as_posix()
+                info = archive.gettarinfo(str(path), arcname="medscale-0.3.0/" + relative)
+                with path.open("rb") as stream:
+                    archive.addfile(info, stream)
+        return destination
+
+    def verify(path: Path) -> tuple[int, dict[str, Any]]:
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(SCRIPT),
+                "--sdist",
+                str(path),
+                "--verify-source-checkout",
+                str(ROOT),
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        assert result.stdout, result.stderr
+        return result.returncode, cast(dict[str, Any], json.loads(result.stdout))
+
+    # The fixture itself must qualify against exact Git-committed root bytes.
+    status, original = verify(pack("untampered.tar.gz"))
+    assert status == 0, original
+
+    pyproject = stage_dir / "pyproject.toml"
+    pyproject.write_bytes(pyproject.read_bytes() + b"\n# unapproved build metadata change\n")
+    record_path = stage_dir / "MEDORIGIN_SOURCE_PROVENANCE.json"
+    record = json.loads(record_path.read_text(encoding="utf-8"))
+    record["projected_pyproject_sha256"] = hashlib.sha256(pyproject.read_bytes()).hexdigest()
+    record_path.write_text(
+        json.dumps(record, sort_keys=True, indent=2) + chr(10),
+        encoding="utf-8",
+    )
+
+    forged_archive = pack("rehashed-metadata.tar.gz")
+    # Its own digest and provenance receipt now agree, so the scope-only
+    # audit passes; verification against committed Git must STILL reject.
+    status, scope = _run(forged_archive)
+    assert status == 0, scope
+    status, bound = verify(forged_archive)
+    assert status == 2, bound
+    assert "projected metadata differs from canonical Git transform" in bound["issues"]

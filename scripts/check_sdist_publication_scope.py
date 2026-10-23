@@ -41,6 +41,43 @@ ESSENTIAL = frozenset(
 MAX_MEMBERS = 2_000
 MAX_TOTAL_SIZE = 50_000_000
 MAX_ONE_FILE = 30_000_000
+FROZEN_ROOT_SHA256 = "c36c33208236dafb136a147dfff0060d592e23daab4b4240521d4747d23ea510"
+FROZEN_LOCK_SHA256 = "6fa0e0b49d19e305032ecd04940db0b9e252dd23b6fbec588b224f739048efc4"
+FROZEN_MANIFEST_SHA256 = "7773967611e42c3d74338a1ec7c9004f661843df809865f6c6d455923fea89d1"
+
+
+def _expected_projected_metadata(original: bytes) -> bytes:
+    """Independently reconstruct the only two allowed edits to frozen metadata.
+
+    A self-declared digest in the packaged provenance cannot authorize a
+    different dependency, script, build backend, project field, or comment.
+    """
+    if hashlib.sha256(original).hexdigest() != FROZEN_ROOT_SHA256:
+        raise ValueError("root metadata does not match the frozen source identity")
+    projected = original
+    old_base = "https://github.com/TheHalfMoon/MESC"
+    new_base = "https://github.com/AbdulazizShehri/MedOrigin"
+    for field, suffix in (
+        ("Homepage", ""),
+        ("Repository", ""),
+        ("Documentation", "/tree/main/docs"),
+        ("Issues", "/issues"),
+    ):
+        old = f'{field} = "{old_base}{suffix}"'.encode() + b"\n"
+        new = f'{field} = "{new_base}{suffix}"'.encode() + b"\n"
+        if projected.count(old) != 1:
+            raise ValueError(f"unsupported frozen Project-URL: {field}")
+        projected = projected.replace(old, new, 1)
+    marker = b'[tool.hatch.build.targets.wheel]\npackages = ["src/medscale"]\n'
+    if projected.count(marker) != 1:
+        raise ValueError("unsupported frozen wheel build identity")
+    addition = (
+        b"\n[tool.hatch.build.targets.sdist]\n"
+        b'only-include = ["src/medscale", "README.md", "LICENSE", '
+        b'"THIRD_PARTY_NOTICES.md", "apps/workspace/LICENSE", '
+        b'"MEDORIGIN_SOURCE_PROVENANCE.json"]\n'
+    )
+    return projected.replace(marker, marker + addition, 1)
 
 
 def _verify_projection(archive: tarfile.TarFile, entries: set[str]) -> list[str]:
@@ -135,21 +172,32 @@ def _verify_source_checkout(archive: tarfile.TarFile, repository: Path) -> list[
                 ):
                     issues.append("source file differs from committed Git bytes")
                     break
-        for path, field in (
-            ("pyproject.toml", "frozen_pyproject_sha256"),
-            ("uv.lock", "frozen_lock_sha256"),
+        frozen_inputs = (
+            ("pyproject.toml", "frozen_pyproject_sha256", FROZEN_ROOT_SHA256),
+            ("uv.lock", "frozen_lock_sha256", FROZEN_LOCK_SHA256),
             (
                 "specs/mesc-experiment-0/mrl-0809-static-prerequisites-v1.json",
                 "frozen_mrl_manifest_sha256",
+                FROZEN_MANIFEST_SHA256,
             ),
-        ):
+        )
+        for path, field, pinned_hash in frozen_inputs:
             committed = subprocess.run(
                 ["git", "-C", str(repository), "show", f"{commit}:{path}"],
                 check=True,
                 capture_output=True,
             ).stdout
-            if hashlib.sha256(committed).hexdigest() != provenance.get(field):
-                issues.append("frozen Git input differs from provenance: " + path)
+            actual = hashlib.sha256(committed).hexdigest()
+            if actual != provenance.get(field) or actual != pinned_hash:
+                issues.append("frozen Git input differs from accepted identity: " + path)
+            if path == "pyproject.toml" and actual == pinned_hash:
+                # The source-attested archive must contain precisely the four
+                # approved URL changes and one explicit sdist allowlist.
+                # Rehashing a malicious pyproject and its self-declared receipt
+                # together must never pass committed-source verification.
+                metadata = archive.extractfile("medscale-0.3.0/pyproject.toml")
+                if metadata is None or metadata.read() != _expected_projected_metadata(committed):
+                    issues.append("projected metadata differs from canonical Git transform")
         if (
             provenance.get("canonical_distribution_repository")
             != "https://github.com/AbdulazizShehri/MedOrigin"
