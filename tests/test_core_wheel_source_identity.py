@@ -157,6 +157,26 @@ def test_rehashed_record_does_not_admit_unreviewed_payload(
     assert any(expected in str(item) for item in report["issues"]), report
 
 
+@pytest.mark.parametrize(
+    "untrusted_directory",
+    [
+        "../escape/",
+        "medscale/unreviewed_dir/",
+        "medscale/../../escaped/",
+    ],
+)
+def test_unsafe_or_untracked_explicit_wheel_directory_is_rejected(
+    tmp_path: Path, untrusted_directory: str
+) -> None:
+    """ZIP directory entries also belong to the installer-facing wheel archive."""
+    wheel_path = _wheel(tmp_path / "dir-attack.whl")
+    with zipfile.ZipFile(wheel_path, "a") as archive:
+        archive.writestr(untrusted_directory, b"")
+    code, report = _inspect(wheel_path)
+    assert code == 2, report
+    assert any("wheel directory" in str(v) for v in report["issues"]), report
+
+
 def test_corrupt_wheel_is_rejected(tmp_path: Path) -> None:
     bad = tmp_path / "corrupt.whl"
     bad.write_bytes(b"not a zip archive")

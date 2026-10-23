@@ -36,7 +36,12 @@ The separate `scripts/check_core_wheel_source_identity.py` now independently
 compares **every packaged Core source file** against exact committed
 `src/medscale/` Git blobs. It rejects added, missing or changed code,
 unexpected distribution metadata, mismatched LICENSE bytes, duplicate/unsafe
-wheel entries, and incorrect PEP 376 `RECORD` hashes and sizes. An attacker
+wheel entries, and incorrect PEP 376 `RECORD` hashes and sizes. This Core
+wheel's canonical file-only ZIP layout also rejects **all explicit directory
+entries**: the prior verifier skipped such entries before path and membership
+checks, allowing unrecorded `../` traversal directories or non-Git paths.
+The three adversarial directory-entry regressions now fail closed while the
+real wheel remains accepted. An attacker
 cannot make injected Python code acceptable merely by recomputing `RECORD`.
 The guard also verifies **installer-controlled wheel metadata** against the
 byte-pinned frozen Git `pyproject.toml`: console entry points, all base and

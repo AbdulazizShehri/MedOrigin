@@ -145,6 +145,10 @@ def inspect(path: Path, repository: Path) -> dict[str, object]:
             for info in wheel.infolist():
                 name = info.filename
                 if info.is_dir():
+                    # This exact Core wheel has a file-only installation
+                    # contract. Ignoring ZIP directory entries previously
+                    # accepted traversal and untracked paths outside RECORD.
+                    issues.append("wheel directory entry is not permitted")
                     continue
                 if name in members:
                     issues.append("duplicate wheel entry")
