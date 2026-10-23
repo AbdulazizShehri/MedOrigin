@@ -11,10 +11,12 @@ MachineStateGenerationError when a test clone committed a one-newline change
 to a Git source bound by the frozen MRL-0809 v1 static manifest. The Git blob
 really changed, as established by distinct before/after SHA-256 values.
 
-However, MRL-0800 is PLANNED, and MRL-0809 depends on it. The state projector
-uses Python short-circuit evaluation for predecessor closure and the special
-gate. When a predecessor is not closed, the special gate is not invoked;
-MRL-0809 remains PLANNED, not ELIGIBLE or CLOSED_CANONICAL.
+However, MRL-0800 is PLANNED, and MRL-0809 depends on it. On the reproduced Windows checkout, the state projector uses Python
+short-circuit evaluation for predecessor closure and the special gate. When
+a predecessor is not closed, the special gate is not invoked; MRL-0809 stays
+PLANNED. In the Linux hosted test, qualified predecessor closure was sufficient
+to invoke the static gate, which correctly raised MachineStateGenerationError.
+Both are fail-closed outcomes; neither is ELIGIBLE or CLOSED_CANONICAL.
 
 The direct validate_static_prerequisites(repo, changed_commit) call separately
 raises MRL0809PrerequisiteGateError for the mismatched source file. The
@@ -31,9 +33,12 @@ projection exception expectations.
    working-tree bytes or platform-dependent line endings.
 3. Require direct static-prerequisite validation to raise the exact
    source-drift error against the mutated Git commit.
-4. Require the aggregate machine state to remain MRL-0809 = PLANNED,
-   without claiming that short-circuited validation was executed.
-5. Check that behavior on hosted Linux and Windows, Python 3.11 and 3.12.
+4. Require the aggregate either to raise exactly the MRL-0809 rejecting
+   gate exception (when predecessors are closed), or to leave MRL-0809
+   PLANNED when predecessors are incomplete. Never accept promotion.
+5. Check both fail-closed outcomes on Linux/Windows, Python 3.11/3.12.
+   Fetch only main ancestry: unbounded remote refs contain Windows-invalid
+   path lengths that otherwise make checkout fail before the test starts.
 
 The test does not use xfail, skip, allow-failure, or platform exceptions.
 The new read-only workflow uses a pinned checkout and uv setup and
@@ -47,8 +52,9 @@ historical v1/v2 manifests, source-binding hashes, dependency locks, frozen
 research records, trusted receipts, scientific claims, release flags or model
 execution. No public distribution, tag, upload or clinical use is authorized.
 
-The new test ensures direct source-integrity refusal and non-promotion under
-today's incomplete predecessor. It does NOT establish unconditional static
+The new test ensures direct source-integrity refusal and non-promotion
+regardless of whether predecessor evidence is sufficient to invoke the
+aggregate special gate. It does NOT establish unconditional static
 validation on every aggregate projector call. If that behavior is required,
 design and qualify a successor research identity rather than silently
 editing sources that the historical v2 manifest binds by exact SHA-256.

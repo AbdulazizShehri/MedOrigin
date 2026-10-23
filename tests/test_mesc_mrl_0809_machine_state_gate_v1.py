@@ -269,7 +269,16 @@ def test_manifest_bound_source_drift_fails_closed(tmp_path: Path) -> None:
         match=r"static prerequisite source drifted: src/medscale/backends/common\.py",
     ):
         validate_static_prerequisites(repo, mutated_commit)
-    assert _task_state(repo, tmp_path) == "PLANNED"
+
+    # Depending on independently qualified predecessor closure, the aggregate
+    # path either reaches the rejecting gate or leaves MRL-0809 PLANNED.
+    # Neither outcome can mark the tampered source eligible or closed.
+    try:
+        aggregate = _task_state(repo, tmp_path)
+    except MachineStateGenerationError as exc:
+        assert str(exc) == "MRL-0809 prerequisite gate failed closed"
+    else:
+        assert aggregate == "PLANNED"
 
 
 def test_forged_present_slot_and_trust_fail_closed(tmp_path: Path) -> None:
