@@ -4,9 +4,13 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import io
 import json
+import re
+import subprocess
 import sys
 import tarfile
+import zipfile
 from pathlib import Path
 
 TOP_LEVEL = frozenset(
@@ -84,7 +88,86 @@ def _verify_projection(archive: tarfile.TarFile, entries: set[str]) -> list[str]
     return issues
 
 
-def inspect(path: Path) -> dict[str, object]:
+def _verify_source_checkout(archive: tarfile.TarFile, repository: Path) -> list[str]:
+    """Independently compare the receipt to exact committed Git source bytes."""
+    issues: list[str] = []
+    try:
+        record = archive.extractfile("medscale-0.3.0/MEDORIGIN_SOURCE_PROVENANCE.json")
+        if record is None:
+            return ["source provenance record missing"]
+        provenance = json.load(record)
+        commit = provenance.get("source_git_commit")
+        source = provenance.get("source_files")
+        if not isinstance(commit, str) or re.fullmatch(r"[0-9a-f]{40}", commit) is None:
+            return ["invalid provenance source commit"]
+        if not isinstance(source, dict):
+            return ["invalid source file map"]
+        head = subprocess.run(
+            ["git", "-C", str(repository), "rev-parse", "HEAD"],
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+        if commit != head:
+            return ["sdist source commit is not the checked-out HEAD"]
+        git_archive = subprocess.run(
+            [
+                "git",
+                "-C",
+                str(repository),
+                "archive",
+                "--format=zip",
+                commit,
+                "--",
+                *sorted(source),
+            ],
+            check=True,
+            capture_output=True,
+        ).stdout
+        with zipfile.ZipFile(io.BytesIO(git_archive)) as zipped:
+            archived_names = {entry.filename for entry in zipped.infolist() if not entry.is_dir()}
+            if archived_names != set(source):
+                issues.append("Git source archive membership differs from provenance")
+            for name, expected in source.items():
+                if (
+                    name not in archived_names
+                    or hashlib.sha256(zipped.read(name)).hexdigest() != expected
+                ):
+                    issues.append("source file differs from committed Git bytes")
+                    break
+        for path, field in (
+            ("pyproject.toml", "frozen_pyproject_sha256"),
+            ("uv.lock", "frozen_lock_sha256"),
+            (
+                "specs/mesc-experiment-0/mrl-0809-static-prerequisites-v1.json",
+                "frozen_mrl_manifest_sha256",
+            ),
+        ):
+            committed = subprocess.run(
+                ["git", "-C", str(repository), "show", f"{commit}:{path}"],
+                check=True,
+                capture_output=True,
+            ).stdout
+            if hashlib.sha256(committed).hexdigest() != provenance.get(field):
+                issues.append("frozen Git input differs from provenance: " + path)
+        if (
+            provenance.get("canonical_distribution_repository")
+            != "https://github.com/AbdulazizShehri/MedOrigin"
+        ):
+            issues.append("canonical distribution repository differs from provenance")
+    except (
+        subprocess.CalledProcessError,
+        OSError,
+        ValueError,
+        TypeError,
+        KeyError,
+        zipfile.BadZipFile,
+    ):
+        issues.append("Git source provenance could not be verified")
+    return issues
+
+
+def inspect(path: Path, *, source_repo: Path | None = None) -> dict[str, object]:
     issues: list[str] = []
     entries: set[str] = set()
     byte_total = 0
@@ -123,6 +206,8 @@ def inspect(path: Path) -> dict[str, object]:
                     break
             if not issues:
                 issues.extend(_verify_projection(archive, entries))
+            if not issues and source_repo is not None:
+                issues.extend(_verify_source_checkout(archive, source_repo))
     except (tarfile.TarError, OSError, EOFError, ValueError, KeyError):
         issues.append("sdist is corrupt or unreadable")
     missing = sorted(ESSENTIAL - entries)
@@ -140,10 +225,15 @@ def inspect(path: Path) -> dict[str, object]:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--sdist", type=Path, required=True)
+    parser.add_argument(
+        "--verify-source-checkout",
+        type=Path,
+        help="Require the source receipt to match every byte of this Git checkout at HEAD",
+    )
     args = parser.parse_args(argv)
     if not args.sdist.is_file():
         parser.error("source distribution not found")
-    result = inspect(args.sdist)
+    result = inspect(args.sdist, source_repo=args.verify_source_checkout)
     sys.stdout.write(json.dumps(result, sort_keys=True, indent=2) + "\n")
     return 0 if result["status"] == "SDIST_SCOPE_QUALIFIED_ONLY" else 2
 

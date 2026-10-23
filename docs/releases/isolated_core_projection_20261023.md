@@ -35,7 +35,8 @@ python scripts/inspect_release_wheel_metadata.py \
   --wheel "$source_dir/dist/medscale-0.3.0-py3-none-any.whl" \
   --expected-version 0.3.0
 python scripts/check_sdist_publication_scope.py \
-  --sdist "$source_dir/dist/medscale-0.3.0.tar.gz"
+  --sdist "$source_dir/dist/medscale-0.3.0.tar.gz" \
+  --verify-source-checkout .
 ```
 
 The PR-specific **Core release projection qualification** workflow adds

@@ -128,6 +128,28 @@ def test_symlink_is_rejected(tmp_path: Path) -> None:
     assert any("special" in str(v) for v in result["issues"])
 
 
+def test_scope_only_receipt_cannot_impersonate_committed_git_source(tmp_path: Path) -> None:
+    """An internally consistent scope receipt is not proof of Git-origin bytes."""
+    archive = _archive(tmp_path / "unbound.tar.gz")
+    status, report = _run(archive)
+    assert status == 0 and report["publication_authorized"] is False
+    checked = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--sdist",
+            str(archive),
+            "--verify-source-checkout",
+            str(ROOT),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert checked.returncode == 2
+    assert "source commit" in checked.stdout
+
+
 def test_corrupt_archive_is_rejected(tmp_path: Path) -> None:
     path = tmp_path / "bad.tar.gz"
     path.write_bytes(b"not a valid tar")
