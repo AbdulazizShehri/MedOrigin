@@ -73,10 +73,11 @@ def _verify_projection(archive: tarfile.TarFile, entries: set[str]) -> list[str]
             "projected_pyproject_sha256"
         ):
             issues.append("projected metadata checksum mismatch")
-        licenses = [
-            archive.extractfile(prefix + name) for name in ("LICENSE", "apps/workspace/LICENSE")
-        ]
-        if any(item is None for item in licenses) or licenses[0].read() != licenses[1].read():
+        core_license = archive.extractfile(prefix + "LICENSE")
+        workspace_license = archive.extractfile(prefix + "apps/workspace/LICENSE")
+        if core_license is None or workspace_license is None:
+            issues.append("Core or Workspace license missing")
+        elif core_license.read() != workspace_license.read():
             issues.append("Core and Workspace license bytes differ")
     except (AttributeError, AssertionError, UnicodeError, ValueError, TypeError, KeyError):
         issues.append("unreadable or malformed source provenance")
