@@ -53,7 +53,8 @@ flowchart LR
 | Document | Covers |
 |---|---|
 | [software_release_track.md](software_release_track.md) | Founder-prioritized synthetic-only package/developer-preview track, with independent scientific/clinical boundaries and evidence gates |
-| [prepublication_qualification_20261023.md](prepublication_qualification_20261023.md) | Read-only exact-wheel metadata audit, synthetic Windows installation evidence, and explicit no-go conditions before a future release |
+| [prepublication_qualification_20261023.md](prepublication_qualification_20261023.md) | Read-only predecessor-root metadata audit, synthetic Windows installation evidence, and original publication no-go conditions |
+| [successor_package_candidate_20261023.md](successor_package_candidate_20261023.md) | Proposed successor root identity, sdist/wheel allowlisting, cross-version installation evidence, and remaining release authority gates |
 | [successor_version_decision_574.md](successor_version_decision_574.md) | Proposed next software version, frozen-input reconciliation options, compatibility and release-authority gates — not a release approval |
 | [historical_compatibility_preflight_574.md](historical_compatibility_preflight_574.md) | Exact-tag-to-main public API, CLI and dataset-integrity preflight; behavioral and persisted-format gates still open |
 | [v0_3_0_candidate_qualification.md](v0_3_0_candidate_qualification.md) | Versioned Core developer preview candidate, exact identity tests, safety bounds and publication gates — not a release |

@@ -36,10 +36,10 @@ dependencies = []
 medscale = "medscale.cli:main"
 
 [project.urls]
-Homepage = "https://github.com/TheHalfMoon/MESC"
-Repository = "https://github.com/TheHalfMoon/MESC"
-Documentation = "https://github.com/TheHalfMoon/MESC/tree/main/docs"
-Issues = "https://github.com/TheHalfMoon/MESC/issues"
+Homepage = "https://github.com/AbdulazizShehri/MedOrigin"
+Repository = "https://github.com/AbdulazizShehri/MedOrigin"
+Documentation = "https://github.com/AbdulazizShehri/MedOrigin/tree/main/docs"
+Issues = "https://github.com/AbdulazizShehri/MedOrigin/issues"
 
 [project.optional-dependencies]
 backends-transformers = [
@@ -87,6 +87,12 @@ path = "src/medscale/__about__.py"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/medscale"]
+
+# Core source distributions must not accidentally ship frozen research receipts,
+# datasets, notebooks, or other repository-only material. Keep their integrity
+# and provenance in GitHub; package only the installable code and legal notices.
+[tool.hatch.build.targets.sdist]
+only-include = ["src/medscale", "README.md", "LICENSE", "THIRD_PARTY_NOTICES.md"]
 
 # ---------------------------------------------------------------------------
 # Ruff — linting + formatting

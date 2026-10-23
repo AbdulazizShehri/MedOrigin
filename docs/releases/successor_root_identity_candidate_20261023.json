@@ -1,0 +1,33 @@
+{
+  "schema": "MEDORIGIN-RELEASE-ROOT-SUCCESSOR-CANDIDATE-V1",
+  "status": "PROPOSED_UNPUBLISHED",
+  "created_at_utc": "2026-10-23",
+  "authority": "Issue #574; ADR-0010; R5/R6; no tag, release, publisher activation or clinical authority",
+  "predecessor": {
+    "git_commit": "12d76bb7c560a204302b5b4e129644c54ae44f6f",
+    "pyproject_sha256": "c36c33208236dafb136a147dfff0060d592e23daab4b4240521d4747d23ea510",
+    "uv_lock_sha256": "6fa0e0b49d19e305032ecd04940db0b9e252dd23b6fbec588b224f739048efc4",
+    "static_manifest_path": "specs/mesc-experiment-0/mrl-0809-static-prerequisites-v1.json",
+    "static_manifest_sha256": "7773967611e42c3d74338a1ec7c9004f661843df809865f6c6d455923fea89d1"
+  },
+  "successor": {
+    "pyproject_sha256": "48bed28c9d366730f615de6f6d068e70dc78d39d600d6f3c70da247acc349310",
+    "uv_lock_sha256": "6fa0e0b49d19e305032ecd04940db0b9e252dd23b6fbec588b224f739048efc4",
+    "distribution": "medscale",
+    "version": "0.3.0",
+    "canonical_repository": "https://github.com/AbdulazizShehri/MedOrigin",
+    "sdist_explicit_only_include": [
+      "src/medscale",
+      "README.md",
+      "LICENSE",
+      "THIRD_PARTY_NOTICES.md"
+    ]
+  },
+  "prohibitions": [
+    "NO_AUTO_PUBLICATION",
+    "NO_TAG",
+    "NO_FROZEN_RESEARCH_REWRITE",
+    "NO_PHI",
+    "NO_GPU_SCIENCE_CLAIM"
+  ]
+}
