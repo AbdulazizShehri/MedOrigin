@@ -173,3 +173,35 @@ def test_tag_release_requires_qualified_wheel_url_gate_before_github_release() -
     assert "uv pip install --python .venv/bin/python --no-deps" in smoke
     assert "needs: [quality, build, install-smoke]" in release
     assert "vars.GITHUB_RELEASE_PUBLISH_ENABLED == 'true'" in release
+
+
+def test_tag_and_pr_paths_use_identical_audited_core_projection() -> None:
+    """Source build, metadata and sdist checks must precede all artifact use."""
+    text = _workflow_text()
+    required_stage = (
+        "uv run --no-sync python scripts/stage_medorigin_core_projection.py "
+        '--out "$RUNNER_TEMP/medorigin-core"'
+    )
+    required_build = 'run: uv build "$RUNNER_TEMP/medorigin-core" --out-dir dist'
+    wheel_check = "scripts/inspect_release_wheel_metadata.py --wheel"
+    archive_check = "scripts/check_sdist_publication_scope.py --sdist"
+    for job_id in ("build", "pr-artifact-build"):
+        block = _job_block(text, job_id)
+        assert block.count(required_stage) == 1
+        assert block.count(required_build) == 1
+        assert block.count(wheel_check) == 1
+        assert block.count(archive_check) == 1
+        assert block.index(required_stage) < block.index(required_build)
+        assert block.index(required_build) < block.index(wheel_check)
+        assert block.index(wheel_check) < block.index(archive_check)
+        assert block.index(archive_check) < block.index("actions/upload-artifact@")
+        assert "uv build\n" not in block
+        assert "contents: write" not in block
+        assert "id-token: write" not in block
+
+    assert text.count(required_stage) == 2
+    assert text.count(required_build) == 2
+    assert text.count(wheel_check) == 2
+    assert text.count(archive_check) == 2
+    assert "vars.GITHUB_RELEASE_PUBLISH_ENABLED == 'true'" in _job_block(text, "github-release")
+    assert "vars.TESTPYPI_PUBLISH_ENABLED == 'true'" in _job_block(text, "testpypi-publish")

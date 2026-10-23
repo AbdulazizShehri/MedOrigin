@@ -46,8 +46,12 @@ uncommitted working-tree source:
    non-Core Workspace code, research payloads, and out-of-budget inputs.
 6. Build and inspect actual `medscale 0.3.0` wheel and sdist, unpack sdist
    and rebuild wheel, clean-install and test CLI in non-source venvs.
-7. Keep this lane **separate from tag-triggered release workflows** until
-   ADR acceptance and an additional explicit publication authorization.
+7. In this **unmerged proposal only**, make the tag-build artifact path and
+   PR-safe round-trip build use this same source projection, actual-wheel URL
+   inspection and sdist provenance audit. The future tag-build path remains
+   a build-only candidate until all other quality and operator gates pass.
+   Public Github Release and TestPyPI jobs retain their existing separate
+   explicit activation conditions and cannot run on a PR or manual preview.
 
 The source Git repository and the package-stage `pyproject.toml` deliberately
 have different hashes; the transformation is published in source control
@@ -67,6 +71,8 @@ distribution lane, or reject it and separately authorize a new research-root
 identity with appropriate scientific migration. Do not merge PR #597's
 root-metadata mutation simply to bypass frozen research gates.
 
-**Until this ADR becomes Accepted:** this implementation is an experimental
-read-only qualification prototype, not an adopted publisher workflow.
-It creates no tag, GitHub Release, package-index upload or deployment.
+**Until this ADR becomes Accepted:** this unmerged implementation is an
+experimental qualification and future-release build proposal, not an adopted
+publisher. Its GitHub workflows build and inspect artifacts only and cannot
+create a tag, GitHub Release, package-index upload or deployment without
+separate explicit authorization and publication gates.

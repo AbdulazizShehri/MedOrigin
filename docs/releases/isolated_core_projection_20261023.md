@@ -40,9 +40,13 @@ python scripts/check_sdist_publication_scope.py \
 
 The PR-specific **Core release projection qualification** workflow adds
 isolated Python 3.11/3.12 Linux builds, source-tarball round-trip and clean
-installed-CLI tests. Existing full main CI must continue testing the
-unchanged, frozen research source. This workflow has `contents: read`
-permissions only, no publisher or package upload jobs.
+installed-CLI tests. The same PR proposes wiring the **existing release.yml**
+future tag-build and PR-safe artifact paths to the exact same projection,
+including actual wheel URL and sdist-provenance guards **before uploading
+artifacts**. Publisher conditions remain unchanged and inactive: PR/manual
+qualification cannot create a GitHub Release or publish to a package index.
+Existing full main CI must continue testing the unchanged, frozen research
+source. The separate qualification workflow uses `contents: read` only.
 
 ## Evidence boundaries
 
