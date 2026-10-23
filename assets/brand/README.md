@@ -1,23 +1,19 @@
-# MedOrigin — Official Visual Identity 01 (reference matched)
+# MedOrigin official visual identity — Concept 01, reference-traced
 
-Founder-approved concept 01 / Overlap Forward, 23 October 2026.
+The symbol matches the founder-approved reference: TWO equal charcoal parallel
+strokes on the left, and a separated narrow orange wedge (the third line)
+beside the large orange circular field. The third line is orange, not black.
+The transparent diagonal space separates the orange wedge from the circular
+field. The black strokes never overlap the orange area.
 
-The canonical symbol has TWO visible, equally sized, parallel charcoal
-diagonal strokes to the LEFT of a filled orange circle. A THIRD angled
-negative-space (transparent) cut crosses the LEFT edge of the orange disc.
-A thin orange segment remains on the outside of the transparent cut.
-Do NOT replace the negative-space cut with a third charcoal stroke or place
-three black strokes on the orange circle.
+This replaces the incorrect prior disc-based mark and restores the original
+reference silhouette, including relative line lengths and placements.
 
-Colors: primary orange #FF6A00, charcoal #202020, paper #FAF7F3.
-SVG masters are vector based, font independent, and use a real transparent
-cut so they work on light and dark backgrounds. Inverse lockup uses white
-visible lines and wordmark. No gradient, glow, 3D, shadow, navy, or web font.
+Colors: orange #FF6A00, charcoal #202020, paper #FAF7F3.
+SVG masters are editable and font-independent. Other PNG/ICO assets are
+regenerated exports. No navy, gradients, shadows or 3D.
 
-Canonical files are medorigin-symbol.svg, medorigin-wordmark.svg,
+Canonical assets: medorigin-symbol.svg, medorigin-wordmark.svg,
 medorigin-lockup-horizontal.svg, medorigin-lockup-stacked.svg,
-medorigin-lockup-inverse.svg and medorigin-app-icon.svg. Other PNG, favicon
-and preview outputs are reproducible exports.
-
-Brand identity is not a clinical, scientific or release authorization.
-Source provenance and historical attribution remain unchanged.
+medorigin-lockup-inverse.svg, medorigin-app-icon.svg.
+Brand is not clinical or scientific approval and grants no release.

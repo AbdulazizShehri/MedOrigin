@@ -15,8 +15,9 @@ Use **MedOrigin** in new public-facing product documentation, repository metadat
 ## Official visual identity
 
 The founder-approved MedOrigin identity (Concept 01 / Overlap Forward) is published
-in [assets/brand](../assets/brand/README.md). The canonical mark has two visible equal charcoal diagonal strokes to the left
-of an orange circle, with a third transparent slash cutting the circle edge.
+in [assets/brand](../assets/brand/README.md). The canonical mark uses two equal charcoal diagonal strokes to the left of a
+separate orange wedge and an orange circular field, with a transparent diagonal
+gap between the wedge and the circular field, matching the approved reference.
 Use orange `#FF6A00`, charcoal `#202020`, and warm paper `#FAF7F3`.
 All MedOrigin wordmark files are self-contained outlined SVGs; no font file is
 redistributed. The approved assets do not imply clinical validation or publication.

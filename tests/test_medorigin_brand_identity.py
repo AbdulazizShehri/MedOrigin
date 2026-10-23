@@ -1,57 +1,62 @@
-"""Lock the founder-approved MedOrigin Concept 01 geometry in the source repo."""
+"""Protect the approved MedOrigin Concept 01 reference-derived geometry."""
 
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
+import pytest
+
 ROOT = Path(__file__).resolve().parents[1] / "assets" / "brand"
 SVG = "{http://www.w3.org/2000/svg}"
+CIRCLE = (
+    "M125 307 C138 298.5 152 293.5 164 293.5 "
+    "C198 293.5 223.5 321.5 223.5 354 "
+    "C223.5 387 199.3 414.5 165 414.5 Z"
+)
+WEDGE = "M118.8 314.3 L155.7 413.9 Q151.8 413.8 147.3 412.8 L113 322.6 Q115.1 318.4 118.8 314.3 Z"
+DARK_LINES = (
+    "M74.4 318.2 L107.8 407.4",
+    "M94.6 318.1 L128.1 407.3",
+)
 
 
-def _read_asset(name: str) -> ET.Element:
-    return ET.parse(ROOT / name).getroot()
-
-
-def test_two_visible_strokes_and_transparent_third_slash() -> None:
-    icon = _read_asset("medorigin-symbol.svg")
-    strokes = [e for e in icon.iter(f"{SVG}g") if e.get("stroke") == "#202020"]
-    assert len(strokes) == 1
-    lines = strokes[0].findall(f"{SVG}path")
-    assert [p.get("d") for p in lines] == [
-        "M68 78 L110 198",
-        "M99 78 L141 198",
+@pytest.mark.parametrize(
+    ("name", "stroke"),
+    [
+        ("medorigin-symbol.svg", "#202020"),
+        ("medorigin-lockup-horizontal.svg", "#202020"),
+        ("medorigin-lockup-stacked.svg", "#202020"),
+        ("medorigin-app-icon.svg", "#202020"),
+        ("medorigin-lockup-inverse.svg", "#FFFFFF"),
+    ],
+)
+def test_mark_matches_approved_reference(name: str, stroke: str) -> None:
+    root = ET.parse(ROOT / name).getroot()
+    transformed = [
+        g for g in root.iter(f"{SVG}g") if g.get("transform") == "translate(-80 -433.6) scale(1.6)"
     ]
-    assert strokes[0].get("stroke-width") == "8.5"
-    clips = list(icon.iter(f"{SVG}clipPath"))
-    assert len(clips) == 1
-    disc = clips[0].find(f"{SVG}circle")
-    assert disc is not None
-    assert (disc.get("cx"), disc.get("cy"), disc.get("r")) == (
-        "209",
-        "128",
-        "79",
-    )
-    filled = [g for g in icon.iter(f"{SVG}g") if g.get("fill") == "#FF6A00"]
-    assert len(filled) == 1
-    assert filled[0].get("clip-path") == "url(#mo-disc)"
-    assert len(filled[0].findall(f"{SVG}path")) == 2
+    assert len(transformed) == 1, name
+    mark = transformed[0]
+
+    orange = [g for g in mark.findall(f"{SVG}g") if g.get("fill") == "#FF6A00"]
+    assert len(orange) == 1, name
+    assert [p.get("d") for p in orange[0].findall(f"{SVG}path")] == [
+        CIRCLE,
+        WEDGE,
+    ]
+
+    dark = [g for g in mark.findall(f"{SVG}g") if g.get("stroke") == stroke]
+    assert len(dark) == 1, name
+    assert dark[0].get("stroke-width") == "6.5"
+    assert dark[0].get("stroke-linecap") == "round"
+    assert tuple(p.get("d") for p in dark[0].findall(f"{SVG}path")) == DARK_LINES
+
+    # No legacy clipped-circle mark, third black stroke or painted white gap.
+    assert not list(mark.iter(f"{SVG}clipPath"))
+    assert not list(mark.iter(f"{SVG}circle"))
+
+
+def test_brand_guidance_preserves_filled_wedge() -> None:
     guidance = (ROOT / "README.md").read_text(encoding="utf8").lower()
-    assert "two visible" in guidance
-    assert "negative-space (transparent) cut" in guidance
-
-
-def test_all_lockups_share_corrected_mark() -> None:
-    for name in (
-        "medorigin-lockup-horizontal.svg",
-        "medorigin-lockup-stacked.svg",
-        "medorigin-app-icon.svg",
-        "medorigin-lockup-inverse.svg",
-    ):
-        root = _read_asset(name)
-        clips = list(root.iter(f"{SVG}clipPath"))
-        assert len(clips) == 1, name
-        assert len(list(root.iter(f"{SVG}circle"))) == 1, name
-        dark_or_white_strokes = [
-            g for g in root.iter(f"{SVG}g") if g.get("stroke") in {"#202020", "#FFFFFF"}
-        ]
-        assert len(dark_or_white_strokes) == 1, name
-        assert len(dark_or_white_strokes[0].findall(f"{SVG}path")) == 2, name
+    assert "two equal charcoal" in guidance
+    assert "orange wedge" in guidance
+    assert "never overlap" in guidance
