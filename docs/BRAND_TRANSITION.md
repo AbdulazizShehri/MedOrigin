@@ -12,6 +12,15 @@
 
 Use **MedOrigin** in new public-facing product documentation, repository metadata, presentations, onboarding, and general-purpose interface copy.
 
+## Official visual identity
+
+The founder-approved MedOrigin identity (Concept 01 / Overlap Forward) is published
+in [assets/brand](../assets/brand/README.md). The canonical mark consists of three
+equal charcoal diagonal strokes intersecting the left of a solid orange circle.
+Use orange `#FF6A00`, charcoal `#202020`, and warm paper `#FAF7F3`.
+All MedOrigin wordmark files are self-contained outlined SVGs; no font file is
+redistributed. The approved assets do not imply clinical validation or publication.
+
 ## What intentionally keeps its historical identity
 
 - The Python distribution, import package, and command remain `medscale`.

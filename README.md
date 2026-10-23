@@ -1,6 +1,8 @@
 <!-- markdownlint-disable MD033 MD041 -->
 <div align="center">
 
+<img src="assets/brand/medorigin-symbol.svg" alt="MedOrigin official brand symbol" width="104" />
+
 # MedOrigin
 
 **Every medical AI output deserves an origin.**

@@ -13,6 +13,7 @@ current architecture and development guides below.
 | Guide | Purpose |
 | --- | --- |
 | [Project overview](vision/MEDORIGIN_OVERVIEW.md) | Product intent, implemented foundations, and current limitations |
+| [Official visual identity](../assets/brand/README.md) | Approved MedOrigin logo, vectors, colors, and usage rules |
 | [MedOrigin architecture](architecture/medorigin_architecture.md) | System boundaries, data flow, and package layout |
 | [Quick start](guides/research_quickstart.md) | Reproduce supported local research workflows |
 | [Developer guide](guides/developer_guide.md) | Install, test, and contribute to the project |
