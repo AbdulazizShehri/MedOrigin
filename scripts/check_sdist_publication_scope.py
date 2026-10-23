@@ -44,6 +44,15 @@ MAX_ONE_FILE = 30_000_000
 FROZEN_ROOT_SHA256 = "c36c33208236dafb136a147dfff0060d592e23daab4b4240521d4747d23ea510"
 FROZEN_LOCK_SHA256 = "6fa0e0b49d19e305032ecd04940db0b9e252dd23b6fbec588b224f739048efc4"
 FROZEN_MANIFEST_SHA256 = "7773967611e42c3d74338a1ec7c9004f661843df809865f6c6d455923fea89d1"
+# Independent trust anchor: never let a packaged receipt declare a smaller
+# Git source set and thereby authorize missing Python modules.
+GIT_PACKAGE_SOURCE_PATHS = (
+    "src/medscale",
+    "README.md",
+    "LICENSE",
+    "THIRD_PARTY_NOTICES.md",
+    "apps/workspace/LICENSE",
+)
 
 
 def _expected_projected_metadata(original: bytes) -> bytes:
@@ -156,13 +165,17 @@ def _verify_source_checkout(archive: tarfile.TarFile, repository: Path) -> list[
                 "--format=zip",
                 commit,
                 "--",
-                *sorted(source),
+                *GIT_PACKAGE_SOURCE_PATHS,
             ],
             check=True,
             capture_output=True,
         ).stdout
         with zipfile.ZipFile(io.BytesIO(git_archive)) as zipped:
             archived_names = {entry.filename for entry in zipped.infolist() if not entry.is_dir()}
+            # Crucially, derive the *complete* expected source inventory from
+            # committed Git, independently of the packaged receipt. Selecting
+            # only receipt-provided names permits a forged subset with a
+            # rehashed receipt to pass even when a Python module is missing.
             if archived_names != set(source):
                 issues.append("Git source archive membership differs from provenance")
             for name, expected in source.items():

@@ -158,6 +158,72 @@ def test_corrupt_archive_is_rejected(tmp_path: Path) -> None:
     assert result["status"] == "BLOCKED"
 
 
+def test_rehashed_source_receipt_cannot_hide_missing_git_module(tmp_path: Path) -> None:
+    """A partial sdist cannot shrink its own trust boundary to omit a module."""
+    staged = tmp_path / "staged"
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(ROOT / "scripts/stage_medorigin_core_projection.py"),
+            "--out",
+            str(staged),
+        ],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    removed = "src/medscale/cli/dataset.py"
+    receipt_path = staged / "MEDORIGIN_SOURCE_PROVENANCE.json"
+    receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+    assert removed in receipt["source_files"]
+
+    def package(filename: str) -> Path:
+        output = tmp_path / filename
+        with tarfile.open(output, "w:gz") as tar:
+            for source in sorted(path for path in staged.rglob("*") if path.is_file()):
+                arcname = "medscale-0.3.0/" + source.relative_to(staged).as_posix()
+                info = tar.gettarinfo(str(source), arcname=arcname)
+                with source.open("rb") as stream:
+                    tar.addfile(info, stream)
+        return output
+
+    def bound_inspect(archive: Path) -> tuple[int, dict[str, Any]]:
+        proc = subprocess.run(
+            [
+                sys.executable,
+                str(SCRIPT),
+                "--sdist",
+                str(archive),
+                "--verify-source-checkout",
+                str(ROOT),
+            ],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        assert proc.stdout, proc.stderr
+        return proc.returncode, cast(dict[str, Any], json.loads(proc.stdout))
+
+    ok, report = bound_inspect(package("original.tar.gz"))
+    assert ok == 0, report
+    # Forge a self-consistent partial inventory: source bytes in Git remain
+    # intact, but the distributable and its declared hash map lose a module.
+    (staged / removed).unlink()
+    receipt["source_files"].pop(removed)
+    receipt["source_file_count"] = len(receipt["source_files"])
+    receipt_path.write_text(json.dumps(receipt, sort_keys=True, indent=2) + "\n", encoding="utf-8")
+    forged = package("forged-partial.tar.gz")
+    # A scope-only check has no independent Git anchor and may pass;
+    # the authoritative committed-source check MUST reject the omitted file.
+    scope_status, scope = _run(forged)
+    assert scope_status == 0, scope
+    status, bound = bound_inspect(forged)
+    assert status == 2, bound
+    assert "Git source archive membership differs from provenance" in bound["issues"]
+
+
 def test_rehashed_project_metadata_cannot_override_committed_root(tmp_path: Path) -> None:
     """An attacker must not authorize arbitrary metadata by editing its receipt."""
     stage_dir = tmp_path / "staged"

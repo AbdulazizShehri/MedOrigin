@@ -25,6 +25,13 @@ frozen root (only four Project-URL substitutions and one sdist allowlist).
 An attacker cannot make an unauthorized metadata/dependency edit acceptable
 by changing both the archive and its self-declared SHA-256 receipt; the
 rehashed-metadata adversarial regression now explicitly tests this rejection.
+The authoritative Git-bound sdist verifier also derives the **complete**
+Core source file inventory from fixed Git paths, independently of the bundled
+provenance map. Deleting a Python module and also deleting its SHA-256 entry
+from a self-consistent receipt must be rejected: a deliberately partial sdist
+previously passed, but now fails the source membership test. The normal
+Git-projected sdist continues to qualify. Source-only scope checks without
+`--verify-source-checkout` are explicitly not a substitute for this gate.
 The separate `scripts/check_core_wheel_source_identity.py` now independently
 compares **every packaged Core source file** against exact committed
 `src/medscale/` Git blobs. It rejects added, missing or changed code,
