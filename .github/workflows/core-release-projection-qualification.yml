@@ -5,6 +5,8 @@ on:
     paths:
       - "scripts/stage_medorigin_core_projection.py"
       - "scripts/check_sdist_publication_scope.py"
+      - "scripts/check_core_wheel_source_identity.py"
+      - "tests/test_core_wheel_source_identity.py"
       - "tests/test_core_release_projection_identity.py"
       - "tests/test_sdist_publication_scope.py"
       - ".github/workflows/core-release-projection-qualification.yml"
@@ -48,6 +50,7 @@ jobs:
           test -f "$sdist"
           "$python_exe" scripts/inspect_release_wheel_metadata.py \
             --wheel "$wheel" --expected-version 0.3.0
+          "$python_exe" scripts/check_core_wheel_source_identity.py --wheel "$wheel" --verify-source-checkout .
           "$python_exe" scripts/check_sdist_publication_scope.py --sdist "$sdist" --verify-source-checkout .
           mkdir "$scratch/unpacked" "$scratch/rebuilt"
           tar -xzf "$sdist" -C "$scratch/unpacked"
@@ -55,6 +58,9 @@ jobs:
           "$python_exe" scripts/inspect_release_wheel_metadata.py \
             --wheel "$scratch/rebuilt/medscale-0.3.0-py3-none-any.whl" \
             --expected-version 0.3.0
+          "$python_exe" scripts/check_core_wheel_source_identity.py \
+            --wheel "$scratch/rebuilt/medscale-0.3.0-py3-none-any.whl" \
+            --verify-source-checkout .
           cmp "$wheel" "$scratch/rebuilt/medscale-0.3.0-py3-none-any.whl"
           uv venv --python "${{ matrix.python }}" "$scratch/venv"
           uv pip install --python "$scratch/venv/bin/python" --no-deps "$wheel"

@@ -25,6 +25,16 @@ frozen root (only four Project-URL substitutions and one sdist allowlist).
 An attacker cannot make an unauthorized metadata/dependency edit acceptable
 by changing both the archive and its self-declared SHA-256 receipt; the
 rehashed-metadata adversarial regression now explicitly tests this rejection.
+The separate `scripts/check_core_wheel_source_identity.py` now independently
+compares **every packaged Core source file** against exact committed
+`src/medscale/` Git blobs. It rejects added, missing or changed code,
+unexpected distribution metadata, mismatched LICENSE bytes, duplicate/unsafe
+wheel entries, and incorrect PEP 376 `RECORD` hashes and sizes. An attacker
+cannot make injected Python code acceptable merely by recomputing `RECORD`.
+Both the PR-safe release workflow and the Linux 3.11/3.12 isolated-Core
+build qualification invoke this source-bound wheel guard **before** any
+artifact is uploaded for CI round-trip verification. Its proof is limited to
+the reviewed exact Git checkout; it is not an external publisher approval.
 All outputs explicitly state publication is not authorized.
 
 The canonical Research Core wheel stays named `medscale` version `0.3.0`
@@ -40,6 +50,9 @@ uv build --wheel --sdist "$source_dir/core" --out-dir "$source_dir/dist"
 python scripts/inspect_release_wheel_metadata.py \
   --wheel "$source_dir/dist/medscale-0.3.0-py3-none-any.whl" \
   --expected-version 0.3.0
+python scripts/check_core_wheel_source_identity.py \
+  --wheel "$source_dir/dist/medscale-0.3.0-py3-none-any.whl" \
+  --verify-source-checkout .
 python scripts/check_sdist_publication_scope.py \
   --sdist "$source_dir/dist/medscale-0.3.0.tar.gz" \
   --verify-source-checkout .
