@@ -15,9 +15,27 @@ permissions:
   contents: read
 
 jobs:
+  tag-main-admission:
+    name: admit tag only at protected main HEAD
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fetch immutable tag and all branches for comparison
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Refuse tag outside exact protected main
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/check_release_tag_main_head.py \
+            --repo . --tag-ref "$GITHUB_REF" --event-sha "$GITHUB_SHA"
+
   quality:
     name: quality gate
     if: github.event_name == 'push'
+    needs: tag-main-admission
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

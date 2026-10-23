@@ -94,6 +94,15 @@ future tag-build and PR-safe artifact paths to the exact same projection,
 including actual wheel URL and sdist-provenance guards **before uploading
 artifacts**. Publisher conditions remain unchanged and inactive: PR/manual
 qualification cannot create a GitHub Release or publish to a package index.
+A separate read-only **tag-to-protected-main admission** now gates the future
+`push` release job chain before quality/build/install/publish: it requires the
+tag commit, checked-out GitHub event SHA, and fully fetched `origin/main` HEAD
+to be **the same commit** and refuses missing or mismatched refs. The
+qualification uses a full-depth checkout without persisted credentials and
+cannot publish; synthetic Git repositories exercise approved-main, unmerged
+branch, stale-main, missing-ref, and inconsistent-event negatives. This is an
+additional automated boundary, not a replacement for tag-protection rules,
+workflow governance, founder ADR acceptance, or an authorized publish switch.
 Existing full main CI must continue testing the unchanged, frozen research
 source. The separate qualification workflow uses `contents: read` only.
 
