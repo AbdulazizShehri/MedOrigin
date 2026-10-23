@@ -4,11 +4,21 @@ import json
 import subprocess
 import sys
 from pathlib import Path
+from typing import TypedDict, cast
 
 import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 CHECK = ROOT / "scripts" / "check_release_tag_main_head.py"
+
+
+class AdmissionReport(TypedDict):
+    status: str
+    tag_ref: str
+    checkout_sha: str
+    protected_main_sha: str
+    publication_authorized: bool
+    issues: list[str]
 
 
 def git(root: Path, *args: str) -> str:
@@ -33,7 +43,7 @@ def repo(tmp_path: Path) -> Path:
     return root
 
 
-def admission(repo: Path, ref: str, sha: str) -> tuple[int, dict]:
+def admission(repo: Path, ref: str, sha: str) -> tuple[int, AdmissionReport]:
     result = subprocess.run(
         [sys.executable, str(CHECK), "--repo", str(repo), "--tag-ref", ref, "--event-sha", sha],
         capture_output=True,
@@ -41,7 +51,7 @@ def admission(repo: Path, ref: str, sha: str) -> tuple[int, dict]:
         check=False,
     )
     assert result.stdout, result.stderr
-    return result.returncode, json.loads(result.stdout)
+    return result.returncode, cast(AdmissionReport, json.loads(result.stdout))
 
 
 def test_exact_main_release_tag_is_qualified_only(repo: Path) -> None:
