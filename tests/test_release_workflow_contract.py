@@ -5,7 +5,7 @@ from pathlib import Path
 
 _WORKFLOW = Path(__file__).resolve().parents[1] / ".github" / "workflows" / "release.yml"
 _JOB_HEADER_RE = re.compile(r"^  [a-z0-9-]+:\s*$", re.MULTILINE)
-_PUBLISH_ACTION = "pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33"
+_PUBLISH_ACTION = "pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086"
 _DOWNLOAD_ACTION = "actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333"
 
 
@@ -118,7 +118,7 @@ def test_tag_release_rejects_stale_or_missing_wheel_metadata_urls() -> None:
 
     import pytest
 
-    canonical = "https://github.com/TheHalfMoon/MedOrigin"
+    canonical = "https://github.com/AbdulazizShehri/MedOrigin"
     labels = {
         "Homepage": canonical,
         "Repository": canonical,
