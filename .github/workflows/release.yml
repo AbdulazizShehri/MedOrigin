@@ -8,6 +8,16 @@ on:
     branches: [main]
     paths:
       - '.github/workflows/release.yml'
+      - 'scripts/stage_medorigin_core_projection.py'
+      - 'scripts/check_sdist_publication_scope.py'
+      - 'scripts/check_core_wheel_source_identity.py'
+      - 'scripts/inspect_release_wheel_metadata.py'
+      - 'scripts/check_release_tag_main_head.py'
+      - 'tests/test_release_workflow_contract.py'
+      - 'tests/test_release_tag_main_admission.py'
+      - 'tests/test_sdist_publication_scope.py'
+      - 'tests/test_core_wheel_source_identity.py'
+      - 'tests/test_core_release_projection_identity.py'
   # Read-only artifact round-trip on exact protected main without publishing a tag.
   workflow_dispatch:
 

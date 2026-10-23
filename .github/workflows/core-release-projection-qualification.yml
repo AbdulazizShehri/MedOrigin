@@ -6,6 +6,7 @@ on:
       - "scripts/stage_medorigin_core_projection.py"
       - "scripts/check_sdist_publication_scope.py"
       - "scripts/check_core_wheel_source_identity.py"
+      - "scripts/inspect_release_wheel_metadata.py"
       - "tests/test_core_wheel_source_identity.py"
       - "tests/test_core_release_projection_identity.py"
       - "tests/test_sdist_publication_scope.py"

@@ -22,6 +22,44 @@ def _job_block(text: str, job_id: str) -> str:
     return text[start:end]
 
 
+def test_pr_safe_release_qualification_triggers_on_trust_boundary_edits() -> None:
+    """Changes to artifact-verifier code must actually trigger release checks."""
+    workflow = _workflow_text()
+    prefix = workflow.split("jobs:", maxsplit=1)[0]
+    assert "  pull_request:\n    branches: [main]\n    paths:" in prefix
+    watch = prefix.split("    paths:", maxsplit=1)[1].split("  workflow_dispatch:", maxsplit=1)[0]
+    required = (
+        ".github/workflows/release.yml",
+        "scripts/stage_medorigin_core_projection.py",
+        "scripts/check_sdist_publication_scope.py",
+        "scripts/check_core_wheel_source_identity.py",
+        "scripts/inspect_release_wheel_metadata.py",
+        "scripts/check_release_tag_main_head.py",
+        "tests/test_release_workflow_contract.py",
+        "tests/test_release_tag_main_admission.py",
+        "tests/test_sdist_publication_scope.py",
+        "tests/test_core_wheel_source_identity.py",
+        "tests/test_core_release_projection_identity.py",
+    )
+    for path in required:
+        assert f"      - '{path}'" in watch, path
+    # Future tag builds must remain independent of PR-only path filters.
+    assert '  push:\n    tags:\n      - "v*"' in prefix
+
+    projection_file = _WORKFLOW.parent / "core-release-projection-qualification.yml"
+    projection = projection_file.read_text(encoding="utf-8")
+    qualification_paths = projection.split("    paths:", maxsplit=1)[1].split(
+        "  workflow_dispatch:", maxsplit=1
+    )[0]
+    for path in (
+        "scripts/stage_medorigin_core_projection.py",
+        "scripts/check_core_wheel_source_identity.py",
+        "scripts/check_sdist_publication_scope.py",
+        "scripts/inspect_release_wheel_metadata.py",
+    ):
+        assert f'      - "{path}"' in qualification_paths, path
+
+
 def test_testpypi_publish_job_is_fail_closed_and_least_privilege() -> None:
     text = _workflow_text()
     block = _job_block(text, "testpypi-publish")

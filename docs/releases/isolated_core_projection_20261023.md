@@ -105,6 +105,13 @@ additional automated boundary, not a replacement for tag-protection rules,
 workflow governance, founder ADR acceptance, or an authorized publish switch.
 Existing full main CI must continue testing the unchanged, frozen research
 source. The separate qualification workflow uses `contents: read` only.
+The nonpublishing release workflow's PR path filter includes the
+source-projection stage, metadata and archive inspectors, tag admission guard,
+and their contract tests; changing any of these trust-boundary components
+must trigger PR artifact qualification even when `release.yml` itself is
+untouched. The Core projection qualification path filter also includes its
+wheel metadata inspector. Automated tests check this trigger contract so a
+future path-filter narrowing does not silently skip essential checks.
 
 ## Evidence boundaries
 
