@@ -1,0 +1,63 @@
+name: Core release projection qualification
+
+on:
+  pull_request:
+    paths:
+      - "scripts/stage_medorigin_core_projection.py"
+      - "scripts/check_sdist_publication_scope.py"
+      - "tests/test_core_release_projection_identity.py"
+      - "tests/test_sdist_publication_scope.py"
+      - ".github/workflows/core-release-projection-qualification.yml"
+      - "docs/adr/0044-isolated-core-release-projection.md"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  read-only-core-projection:
+    name: Read-only projected build (Python ${{ matrix.python }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.11", "3.12"]
+    steps:
+      - name: Checkout source at the exact revision
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install pinned uv
+        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        with:
+          enable-cache: false
+      - name: Install Python
+        run: uv python install "${{ matrix.python }}"
+      - name: Stage source-bound package and qualify artifacts
+        shell: bash
+        run: |
+          set -euo pipefail
+          python_exe="$(uv python find "${{ matrix.python }}")"
+          scratch="$(mktemp -d)"
+          "$python_exe" scripts/stage_medorigin_core_projection.py --out "$scratch/projected"
+          uv build --sdist --wheel "$scratch/projected" --out-dir "$scratch/dist"
+          wheel="$scratch/dist/medscale-0.3.0-py3-none-any.whl"
+          sdist="$scratch/dist/medscale-0.3.0.tar.gz"
+          test -f "$wheel"
+          test -f "$sdist"
+          "$python_exe" scripts/inspect_release_wheel_metadata.py \
+            --wheel "$wheel" --expected-version 0.3.0
+          "$python_exe" scripts/check_sdist_publication_scope.py --sdist "$sdist"
+          mkdir "$scratch/unpacked" "$scratch/rebuilt"
+          tar -xzf "$sdist" -C "$scratch/unpacked"
+          uv build --wheel "$scratch/unpacked/medscale-0.3.0" --out-dir "$scratch/rebuilt"
+          "$python_exe" scripts/inspect_release_wheel_metadata.py \
+            --wheel "$scratch/rebuilt/medscale-0.3.0-py3-none-any.whl" \
+            --expected-version 0.3.0
+          cmp "$wheel" "$scratch/rebuilt/medscale-0.3.0-py3-none-any.whl"
+          uv venv --python "${{ matrix.python }}" "$scratch/venv"
+          uv pip install --python "$scratch/venv/bin/python" --no-deps "$wheel"
+          ( cd "$scratch" && "$scratch/venv/bin/medscale" --version )
+          test -z "$(git diff --name-only)"
+          echo "PROJECTION_ONLY_QUALIFIED_NOT_PUBLISHED"
