@@ -55,6 +55,7 @@ flowchart LR
 | [software_release_track.md](software_release_track.md) | Founder-prioritized synthetic-only package/developer-preview track, with independent scientific/clinical boundaries and evidence gates |
 | [prepublication_qualification_20261023.md](prepublication_qualification_20261023.md) | Read-only exact-wheel metadata audit, synthetic Windows installation evidence, and explicit no-go conditions before a future release |
 | [isolated_core_projection_20261023.md](isolated_core_projection_20261023.md) | Proposed source-attested isolated Core packaging lane that preserves frozen MRL inputs and cannot publish |
+| [core_release_decision_preflight_20261023.md](core_release_decision_preflight_20261023.md) | Unapproved architecture alternatives, exact-head evidence matrix, historical compatibility limits, and explicit review-versus-publication gates |
 | [successor_version_decision_574.md](successor_version_decision_574.md) | Proposed next software version, frozen-input reconciliation options, compatibility and release-authority gates — not a release approval |
 | [historical_compatibility_preflight_574.md](historical_compatibility_preflight_574.md) | Exact-tag-to-main public API, CLI and dataset-integrity preflight; behavioral and persisted-format gates still open |
 | [v0_3_0_candidate_qualification.md](v0_3_0_candidate_qualification.md) | Versioned Core developer preview candidate, exact identity tests, safety bounds and publication gates — not a release |
