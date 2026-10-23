@@ -29,7 +29,14 @@ The authoritative Git-bound sdist verifier also derives the **complete**
 Core source file inventory from fixed Git paths, independently of the bundled
 provenance map. Deleting a Python module and also deleting its SHA-256 entry
 from a self-consistent receipt must be rejected: a deliberately partial sdist
-previously passed, but now fails the source membership test. The normal
+previously passed, but now fails the source membership test. The Git-bound
+verifier separately validates the generated `PKG-INFO` installer metadata
+against the canonical projected `pyproject.toml` and exact README bytes,
+including version, author, URLs, Python requirements, optional extras, all
+`Requires-Dist`, classifiers, license and permitted headers. An added
+undeclared dependency previously passed without changing any source receipt;
+it now fails closed, along with tampered versions, arbitrary headers, missing
+`PKG-INFO`, and altered description bytes. The normal
 Git-projected sdist continues to qualify. Source-only scope checks without
 `--verify-source-checkout` are explicitly not a substitute for this gate.
 The separate `scripts/check_core_wheel_source_identity.py` now independently

@@ -8,6 +8,7 @@ import json
 import subprocess
 import sys
 import tarfile
+import tomllib
 from pathlib import Path
 from typing import Any, cast
 
@@ -23,6 +24,39 @@ ESSENTIAL = (
     "apps/workspace/LICENSE",
     "MEDORIGIN_SOURCE_PROVENANCE.json",
 )
+
+
+def _add_bound_pkg_info(stage: Path) -> None:
+    """Materialize self-consistent test-only metadata for staged source fixtures."""
+    project = tomllib.loads((stage / "pyproject.toml").read_text(encoding="utf-8"))["project"]
+    fields = [
+        "Metadata-Version: 2.5",
+        f"Name: {project['name']}",
+        "Version: 0.3.0",
+        f"Summary: {project['description']}",
+    ]
+    fields.extend(f"Project-URL: {name}, {url}" for name, url in project["urls"].items())
+    fields.extend(
+        [
+            f"Author: {', '.join(author['name'] for author in project['authors'])}",
+            f"License-Expression: {project['license']}",
+            "License-File: LICENSE",
+            f"Keywords: {','.join(sorted(project['keywords']))}",
+        ]
+    )
+    fields.extend(f"Classifier: {value}" for value in project["classifiers"])
+    fields.append(f"Requires-Python: {project['requires-python']}")
+    extras = project.get("optional-dependencies", {})
+    for name, values in extras.items():
+        fields.append(f"Provides-Extra: {name}")
+        for requirement in values:
+            dependency, has_marker, marker = requirement.partition(";")
+            condition = f"({marker.strip()}) and " if has_marker else ""
+            fields.append(f"Requires-Dist: {dependency.strip()}; {condition}extra == '{name}'")
+    fields.append("Description-Content-Type: text/markdown")
+    (stage / "PKG-INFO").write_bytes(
+        ("\n".join(fields) + "\n\n").encode("utf-8") + (stage / "README.md").read_bytes()
+    )
 
 
 def _archive(
@@ -174,6 +208,7 @@ def test_rehashed_source_receipt_cannot_hide_missing_git_module(tmp_path: Path) 
         check=False,
     )
     assert result.returncode == 0, result.stderr
+    _add_bound_pkg_info(staged)
     removed = "src/medscale/cli/dataset.py"
     receipt_path = staged / "MEDORIGIN_SOURCE_PROVENANCE.json"
     receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
@@ -224,6 +259,79 @@ def test_rehashed_source_receipt_cannot_hide_missing_git_module(tmp_path: Path) 
     assert "Git source archive membership differs from provenance" in bound["issues"]
 
 
+def test_generated_pkg_info_installer_controls_are_git_bound(tmp_path: Path) -> None:
+    """A tampered sdist must not change dependencies, metadata, or README."""
+    stage = tmp_path / "source"
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(ROOT / "scripts/stage_medorigin_core_projection.py"),
+            "--out",
+            str(stage),
+        ],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    _add_bound_pkg_info(stage)
+    pkg = stage / "PKG-INFO"
+    original = pkg.read_bytes()
+
+    def check_bound(name: str) -> tuple[int, dict[str, Any]]:
+        output = tmp_path / (name + ".tar.gz")
+        with tarfile.open(output, "w:gz") as archive:
+            for file in sorted(path for path in stage.rglob("*") if path.is_file()):
+                info = archive.gettarinfo(
+                    str(file), arcname="medscale-0.3.0/" + file.relative_to(stage).as_posix()
+                )
+                with file.open("rb") as source:
+                    archive.addfile(info, source)
+        cmd = [
+            sys.executable,
+            str(SCRIPT),
+            "--sdist",
+            str(output),
+            "--verify-source-checkout",
+            str(ROOT),
+        ]
+        proc = subprocess.run(cmd, capture_output=True, text=True, check=False)
+        assert proc.stdout, proc.stderr
+        return proc.returncode, cast(dict[str, Any], json.loads(proc.stdout))
+
+    code, report = check_bound("genuine-source")
+    assert code == 0, report
+    header, divider, body = original.partition(b"\n\n")
+    assert divider
+    for name, tampered, expected in (
+        (
+            "unexpected-install-dependency",
+            header + b"\nRequires-Dist: synthetic-undisclosed-dependency>=9" + divider + body,
+            "Requires-Dist",
+        ),
+        (
+            "unexpected-control-header",
+            header + b"\nX-Extra-Installer-Control: yes" + divider + body,
+            "unapproved metadata fields",
+        ),
+        (
+            "wrong-project-version",
+            original.replace(b"Version: 0.3.0\n", b"Version: 9.9.9\n", 1),
+            "Version",
+        ),
+        ("different-readme-body", original + b"\nforged footer\n", "README body"),
+    ):
+        pkg.write_bytes(tampered)
+        code, report = check_bound(name)
+        assert code == 2, (name, report)
+        assert any(expected in issue for issue in report["issues"]), (name, report)
+    pkg.unlink()
+    code, report = check_bound("missing-pkg-info")
+    assert code == 2, report
+    assert any("PKG-INFO" in issue for issue in report["issues"]), report
+
+
 def test_rehashed_project_metadata_cannot_override_committed_root(tmp_path: Path) -> None:
     """An attacker must not authorize arbitrary metadata by editing its receipt."""
     stage_dir = tmp_path / "staged"
@@ -240,6 +348,7 @@ def test_rehashed_project_metadata_cannot_override_committed_root(tmp_path: Path
         check=False,
     )
     assert staged.returncode == 0, staged.stderr
+    _add_bound_pkg_info(stage_dir)
 
     def pack(name: str) -> Path:
         destination = tmp_path / name

@@ -10,7 +10,10 @@ import re
 import subprocess
 import sys
 import tarfile
+import tomllib
 import zipfile
+from email.parser import BytesParser
+from email.policy import default
 from pathlib import Path
 
 TOP_LEVEL = frozenset(
@@ -87,6 +90,82 @@ def _expected_projected_metadata(original: bytes) -> bytes:
         b'"MEDORIGIN_SOURCE_PROVENANCE.json"]\n'
     )
     return projected.replace(marker, marker + addition, 1)
+
+
+def _verify_generated_pkg_info(
+    metadata_bytes: bytes, project_bytes: bytes, readme_bytes: bytes
+) -> list[str]:
+    """Bind generated source-distribution installer metadata to its TOML source.
+
+    RECORD and the provenance receipt cover only package source; an unbound
+    PKG-INFO can otherwise advertise undeclared installer dependencies.
+    """
+    issues: list[str] = []
+    try:
+        project = tomllib.loads(project_bytes.decode("utf-8"))["project"]
+        metadata = BytesParser(policy=default).parsebytes(metadata_bytes)
+        header, separator, description = metadata_bytes.partition(b"\n\n")
+        if not header or not separator or description != readme_bytes:
+            issues.append("sdist PKG-INFO README body differs from committed source")
+        if metadata.defects:
+            issues.append("sdist PKG-INFO has malformed RFC822 metadata")
+        allowed = {
+            "metadata-version",
+            "name",
+            "version",
+            "summary",
+            "project-url",
+            "author",
+            "license-expression",
+            "license-file",
+            "keywords",
+            "classifier",
+            "requires-python",
+            "provides-extra",
+            "requires-dist",
+            "description-content-type",
+        }
+        if any(name.lower() not in allowed for name in metadata):
+            issues.append("sdist PKG-INFO contains unapproved metadata fields")
+
+        def check(field: str, expected: list[str], *, unordered: bool = False) -> None:
+            actual = [str(value) for value in metadata.get_all(field, [])]
+            if (sorted(actual) if unordered else actual) != (
+                sorted(expected) if unordered else expected
+            ):
+                issues.append(f"sdist PKG-INFO {field} differs from projected project")
+
+        for field, values in (
+            ("Metadata-Version", ["2.5"]),
+            ("Name", [project["name"]]),
+            ("Version", ["0.3.0"]),
+            ("Summary", [project["description"]]),
+            ("Project-URL", [f"{name}, {url}" for name, url in project["urls"].items()]),
+            ("Author", [", ".join(author["name"] for author in project["authors"])]),
+            ("License-Expression", [project["license"]]),
+            ("License-File", ["LICENSE"]),
+            ("Keywords", [",".join(sorted(project.get("keywords", [])))]),
+            ("Classifier", project.get("classifiers", [])),
+            ("Description-Content-Type", ["text/markdown"]),
+        ):
+            check(field, values, unordered=field in {"Project-URL", "Classifier"})
+        python_specs = [str(value) for value in metadata.get_all("Requires-Python", [])]
+        if len(python_specs) != 1 or sorted(
+            part.strip() for part in python_specs[0].split(",")
+        ) != sorted(part.strip() for part in project["requires-python"].split(",")):
+            issues.append("sdist PKG-INFO Requires-Python differs from projected project")
+        extras = project.get("optional-dependencies", {})
+        check("Provides-Extra", list(extras), unordered=True)
+        requirements = list(project.get("dependencies", []))
+        for extra, dependencies in extras.items():
+            for requirement in dependencies:
+                dependency, mark, marker = requirement.partition(";")
+                condition = f"({marker.strip()}) and " if mark else ""
+                requirements.append(f"{dependency.strip()}; {condition}extra == '{extra}'")
+        check("Requires-Dist", requirements, unordered=True)
+    except (KeyError, TypeError, ValueError, UnicodeError, AttributeError):
+        issues.append("sdist PKG-INFO or projected project metadata is malformed")
+    return issues
 
 
 def _verify_projection(archive: tarfile.TarFile, entries: set[str]) -> list[str]:
@@ -209,8 +288,32 @@ def _verify_source_checkout(archive: tarfile.TarFile, repository: Path) -> list[
                 # Rehashing a malicious pyproject and its self-declared receipt
                 # together must never pass committed-source verification.
                 metadata = archive.extractfile("medscale-0.3.0/pyproject.toml")
-                if metadata is None or metadata.read() != _expected_projected_metadata(committed):
+                if metadata is None:
                     issues.append("projected metadata differs from canonical Git transform")
+                else:
+                    projected_bytes = metadata.read()
+                    if projected_bytes != _expected_projected_metadata(committed):
+                        issues.append("projected metadata differs from canonical Git transform")
+                    else:
+                        # PKG-INFO is installer-facing source-distribution
+                        # metadata, independent of the source provenance map.
+                        # An attacker can change it without altering any code
+                        # or rehashing the self-attested source receipt.
+                        pkg_name = "medscale-0.3.0/PKG-INFO"
+                        package_info = (
+                            archive.extractfile(pkg_name)
+                            if pkg_name in archive.getnames()
+                            else None
+                        )
+                        readme = archive.extractfile("medscale-0.3.0/README.md")
+                        if package_info is None or readme is None:
+                            issues.append("Git-bound sdist PKG-INFO or README missing")
+                        else:
+                            issues.extend(
+                                _verify_generated_pkg_info(
+                                    package_info.read(), projected_bytes, readme.read()
+                                )
+                            )
         if (
             provenance.get("canonical_distribution_repository")
             != "https://github.com/AbdulazizShehri/MedOrigin"
