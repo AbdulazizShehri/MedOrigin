@@ -10,6 +10,10 @@ from pathlib import Path
 import pytest
 
 from medscale.mesc._canonical_json_v1 import canonical_json_bytes
+from medscale.mesc._mrl_0809_prerequisite_gate_v1 import (
+    MRL0809PrerequisiteGateError,
+    validate_static_prerequisites,
+)
 from medscale.mesc._mrl_machine_state_generation_v1 import (
     MachineStateGenerationError,
     generate_machine_state,
@@ -44,16 +48,23 @@ def _git(root: Path, *args: str) -> str:
     return completed.stdout.strip()
 
 
-def _clone(tmp_path: Path) -> Path:
+def _clone(tmp_path: Path, *, shared_objects: bool = False) -> Path:
     destination = tmp_path / "repo"
+    clone_flags = ("--shared", "--no-checkout") if shared_objects else ("--no-hardlinks",)
     subprocess.run(
-        ("git", "clone", "--quiet", "--no-hardlinks", str(_ROOT), str(destination)),
+        ("git", "clone", "--quiet", *clone_flags, str(_ROOT), str(destination)),
         check=True,
         capture_output=True,
         text=True,
     )
     source_head = _git(_ROOT, "rev-parse", "HEAD")
-    _git(destination, "checkout", "--detach", source_head)
+    if shared_objects:
+        # Git objects and index remain complete, but do not materialize the
+        # enormous historical working tree for this one-source adversarial case.
+        _git(destination, "update-ref", "--no-deref", "HEAD", source_head)
+        _git(destination, "read-tree", source_head)
+    else:
+        _git(destination, "checkout", "--detach", source_head)
     _git(destination, "config", "user.name", "MRL-0809 test")
     _git(destination, "config", "user.email", "mrl0809-test@example.invalid")
     _git(destination, "update-ref", "refs/remotes/origin/main", source_head)
@@ -222,14 +233,43 @@ def test_manual_checkbox_cannot_bypass_absent_prerequisite_gate(tmp_path: Path) 
 
 
 def test_manifest_bound_source_drift_fails_closed(tmp_path: Path) -> None:
-    repo = _clone(tmp_path)
-    path = repo / "src/medscale/backends/common.py"
-    path.write_bytes(path.read_bytes() + b"\n")
-    _commit(repo, "test: drift manifest-bound source", Path("src/medscale/backends/common.py"))
+    """Reject committed drift even when dependencies block aggregate evaluation."""
+    # Local alternates avoid copying the entire historical Git object database;
+    # changed objects are still committed into this isolated disposable clone.
+    repo = _clone(tmp_path, shared_objects=True)
+    tracked_source = Path("src/medscale/backends/common.py")
+    original_commit = _git(repo, "rev-parse", "HEAD")
+    original_blob = _git(repo, "rev-parse", f"HEAD:{tracked_source.as_posix()}")
+    manifest = subprocess.run(
+        ("git", "show", f"{original_commit}:{_MANIFEST.as_posix()}"),
+        cwd=repo,
+        check=True,
+        capture_output=True,
+    ).stdout
+    assert validate_static_prerequisites(repo, original_commit).manifest_sha256 == (
+        hashlib.sha256(manifest).hexdigest()
+    )
+    original_source = subprocess.run(
+        ("git", "show", f"{original_commit}:{tracked_source.as_posix()}"),
+        cwd=repo,
+        check=True,
+        capture_output=True,
+    ).stdout
+    path = repo / tracked_source
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(original_source + b"\n")
+    mutated_commit = _commit(repo, "test: drift manifest-bound source", tracked_source)
+    assert _git(repo, "rev-parse", f"HEAD:{tracked_source.as_posix()}") != original_blob
+
+    # The immutable v1 manifest is bound directly to committed Git bytes.
+    # A PLANNED predecessor causes the aggregate projector to short-circuit
+    # before it invokes MRL-0809's gate; this does not admit mutated evidence.
     with pytest.raises(
-        MachineStateGenerationError, match="MRL-0809 prerequisite gate failed closed"
+        MRL0809PrerequisiteGateError,
+        match=r"static prerequisite source drifted: src/medscale/backends/common\.py",
     ):
-        _task_state(repo, tmp_path)
+        validate_static_prerequisites(repo, mutated_commit)
+    assert _task_state(repo, tmp_path) == "PLANNED"
 
 
 def test_forged_present_slot_and_trust_fail_closed(tmp_path: Path) -> None:

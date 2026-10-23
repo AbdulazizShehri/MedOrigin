@@ -1,0 +1,48 @@
+name: MRL-0809 committed-source drift portability
+
+# Read-only diagnostic coverage for issue #599. No research manifest changes.
+# A green result is NOT MRL-0809 scientific admission or release authority.
+on:
+  pull_request:
+    paths:
+      - "tests/test_mesc_mrl_0809_machine_state_gate_v1.py"
+      - ".github/workflows/mrl0809-drift-portability.yml"
+      - "docs/releases/mrl0809_drift_portability_20261023.md"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  committed-source-gate:
+    name: Drift refusal (${{ matrix.os }}, Python ${{ matrix.python }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2025]
+        python: ["3.11", "3.12"]
+    steps:
+      - name: Checkout exact proposed commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Install pinned uv
+        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        with:
+          enable-cache: false
+      - name: Install Python
+        run: uv python install "${{ matrix.python }}"
+      - name: Install exact project lock
+        run: uv sync --frozen
+      - name: Qualify static drift refusal and non-promotion
+        shell: bash
+        run: |
+          set -euo pipefail
+          uv run --no-sync python -m pytest \
+            tests/test_mesc_mrl_0809_machine_state_gate_v1.py::test_manifest_bound_source_drift_fails_closed \
+            -q --basetemp=.mrl0809-drift-portability-tmp
+          echo "MRL0809_DIRECT_SOURCE_REFUSAL_AND_AGGREGATE_NON_PROMOTION_ONLY"
