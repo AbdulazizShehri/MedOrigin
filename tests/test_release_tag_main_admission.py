@@ -114,7 +114,7 @@ def test_release_workflow_gate_is_in_quality_chain() -> None:
     assert "persist-credentials: false" in gate
     assert "scripts/check_release_tag_main_head.py" in gate
     assert '--tag-ref "$GITHUB_REF" --event-sha "$GITHUB_SHA"' in gate
-    assert "needs: tag-main-admission" in quality
+    assert "needs: [tag-main-admission, tag-ruleset-admission]" in quality
     assert "needs: [quality, build, install-smoke]" in publish
     assert "needs: github-release" in index
     assert "contents: write" not in gate

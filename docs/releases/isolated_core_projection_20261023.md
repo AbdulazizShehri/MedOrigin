@@ -103,6 +103,18 @@ cannot publish; synthetic Git repositories exercise approved-main, unmerged
 branch, stale-main, missing-ref, and inconsistent-event negatives. This is an
 additional automated boundary, not a replacement for tag-protection rules,
 workflow governance, founder ADR acceptance, or an authorized publish switch.
+The future tag-push release path now also depends on a separate read-only
+`tag-ruleset-admission` job. It queries the effective GitHub repository and
+inherited rulesets and fails closed unless an **active tag-target ruleset**
+unambiguously covers every `refs/tags/v*` tag without excluded ref patterns
+and has the GitHub `creation`, `update`, and `deletion` restrictions. The
+admission job has read-only GitHub API access, no persisted checkout
+credentials, and no capability to create a ruleset, tag, or release. A missing
+rule blocks the chain before quality, build, GitHub Release and TestPyPI.
+The checker intentionally does **not** claim authorization to publish: GitHub
+may withhold bypass actors from read-only ruleset responses, so a repository
+administrator must separately verify that bypass is limited to explicitly
+authorized release actors. The same founder ADR and version gates still apply.
 Existing full main CI must continue testing the unchanged, frozen research
 source. The separate qualification workflow uses `contents: read` only.
 The nonpublishing release workflow's PR path filter includes the

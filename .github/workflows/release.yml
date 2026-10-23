@@ -13,7 +13,9 @@ on:
       - 'scripts/check_core_wheel_source_identity.py'
       - 'scripts/inspect_release_wheel_metadata.py'
       - 'scripts/check_release_tag_main_head.py'
+      - 'scripts/check_release_tag_governance.py'
       - 'tests/test_release_workflow_contract.py'
+      - 'tests/test_release_tag_governance.py'
       - 'tests/test_release_tag_main_admission.py'
       - 'tests/test_sdist_publication_scope.py'
       - 'tests/test_core_wheel_source_identity.py'
@@ -42,10 +44,28 @@ jobs:
           python3 scripts/check_release_tag_main_head.py \
             --repo . --tag-ref "$GITHUB_REF" --event-sha "$GITHUB_SHA"
 
+  tag-ruleset-admission:
+    name: verify v-tag governance (read-only)
+    if: github.event_name == 'push'
+    needs: tag-main-admission
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Refuse release if GitHub release-tag rules are missing
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          python3 scripts/check_release_tag_governance.py \
+            --repository "$GITHUB_REPOSITORY" --tag-ref "$GITHUB_REF"
+
   quality:
     name: quality gate
     if: github.event_name == 'push'
-    needs: tag-main-admission
+    needs: [tag-main-admission, tag-ruleset-admission]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
