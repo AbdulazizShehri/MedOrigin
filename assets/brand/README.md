@@ -1,20 +1,23 @@
-# MedOrigin — Visual Identity 01
+# MedOrigin — Official Visual Identity 01 (reference matched)
 
-Approved Concept: Overlap Forward.
-A solid orange circle and three charcoal slashes of identical width, length
-and tilt. The rightmost slash intersects the LEFT edge of the orange circle.
-The geometry does not match the placement of the Linear app logo.
+Founder-approved concept 01 / Overlap Forward, 23 October 2026.
 
-Colors: orange #FF6A00; charcoal #202020; paper #FAF7F3; white #FFFFFF.
-The selected orange matches the approved visual reference, not an asserted
-official third-party brand specification.
+The canonical symbol has TWO visible, equally sized, parallel charcoal
+diagonal strokes to the LEFT of a filled orange circle. A THIRD angled
+negative-space (transparent) cut crosses the LEFT edge of the orange disc.
+A thin orange segment remains on the outside of the transparent cut.
+Do NOT replace the negative-space cut with a third charcoal stroke or place
+three black strokes on the orange circle.
 
-The canonical editable masters are medorigin-symbol.svg and
-medorigin-lockup-horizontal.svg. All MedOrigin text is vector-outlined and
-requires no installed font. PNG/ICO files are practical exports.
-The inverse SVG is transparent and meant for dark backgrounds.
-The brand preview is an illustration, not a source asset.
+Colors: primary orange #FF6A00, charcoal #202020, paper #FAF7F3.
+SVG masters are vector based, font independent, and use a real transparent
+cut so they work on light and dark backgrounds. Inverse lockup uses white
+visible lines and wordmark. No gradient, glow, 3D, shadow, navy, or web font.
 
-Rules: Keep three lines equal, the circle solid, and all geometry flat.
-No navy, gradients, shadow, glow, or 3D effects. Test 16/32px icon clarity.
-No clinical approval or release is represented by this visual identity.
+Canonical files are medorigin-symbol.svg, medorigin-wordmark.svg,
+medorigin-lockup-horizontal.svg, medorigin-lockup-stacked.svg,
+medorigin-lockup-inverse.svg and medorigin-app-icon.svg. Other PNG, favicon
+and preview outputs are reproducible exports.
+
+Brand identity is not a clinical, scientific or release authorization.
+Source provenance and historical attribution remain unchanged.
