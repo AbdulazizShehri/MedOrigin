@@ -8,9 +8,39 @@ import sys
 import zipfile
 from email.message import Message
 from pathlib import Path
+from typing import Any, cast
 
 import pytest
-from scripts.inspect_release_wheel_metadata import EXPECTED_URLS, inspect_wheel
+
+HOME = "https://github.com/AbdulazizShehri/MedOrigin"
+EXPECTED_URLS = {
+    "Homepage": HOME,
+    "Repository": HOME,
+    "Documentation": HOME + "/tree/main/docs",
+    "Issues": HOME + "/issues",
+}
+SCRIPT = Path(__file__).resolve().parents[1] / "scripts" / "inspect_release_wheel_metadata.py"
+
+
+def inspect_wheel(
+    wheel: Path, *, expected_version: str | None = None, distribution: str = "medscale"
+) -> dict[str, Any]:
+    """Exercise the operator CLI instead of importing scripts under an alias."""
+    command = [
+        sys.executable,
+        str(SCRIPT),
+        "--wheel",
+        str(wheel),
+        "--distribution",
+        distribution,
+    ]
+    if expected_version is not None:
+        command.extend(["--expected-version", expected_version])
+    completed = subprocess.run(command, check=False, text=True, capture_output=True)
+    assert completed.returncode in (0, 2), completed.stderr
+    data = json.loads(completed.stdout)
+    assert isinstance(data, dict)
+    return cast(dict[str, Any], data)
 
 
 def _wheel(
