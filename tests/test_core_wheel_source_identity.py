@@ -9,6 +9,7 @@ import io
 import json
 import subprocess
 import sys
+import tomllib
 import zipfile
 from pathlib import Path
 from typing import Any, cast
@@ -35,14 +36,40 @@ def _source() -> dict[str, bytes]:
         }
 
 
+def _expected_metadata() -> bytes:
+    project = tomllib.loads(_git("show", "HEAD:pyproject.toml").decode("utf-8"))["project"]
+    fields = [
+        "Metadata-Version: 2.3",
+        f"Name: {project['name']}",
+        "Version: 0.3.0",
+        f"Requires-Python: {','.join(reversed(project['requires-python'].split(',')))}",
+        f"License-Expression: {project['license']}",
+        "License-File: LICENSE",
+    ]
+    for name, url in project["urls"].items():
+        fields.append(
+            "Project-URL: "
+            + name
+            + ", "
+            + url.replace("TheHalfMoon/MESC", "AbdulazizShehri/MedOrigin")
+        )
+    for extra, requirements in project["optional-dependencies"].items():
+        fields.append("Provides-Extra: " + extra)
+        for requirement in requirements:
+            dependency, sep, marker = requirement.partition(";")
+            suffix = f"({marker.strip()}) and " if sep else ""
+            fields.append(f"Requires-Dist: {dependency.strip()}; {suffix}extra == '{extra}'")
+    return ("\n".join(fields) + "\n").encode("utf-8")
+
+
 def _wheel(path: Path, mutation: str | None = None) -> Path:
     source = _source()
     entries = dict(source)
     entries.update(
         {
-            DIST_INFO + "METADATA": b"Metadata-Version: 2.3\nName: medscale\nVersion: 0.3.0\n",
-            DIST_INFO + "WHEEL": b"Wheel-Version: 1.0\nTag: py3-none-any\n",
-            DIST_INFO + "entry_points.txt": b"[console_scripts]\nmedscale=medscale.cli:main\n",
+            DIST_INFO + "METADATA": _expected_metadata(),
+            DIST_INFO + "WHEEL": b"Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
+            DIST_INFO + "entry_points.txt": b"[console_scripts]\nmedscale = medscale.cli:main\n",
             DIST_INFO + "licenses/LICENSE": _git("show", "HEAD:LICENSE"),
         }
     )
@@ -54,6 +81,16 @@ def _wheel(path: Path, mutation: str | None = None) -> Path:
         entries["data/private.json"] = b"{}"
     if mutation == "license":
         entries[DIST_INFO + "licenses/LICENSE"] = b"wrong license bytes"
+    if mutation == "entrypoint":
+        entries[DIST_INFO + "entry_points.txt"] += b"rogue = medscale.cli:main\n"
+    if mutation == "dependency":
+        entries[DIST_INFO + "METADATA"] += b"Requires-Dist: unapproved-network-package>=1.0\n"
+    if mutation == "wheel_tag":
+        entries[DIST_INFO + "WHEEL"] += b"Tag: cp311-win_amd64\n"
+    if mutation == "python_range":
+        entries[DIST_INFO + "METADATA"] = entries[DIST_INFO + "METADATA"].replace(
+            b"<3.15,>=3.11", b">=3.8"
+        )
     record = io.StringIO(newline="")
     writer = csv.writer(record, lineterminator="\n")
     for name, contents in sorted(entries.items()):
@@ -103,6 +140,10 @@ def test_full_committed_source_wheel_is_read_only_and_source_bound(tmp_path: Pat
         ("extra", "wheel Python payload membership differs from committed Git source"),
         ("outside", "wheel distribution metadata membership differs from allowlist"),
         ("license", "wheel license bytes differ from committed Git"),
+        ("entrypoint", "wheel console entry points differ from frozen Git project"),
+        ("dependency", "wheel dependencies differ from frozen Git project"),
+        ("wheel_tag", "wheel installer control Tag is not permitted"),
+        ("python_range", "wheel Python requirement differs from frozen Git project"),
         ("record", "invalid or duplicate wheel RECORD entry"),
     ],
 )

@@ -31,6 +31,16 @@ compares **every packaged Core source file** against exact committed
 unexpected distribution metadata, mismatched LICENSE bytes, duplicate/unsafe
 wheel entries, and incorrect PEP 376 `RECORD` hashes and sizes. An attacker
 cannot make injected Python code acceptable merely by recomputing `RECORD`.
+The guard also verifies **installer-controlled wheel metadata** against the
+byte-pinned frozen Git `pyproject.toml`: console entry points, all base and
+optional `Requires-Dist` dependencies, extra names, Python version range,
+canonical four project links, declared license, and pure-Python wheel tags.
+A separate synthetic attack added an unauthorized installation dependency
+and extra console script, then recomputed every `RECORD` digest. The older
+source-only verifier accepted those bytes; the hardened verifier now rejects
+them independently while accepting the actual staged Git-source wheel.
+Four fail-closed metadata mutation regressions cover these controls without
+changing the frozen project root, lockfile, research manifests or publishers.
 Both the PR-safe release workflow and the Linux 3.11/3.12 isolated-Core
 build qualification invoke this source-bound wheel guard **before** any
 artifact is uploaded for CI round-trip verification. Its proof is limited to

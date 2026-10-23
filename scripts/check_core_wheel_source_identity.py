@@ -14,7 +14,10 @@ import hashlib
 import io
 import json
 import subprocess
+import tomllib
 import zipfile
+from email.parser import BytesParser
+from email.policy import default
 from pathlib import Path
 
 DIST_INFO = "medscale-0.3.0.dist-info/"
@@ -30,6 +33,7 @@ DIST_INFO_FILES = frozenset(
 MAX_MEMBERS = 2_000
 MAX_MEMBER_SIZE = 30_000_000
 MAX_TOTAL_SIZE = 50_000_000
+FROZEN_ROOT_SHA256 = "c36c33208236dafb136a147dfff0060d592e23daab4b4240521d4747d23ea510"
 
 
 def _git(repository: Path, *args: str) -> bytes:
@@ -40,12 +44,82 @@ def _git(repository: Path, *args: str) -> bytes:
     ).stdout
 
 
+def _verify_install_metadata(members: dict[str, bytes], frozen_root: bytes) -> list[str]:
+    """Bind installer-executed entry points and dependencies to pinned source.
+
+    A valid self-rehashed RECORD never authorizes an added console command,
+    undeclared distribution dependency, changed Python requirement, or wheel tag.
+    """
+    issues: list[str] = []
+    if hashlib.sha256(frozen_root).hexdigest() != FROZEN_ROOT_SHA256:
+        return ["frozen project root identity differs from accepted Git SHA-256"]
+    try:
+        project = tomllib.loads(frozen_root.decode("utf-8"))["project"]
+        meta = BytesParser(policy=default).parsebytes(members[DIST_INFO + "METADATA"])
+        wheel = BytesParser(policy=default).parsebytes(members[DIST_INFO + "WHEEL"])
+        scripts = project["scripts"]
+        entry_lines = ["[console_scripts]"]
+        entry_lines.extend(f"{name} = {target}" for name, target in scripts.items())
+        expected_entry = ("\n".join(entry_lines) + "\n").encode("utf-8")
+        if members[DIST_INFO + "entry_points.txt"] != expected_entry:
+            issues.append("wheel console entry points differ from frozen Git project")
+        for key, expected in (
+            ("Name", project["name"]),
+            ("Version", "0.3.0"),
+            ("License-Expression", project["license"]),
+            ("License-File", "LICENSE"),
+        ):
+            if [str(v) for v in meta.get_all(key, [])] != [expected]:
+                issues.append(f"wheel METADATA {key} differs from frozen Git project")
+        python_range = [str(v) for v in meta.get_all("Requires-Python", [])]
+        if len(python_range) != 1 or sorted(
+            x.strip() for x in python_range[0].split(",")
+        ) != sorted(x.strip() for x in project["requires-python"].split(",")):
+            issues.append("wheel Python requirement differs from frozen Git project")
+        optional = project.get("optional-dependencies", {})
+        expected_reqs = list(project.get("dependencies", []))
+        for extra, values in optional.items():
+            for requirement in values:
+                dependency, sep, marker = requirement.partition(";")
+                constraint = f"({marker.strip()}) and " if sep else ""
+                expected_reqs.append(f"{dependency.strip()}; {constraint}extra == '{extra}'")
+        actual_reqs = [str(v) for v in meta.get_all("Requires-Dist", [])]
+        if sorted(actual_reqs) != sorted(expected_reqs):
+            issues.append("wheel dependencies differ from frozen Git project")
+        if sorted(str(v) for v in meta.get_all("Provides-Extra", [])) != sorted(optional):
+            issues.append("wheel optional extras differ from frozen Git project")
+        canonical_urls = {
+            name: value.replace("TheHalfMoon/MESC", "AbdulazizShehri/MedOrigin")
+            for name, value in project["urls"].items()
+        }
+        if sorted(str(v) for v in meta.get_all("Project-URL", [])) != sorted(
+            f"{name}, {url}" for name, url in canonical_urls.items()
+        ):
+            issues.append("wheel project URLs differ from accepted Git projection")
+        for key, expected in (
+            ("Wheel-Version", "1.0"),
+            ("Root-Is-Purelib", "true"),
+            ("Tag", "py3-none-any"),
+        ):
+            if [str(v) for v in wheel.get_all(key, [])] != [expected]:
+                issues.append(f"wheel installer control {key} is not permitted")
+        if any(
+            key.lower() not in {"wheel-version", "generator", "root-is-purelib", "tag"}
+            for key in wheel
+        ):
+            issues.append("unexpected wheel installer control field")
+    except (KeyError, TypeError, ValueError, UnicodeError, AttributeError):
+        issues.append("wheel installer metadata or frozen project root is malformed")
+    return issues
+
+
 def inspect(path: Path, repository: Path) -> dict[str, object]:
     issues: list[str] = []
     sources: dict[str, bytes] = {}
     members: dict[str, bytes] = {}
     commit = ""
     license_bytes = b""
+    project_bytes = b""
     try:
         commit = _git(repository, "rev-parse", "HEAD").decode("ascii").strip()
         source_archive = _git(repository, "archive", "--format=zip", commit, "--", "src/medscale")
@@ -64,6 +138,7 @@ def inspect(path: Path, repository: Path) -> dict[str, object]:
         if len(sources) < 200 or "medscale/__init__.py" not in sources:
             issues.append("committed Core package source set is incomplete")
         license_bytes = _git(repository, "show", f"{commit}:LICENSE")
+        project_bytes = _git(repository, "show", f"{commit}:pyproject.toml")
 
         total = 0
         with zipfile.ZipFile(path) as wheel:
@@ -117,6 +192,7 @@ def inspect(path: Path, repository: Path) -> dict[str, object]:
             issues.append("wheel distribution metadata membership differs from allowlist")
         if members.get(DIST_INFO + "licenses/LICENSE") != license_bytes:
             issues.append("wheel license bytes differ from committed Git")
+        issues.extend(_verify_install_metadata(members, project_bytes))
         record_bytes = members.get(DIST_INFO + "RECORD")
         if record_bytes is None:
             issues.append("wheel RECORD missing")
