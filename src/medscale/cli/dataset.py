@@ -79,14 +79,13 @@ def _write_manifests(dataset_dir: Path) -> Path:
     return dataset_dir / "manifest.json"
 
 
-def _freeze_command(dataset_dir: Path, created_at: str) -> int:
-    dataset_dir = dataset_dir.resolve()
-    if not dataset_dir.exists():
-        return _common.fail(f"dataset directory not found: {dataset_dir}")
+def _frozen_receipt_guard(dataset_dir: Path) -> int | None:
+    """Refuse overwriting frozen dataset evidence via *any* CLI writer.
 
-    # ADR-0030: freeze is an immutable receipt operation, not a repair tool.
-    # In particular, re-freezing a historical v0.2.0 dataset would silently
-    # replace its stale manifest checksum and destroy the original evidence.
+    This must apply equally to init --write, manifest --write and freeze:
+    the old freeze-only guard left an alternate path to erase manifest bytes.
+    Preserve historical v0.2.0 evidence even if its checksum is invalid.
+    """
     checksum_dir = dataset_dir / "checksums"
     if checksum_dir.exists() and any(checksum_dir.glob("*.sha256")):
         return _common.fail(
@@ -109,6 +108,16 @@ def _freeze_command(dataset_dir: Path, created_at: str) -> int:
                 f"refusing to overwrite a frozen dataset manifest: {manifest_path}",
                 hint="preserve existing evidence; use a fresh dataset identity",
             )
+    return None
+
+
+def _freeze_command(dataset_dir: Path, created_at: str) -> int:
+    dataset_dir = dataset_dir.resolve()
+    if not dataset_dir.exists():
+        return _common.fail(f"dataset directory not found: {dataset_dir}")
+    guard = _frozen_receipt_guard(dataset_dir)
+    if guard is not None:
+        return guard
 
     records_path = _layout.corpus_path(dataset_dir.parent).resolve()
     records = _load_records(records_path)
@@ -147,6 +156,10 @@ def _init_command(dataset_id: str, root: Path, write: bool) -> int:
     dataset_dir = root / dataset_id
     if dataset_dir.exists() and not write:
         return _common.fail(f"{dataset_dir} already exists; use --write to mutate explicitly")
+    if write and dataset_dir.exists():
+        guard = _frozen_receipt_guard(dataset_dir.resolve())
+        if guard is not None:
+            return guard
     if write:
         dataset_dir.mkdir(parents=True, exist_ok=True)
         (dataset_dir / "schema.json").write_text("{}", encoding="utf-8", newline="\n")
@@ -170,6 +183,10 @@ def _validate_command(dataset_dir: Path) -> int:
 def _manifest_command(dataset_dir: Path, write: bool) -> int:
     if not dataset_dir.exists():
         return _common.fail(f"dataset directory not found: {dataset_dir}")
+    if write:
+        guard = _frozen_receipt_guard(dataset_dir.resolve())
+        if guard is not None:
+            return guard
     preview = _preview_manifest(dataset_dir)
     if write:
         path = _write_manifests(dataset_dir)
