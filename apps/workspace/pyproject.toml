@@ -15,6 +15,12 @@ authors = [{ name = "Abdulaziz Alshehri" }]
 # migration remain reviewed code in this package.
 dependencies = ["cryptography==50.0.1"]
 
+[project.urls]
+Homepage = "https://github.com/AbdulazizShehri/MedOrigin"
+Repository = "https://github.com/AbdulazizShehri/MedOrigin"
+Documentation = "https://github.com/AbdulazizShehri/MedOrigin/tree/main/docs"
+Issues = "https://github.com/AbdulazizShehri/MedOrigin/issues"
+
 # The runtime __version__ remains the single source for wheel/sdist metadata.
 # Preserve the legacy distribution and import names for backward compatibility.
 [tool.hatch.version]

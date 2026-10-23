@@ -9,7 +9,7 @@ The repository has **two independent Python distributions**, both currently for 
 
 | Class | Build root | Distribution / current source version | Installed import / entry point | Status |
 | --- | --- | --- | --- | --- |
-| Research Core | Repository root | `medscale` / `0.2.0` | `import medscale`, `medscale --help` | Source-built developer tool; not a clinically qualified answer service |
+| Research Core | Repository root | `medscale` / `0.3.0` (unpublished source candidate) | `import medscale`, `medscale --help` | Source-built developer tool; not a clinically qualified answer service |
 | Clinical Workspace | `apps/workspace/` | `medscale-workspace` / `0.1.0.dev1` | `import medscale_workspace`, `python -m medscale_workspace` | Independently installable **synthetic offline Python shell/API**, no general-purpose desktop or browser GUI |
 
 These versions describe the current **source baseline**, not authorization to overwrite historical tag `v0.2.0` or claim a new release. A newly approved immutable package release needs a governed successor version and qualified exact-tag artifacts.
@@ -31,7 +31,7 @@ To check the Research Core wheel independently, use a fresh environment and run 
 
 ```bash
 python3.11 -m venv /tmp/medorigin-core-smoke
-/tmp/medorigin-core-smoke/bin/python -m pip install --no-index --no-deps build/core/medscale-0.2.0-py3-none-any.whl
+/tmp/medorigin-core-smoke/bin/python -m pip install --no-index --no-deps build/core/medscale-0.3.0-py3-none-any.whl
 cd /tmp
 ./medorigin-core-smoke/bin/python -c 'import medscale, importlib.metadata as m; print(m.version("medscale"), medscale.__file__)'
 ./medorigin-core-smoke/bin/medscale --version
