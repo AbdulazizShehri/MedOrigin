@@ -170,6 +170,10 @@ def test_symlink_is_rejected(tmp_path: Path) -> None:
         ("setuid", "file mode"),
         ("executable", "file mode"),
         ("pax-xattr", "PAX extension"),
+        ("uid", "owner metadata"),
+        ("gid", "owner metadata"),
+        ("uname", "owner metadata"),
+        ("gname", "owner metadata"),
     ],
 )
 def test_sdist_rejects_unauthenticated_tar_header_controls(
@@ -191,6 +195,14 @@ def test_sdist_rejects_unauthenticated_tar_header_controls(
                     member.mode = 0o4755
                 elif mutation == "executable":
                     member.mode = 0o755
+                elif mutation == "uid":
+                    member.uid = 1000
+                elif mutation == "gid":
+                    member.gid = 1000
+                elif mutation == "uname":
+                    member.uname = "untrusted-owner"
+                elif mutation == "gname":
+                    member.gname = "untrusted-group"
                 else:
                     member.pax_headers = {"SCHILY.xattr.user.proof": "test-only untrusted metadata"}
             target.addfile(member, io.BytesIO(payload.read()) if payload else None)
@@ -259,6 +271,8 @@ def test_rehashed_source_receipt_cannot_hide_missing_git_module(tmp_path: Path) 
                 arcname = "medscale-0.3.0/" + source.relative_to(staged).as_posix()
                 info = tar.gettarinfo(str(source), arcname=arcname)
                 info.mode = 0o644
+                info.uid = info.gid = 0
+                info.uname = info.gname = ""
                 with source.open("rb") as stream:
                     tar.addfile(info, stream)
         return output
@@ -326,6 +340,8 @@ def test_generated_pkg_info_installer_controls_are_git_bound(tmp_path: Path) -> 
                     str(file), arcname="medscale-0.3.0/" + file.relative_to(stage).as_posix()
                 )
                 info.mode = 0o644
+                info.uid = info.gid = 0
+                info.uname = info.gname = ""
                 with file.open("rb") as source:
                     archive.addfile(info, source)
         cmd = [
@@ -397,6 +413,8 @@ def test_rehashed_project_metadata_cannot_override_committed_root(tmp_path: Path
                 relative = path.relative_to(stage_dir).as_posix()
                 info = archive.gettarinfo(str(path), arcname="medscale-0.3.0/" + relative)
                 info.mode = 0o644
+                info.uid = info.gid = 0
+                info.uname = info.gname = ""
                 with path.open("rb") as stream:
                     archive.addfile(info, stream)
         return destination

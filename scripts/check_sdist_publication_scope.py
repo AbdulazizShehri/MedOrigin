@@ -369,6 +369,11 @@ def inspect(path: Path, *, source_repo: Path | None = None) -> dict[str, object]
                     issues.append("sdist file mode differs from qualified archive")
                 if member.pax_headers:
                     issues.append("sdist PAX extension metadata not permitted")
+                # Source content hashes do not attest TAR owner/group metadata.
+                # Qualified Hatchling sdist members are owner-neutral; accepting
+                # forged owners can affect extractors that restore ownership.
+                if member.uid != 0 or member.gid != 0 or member.uname or member.gname:
+                    issues.append("sdist owner metadata differs from qualified archive")
                 if member.size > MAX_ONE_FILE:
                     issues.append("sdist member exceeds size budget")
                 byte_total += member.size
