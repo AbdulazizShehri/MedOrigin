@@ -252,6 +252,64 @@ def test_untracked_zip_envelope_payload_is_rejected(tmp_path: Path, injection: s
     assert any("wheel ZIP envelope" in str(issue) for issue in report["issues"]), report
 
 
+@pytest.mark.parametrize("mutation", ["member-comment", "member-extra", "stored"])
+def test_untracked_member_metadata_is_rejected(tmp_path: Path, mutation: str) -> None:
+    """Archive member headers are not authenticated by RECORD content hashes."""
+    original = _wheel(tmp_path / "original.whl")
+    forged = tmp_path / "forged-member-header.whl"
+    with zipfile.ZipFile(original) as trusted, zipfile.ZipFile(forged, "w") as altered:
+        for info in trusted.infolist():
+            original_bytes = trusted.read(info)
+            if info.filename == "medscale/__about__.py":
+                if mutation == "member-comment":
+                    info.comment = b"UNTRACKED_MEMBER_COMMENT"
+                elif mutation == "member-extra":
+                    info.extra = bytes.fromhex("fe ca 04 00") + b"data"
+                else:
+                    info.compress_type = zipfile.ZIP_STORED
+            altered.writestr(info, original_bytes)
+    code, report = _inspect(forged)
+    assert code == 2, report
+    assert report["status"] == "BLOCKED"
+    assert any("wheel member header metadata" in str(x) for x in report["issues"]), report
+
+
+def test_untracked_zip_member_gap_is_rejected(tmp_path: Path) -> None:
+    """Unused bytes between valid local files are not covered by ZIP RECORD."""
+    original = _wheel(tmp_path / "original.whl")
+    with zipfile.ZipFile(original) as archive:
+        ordered = sorted(archive.infolist(), key=lambda item: item.header_offset)
+        gap_offset = ordered[1].header_offset
+        central_offset = archive.start_dir
+        count = len(ordered)
+
+    padding = b"UNTRACKED_GAP_BETWEEN_MEMBERS"
+    data = bytearray(original.read_bytes())
+    data[gap_offset:gap_offset] = padding
+    cursor = central_offset + len(padding)
+    for _ in range(count):
+        assert data[cursor : cursor + 4] == bytes.fromhex("50 4b 01 02")
+        name_length = int.from_bytes(data[cursor + 28 : cursor + 30], "little")
+        extra_length = int.from_bytes(data[cursor + 30 : cursor + 32], "little")
+        comment_length = int.from_bytes(data[cursor + 32 : cursor + 34], "little")
+        offset = int.from_bytes(data[cursor + 42 : cursor + 46], "little")
+        if offset >= gap_offset:
+            data[cursor + 42 : cursor + 46] = (offset + len(padding)).to_bytes(4, "little")
+        cursor += 46 + name_length + extra_length + comment_length
+
+    eocd_offset = len(data) - 22
+    data[eocd_offset + 16 : eocd_offset + 20] = (central_offset + len(padding)).to_bytes(
+        4, "little"
+    )
+    forged = tmp_path / "forged-gap.whl"
+    forged.write_bytes(data)
+    with zipfile.ZipFile(forged) as readable:
+        assert readable.testzip() is None  # ZIP itself remains readable and all CRCs match.
+    code, report = _inspect(forged)
+    assert code == 2, report
+    assert any("wheel local ZIP layout" in str(issue) for issue in report["issues"]), report
+
+
 def test_corrupt_wheel_is_rejected(tmp_path: Path) -> None:
     bad = tmp_path / "corrupt.whl"
     bad.write_bytes(b"not a zip archive")

@@ -44,6 +44,44 @@ def _git(repository: Path, *args: str) -> bytes:
     ).stdout
 
 
+def _plain_local_zip_layout(path: Path, archive: zipfile.ZipFile) -> bool:
+    """Require no hidden bytes between ZIP file headers and central directory.
+
+    RECORD attests decompressed bytes, not unused archive gaps, or different
+    local versus central header metadata. The audited Core wheel uses simple
+    deflated local records without extra fields or data descriptors.
+    """
+    entries = sorted(archive.infolist(), key=lambda info: info.header_offset)
+    if not entries or len(entries) > MAX_MEMBERS:
+        return False
+    cursor = 0
+    with path.open("rb") as source:
+        for info in entries:
+            if info.header_offset != cursor:
+                return False
+            source.seek(cursor)
+            header = source.read(30)
+            if len(header) != 30 or header[:4] != bytes.fromhex("50 4b 03 04"):
+                return False
+            flags = int.from_bytes(header[6:8], "little")
+            method = int.from_bytes(header[8:10], "little")
+            compressed = int.from_bytes(header[18:22], "little")
+            uncompressed = int.from_bytes(header[22:26], "little")
+            name_length = int.from_bytes(header[26:28], "little")
+            extra_length = int.from_bytes(header[28:30], "little")
+            if (
+                flags != 0
+                or method != zipfile.ZIP_DEFLATED
+                or extra_length != 0
+                or compressed != info.compress_size
+                or uncompressed != info.file_size
+                or source.read(name_length) != info.filename.encode("utf-8")
+            ):
+                return False
+            cursor = source.tell() + info.compress_size
+    return cursor == archive.start_dir
+
+
 def _verify_install_metadata(
     members: dict[str, bytes], frozen_root: bytes, readme_bytes: bytes
 ) -> list[str]:
@@ -201,6 +239,8 @@ def inspect(path: Path, repository: Path) -> dict[str, object]:
                 issues.append("wheel ZIP envelope contains untracked prefix, trailer or comment")
         total = 0
         with zipfile.ZipFile(path) as wheel:
+            if not _plain_local_zip_layout(path, wheel):
+                issues.append("wheel local ZIP layout includes untracked or inconsistent bytes")
             if wheel.comment or (wheel.infolist() and wheel.infolist()[0].header_offset != 0):
                 issues.append("wheel ZIP envelope is not a plain file-only archive")
             for info in wheel.infolist():
@@ -221,6 +261,17 @@ def inspect(path: Path, repository: Path) -> dict[str, object]:
                     or name != name.strip()
                 ):
                     issues.append("unsafe wheel path")
+                    continue
+                # ZIP central-directory fields are outside RECORD's content
+                # hash contract. Qualified wheel members are deflated regular
+                # files with no hidden extra/comment or installer flags.
+                if (
+                    info.comment
+                    or info.extra
+                    or info.flag_bits != 0
+                    or info.compress_type != zipfile.ZIP_DEFLATED
+                ):
+                    issues.append("wheel member header metadata is not qualified")
                     continue
                 if (info.external_attr >> 16) & 0o170000 == 0o120000:
                     issues.append("wheel symlink prohibited")
