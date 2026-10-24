@@ -37,7 +37,16 @@ including version, author, URLs, Python requirements, optional extras, all
 undeclared dependency previously passed without changing any source receipt;
 it now fails closed, along with tampered versions, arbitrary headers, missing
 `PKG-INFO`, and altered description bytes. The normal
-Git-projected sdist continues to qualify. Source-only scope checks without
+Git-projected sdist continues to qualify.
+The sdist verifier also binds TAR *headers*, not only file payloads: this
+exact Core Hatchling archive has only regular files at mode `0644` with no
+PAX extended attributes. A synthetic tarball carrying setuid/executable
+permissions or a PAX xattr previously passed the Git-bound source audit
+without changing any hashed file. These three negative cases are now
+rejected while an actual staged `medscale-0.3.0.tar.gz` retains a positive
+qualification. Synthetic fixtures reproduce the canonical header contract
+explicitly; this check is deliberately specific to this isolated Core lane.
+Source-only scope checks without
 `--verify-source-checkout` are explicitly not a substitute for this gate.
 The separate `scripts/check_core_wheel_source_identity.py` now independently
 compares **every packaged Core source file** against exact committed

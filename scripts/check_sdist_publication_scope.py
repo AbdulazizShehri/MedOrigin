@@ -360,8 +360,15 @@ def inspect(path: Path, *, source_repo: Path | None = None) -> dict[str, object]
                     issues.append("src contains non-Core payload")
                 elif parts[1] == "apps" and relative != "apps/workspace/LICENSE":
                     issues.append("apps contains non-license payload")
-                if not (member.isfile() or member.isdir()):
-                    issues.append("link or special file not permitted")
+                # The qualified Hatchling Core sdist is a file-only archive:
+                # every entry has regular-file mode 0644 and no PAX extensions.
+                # Source hashes do not authenticate TAR permissions or xattrs.
+                if not member.isfile():
+                    issues.append("sdist directory, link or special file not permitted")
+                if member.mode & 0o7777 != 0o644:
+                    issues.append("sdist file mode differs from qualified archive")
+                if member.pax_headers:
+                    issues.append("sdist PAX extension metadata not permitted")
                 if member.size > MAX_ONE_FILE:
                     issues.append("sdist member exceeds size budget")
                 byte_total += member.size

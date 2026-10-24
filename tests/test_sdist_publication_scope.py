@@ -12,6 +12,8 @@ import tomllib
 from pathlib import Path
 from typing import Any, cast
 
+import pytest
+
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "scripts" / "check_sdist_publication_scope.py"
 ESSENTIAL = (
@@ -162,6 +164,42 @@ def test_symlink_is_rejected(tmp_path: Path) -> None:
     assert any("special" in str(v) for v in result["issues"])
 
 
+@pytest.mark.parametrize(
+    ("mutation", "expected"),
+    [
+        ("setuid", "file mode"),
+        ("executable", "file mode"),
+        ("pax-xattr", "PAX extension"),
+    ],
+)
+def test_sdist_rejects_unauthenticated_tar_header_controls(
+    tmp_path: Path, mutation: str, expected: str
+) -> None:
+    """Identical source bytes and provenance never authorize TAR modes/xattrs."""
+    original = _archive(tmp_path / "known.tar.gz")
+    code, baseline = _run(original)
+    assert code == 0, baseline
+    forged = tmp_path / (mutation + ".tar.gz")
+    with (
+        tarfile.open(original, "r:gz") as source,
+        tarfile.open(forged, "w:gz", format=tarfile.PAX_FORMAT) as target,
+    ):
+        for member in source:
+            payload = source.extractfile(member)
+            if member.name == "medscale-0.3.0/README.md":
+                if mutation == "setuid":
+                    member.mode = 0o4755
+                elif mutation == "executable":
+                    member.mode = 0o755
+                else:
+                    member.pax_headers = {"SCHILY.xattr.user.proof": "test-only untrusted metadata"}
+            target.addfile(member, io.BytesIO(payload.read()) if payload else None)
+    status, report = _run(forged)
+    assert status == 2, report
+    assert report["status"] == "BLOCKED"
+    assert any(expected in issue for issue in report["issues"]), report
+
+
 def test_scope_only_receipt_cannot_impersonate_committed_git_source(tmp_path: Path) -> None:
     """An internally consistent scope receipt is not proof of Git-origin bytes."""
     archive = _archive(tmp_path / "unbound.tar.gz")
@@ -216,10 +254,11 @@ def test_rehashed_source_receipt_cannot_hide_missing_git_module(tmp_path: Path) 
 
     def package(filename: str) -> Path:
         output = tmp_path / filename
-        with tarfile.open(output, "w:gz") as tar:
+        with tarfile.open(output, "w:gz", format=tarfile.GNU_FORMAT) as tar:
             for source in sorted(path for path in staged.rglob("*") if path.is_file()):
                 arcname = "medscale-0.3.0/" + source.relative_to(staged).as_posix()
                 info = tar.gettarinfo(str(source), arcname=arcname)
+                info.mode = 0o644
                 with source.open("rb") as stream:
                     tar.addfile(info, stream)
         return output
@@ -281,11 +320,12 @@ def test_generated_pkg_info_installer_controls_are_git_bound(tmp_path: Path) -> 
 
     def check_bound(name: str) -> tuple[int, dict[str, Any]]:
         output = tmp_path / (name + ".tar.gz")
-        with tarfile.open(output, "w:gz") as archive:
+        with tarfile.open(output, "w:gz", format=tarfile.GNU_FORMAT) as archive:
             for file in sorted(path for path in stage.rglob("*") if path.is_file()):
                 info = archive.gettarinfo(
                     str(file), arcname="medscale-0.3.0/" + file.relative_to(stage).as_posix()
                 )
+                info.mode = 0o644
                 with file.open("rb") as source:
                     archive.addfile(info, source)
         cmd = [
@@ -352,10 +392,11 @@ def test_rehashed_project_metadata_cannot_override_committed_root(tmp_path: Path
 
     def pack(name: str) -> Path:
         destination = tmp_path / name
-        with tarfile.open(destination, "w:gz") as archive:
+        with tarfile.open(destination, "w:gz", format=tarfile.GNU_FORMAT) as archive:
             for path in sorted(p for p in stage_dir.rglob("*") if p.is_file()):
                 relative = path.relative_to(stage_dir).as_posix()
                 info = archive.gettarinfo(str(path), arcname="medscale-0.3.0/" + relative)
+                info.mode = 0o644
                 with path.open("rb") as stream:
                     archive.addfile(info, stream)
         return destination
