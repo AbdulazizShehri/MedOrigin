@@ -98,6 +98,19 @@ example, **not** full HL7 FHIR conformance, clinical correctness, or an
 authorized distribution. The example has no publication path and does not
 modify the frozen research root or historical v0.2.0 data.
 
+## Optional pinned synthetic case exploration
+
+The [native developer-only desktop example](../../examples/synthetic_fhir_developer_beta/README.md)
+also offers a **Synthetic cases** page when an already-installed,
+synthetic-only `medscale-workspace 0.1.0.dev1` runtime is supplied via
+`--workspace-python`. It reads precisely the bundled fictional patient and
+encounter fixtures by calling the installed Workspace snapshot, then
+presents only a pinned non-PHI label set. Unknown or changed object fields
+fail closed. The **Run FHIR validation** action transitions to the
+existing installed-Core validation workflow; no patient import, clinical
+functionality, network server or historical v0.2.0 dataset migration is
+introduced.
+
 ## Optional interactive native Developer Beta preview
 
 After installing the Core Wheel into a supported Python 3.11/3.12 environment,

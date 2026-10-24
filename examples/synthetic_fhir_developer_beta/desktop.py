@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import Any
 
 from reproduce import run_one, verify_workspace_shell
+from synthetic_cases import load_synthetic_case
 
 BACKGROUND = "#0d1118"
 SURFACE = "#171e29"
@@ -73,14 +74,21 @@ class Desktop:
         self.events: queue.Queue[tuple[str, Any]] = queue.Queue()
         self.working = False
         self.active = "Overview"
-        root.title("MedOrigin — Developer Beta")
+        root.title("MedOrigin - Developer Beta")
         root.geometry("1100x760")
         root.minsize(850, 610)
         root.configure(bg=BACKGROUND)
-        self.status = tk.StringVar(value="READY  ·  SYNTHETIC ONLY")
+        self.status = tk.StringVar(value="READY - SYNTHETIC ONLY")
         self.result_line = tk.StringVar(value="No synthetic validation has been run.")
-        self.report_hash = tk.StringVar(value="—")
-        self.fixture_hash = tk.StringVar(value="—")
+        self.report_hash = tk.StringVar(value="Not generated")
+        self.fixture_hash = tk.StringVar(value="Not generated")
+        self.case_status = tk.StringVar(
+            value="Synthetic fixture ready to load"
+            if workspace_python is not None
+            else "Optional Workspace not connected"
+        )
+        self.case_patient = tk.StringVar(value="Not loaded")
+        self.case_encounter = tk.StringVar(value="Not loaded")
         self.workspace_line = tk.StringVar(
             value="Optional synthetic Workspace configured"
             if workspace_python
@@ -133,10 +141,10 @@ class Desktop:
         header = tk.Frame(self.root, bg=BACKGROUND, height=94)
         header.pack(fill="x")
         header.pack_propagate(False)
-        self._label(header, "●", size=23, color=PRIMARY).pack(side="left", padx=(32, 7))
+        self._label(header, "O", size=23, color=PRIMARY).pack(side="left", padx=(32, 7))
         self._label(header, "MedOrigin", size=21, weight="bold").pack(side="left")
         self._label(
-            header, "DEVELOPER BETA  •  UNPUBLISHED", size=9, color=PRIMARY, weight="bold"
+            header, "DEVELOPER BETA - UNPUBLISHED", size=9, color=PRIMARY, weight="bold"
         ).pack(side="right", padx=35)
 
         line = tk.Frame(self.root, bg=BORDER, height=1)
@@ -149,7 +157,7 @@ class Desktop:
         self._label(side, "WORKSPACE", size=10, color=MUTED, weight="bold", bg=SURFACE).pack(
             anchor="w", padx=26, pady=(35, 14)
         )
-        for name in ("Overview", "Synthetic validation", "Safety & scope"):
+        for name in ("Overview", "Synthetic cases", "Synthetic validation", "Safety & scope"):
             b = tk.Button(
                 side,
                 text=name,
@@ -184,9 +192,10 @@ class Desktop:
 
         host = tk.Frame(body, bg=BACKGROUND)
         host.pack(side="left", fill="both", expand=True, padx=38, pady=35)
-        for name in ("Overview", "Synthetic validation", "Safety & scope"):
+        for name in ("Overview", "Synthetic cases", "Synthetic validation", "Safety & scope"):
             self.pages[name] = tk.Frame(host, bg=BACKGROUND)
         self._make_overview(self.pages["Overview"])
+        self._make_cases(self.pages["Synthetic cases"])
         self._make_validation(self.pages["Synthetic validation"])
         self._make_safety(self.pages["Safety & scope"])
 
@@ -212,7 +221,7 @@ class Desktop:
         self._label(p, "CORE ENGINE", 10, PRIMARY, "bold", bg=SURFACE).pack(
             anchor="w", padx=25, pady=(23, 6)
         )
-        self._label(p, "medscale 0.3.0  ·  Installed CLI", 16, FOREGROUND, "bold", bg=SURFACE).pack(
+        self._label(p, "medscale 0.3.0 - Installed CLI", 16, FOREGROUND, "bold", bg=SURFACE).pack(
             anchor="w", padx=25
         )
         self._label(
@@ -235,9 +244,56 @@ class Desktop:
             font=("Segoe UI", 13),
             anchor="w",
         ).pack(anchor="w", padx=25, pady=(0, 23))
-        self._button(page, "Run synthetic FHIR validation  →", self._begin_from_overview).pack(
+        self._button(page, "Run synthetic FHIR validation >", self._begin_from_overview).pack(
             anchor="w", pady=(27, 0)
         )
+
+    def _make_cases(self, page: tk.Frame) -> None:
+        self._subtitle(
+            page,
+            "Workspace fixture explorer",
+            "Explore a fictional case.",
+            "Load the pinned Synthetic Patient Alpha and Synthetic Encounter 001 "
+            "from a separately installed, synthetic-only Workspace. "
+            "Real patient files are not accepted.",
+        )
+        panel = self._panel(page)
+        self._label(panel, "FIXED SYNTHETIC CASE", 10, PRIMARY, "bold", bg=SURFACE).pack(
+            anchor="w", padx=25, pady=(23, 7)
+        )
+        for title, variable in (
+            ("Demo patient", self.case_patient),
+            ("Demo encounter", self.case_encounter),
+            ("Data classification", self.case_status),
+        ):
+            self._label(panel, title, 10, MUTED, bg=SURFACE).pack(anchor="w", padx=25, pady=(15, 5))
+            tk.Label(
+                panel,
+                textvariable=variable,
+                bg=SURFACE,
+                fg=FOREGROUND,
+                font=("Segoe UI", 13, "bold"),
+                anchor="w",
+                wraplength=600,
+                justify="left",
+            ).pack(fill="x", padx=25)
+        controls = tk.Frame(panel, bg=SURFACE)
+        controls.pack(anchor="w", padx=25, pady=24)
+        self.case_button = self._button(controls, "Load synthetic case", self._load_case)
+        if self.workspace_python is None:
+            self.case_button.configure(state="disabled")
+        self.case_button.pack(side="left")
+        self._button(controls, "Run FHIR validation", self._begin_from_overview, fill=False).pack(
+            side="left", padx=(12, 0)
+        )
+        self._label(
+            page,
+            "Demo-only identity is pinned to Workspace 0.1.0.dev1; "
+            "unexpected object fields are rejected rather than shown.",
+            10,
+            MUTED,
+            wraplength=660,
+        ).pack(anchor="w", pady=(22, 0))
 
     def _make_validation(self, page: tk.Frame) -> None:
         self._subtitle(
@@ -345,13 +401,33 @@ class Desktop:
             return
         self.working = True
         self.run_button.configure(state="disabled")
+        self.case_button.configure(state="disabled")
         self.copy_button.configure(state="disabled")
-        self.status.set("RUNNING  ·  LOCAL CHECK")
-        self.result_line.set("Checking bundled synthetic fixture…")
-        self.report_hash.set("—")
-        self.fixture_hash.set("—")
+        self.status.set("RUNNING - LOCAL CHECK")
+        self.result_line.set("Checking bundled synthetic fixture...")
+        self.report_hash.set("Not generated")
+        self.fixture_hash.set("Not generated")
         thread = threading.Thread(target=self._worker, daemon=True)
         thread.start()
+
+    def _load_case(self) -> None:
+        if self.working or self.workspace_python is None:
+            return
+        self.working = True
+        self.run_button.configure(state="disabled")
+        self.case_button.configure(state="disabled")
+        self.case_status.set("Checking installed synthetic fixture...")
+        threading.Thread(target=self._case_worker, daemon=True).start()
+
+    def _case_worker(self) -> None:
+        try:
+            if self.workspace_python is None:
+                raise ValueError("Synthetic Workspace not installed")
+            with tempfile.TemporaryDirectory(prefix="medorigin-case-read-") as directory:
+                admitted = load_synthetic_case(self.workspace_python, Path(directory))
+            self.events.put(("case-success", admitted))
+        except Exception:
+            self.events.put(("case-error", "Synthetic case could not be verified."))
 
     def _worker(self) -> None:
         try:
@@ -367,17 +443,27 @@ class Desktop:
                 kind, result = self.events.get_nowait()
                 self.working = False
                 self.run_button.configure(state="normal")
+                if self.workspace_python is not None:
+                    self.case_button.configure(state="normal")
+                if kind == "case-success":
+                    self.case_patient.set(result["patient"])
+                    self.case_encounter.set(result["encounter"])
+                    self.case_status.set("SYNTHETIC / verified fixture")
+                    continue
+                if kind == "case-error":
+                    self.case_patient.set("Not loaded")
+                    self.case_encounter.set("Not loaded")
+                    self.case_status.set("Synthetic case could not be verified.")
+                    continue
                 if kind == "success":
                     self.last_result = result
                     safe = result["fhir"]
-                    self.status.set("PASSED  ·  SYNTHETIC")
+                    self.status.set("PASSED - SYNTHETIC")
                     self.result_line.set("Local FHIR structural validation passed")
                     self.report_hash.set(safe["report_sha256"])
                     self.fixture_hash.set(safe["fixture_sha256"])
                     if result["workspace"] is not None:
-                        self.workspace_line.set(
-                            "Workspace 0.1.0.dev1  ·  SYNTHETIC / offline-shell"
-                        )
+                        self.workspace_line.set("Workspace 0.1.0.dev1 - SYNTHETIC / offline-shell")
                     self.copy_button.configure(state="normal")
                 else:
                     self.last_result = None

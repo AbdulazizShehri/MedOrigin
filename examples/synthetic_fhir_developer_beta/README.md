@@ -40,6 +40,28 @@ Its dependencies can require a normal *free* Python package installation
 before the local runtime can operate offline; this demo itself never uploads
 data or connects to an EHR.
 
+## Pinned synthetic case explorer (desktop preview only)
+
+The optional native Tkinter preview has a **Synthetic cases** navigation page.
+When `--workspace-python` points to a separately installed
+`medscale-workspace 0.1.0.dev1`, **Load synthetic case** reads the existing
+Workspace's immutable, fictional `Synthetic Patient Alpha` and
+`Synthetic Encounter 001` fixtures. The page also links to the ordinary
+**Run FHIR validation** workflow, using the already installed Core CLI.
+
+The explorer deliberately **does not** allow typing patient data, file
+selection, opening real medical records, searching a clinic, saving changes,
+or migrating historical datasets. An explicit **allowlist of the entire
+pinned Workspace snapshot** (including the fixture identities, SYNTHETIC
+classification and offline safety capabilities) must match before it shows
+the whitelisted synthetic names. Unexpected metadata, patient-like fields,
+wrong Workspace versions, or modified fixture bytes are **rejected rather
+than displayed**. Installed Workspace is optional: the synthetic Core
+validation screen continues to operate without it.
+
+The example is a **local developer UX prototype**, not a clinical patient
+directory, a persistent patient store, or a packaged desktop application.
+
 ## Native Windows desktop preview (interactive)
 
 An optional **real local Tkinter desktop window** is available for developers
