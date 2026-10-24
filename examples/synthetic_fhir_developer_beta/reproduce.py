@@ -111,6 +111,23 @@ def main(argv: list[str] | None = None) -> int:
         }
         record = output / "evidence.json"
         record.write_text(json.dumps(receipt, sort_keys=True, indent=2) + "\n", encoding="utf-8")
+        preview = subprocess.run(
+            [
+                sys.executable,
+                str(HERE / "preview.py"),
+                "--receipt",
+                str(record),
+                "--out",
+                str(output / "preview.html"),
+            ],
+            cwd=output,
+            capture_output=True,
+            text=True,
+            timeout=30,
+            check=False,
+        )
+        if preview.returncode != 0:
+            raise ValueError(f"local static preview failed: {preview.stderr[:250]}")
         print("MEDORIGIN_SYNTHETIC_FHIR_DEMO_PASS")
         print(f"report_sha256={runs[0]['report_sha256']}")
         print(f"receipt_sha256={digest(record)}")

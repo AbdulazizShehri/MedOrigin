@@ -80,6 +80,9 @@ only committed synthetic JSON fixtures. It exercises the documented and legacy
 FHIR commands, writes a local content-addressed validation report, rejects
 malformed JSON, and produces an inspectable receipt. The demo also supports an
 optional second Python runtime for comparing deterministic report bytes.
+It also generates a **standalone static `preview.html`** for locally
+reviewing the synthetic structural result and SHA-256 hashes in a browser,
+with no web server, external resources, JavaScript or patient data.
 
 The `valid` report status demonstrates this local structural validation
 example, **not** full HL7 FHIR conformance, clinical correctness, or an

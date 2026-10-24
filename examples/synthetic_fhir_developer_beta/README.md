@@ -14,6 +14,15 @@ On Linux/macOS, supply `venv/bin/medscale` instead. To compare output bytes from
 
 The command checks the installed distribution version, validates a tiny synthetic `StructureDefinition` file, verifies its local content-addressed `report.json`, exercises the documented and legacy FHIR commands, and confirms a malformed JSON fixture exits with code **1**. Successful completion prints `MEDORIGIN_SYNTHETIC_FHIR_DEMO_PASS` and the SHA-256 digests. `--out` must name a *nonexistent* directory, which protects existing evidence from accidental overwrite. If an error occurs, treat the partial output as nonqualifying.
 
+## Offline browser preview
+
+Successful execution also writes a **static `preview.html`** in the new
+`--out` folder. Open the file directly in a local browser: it displays
+the synthetic structural-check results, report and fixture SHA-256 hashes,
+and a prominent disclaimer. No web server, JavaScript, fonts from CDNs,
+data uploads or network connections are required. All rendered receipt
+fields are HTML-escaped, and the page declares a restrictive CSP.
+
 ## Strict limitations
 
 - Use synthetic inputs **only**. The `valid` result means the tiny fixture passed the **local structural validator**, not full HL7 FHIR standards conformance, clinical correctness, diagnostic accuracy or production EHR readiness.
