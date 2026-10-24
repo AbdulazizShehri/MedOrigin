@@ -40,6 +40,40 @@ Its dependencies can require a normal *free* Python package installation
 before the local runtime can operate offline; this demo itself never uploads
 data or connects to an EHR.
 
+## Native Windows desktop preview (interactive)
+
+An optional **real local Tkinter desktop window** is available for developers
+who have a trusted, **already-installed** `medscale 0.3.0` CLI. Python must
+include the standard-library Tkinter/Tcl runtime (confirmed on Windows Python
+3.11). Tkinter is not required by the Core Wheel or the existing CLI example.
+
+From the repository root, Windows PowerShell:
+
+```powershell
+python examples/synthetic_fhir_developer_beta/desktop.py --cli "C:/path/to/core/venv/Scripts/medscale.exe"
+```
+
+To display the separately installed **synthetic-only Workspace** status:
+
+```powershell
+python examples/synthetic_fhir_developer_beta/desktop.py --cli "C:/path/to/core/venv/Scripts/medscale.exe" --workspace-python "C:/path/to/workspace/venv/Scripts/python.exe"
+```
+
+This *functional developer preview*, not a full clinical GUI, has three
+screens: Overview, Synthetic validation and Safety & scope. Select
+**Validate synthetic fixture** to invoke the **installed CLI** asynchronously;
+the UI remains responsive, checks a bundled fictional fixture, and displays
+only a whitelisted result and its SHA-256 digest. **Copy report SHA-256** copies
+the displayed digest. Any optional Workspace result is restricted to the
+SYNTHETIC offline shell metadata with no patient fields. Only a local
+temporary directory is used for each run, cleaned after normal completion;
+interrupted processes may leave OS temporary files to clean up manually.
+
+**No arbitrary file opening, patient import, EHR connection, recording,
+clinical interpretation, permanent dataset store, server, or cloud call is
+implemented in this preview.** A missing Tk runtime should be treated as
+an unsupported optional GUI environment, not a failure of the Core CLI.
+
 ## Offline browser preview
 
 Successful execution also writes a **static `preview.html`** in the new

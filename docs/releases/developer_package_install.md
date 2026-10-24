@@ -98,6 +98,21 @@ example, **not** full HL7 FHIR conformance, clinical correctness, or an
 authorized distribution. The example has no publication path and does not
 modify the frozen research root or historical v0.2.0 data.
 
+## Optional interactive native Developer Beta preview
+
+After installing the Core Wheel into a supported Python 3.11/3.12 environment,
+developers may run the [synthetic-only Tkinter desktop preview](../../examples/synthetic_fhir_developer_beta/README.md)
+via `python examples/synthetic_fhir_developer_beta/desktop.py --cli
+/path/to/installed/medscale` (Windows uses `Scripts/medscale.exe`).
+This example is a **repository-only tool**, not a packaged installer or
+general-purpose clinician GUI. It provides an actual interactive validation
+button, report SHA-256 display and clipboard action, using **only bundled
+synthetic FHIR data** with temporary local reports. An optional separately
+installed Workspace Python environment can supply *strictly non-object*
+SYNTHETIC shell status; Tkinter may not be available on every Python install.
+No additional public release, PHI access or persistent production store is
+authorized by this preview.
+
 ## Hard stop boundaries
 
 - Use synthetic data only. There is **no authorization** to enter, import or process PHI or real-patient records; no production EHR writes or autonomous diagnosis.
