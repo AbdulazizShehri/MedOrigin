@@ -1,7 +1,10 @@
 """Read-only prepublication check for enforced GitHub release-tag protection.
 
-Requires GitHub CLI authentication with metadata:read (the Actions GITHUB_TOKEN
-has read access). No rule creation, releases, tag writes or admin APIs.
+Requires a GitHub CLI identity authorized to read complete ruleset details,
+including bypass_actors. GitHub can mask this field to non-admin callers,
+including the default Actions GITHUB_TOKEN. Unverifiable bypass metadata
+must block tag admission until a separately governed privileged read-only
+verification path is available. No rule creation, release or tag writes.
 """
 
 from __future__ import annotations
@@ -15,6 +18,9 @@ from typing import Any
 
 REQUIRED_RULES = frozenset({"creation", "update", "deletion"})
 CONSERVATIVE_V_TAG_TARGETS = frozenset({"~ALL", "refs/tags/v*", "refs/tags/*"})
+# GitHub repository role ID 5 is Administrator. Broader or unknown bypasses
+# must not satisfy a release-tag governance check.
+ALLOWED_BYPASS = {"actor_id": 5, "actor_type": "RepositoryRole", "bypass_mode": "always"}
 
 
 def qualifies_ruleset(ruleset: dict[str, Any]) -> bool:
@@ -31,6 +37,11 @@ def qualifies_ruleset(ruleset: dict[str, Any]) -> bool:
     if not isinstance(include, list) or not isinstance(exclude, list):
         return False
     if exclude or not any(v in CONSERVATIVE_V_TAG_TARGETS for v in include):
+        return False
+    bypass_actors = ruleset.get("bypass_actors")
+    if not isinstance(bypass_actors, list) or any(
+        not isinstance(actor, dict) or actor != ALLOWED_BYPASS for actor in bypass_actors
+    ):
         return False
     rules = ruleset.get("rules")
     if not isinstance(rules, list):
@@ -87,7 +98,7 @@ def inspect(
         "repository": repository,
         "tag_ref": tag_ref,
         "matching_ruleset_ids": sorted(set(qualifying)),
-        "bypass_actors_verified": False,
+        "bypass_actors_verified": bool(qualifying),
         "publication_authorized": False,
         "issues": problems,
     }
