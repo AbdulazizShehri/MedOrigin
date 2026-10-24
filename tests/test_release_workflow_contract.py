@@ -246,6 +246,7 @@ def test_tag_and_pr_paths_use_identical_audited_core_projection() -> None:
     assert "vars.GITHUB_RELEASE_PUBLISH_ENABLED == 'true'" in _job_block(text, "github-release")
     assert "vars.TESTPYPI_PUBLISH_ENABLED == 'true'" in _job_block(text, "testpypi-publish")
 
+
 def test_full_ci_shards_have_bounded_verbose_test_diagnostics() -> None:
     """Slow or stalled pytest nodes must be attributable and time-bounded."""
     ci = (_WORKFLOW.parent / "ci.yml").read_text(encoding="utf-8")
