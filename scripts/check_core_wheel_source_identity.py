@@ -185,8 +185,8 @@ def inspect(path: Path, repository: Path) -> dict[str, object]:
         # prepended or appended to a valid wheel archive. The qualified
         # Hatchling wheel is a plain ZIP: no self-extracting prefix, trailing
         # bytes or archive comment. Reject an untracked executable envelope.
-        size = path.stat().st_size
-        if size < 22 or size > MAX_TOTAL_SIZE + 5_000_000:
+        archive_size = path.stat().st_size
+        if archive_size < 22 or archive_size > MAX_TOTAL_SIZE + 5_000_000:
             issues.append("wheel ZIP envelope exceeds archive byte budget")
         else:
             with path.open("rb") as archive_bytes:
