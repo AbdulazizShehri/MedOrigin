@@ -1,0 +1,342 @@
+"""Adversarial checks that exact installed Core wheel code comes from Git."""
+
+from __future__ import annotations
+
+import base64
+import csv
+import hashlib
+import io
+import json
+import subprocess
+import sys
+import tomllib
+import zipfile
+from pathlib import Path
+from typing import Any, cast
+
+import pytest
+
+ROOT = Path(__file__).resolve().parents[1]
+SCRIPT = ROOT / "scripts/check_core_wheel_source_identity.py"
+DIST_INFO = "medscale-0.3.0.dist-info/"
+
+
+def _git(*args: str) -> bytes:
+    return subprocess.run(["git", *args], cwd=ROOT, check=True, capture_output=True).stdout
+
+
+def _source() -> dict[str, bytes]:
+    commit = _git("rev-parse", "HEAD").decode("ascii").strip()
+    data = _git("archive", "--format=zip", commit, "--", "src/medscale")
+    with zipfile.ZipFile(io.BytesIO(data)) as archive:
+        return {
+            name.removeprefix("src/"): archive.read(name)
+            for name in archive.namelist()
+            if not name.endswith("/")
+        }
+
+
+def _expected_metadata() -> bytes:
+    project = tomllib.loads(_git("show", "HEAD:pyproject.toml").decode("utf-8"))["project"]
+    fields = [
+        "Metadata-Version: 2.5",
+        f"Name: {project['name']}",
+        "Version: 0.3.0",
+        f"Summary: {project['description']}",
+        f"Author: {', '.join(author['name'] for author in project['authors'])}",
+        f"Keywords: {','.join(sorted(project['keywords']))}",
+        "Description-Content-Type: text/markdown",
+        f"Requires-Python: {','.join(reversed(project['requires-python'].split(',')))}",
+        f"License-Expression: {project['license']}",
+        "License-File: LICENSE",
+    ]
+    fields.extend(f"Classifier: {value}" for value in project["classifiers"])
+    for name, url in project["urls"].items():
+        fields.append(
+            "Project-URL: "
+            + name
+            + ", "
+            + url.replace("TheHalfMoon/MESC", "AbdulazizShehri/MedOrigin")
+        )
+    for extra, requirements in project["optional-dependencies"].items():
+        fields.append("Provides-Extra: " + extra)
+        for requirement in requirements:
+            dependency, sep, marker = requirement.partition(";")
+            suffix = f"({marker.strip()}) and " if sep else ""
+            fields.append(f"Requires-Dist: {dependency.strip()}; {suffix}extra == '{extra}'")
+    return ("\n".join(fields) + "\n\n").encode("utf-8") + _git("show", "HEAD:README.md")
+
+
+def _wheel(path: Path, mutation: str | None = None) -> Path:
+    source = _source()
+    entries = dict(source)
+    entries.update(
+        {
+            DIST_INFO + "METADATA": _expected_metadata(),
+            DIST_INFO + "WHEEL": b"Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
+            DIST_INFO + "entry_points.txt": b"[console_scripts]\nmedscale = medscale.cli:main\n",
+            DIST_INFO + "licenses/LICENSE": _git("show", "HEAD:LICENSE"),
+        }
+    )
+    if mutation == "tamper":
+        entries["medscale/__about__.py"] += b"\n# injected post-build code\n"
+    if mutation == "extra":
+        entries["medscale/injected.py"] = b"print('unexpected code')\n"
+    if mutation == "outside":
+        entries["data/private.json"] = b"{}"
+    if mutation == "license":
+        entries[DIST_INFO + "licenses/LICENSE"] = b"wrong license bytes"
+    if mutation == "entrypoint":
+        entries[DIST_INFO + "entry_points.txt"] += b"rogue = medscale.cli:main\n"
+    forged_headers = {
+        "dependency": b"Requires-Dist: unapproved-network-package>=1.0",
+        "unapproved_metadata_control": b"Obsoletes-Dist: legacy-other-package",
+        "metadata_summary": b"Summary: Trust me, certified software",
+    }
+    if mutation in forged_headers:
+        head, separator, description = entries[DIST_INFO + "METADATA"].partition(b"\n\n")
+        assert separator
+        entries[DIST_INFO + "METADATA"] = (
+            head + b"\n" + forged_headers[mutation] + separator + description
+        )
+    if mutation == "metadata_description":
+        entries[DIST_INFO + "METADATA"] += b"\nForged README footer\n"
+    if mutation == "wheel_tag":
+        entries[DIST_INFO + "WHEEL"] += b"Tag: cp311-win_amd64\n"
+    if mutation == "python_range":
+        entries[DIST_INFO + "METADATA"] = entries[DIST_INFO + "METADATA"].replace(
+            b"<3.15,>=3.11", b">=3.8"
+        )
+    record = io.StringIO(newline="")
+    writer = csv.writer(record, lineterminator="\n")
+    for name, contents in sorted(entries.items()):
+        digest = base64.urlsafe_b64encode(hashlib.sha256(contents).digest()).rstrip(b"=")
+        writer.writerow((name, "sha256=" + digest.decode("ascii"), str(len(contents))))
+    writer.writerow((DIST_INFO + "RECORD", "", ""))
+    entries[DIST_INFO + "RECORD"] = record.getvalue().encode("utf-8")
+    if mutation == "record":
+        entries[DIST_INFO + "RECORD"] = b"invalid,nohash,0\n"
+    with zipfile.ZipFile(path, mode="w", compression=zipfile.ZIP_DEFLATED) as archive:
+        for name, contents in entries.items():
+            member = zipfile.ZipInfo(name)
+            # Match the qualified Hatchling wheel permission contract.
+            member.external_attr = (0o100644 if name.startswith("medscale/") else 0o644) << 16
+            archive.writestr(member, contents, compress_type=zipfile.ZIP_DEFLATED)
+    return path
+
+
+def _inspect(path: Path) -> tuple[int, dict[str, Any]]:
+    run = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--wheel",
+            str(path),
+            "--verify-source-checkout",
+            str(ROOT),
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert run.returncode in (0, 2), run.stderr
+    return run.returncode, cast(dict[str, Any], json.loads(run.stdout))
+
+
+def test_full_committed_source_wheel_is_read_only_and_source_bound(tmp_path: Path) -> None:
+    code, report = _inspect(_wheel(tmp_path / "good.whl"))
+    assert code == 0, report
+    assert report["status"] == "SOURCE_BOUND_WHEEL_QUALIFIED_ONLY"
+    assert report["publication_authorized"] is False
+    assert report["source_file_count"] >= 200
+    assert report["wheel_members"] == report["source_file_count"] + 5
+
+
+@pytest.mark.parametrize(
+    ("mutation", "expected"),
+    [
+        ("tamper", "wheel payload bytes differ from committed Git source"),
+        ("extra", "wheel Python payload membership differs from committed Git source"),
+        ("outside", "wheel distribution metadata membership differs from allowlist"),
+        ("license", "wheel license bytes differ from committed Git"),
+        ("entrypoint", "wheel console entry points differ from frozen Git project"),
+        ("dependency", "wheel dependencies differ from frozen Git project"),
+        ("wheel_tag", "wheel installer control Tag is not permitted"),
+        ("python_range", "wheel Python requirement differs from frozen Git project"),
+        ("record", "invalid or duplicate wheel RECORD entry"),
+    ],
+)
+def test_rehashed_record_does_not_admit_unreviewed_payload(
+    tmp_path: Path, mutation: str, expected: str
+) -> None:
+    code, report = _inspect(_wheel(tmp_path / (mutation + ".whl"), mutation))
+    assert code == 2
+    assert report["status"] == "BLOCKED"
+    assert report["publication_authorized"] is False
+    assert any(expected in str(item) for item in report["issues"]), report
+
+
+@pytest.mark.parametrize(
+    "untrusted_directory",
+    [
+        "../escape/",
+        "medscale/unreviewed_dir/",
+        "medscale/../../escaped/",
+    ],
+)
+def test_unsafe_or_untracked_explicit_wheel_directory_is_rejected(
+    tmp_path: Path, untrusted_directory: str
+) -> None:
+    """ZIP directory entries also belong to the installer-facing wheel archive."""
+    wheel_path = _wheel(tmp_path / "dir-attack.whl")
+    with zipfile.ZipFile(wheel_path, "a") as archive:
+        archive.writestr(untrusted_directory, b"")
+    code, report = _inspect(wheel_path)
+    assert code == 2, report
+    assert any("wheel directory" in str(v) for v in report["issues"]), report
+
+
+@pytest.mark.parametrize(
+    "mutation", ["unapproved_metadata_control", "metadata_summary", "metadata_description"]
+)
+def test_self_rehashed_unapproved_distribution_metadata_is_rejected(
+    tmp_path: Path, mutation: str
+) -> None:
+    """Rehashing RECORD does not authorize arbitrary installer-facing metadata."""
+    code, report = _inspect(_wheel(tmp_path / (mutation + ".whl"), mutation))
+    assert code == 2, report
+    assert report["status"] == "BLOCKED"
+    assert any("METADATA" in str(v) for v in report["issues"]), report
+
+
+@pytest.mark.parametrize("mode", [0o100755, 0o104755, 0o120777, 0o40755])
+def test_rehashed_wheel_with_unapproved_file_permissions_is_rejected(
+    tmp_path: Path, mode: int
+) -> None:
+    """Wheel RECORD covers bytes but does not attest executable/setuid/special modes."""
+    trusted = _wheel(tmp_path / "trusted.whl")
+    altered = tmp_path / "forged-permissions.whl"
+    with zipfile.ZipFile(trusted) as source, zipfile.ZipFile(altered, "w") as output:
+        for info in source.infolist():
+            if info.filename == "medscale/__about__.py":
+                info.external_attr = mode << 16
+            output.writestr(info, source.read(info))
+    code, report = _inspect(altered)
+    assert code == 2, report
+    assert report["status"] == "BLOCKED"
+    assert any(
+        "wheel file permissions" in str(issue) or "wheel symlink prohibited" in str(issue)
+        for issue in report["issues"]
+    )
+
+
+@pytest.mark.parametrize("injection", ["prefix", "suffix", "zip-comment"])
+def test_untracked_zip_envelope_payload_is_rejected(tmp_path: Path, injection: str) -> None:
+    """Content hashes do not authorize executable preambles or trailing ZIP data."""
+    original = _wheel(tmp_path / "qualified.whl")
+    baseline_code, baseline = _inspect(original)
+    assert baseline_code == 0, baseline
+    forged = tmp_path / "injected-envelope.whl"
+    content = original.read_bytes()
+    if injection == "prefix":
+        forged.write_bytes(b"UNTRACKED_EXE_PREAMBLE" + content)
+    elif injection == "suffix":
+        forged.write_bytes(content + b"UNTRACKED_TRAILER")
+    else:
+        forged.write_bytes(content)
+        with zipfile.ZipFile(forged, "a") as archive:
+            archive.comment = b"UNTRACKED_ZIP_COMMENT"
+    code, report = _inspect(forged)
+    assert code == 2, report
+    assert report["status"] == "BLOCKED"
+    assert any("wheel ZIP envelope" in str(issue) for issue in report["issues"]), report
+
+
+@pytest.mark.parametrize("mutation", ["member-comment", "member-extra", "stored"])
+def test_untracked_member_metadata_is_rejected(tmp_path: Path, mutation: str) -> None:
+    """Archive member headers are not authenticated by RECORD content hashes."""
+    original = _wheel(tmp_path / "original.whl")
+    forged = tmp_path / "forged-member-header.whl"
+    with zipfile.ZipFile(original) as trusted, zipfile.ZipFile(forged, "w") as altered:
+        for info in trusted.infolist():
+            original_bytes = trusted.read(info)
+            if info.filename == "medscale/__about__.py":
+                if mutation == "member-comment":
+                    info.comment = b"UNTRACKED_MEMBER_COMMENT"
+                elif mutation == "member-extra":
+                    info.extra = bytes.fromhex("fe ca 04 00") + b"data"
+                else:
+                    info.compress_type = zipfile.ZIP_STORED
+            altered.writestr(info, original_bytes)
+    code, report = _inspect(forged)
+    assert code == 2, report
+    assert report["status"] == "BLOCKED"
+    assert any("wheel member header metadata" in str(x) for x in report["issues"]), report
+
+
+def test_untracked_zip_member_gap_is_rejected(tmp_path: Path) -> None:
+    """Unused bytes between valid local files are not covered by ZIP RECORD."""
+    original = _wheel(tmp_path / "original.whl")
+    with zipfile.ZipFile(original) as archive:
+        ordered = sorted(archive.infolist(), key=lambda item: item.header_offset)
+        gap_offset = ordered[1].header_offset
+        central_offset = archive.start_dir
+        count = len(ordered)
+
+    padding = b"UNTRACKED_GAP_BETWEEN_MEMBERS"
+    data = bytearray(original.read_bytes())
+    data[gap_offset:gap_offset] = padding
+    cursor = central_offset + len(padding)
+    for _ in range(count):
+        assert data[cursor : cursor + 4] == bytes.fromhex("50 4b 01 02")
+        name_length = int.from_bytes(data[cursor + 28 : cursor + 30], "little")
+        extra_length = int.from_bytes(data[cursor + 30 : cursor + 32], "little")
+        comment_length = int.from_bytes(data[cursor + 32 : cursor + 34], "little")
+        offset = int.from_bytes(data[cursor + 42 : cursor + 46], "little")
+        if offset >= gap_offset:
+            data[cursor + 42 : cursor + 46] = (offset + len(padding)).to_bytes(4, "little")
+        cursor += 46 + name_length + extra_length + comment_length
+
+    eocd_offset = len(data) - 22
+    data[eocd_offset + 16 : eocd_offset + 20] = (central_offset + len(padding)).to_bytes(
+        4, "little"
+    )
+    forged = tmp_path / "forged-gap.whl"
+    forged.write_bytes(data)
+    with zipfile.ZipFile(forged) as readable:
+        assert readable.testzip() is None  # ZIP itself remains readable and all CRCs match.
+    code, report = _inspect(forged)
+    assert code == 2, report
+    assert any("wheel local ZIP layout" in str(issue) for issue in report["issues"]), report
+
+
+def test_corrupt_wheel_is_rejected(tmp_path: Path) -> None:
+    bad = tmp_path / "corrupt.whl"
+    bad.write_bytes(b"not a zip archive")
+    code, report = _inspect(bad)
+    assert code == 2
+    assert report["status"] == "BLOCKED"
+
+
+def test_duplicate_python_entry_is_rejected(tmp_path: Path) -> None:
+    path = _wheel(tmp_path / "duplicate.whl")
+    with pytest.warns(UserWarning, match="Duplicate name"), zipfile.ZipFile(path, "a") as archive:
+        archive.writestr("medscale/__about__.py", b"overriding version")
+    code, report = _inspect(path)
+    assert code == 2
+    assert "duplicate wheel entry" in report["issues"]
+
+
+def test_release_workflows_require_source_bound_wheel_verification() -> None:
+    release = (ROOT / ".github/workflows/release.yml").read_text(encoding="utf-8")
+    check = (
+        'scripts/check_core_wheel_source_identity.py --wheel "$wheel" --verify-source-checkout .'
+    )
+    assert release.count(check) == 2
+    for step in release.split("      - name: Upload ", 1)[:1]:
+        assert check in step
+    qualification = (
+        ROOT / ".github/workflows/core-release-projection-qualification.yml"
+    ).read_text(encoding="utf-8")
+    assert '      - "tests/test_core_wheel_source_identity.py"' in qualification
+    assert qualification.count("scripts/check_core_wheel_source_identity.py") >= 3

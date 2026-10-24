@@ -10,6 +10,35 @@ from pathlib import Path
 import pytest
 
 from medscale.cli import fhir as fhir_cli
+from medscale.cli import main as public_cli_main
+
+
+def test_public_fhir_validate_dispatch_accepts_synthetic_file(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The documented console argv must work through the real top-level dispatcher."""
+    payload = {"resourceType": "StructureDefinition", "id": "synthetic-review"}
+    source = tmp_path / "synthetic.json"
+    source.write_text(json.dumps(payload), encoding="utf-8")
+
+    assert public_cli_main(["fhir", "validate", str(source), "--summary-only"]) == 0
+    assert json.loads(capsys.readouterr().out) == payload
+
+
+def test_public_fhir_validate_rejects_malformed_json(tmp_path: Path) -> None:
+    source = tmp_path / "invalid.json"
+    source.write_text("{invalid json", encoding="utf-8")
+    assert public_cli_main(["fhir", "validate", str(source)]) == 1
+
+
+def test_bare_legacy_fhir_file_dispatch_remains_supported(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    source = tmp_path / "legacy.json"
+    payload = {"resourceType": "StructureDefinition", "id": "legacy-synthetic"}
+    source.write_text(json.dumps(payload), encoding="utf-8")
+    assert public_cli_main(["fhir", str(source), "--summary-only"]) == 0
+    assert json.loads(capsys.readouterr().out) == payload
 
 
 def test_fhir_cli_is_importable() -> None:

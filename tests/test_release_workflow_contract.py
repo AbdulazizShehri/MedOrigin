@@ -22,6 +22,46 @@ def _job_block(text: str, job_id: str) -> str:
     return text[start:end]
 
 
+def test_pr_safe_release_qualification_triggers_on_trust_boundary_edits() -> None:
+    """Changes to artifact-verifier code must actually trigger release checks."""
+    workflow = _workflow_text()
+    prefix = workflow.split("jobs:", maxsplit=1)[0]
+    assert "  pull_request:\n    branches: [main]\n    paths:" in prefix
+    watch = prefix.split("    paths:", maxsplit=1)[1].split("  workflow_dispatch:", maxsplit=1)[0]
+    required = (
+        ".github/workflows/release.yml",
+        "scripts/stage_medorigin_core_projection.py",
+        "scripts/check_sdist_publication_scope.py",
+        "scripts/check_core_wheel_source_identity.py",
+        "scripts/inspect_release_wheel_metadata.py",
+        "scripts/check_release_tag_main_head.py",
+        "scripts/check_release_tag_governance.py",
+        "tests/test_release_workflow_contract.py",
+        "tests/test_release_tag_governance.py",
+        "tests/test_release_tag_main_admission.py",
+        "tests/test_sdist_publication_scope.py",
+        "tests/test_core_wheel_source_identity.py",
+        "tests/test_core_release_projection_identity.py",
+    )
+    for path in required:
+        assert f"      - '{path}'" in watch, path
+    # Future tag builds must remain independent of PR-only path filters.
+    assert '  push:\n    tags:\n      - "v*"' in prefix
+
+    projection_file = _WORKFLOW.parent / "core-release-projection-qualification.yml"
+    projection = projection_file.read_text(encoding="utf-8")
+    qualification_paths = projection.split("    paths:", maxsplit=1)[1].split(
+        "  workflow_dispatch:", maxsplit=1
+    )[0]
+    for path in (
+        "scripts/stage_medorigin_core_projection.py",
+        "scripts/check_core_wheel_source_identity.py",
+        "scripts/check_sdist_publication_scope.py",
+        "scripts/inspect_release_wheel_metadata.py",
+    ):
+        assert f'      - "{path}"' in qualification_paths, path
+
+
 def test_testpypi_publish_job_is_fail_closed_and_least_privilege() -> None:
     text = _workflow_text()
     block = _job_block(text, "testpypi-publish")
@@ -173,3 +213,63 @@ def test_tag_release_requires_qualified_wheel_url_gate_before_github_release() -
     assert "uv pip install --python .venv/bin/python --no-deps" in smoke
     assert "needs: [quality, build, install-smoke]" in release
     assert "vars.GITHUB_RELEASE_PUBLISH_ENABLED == 'true'" in release
+
+
+def test_tag_and_pr_paths_use_identical_audited_core_projection() -> None:
+    """Source build, metadata and sdist checks must precede all artifact use."""
+    text = _workflow_text()
+    required_stage = (
+        "uv run --no-sync python scripts/stage_medorigin_core_projection.py "
+        '--out "$RUNNER_TEMP/medorigin-core"'
+    )
+    required_build = 'run: uv build "$RUNNER_TEMP/medorigin-core" --out-dir dist'
+    wheel_check = "scripts/inspect_release_wheel_metadata.py --wheel"
+    archive_check = "scripts/check_sdist_publication_scope.py --sdist"
+    for job_id in ("build", "pr-artifact-build"):
+        block = _job_block(text, job_id)
+        assert block.count(required_stage) == 1
+        assert block.count(required_build) == 1
+        assert block.count(wheel_check) == 1
+        assert block.count(archive_check) == 1
+        assert block.index(required_stage) < block.index(required_build)
+        assert block.index(required_build) < block.index(wheel_check)
+        assert block.index(wheel_check) < block.index(archive_check)
+        assert block.index(archive_check) < block.index("actions/upload-artifact@")
+        assert "uv build\n" not in block
+        assert "contents: write" not in block
+        assert "id-token: write" not in block
+
+    assert text.count(required_stage) == 2
+    assert text.count(required_build) == 2
+    assert text.count(wheel_check) == 2
+    assert text.count(archive_check) == 2
+    assert "vars.GITHUB_RELEASE_PUBLISH_ENABLED == 'true'" in _job_block(text, "github-release")
+    assert "vars.TESTPYPI_PUBLISH_ENABLED == 'true'" in _job_block(text, "testpypi-publish")
+
+
+def test_full_ci_eight_shards_preserve_exact_full_inventory_and_coverage() -> None:
+    """More parallelism must never silently omit any test or coverage shard."""
+    ci = (_WORKFLOW.parent / "ci.yml").read_text(encoding="utf-8")
+    shard = _job_block(ci, "pytest-shard")
+    quality = _job_block(ci, "quality")
+    assert 'PYTEST_SHARD_COUNT: "8"' in ci.split("jobs:", maxsplit=1)[0]
+    assert "shard: [0, 1, 2, 3, 4, 5, 6, 7]" in shard
+    assert "buckets = [nodeids[index::shard_count] for index in range(shard_count)]" in shard
+    assert "set(flattened) != set(nodeids)" in shard
+    assert "test_nodes < pytest-shard.txt" in shard
+    assert "name: coverage-py${{ matrix.python-version }}-shard-${{ matrix.shard }}" in shard
+    assert 'test "${#coverage_files[@]}" -eq "${PYTEST_SHARD_COUNT}"' in quality
+    assert "uv run coverage report --show-missing --fail-under=77" in quality
+
+
+def test_full_ci_shards_have_bounded_verbose_test_diagnostics() -> None:
+    """Slow or stalled pytest nodes must be attributable and time-bounded."""
+    ci = (_WORKFLOW.parent / "ci.yml").read_text(encoding="utf-8")
+    shard = _job_block(ci, "pytest-shard")
+    assert "timeout-minutes: 45" in shard
+    assert "needs: static" in shard
+    assert "fail-fast: false" in shard
+    assert "-vv --durations=15" in shard
+    assert "--cov --cov-report= --cov-fail-under=0" in shard
+    assert '"${test_nodes[@]}"' in shard
+    assert 'test -s "${COVERAGE_FILE}"' in shard

@@ -53,7 +53,12 @@ def main(argv: list[str] | None = None) -> int:
         default=False,
         help="Print the normalized JSON payload and exit without validation.",
     )
-    args = parser.parse_args(argv)
+    # Public command is 'medscale fhir validate <file>'. Historically this
+    # module also accepted the bare 'medscale fhir <file>' spelling; keep both.
+    tokens = list(sys.argv[1:] if argv is None else argv)
+    if tokens and tokens[0] == "validate":
+        tokens.pop(0)
+    args = parser.parse_args(tokens)
     if args.input_file is None or not args.input_file.exists():
         print(f"input read error: {args.input_file} does not exist", file=sys.stderr)
         return 1
