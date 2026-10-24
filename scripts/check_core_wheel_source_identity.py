@@ -44,7 +44,9 @@ def _git(repository: Path, *args: str) -> bytes:
     ).stdout
 
 
-def _verify_install_metadata(members: dict[str, bytes], frozen_root: bytes) -> list[str]:
+def _verify_install_metadata(
+    members: dict[str, bytes], frozen_root: bytes, readme_bytes: bytes
+) -> list[str]:
     """Bind installer-executed entry points and dependencies to pinned source.
 
     A valid self-rehashed RECORD never authorizes an added console command,
@@ -58,6 +60,43 @@ def _verify_install_metadata(members: dict[str, bytes], frozen_root: bytes) -> l
         meta = BytesParser(policy=default).parsebytes(members[DIST_INFO + "METADATA"])
         wheel = BytesParser(policy=default).parsebytes(members[DIST_INFO + "WHEEL"])
         scripts = project["scripts"]
+        raw_metadata = members[DIST_INFO + "METADATA"]
+        header, separator, description = raw_metadata.partition(b"\n\n")
+        if not header or not separator or description != readme_bytes:
+            issues.append("wheel METADATA description differs from committed README")
+        if meta.defects:
+            issues.append("wheel METADATA contains malformed RFC822 fields")
+        allowed_headers = {
+            "metadata-version",
+            "name",
+            "version",
+            "summary",
+            "project-url",
+            "author",
+            "license-expression",
+            "license-file",
+            "keywords",
+            "classifier",
+            "requires-python",
+            "provides-extra",
+            "requires-dist",
+            "description-content-type",
+        }
+        if any(field.lower() not in allowed_headers for field in meta):
+            issues.append("wheel METADATA contains unapproved header")
+        for field, expected_values in (
+            ("Metadata-Version", ["2.5"]),
+            ("Summary", [project["description"]]),
+            ("Author", [", ".join(author["name"] for author in project["authors"])]),
+            ("Keywords", [",".join(sorted(project.get("keywords", [])))]),
+            ("Classifier", project.get("classifiers", [])),
+            ("Description-Content-Type", ["text/markdown"]),
+        ):
+            actual_values = [str(value) for value in meta.get_all(field, [])]
+            if (sorted(actual_values) if field == "Classifier" else actual_values) != (
+                sorted(expected_values) if field == "Classifier" else expected_values
+            ):
+                issues.append(f"wheel METADATA {field} differs from frozen Git project")
         entry_lines = ["[console_scripts]"]
         entry_lines.extend(f"{name} = {target}" for name, target in scripts.items())
         expected_entry = ("\n".join(entry_lines) + "\n").encode("utf-8")
@@ -120,6 +159,7 @@ def inspect(path: Path, repository: Path) -> dict[str, object]:
     commit = ""
     license_bytes = b""
     project_bytes = b""
+    readme_bytes = b""
     try:
         commit = _git(repository, "rev-parse", "HEAD").decode("ascii").strip()
         source_archive = _git(repository, "archive", "--format=zip", commit, "--", "src/medscale")
@@ -139,6 +179,7 @@ def inspect(path: Path, repository: Path) -> dict[str, object]:
             issues.append("committed Core package source set is incomplete")
         license_bytes = _git(repository, "show", f"{commit}:LICENSE")
         project_bytes = _git(repository, "show", f"{commit}:pyproject.toml")
+        readme_bytes = _git(repository, "show", f"{commit}:README.md")
 
         total = 0
         with zipfile.ZipFile(path) as wheel:
@@ -196,7 +237,7 @@ def inspect(path: Path, repository: Path) -> dict[str, object]:
             issues.append("wheel distribution metadata membership differs from allowlist")
         if members.get(DIST_INFO + "licenses/LICENSE") != license_bytes:
             issues.append("wheel license bytes differ from committed Git")
-        issues.extend(_verify_install_metadata(members, project_bytes))
+        issues.extend(_verify_install_metadata(members, project_bytes, readme_bytes))
         record_bytes = members.get(DIST_INFO + "RECORD")
         if record_bytes is None:
             issues.append("wheel RECORD missing")

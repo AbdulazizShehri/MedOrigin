@@ -39,13 +39,18 @@ def _source() -> dict[str, bytes]:
 def _expected_metadata() -> bytes:
     project = tomllib.loads(_git("show", "HEAD:pyproject.toml").decode("utf-8"))["project"]
     fields = [
-        "Metadata-Version: 2.3",
+        "Metadata-Version: 2.5",
         f"Name: {project['name']}",
         "Version: 0.3.0",
+        f"Summary: {project['description']}",
+        f"Author: {', '.join(author['name'] for author in project['authors'])}",
+        f"Keywords: {','.join(sorted(project['keywords']))}",
+        "Description-Content-Type: text/markdown",
         f"Requires-Python: {','.join(reversed(project['requires-python'].split(',')))}",
         f"License-Expression: {project['license']}",
         "License-File: LICENSE",
     ]
+    fields.extend(f"Classifier: {value}" for value in project["classifiers"])
     for name, url in project["urls"].items():
         fields.append(
             "Project-URL: "
@@ -59,7 +64,7 @@ def _expected_metadata() -> bytes:
             dependency, sep, marker = requirement.partition(";")
             suffix = f"({marker.strip()}) and " if sep else ""
             fields.append(f"Requires-Dist: {dependency.strip()}; {suffix}extra == '{extra}'")
-    return ("\n".join(fields) + "\n").encode("utf-8")
+    return ("\n".join(fields) + "\n\n").encode("utf-8") + _git("show", "HEAD:README.md")
 
 
 def _wheel(path: Path, mutation: str | None = None) -> Path:
@@ -83,8 +88,19 @@ def _wheel(path: Path, mutation: str | None = None) -> Path:
         entries[DIST_INFO + "licenses/LICENSE"] = b"wrong license bytes"
     if mutation == "entrypoint":
         entries[DIST_INFO + "entry_points.txt"] += b"rogue = medscale.cli:main\n"
-    if mutation == "dependency":
-        entries[DIST_INFO + "METADATA"] += b"Requires-Dist: unapproved-network-package>=1.0\n"
+    forged_headers = {
+        "dependency": b"Requires-Dist: unapproved-network-package>=1.0",
+        "unapproved_metadata_control": b"Obsoletes-Dist: legacy-other-package",
+        "metadata_summary": b"Summary: Trust me, certified software",
+    }
+    if mutation in forged_headers:
+        head, separator, description = entries[DIST_INFO + "METADATA"].partition(b"\n\n")
+        assert separator
+        entries[DIST_INFO + "METADATA"] = (
+            head + b"\n" + forged_headers[mutation] + separator + description
+        )
+    if mutation == "metadata_description":
+        entries[DIST_INFO + "METADATA"] += b"\nForged README footer\n"
     if mutation == "wheel_tag":
         entries[DIST_INFO + "WHEEL"] += b"Tag: cp311-win_amd64\n"
     if mutation == "python_range":
@@ -175,6 +191,19 @@ def test_unsafe_or_untracked_explicit_wheel_directory_is_rejected(
     code, report = _inspect(wheel_path)
     assert code == 2, report
     assert any("wheel directory" in str(v) for v in report["issues"]), report
+
+
+@pytest.mark.parametrize(
+    "mutation", ["unapproved_metadata_control", "metadata_summary", "metadata_description"]
+)
+def test_self_rehashed_unapproved_distribution_metadata_is_rejected(
+    tmp_path: Path, mutation: str
+) -> None:
+    """Rehashing RECORD does not authorize arbitrary installer-facing metadata."""
+    code, report = _inspect(_wheel(tmp_path / (mutation + ".whl"), mutation))
+    assert code == 2, report
+    assert report["status"] == "BLOCKED"
+    assert any("METADATA" in str(v) for v in report["issues"]), report
 
 
 def test_corrupt_wheel_is_rejected(tmp_path: Path) -> None:

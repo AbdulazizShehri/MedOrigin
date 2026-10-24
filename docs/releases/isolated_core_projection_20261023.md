@@ -60,6 +60,15 @@ source-only verifier accepted those bytes; the hardened verifier now rejects
 them independently while accepting the actual staged Git-source wheel.
 Four fail-closed metadata mutation regressions cover these controls without
 changing the frozen project root, lockfile, research manifests or publishers.
+The wheel verifier now also checks the exact `METADATA` header allowlist,
+metadata version, summary, author, keywords, classifiers and declared README
+content type against the pinned Git project, and compares the wheel's
+embedded Markdown description byte-for-byte with committed `README.md`.
+Before this hardening, a synthetic wheel with an extra `Obsoletes-Dist` header
+or forged `Summary` passed even after fully rehashing `RECORD`. Both changes,
+and an altered description body, now fail closed while the actual staged wheel
+continues to qualify. The source-distribution `PKG-INFO` verifier applies
+a matching source-bound policy independently.
 Both the PR-safe release workflow and the Linux 3.11/3.12 isolated-Core
 build qualification invoke this source-bound wheel guard **before** any
 artifact is uploaded for CI round-trip verification. Its proof is limited to
