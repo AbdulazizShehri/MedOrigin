@@ -63,6 +63,15 @@ jobs:
       - name: Docs link hygiene
         run: uv run python scripts/check_docs_links.py
 
+      # CI checks out full Git history above; this only exports the pinned
+      # historical and current source into isolated synthetic temp trees.
+      # Exit 0 means the documented incompatibility was reproduced, NOT release-ready.
+      - name: Historical synthetic dataset format replay (read-only)
+        run: >-
+          uv run --no-sync python scripts/audit_historical_dataset_compatibility.py
+          --repo .
+          --json-out "${{ runner.temp }}/medorigin-history-${{ matrix.python-version }}.json"
+
       - name: MRL canonical closeout evidence live binding
         if: github.event_name == 'pull_request' && matrix.python-version == '3.11'
         env:

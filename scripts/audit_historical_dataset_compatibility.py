@@ -178,6 +178,80 @@ def inspect(repo: Path, workspace: Path) -> dict[str, Any]:
     }
 
 
+def evaluate_replay(report: dict[str, Any]) -> list[str]:
+    """Fail closed if the pinned synthetic historical-compatibility matrix drifts.
+
+    A passing result means only that the known INCOMPATIBILITY and safeguards
+    were reproduced. It never establishes cross-version compatibility.
+    """
+    issues: list[str] = []
+    if report.get("baseline") != HISTORICAL:
+        issues.append("historical source commit differs from pinned v0.2.0")
+    candidate = report.get("candidate")
+    if (
+        not isinstance(candidate, str)
+        or len(candidate) != 40
+        or any(char not in "0123456789abcdef" for char in candidate)
+        or candidate == HISTORICAL
+    ):
+        issues.append("candidate source commit is not a distinct canonical SHA")
+    if report.get("synthetic_only") is not True:
+        issues.append("audit evidence must use synthetic datasets only")
+    if report.get("publication_authorized") is not False:
+        issues.append("audit evidence cannot authorize publication")
+    cases = report.get("cases")
+    if not isinstance(cases, dict) or set(cases) != {"v0.2.0", "candidate"}:
+        issues.append("historical and candidate result cases missing")
+        return issues
+    expected = {
+        "v0.2.0": {"freeze": 1, "v0.2.0": 1, "candidate": 1, "checksum": False},
+        "candidate": {"freeze": 0, "v0.2.0": 1, "candidate": 0, "checksum": True},
+    }
+    for name, contract in expected.items():
+        entry = cases[name]
+        if not isinstance(entry, dict):
+            issues.append(f"{name}: invalid result type")
+            continue
+        if entry.get("manifest_exit") != 0:
+            issues.append(f"{name}: initial manifest creation did not succeed")
+        freeze = entry.get("freeze")
+        if not isinstance(freeze, dict) or freeze.get("exit") != contract["freeze"]:
+            issues.append(f"{name}: freeze exit differs from audited baseline")
+        validations = entry.get("validations")
+        for validator in ("v0.2.0", "candidate"):
+            observed = validations.get(validator) if isinstance(validations, dict) else None
+            if not isinstance(observed, dict) or observed.get("exit") != contract[validator]:
+                issues.append(f"{name}: {validator} validator differs from audited baseline")
+        if entry.get("manifest_checksum_matches") is not contract["checksum"]:
+            issues.append(f"{name}: manifest checksum relation changed")
+        digests = (entry.get("manifest_sha256"), entry.get("recorded_manifest_sha256"))
+        if not all(
+            isinstance(value, str)
+            and len(value) == 64
+            and all(char in "0123456789abcdef" for char in value)
+            for value in digests
+        ):
+            issues.append(f"{name}: missing or invalid manifest checksums")
+        elif (digests[0] == digests[1]) is not contract["checksum"]:
+            issues.append(f"{name}: recorded checksum contradicts computed relation")
+        guards = entry.get("writer_guards")
+        if not isinstance(guards, dict) or set(guards) != {
+            "freeze",
+            "manifest-write",
+            "init-write",
+        }:
+            issues.append(f"{name}: immutable-writer coverage incomplete")
+        else:
+            for operation, result in guards.items():
+                if (
+                    not isinstance(result, dict)
+                    or result.get("exit") != 2
+                    or result.get("all_artifact_bytes_preserved") is not True
+                ):
+                    issues.append(f"{name}: {operation} did not refuse without mutation")
+    return issues
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--repo", type=Path, default=Path(__file__).resolve().parents[1])
@@ -185,6 +259,9 @@ def main() -> int:
     args = parser.parse_args()
     with tempfile.TemporaryDirectory(prefix="medorigin-history-replay-") as directory:
         report = inspect(args.repo.resolve(), Path(directory))
+    issues = evaluate_replay(report)
+    report["status"] = "KNOWN_INCOMPATIBILITY_REPRODUCED_ONLY" if not issues else "BLOCKED"
+    report["issues"] = issues
     args.json_out.write_text(json.dumps(report, sort_keys=True, indent=2) + "\n", encoding="utf-8")
     cases = report["cases"]
     for name in ("v0.2.0", "candidate"):
@@ -199,13 +276,9 @@ def main() -> int:
             f"validate_candidate={case['validations']['candidate']['exit']} "
             f"preserved={preserved}"
         )
-    if not all(
-        operation["all_artifact_bytes_preserved"] and operation["exit"] != 0
-        for case in cases.values()
-        for operation in case["writer_guards"].values()
-    ):
-        return 2
-    return 0
+    if issues:
+        print("audit baseline drift: " + "; ".join(issues), file=sys.stderr)
+    return 2 if issues else 0
 
 
 if __name__ == "__main__":

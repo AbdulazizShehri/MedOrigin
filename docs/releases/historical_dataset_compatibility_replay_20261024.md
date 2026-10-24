@@ -67,8 +67,16 @@ python scripts/audit_historical_dataset_compatibility.py \
 The command exports only pinned source trees from Git, constructs all
 test datasets inside a temporary directory, executes isolated local
 subprocesses, snapshots file SHA-256 values, and writes an inspectable
-machine-readable JSON receipt. It does **not** install software, download
-data, modify an existing dataset, change tags, use patient/PHI data, or
+machine-readable JSON receipt. The CLI now reports
+`KNOWN_INCOMPATIBILITY_REPRODUCED_ONLY` **only** when the documented
+historical/current freeze, checksum, validator and immutable-writer matrix
+matches its audited baseline; any missing evidence, changed exit code,
+unexpected compatibility result or mutated dataset returns `BLOCKED` with a
+nonzero exit code. This is a **regression detector of known incompatibility**,
+not a claim that old and new formats have become compatible. GitHub CI's
+read-only static jobs rerun the comparison under Python 3.11 and 3.12 using
+complete Git history; receipts stay in temporary runner storage. The command
+does **not** install software, download data, modify an existing dataset, change tags, use patient/PHI data, or
 publish any package. `historical_synthetic_receipt.json` is a local
 output; do not confuse it with a project release or an independent review.
 
