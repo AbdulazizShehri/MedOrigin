@@ -6,6 +6,7 @@ import importlib
 import os
 import sys
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -16,14 +17,14 @@ OTHER_HEX = "b" * 64
 
 
 @pytest.fixture
-def desktop(monkeypatch: pytest.MonkeyPatch):
+def desktop(monkeypatch: pytest.MonkeyPatch) -> Any:
     pytest.importorskip("tkinter")
     monkeypatch.syspath_prepend(str(EXAMPLE_DIR))
     sys.modules.pop("desktop", None)
     return importlib.import_module("desktop")
 
 
-def test_public_projection_whitelists_fields(desktop) -> None:
+def test_public_projection_whitelists_fields(desktop: Any) -> None:
     payload = {
         "structural_status": "valid",
         "malformed_exit": 1,
@@ -49,17 +50,17 @@ def test_public_projection_whitelists_fields(desktop) -> None:
         {"structural_status": "valid", "malformed_exit": 1, "report_sha256": "A" * 64},
     ],
 )
-def test_public_projection_rejects_invalid_evidence(desktop, broken) -> None:
+def test_public_projection_rejects_invalid_evidence(desktop: Any, broken: Any) -> None:
     with pytest.raises(ValueError):
         desktop.public_result(broken)
 
 
 def test_validation_always_uses_temporary_local_synthetic_data(
-    desktop, monkeypatch: pytest.MonkeyPatch
+    desktop: Any, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     observed: list[Path] = []
 
-    def fake_run(_cli: Path, directory: Path, label: str):
+    def fake_run(_cli: Path, directory: Path, label: str) -> None:
         assert label == "desktop"
         assert directory.is_dir()
         assert directory.name.startswith("medorigin-synthetic-ui-")
@@ -86,7 +87,7 @@ def test_validation_always_uses_temporary_local_synthetic_data(
 
 
 def test_workspace_status_rejects_extra_patient_like_fields(
-    desktop, monkeypatch: pytest.MonkeyPatch
+    desktop: Any, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setattr(
         desktop,
@@ -115,7 +116,7 @@ def test_workspace_status_rejects_extra_patient_like_fields(
     assert "PRIVATE-SENTINEL" not in str(error.value)
 
 
-def test_native_window_initializes_and_pages_navigate(desktop) -> None:
+def test_native_window_initializes_and_pages_navigate(desktop: Any) -> None:
     if os.name != "nt" and not os.environ.get("DISPLAY"):
         pytest.skip("no graphical display in hosted CI")
     import tkinter as tk

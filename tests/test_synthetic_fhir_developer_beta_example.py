@@ -6,6 +6,7 @@ import importlib.util
 import json
 import sys
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -13,7 +14,7 @@ ROOT = Path(__file__).resolve().parents[1]
 EXAMPLE = ROOT / "examples" / "synthetic_fhir_developer_beta"
 
 
-def _module():
+def _module() -> Any:
     spec = importlib.util.spec_from_file_location(
         "medorigin_synthetic_example", EXAMPLE / "reproduce.py"
     )
@@ -58,7 +59,7 @@ def test_digests_match_fixture_bytes() -> None:
     assert "publication_authorized" in (EXAMPLE / "reproduce.py").read_text(encoding="utf-8")
 
 
-def _preview_module():
+def _preview_module() -> Any:
     spec = importlib.util.spec_from_file_location(
         "medorigin_synthetic_preview", EXAMPLE / "preview.py"
     )

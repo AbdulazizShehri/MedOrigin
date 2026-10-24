@@ -7,6 +7,7 @@ import json
 import os
 import sys
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -16,7 +17,7 @@ OTHER_SHA = "b" * 64
 
 
 @pytest.fixture
-def exported(monkeypatch: pytest.MonkeyPatch):
+def exported(monkeypatch: pytest.MonkeyPatch) -> Any:
     monkeypatch.syspath_prepend(str(DIR))
     sys.modules.pop("evidence_export", None)
     return importlib.import_module("evidence_export")
@@ -35,7 +36,7 @@ def admitted(*, workspace: bool = False) -> dict[str, object]:
     }
 
 
-def test_receipt_contains_only_safe_evidence(exported) -> None:
+def test_receipt_contains_only_safe_evidence(exported: Any) -> None:
     receipt = exported.build_receipt(admitted())
     assert receipt["data_class"] == "SYNTHETIC"
     assert receipt["fhir"]["report_sha256"] == GOOD_SHA
@@ -48,7 +49,7 @@ def test_receipt_contains_only_safe_evidence(exported) -> None:
     assert "patient" not in json.dumps(receipt).lower()
 
 
-def test_workspace_case_attestation_is_boolean_not_identity(exported) -> None:
+def test_workspace_case_attestation_is_boolean_not_identity(exported: Any) -> None:
     receipt = exported.build_receipt(admitted(workspace=True), case_verified=True)
     assert receipt["workspace"] == {
         "installed_synthetic_shell": True,
@@ -69,7 +70,9 @@ def test_workspace_case_attestation_is_boolean_not_identity(exported) -> None:
         lambda r: r.update({"workspace": {"patient_name": "SECRET-CANARY"}}),
     ],
 )
-def test_export_refuses_unknown_clinical_fields_and_invalid_status(exported, mutate) -> None:
+def test_export_refuses_unknown_clinical_fields_and_invalid_status(
+    exported: Any, mutate: Any
+) -> None:
     data = admitted()
     mutate(data)
     with pytest.raises(ValueError) as err:
@@ -77,14 +80,16 @@ def test_export_refuses_unknown_clinical_fields_and_invalid_status(exported, mut
     assert "SECRET-CANARY" not in str(err.value)
 
 
-def test_fails_if_case_status_lacks_verified_workspace(exported) -> None:
+def test_fails_if_case_status_lacks_verified_workspace(exported: Any) -> None:
     with pytest.raises(ValueError):
         exported.build_receipt(admitted(), case_verified=True)
     with pytest.raises(ValueError):
         exported.build_receipt(admitted(workspace=True), case_verified="true")
 
 
-def test_exclusive_save_is_reproducible_and_does_not_overwrite(exported, tmp_path: Path) -> None:
+def test_exclusive_save_is_reproducible_and_does_not_overwrite(
+    exported: Any, tmp_path: Path
+) -> None:
     dest = tmp_path / "synthetic-evidence.json"
     result = admitted(workspace=True)
     assert exported.save_receipt_new(dest, result) == "SYNTHETIC_EVIDENCE_EXPORTED"
@@ -99,7 +104,7 @@ def test_exclusive_save_is_reproducible_and_does_not_overwrite(exported, tmp_pat
     assert another.read_bytes() == original
 
 
-def test_invalid_output_path_rejected_before_any_creation(exported, tmp_path: Path) -> None:
+def test_invalid_output_path_rejected_before_any_creation(exported: Any, tmp_path: Path) -> None:
     with pytest.raises(ValueError):
         exported.save_receipt_new(tmp_path / "not-json.txt", admitted())
     with pytest.raises(ValueError):
@@ -107,7 +112,7 @@ def test_invalid_output_path_rejected_before_any_creation(exported, tmp_path: Pa
     assert not list(tmp_path.iterdir())
 
 
-def test_existing_symlink_destination_not_modified(exported, tmp_path: Path) -> None:
+def test_existing_symlink_destination_not_modified(exported: Any, tmp_path: Path) -> None:
     victim = tmp_path / "victim.txt"
     victim.write_text("DO-NOT-TOUCH", encoding="utf-8")
     link = tmp_path / "receipt.json"
@@ -121,7 +126,7 @@ def test_existing_symlink_destination_not_modified(exported, tmp_path: Path) -> 
 
 
 def test_gui_export_button_requires_completed_validation(
-    exported, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    exported: Any, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     if os.name != "nt" and not os.environ.get("DISPLAY"):
         pytest.skip("no graphical display in CI")

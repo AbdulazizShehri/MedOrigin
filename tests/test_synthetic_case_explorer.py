@@ -9,6 +9,7 @@ import os
 import sys
 from pathlib import Path
 from subprocess import CompletedProcess
+from typing import Any
 
 import pytest
 
@@ -16,13 +17,13 @@ EXAMPLE = Path(__file__).resolve().parents[1] / "examples" / "synthetic_fhir_dev
 
 
 @pytest.fixture
-def explorer(monkeypatch: pytest.MonkeyPatch):
+def explorer(monkeypatch: pytest.MonkeyPatch) -> Any:
     monkeypatch.syspath_prepend(str(EXAMPLE))
     sys.modules.pop("synthetic_cases", None)
     return importlib.import_module("synthetic_cases")
 
 
-def test_pinned_fixture_projects_only_safe_demo_labels(explorer) -> None:
+def test_pinned_fixture_projects_only_safe_demo_labels(explorer: Any) -> None:
     admitted = explorer.admit_snapshot(copy.deepcopy(explorer.EXPECTED_SNAPSHOT))
     assert admitted == {
         "workspace": "Synthetic workspace",
@@ -46,7 +47,7 @@ def test_pinned_fixture_projects_only_safe_demo_labels(explorer) -> None:
         lambda d: d.update({"clinical_record": "PRIVATE-SENTINEL"}),
     ],
 )
-def test_case_explorer_rejects_drift_and_patient_like_fields(explorer, change) -> None:
+def test_case_explorer_rejects_drift_and_patient_like_fields(explorer: Any, change: Any) -> None:
     candidate = copy.deepcopy(explorer.EXPECTED_SNAPSHOT)
     change(candidate)
     with pytest.raises(ValueError) as err:
@@ -64,7 +65,9 @@ def test_case_explorer_rejects_drift_and_patient_like_fields(explorer, change) -
         (("capabilities", "external_model"), 0.0),
     ],
 )
-def test_case_explorer_refuses_numeric_boolean_aliases(explorer, path, replacement) -> None:
+def test_case_explorer_refuses_numeric_boolean_aliases(
+    explorer: Any, path: Any, replacement: Any
+) -> None:
     candidate = copy.deepcopy(explorer.EXPECTED_SNAPSHOT)
     candidate[path[0]][path[1]] = replacement
     # Ordinary Python dict equality would accept these altered values.
@@ -75,7 +78,7 @@ def test_case_explorer_refuses_numeric_boolean_aliases(explorer, path, replaceme
 
 @pytest.mark.parametrize("duplicate_at", ["root", "patient", "capabilities"])
 def test_case_loader_rejects_duplicate_json_fields(
-    explorer, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, duplicate_at: str
+    explorer: Any, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, duplicate_at: str
 ) -> None:
     monkeypatch.setattr(explorer, "verify_workspace_shell", lambda _python, _cwd: None)
     payload = json.dumps(explorer.EXPECTED_SNAPSHOT)
@@ -98,7 +101,7 @@ def test_case_loader_rejects_duplicate_json_fields(
 
 
 def test_case_loader_requests_only_installed_fixed_fixture(
-    explorer, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    explorer: Any, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     observed: list[list[str]] = []
 
@@ -117,7 +120,7 @@ def test_case_loader_requests_only_installed_fixed_fixture(
 
 
 def test_case_loader_suppresses_malformed_shell_payload(
-    explorer, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    explorer: Any, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     monkeypatch.setattr(explorer, "verify_workspace_shell", lambda _python, _cwd: None)
     monkeypatch.setattr(
@@ -131,7 +134,7 @@ def test_case_loader_suppresses_malformed_shell_payload(
 
 
 def test_case_loader_rejects_oversized_output(
-    explorer, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    explorer: Any, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     monkeypatch.setattr(explorer, "verify_workspace_shell", lambda _python, _cwd: None)
     monkeypatch.setattr(

@@ -7,6 +7,7 @@ import json
 import sys
 import zipfile
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -15,7 +16,7 @@ SCRIPT = ROOT / "scripts" / "qualify_medorigin_developer_beta.py"
 
 
 @pytest.fixture
-def rehearsal():
+def rehearsal() -> Any:
     spec = importlib.util.spec_from_file_location("medorigin_release_rehearsal", SCRIPT)
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
@@ -23,7 +24,7 @@ def rehearsal():
     return module
 
 
-def test_rehearsal_rejects_failed_subprocess_without_echoing_payload(rehearsal) -> None:
+def test_rehearsal_rejects_failed_subprocess_without_echoing_payload(rehearsal: Any) -> None:
     with pytest.raises(rehearsal.QualificationError) as exc:
         rehearsal.run([sys.executable, "-c", "import sys; print('PATIENT-SECRET'); sys.exit(5)"])
     assert "PATIENT-SECRET" not in str(exc.value)
@@ -41,7 +42,7 @@ def test_rehearsal_rejects_failed_subprocess_without_echoing_payload(rehearsal) 
     ],
 )
 def test_rehearsal_rejects_incomplete_or_false_verifier_receipts(
-    rehearsal, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, tamper: dict
+    rehearsal: Any, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, tamper: dict[str, Any]
 ) -> None:
     receipt = {
         "status": "METADATA_QUALIFIED_ONLY",
@@ -57,7 +58,7 @@ def test_rehearsal_rejects_incomplete_or_false_verifier_receipts(
 
 
 def test_rehearsal_accepts_only_explicit_nonpublishing_receipt(
-    rehearsal, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    rehearsal: Any, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     payload = {
         "status": "SDIST_SCOPE_QUALIFIED_ONLY",
@@ -71,7 +72,9 @@ def test_rehearsal_accepts_only_explicit_nonpublishing_receipt(
     assert observed == payload
 
 
-def test_rehearsal_refuses_empty_or_truncated_wheel_inventory(rehearsal, tmp_path: Path) -> None:
+def test_rehearsal_refuses_empty_or_truncated_wheel_inventory(
+    rehearsal: Any, tmp_path: Path
+) -> None:
     wheel = tmp_path / "candidate.whl"
     with zipfile.ZipFile(wheel, "w") as archive:
         archive.writestr("medscale/__init__.py", "# not enough source\n")
@@ -80,7 +83,7 @@ def test_rehearsal_refuses_empty_or_truncated_wheel_inventory(rehearsal, tmp_pat
 
 
 def test_rehearsal_fails_missing_inputs_without_creating_artifacts(
-    rehearsal, tmp_path: Path
+    rehearsal: Any, tmp_path: Path
 ) -> None:
     assert (
         rehearsal.main(
