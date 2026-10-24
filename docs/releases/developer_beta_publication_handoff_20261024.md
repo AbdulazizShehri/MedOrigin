@@ -35,8 +35,17 @@ The **pre-existing, unpublished** package artifacts bound to Draft PR #598's
 | Cross-runtime actual synthetic FHIR run | PASS; `991d319d9c567db3a71985661a12abb67c8432ff43b439c08759f8ee1d52fbd9` |
 | Native Tkinter GUI installed-Core E2E (Windows, both versions) | PASS, synthetic validation, copy, exclusive JSON export, no overwrite |
 
-The two installs were created from the **same** exact local wheel, without
-remote package installation or model download. The local E2E did not qualify
+The reproducible **nonpublishing GitHub Actions rehearsal** is defined in
+`.github/workflows/medorigin-developer-beta-rehearsal.yml`. On a PR or a
+manual dispatch it stages the current committed source, builds the candidate
+artifacts outside the checkout, clean-installs the exact wheel into Python
+3.11 and 3.12 environments on Linux and Windows, checks the installed source
+bytes, and runs the real synthetic FHIR example. A passing job is a technical
+readiness receipt only; there is no upload, tag, publisher activation or
+artifact distribution step.
+
+The two local Windows installs used for the earlier evidence were created from
+the **same** exact local wheel, without remote package installation or model download. The local E2E did not qualify
 the optional independently packaged Workspace; it was Core-only.
 
 The machine-readable automated source-to-installed-wheel rehearsal is in
