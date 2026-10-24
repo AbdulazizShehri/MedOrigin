@@ -72,6 +72,20 @@ The [Workspace CI qualification](../../.github/workflows/workspace-package-quali
 
 The locally built Windows wheel had a different SHA-256. **No cross-platform reproducible-byte claim** follows from these tests. The two Linux builds only demonstrate byte identity across those tested Linux jobs. Fresh exact-tag release artifact/CI receipts are still required for a public versioned release.
 
+## Reproducible first-run synthetic FHIR example
+
+The [standalone Developer Beta synthetic FHIR demo](../../examples/synthetic_fhir_developer_beta/README.md)
+runs against the **actually installed** `medscale 0.3.0` executable, using
+only committed synthetic JSON fixtures. It exercises the documented and legacy
+FHIR commands, writes a local content-addressed validation report, rejects
+malformed JSON, and produces an inspectable receipt. The demo also supports an
+optional second Python runtime for comparing deterministic report bytes.
+
+The `valid` report status demonstrates this local structural validation
+example, **not** full HL7 FHIR conformance, clinical correctness, or an
+authorized distribution. The example has no publication path and does not
+modify the frozen research root or historical v0.2.0 data.
+
 ## Hard stop boundaries
 
 - Use synthetic data only. There is **no authorization** to enter, import or process PHI or real-patient records; no production EHR writes or autonomous diagnosis.
