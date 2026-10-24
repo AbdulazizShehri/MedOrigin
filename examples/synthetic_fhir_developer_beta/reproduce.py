@@ -20,6 +20,27 @@ VERSION = "medscale 0.3.0"
 TIMESTAMP = "2026-10-24T00:00:00Z"
 
 
+def exact_json_contract(actual: object, expected: object) -> bool:
+    """Match both value and JSON type; numerics must not masquerade as booleans."""
+    if type(actual) is not type(expected):
+        return False
+    if isinstance(actual, dict) and isinstance(expected, dict):
+        return actual.keys() == expected.keys() and all(
+            exact_json_contract(actual[key], value) for key, value in expected.items()
+        )
+    return actual == expected
+
+
+def unique_json_object(pairs: list[tuple[str, object]]) -> dict[str, object]:
+    """Reject duplicate keys at every depth rather than letting the final key win."""
+    result: dict[str, object] = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError("duplicate key in installed synthetic CLI output")
+        result[key] = value
+    return result
+
+
 def digest(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
@@ -87,7 +108,7 @@ def verify_workspace_shell(interpreter: Path, directory: Path) -> dict[str, obje
     if shell.returncode != 0 or len(shell.stdout) > 2048:
         raise ValueError("synthetic Workspace shell failed or returned oversized output")
     try:
-        payload = json.loads(shell.stdout)
+        payload = json.loads(shell.stdout, object_pairs_hook=unique_json_object)
     except json.JSONDecodeError as exc:
         raise ValueError("Workspace shell did not return valid JSON") from exc
     allowed = {
@@ -96,7 +117,7 @@ def verify_workspace_shell(interpreter: Path, directory: Path) -> dict[str, obje
         "mode": "offline-shell",
         "ready": True,
     }
-    if not isinstance(payload, dict) or payload != allowed:
+    if not exact_json_contract(payload, allowed):
         # Never include untrusted payload or stderr in a failure message.
         raise ValueError("Workspace shell status is not the safe synthetic-only contract")
     return {

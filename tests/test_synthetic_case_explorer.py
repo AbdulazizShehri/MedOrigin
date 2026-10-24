@@ -54,6 +54,49 @@ def test_case_explorer_rejects_drift_and_patient_like_fields(explorer, change) -
     assert "PRIVATE-SENTINEL" not in str(err.value)
 
 
+@pytest.mark.parametrize(
+    "path,replacement",
+    [
+        (("capabilities", "network"), 0),
+        (("capabilities", "ehr"), 0.0),
+        (("capabilities", "persistent_write"), 1),
+        (("storage", "plaintext_fallback"), 0),
+        (("capabilities", "external_model"), 0.0),
+    ],
+)
+def test_case_explorer_refuses_numeric_boolean_aliases(explorer, path, replacement) -> None:
+    candidate = copy.deepcopy(explorer.EXPECTED_SNAPSHOT)
+    candidate[path[0]][path[1]] = replacement
+    # Ordinary Python dict equality would accept these altered values.
+    assert candidate == explorer.EXPECTED_SNAPSHOT
+    with pytest.raises(ValueError):
+        explorer.admit_snapshot(candidate)
+
+
+@pytest.mark.parametrize("duplicate_at", ["root", "patient", "capabilities"])
+def test_case_loader_rejects_duplicate_json_fields(
+    explorer, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, duplicate_at: str
+) -> None:
+    monkeypatch.setattr(explorer, "verify_workspace_shell", lambda _python, _cwd: None)
+    payload = json.dumps(explorer.EXPECTED_SNAPSHOT)
+    if duplicate_at == "root":
+        payload = payload.replace(
+            '{"workspace_id":', '{"workspace_id": "PRIVATE-SENTINEL", "workspace_id":', 1
+        )
+    elif duplicate_at == "patient":
+        payload = payload.replace(
+            '"display_name":', '"display_name": "PRIVATE-SENTINEL", "display_name":', 1
+        )
+    else:
+        payload = payload.replace('"network":', '"network": true, "network":', 1)
+    monkeypatch.setattr(
+        explorer, "call", lambda _python, args, _cwd: CompletedProcess(args, 0, payload, "")
+    )
+    with pytest.raises(ValueError) as err:
+        explorer.load_synthetic_case(Path(sys.executable), tmp_path)
+    assert "PRIVATE-SENTINEL" not in str(err.value)
+
+
 def test_case_loader_requests_only_installed_fixed_fixture(
     explorer, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:

@@ -78,8 +78,10 @@ or migrating historical datasets. An explicit **allowlist of the entire
 pinned Workspace snapshot** (including the fixture identities, SYNTHETIC
 classification and offline safety capabilities) must match before it shows
 the whitelisted synthetic names. Unexpected metadata, patient-like fields,
-wrong Workspace versions, or modified fixture bytes are **rejected rather
-than displayed**. Installed Workspace is optional: the synthetic Core
+wrong Workspace versions, numeric stand-ins for Boolean safety fields,
+duplicate JSON keys (including hidden overwritten fields), or modified fixture
+bytes are **rejected rather than displayed**. The same strict JSON and Boolean
+admission rules apply to the optional installed Workspace shell. Installed Workspace is optional: the synthetic Core
 validation screen continues to operate without it.
 
 The example is a **local developer UX prototype**, not a clinical patient

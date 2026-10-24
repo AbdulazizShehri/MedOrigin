@@ -179,6 +179,32 @@ def test_optional_workspace_rejects_extra_fields_without_echoing_them(
     assert "PRIVATE-SENTINEL" not in str(raised.value)
 
 
+@pytest.mark.parametrize(
+    "payload",
+    [
+        '{"application":"medscale-workspace","data_class":"SYNTHETIC","mode":"offline-shell","ready":1}',
+        '{"application":"medscale-workspace","data_class":"SYNTHETIC","mode":"offline-shell","ready":false,"ready":true}',
+        '{"application":"medscale-workspace","data_class":"SYNTHETIC","mode":"offline-shell","patient_name":"PRIVATE-SENTINEL","patient_name":"removed","ready":true}',
+    ],
+)
+def test_workspace_shell_rejects_ambiguous_json_types_and_duplicate_keys(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, payload: str
+) -> None:
+    import subprocess
+
+    module = _module()
+
+    def fake_call(_python: Path, args: list[str], _cwd: Path) -> subprocess.CompletedProcess[str]:
+        if "-c" in args:
+            return subprocess.CompletedProcess(args, 0, "0.1.0.dev1\n", "")
+        return subprocess.CompletedProcess(args, 0, payload, "")
+
+    monkeypatch.setattr(module, "call", fake_call)
+    with pytest.raises(ValueError) as raised:
+        module.verify_workspace_shell(Path(sys.executable), tmp_path)
+    assert "PRIVATE-SENTINEL" not in str(raised.value)
+
+
 def test_workspace_version_mismatch_fails_closed_before_shell(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

@@ -10,7 +10,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from reproduce import call, verify_workspace_shell
+from reproduce import call, exact_json_contract, unique_json_object, verify_workspace_shell
 
 EXPECTED_SNAPSHOT = {
     "workspace_id": "6cd9e9f4-1c3b-40b4-b10f-5b16db71a9fe",
@@ -50,7 +50,7 @@ _SNAPSHOT_COMMAND = (
 
 def admit_snapshot(data: object) -> dict[str, str]:
     """Admit exactly the known synthetic fixture, never free-form object data."""
-    if not isinstance(data, dict) or data != EXPECTED_SNAPSHOT:
+    if not exact_json_contract(data, EXPECTED_SNAPSHOT):
         raise ValueError("Installed Workspace fixture differs from pinned synthetic-only contract")
     return {
         "workspace": "Synthetic workspace",
@@ -68,7 +68,7 @@ def load_synthetic_case(interpreter: Path, workdir: Path) -> dict[str, str]:
     if proc.returncode != 0 or len(proc.stdout) > 4096:
         raise ValueError("Synthetic Workspace fixture could not be loaded")
     try:
-        return admit_snapshot(json.loads(proc.stdout))
+        return admit_snapshot(json.loads(proc.stdout, object_pairs_hook=unique_json_object))
     except (ValueError, TypeError) as exc:
         # Do not echo stderr, original data, or potentially sensitive fields.
         raise ValueError("Synthetic Workspace fixture was not admitted") from exc
