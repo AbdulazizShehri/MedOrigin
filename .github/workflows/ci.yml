@@ -94,6 +94,8 @@ jobs:
     name: pytest shard ${{ matrix.shard }} (py${{ matrix.python-version }})
     needs: static
     runs-on: ubuntu-latest
+    # Bound stalled shards: the previous successful shard-3 run took ~15 min.
+    timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
@@ -227,7 +229,12 @@ jobs:
         run: |
           mapfile -t test_nodes < pytest-shard.txt
           test "${#test_nodes[@]}" -gt 0
-          uv run --no-sync pytest             --cov             --cov-report=             --cov-fail-under=0             "${test_nodes[@]}"
+          # Show each test node while it executes to identify a stalled case.
+          # Preserve complete coverage and fail closed on the job timeout.
+          uv run --no-sync pytest \
+            -vv --durations=15 \
+            --cov --cov-report= --cov-fail-under=0 \
+            "${test_nodes[@]}"
           test -s "${COVERAGE_FILE}"
 
       - name: Preserve shard coverage
