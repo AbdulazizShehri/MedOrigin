@@ -72,7 +72,13 @@ machine-readable JSON receipt. The CLI now reports
 historical/current freeze, checksum, validator and immutable-writer matrix
 matches its audited baseline; any missing evidence, changed exit code,
 unexpected compatibility result or mutated dataset returns `BLOCKED` with a
-nonzero exit code. This is a **regression detector of known incompatibility**,
+nonzero exit code. The replay additionally binds the computed manifest digest
+and the checksum-file digest to actual per-file SHA-256 snapshot values: a
+self-consistent but forged checksum pair no longer passes simply because its
+matching/nonmatching boolean remains unchanged. The checksum receipt check
+accepts LF and historical CRLF file endings while still binding the exact
+snapshot bytes; this prevents Windows/Linux newline differences from
+masquerading as source or format compatibility. This is a **regression detector of known incompatibility**,
 not a claim that old and new formats have become compatible. GitHub CI's
 read-only static jobs rerun the comparison under Python 3.11 and 3.12 using
 complete Git history; receipts stay in temporary runner storage. The command

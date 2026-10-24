@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import copy
+import hashlib
 import runpy
 from collections.abc import Callable
 from pathlib import Path
@@ -31,6 +32,12 @@ def _case(*, historical: bool) -> dict[str, Any]:
         "manifest_sha256": DUMMY_A,
         "recorded_manifest_sha256": DUMMY_B if historical else DUMMY_A,
         "manifest_checksum_matches": not historical,
+        "artifact_hashes_by_relative_path": {
+            "manifest.json": DUMMY_A,
+            "checksums/manifest.json.sha256": hashlib.sha256(
+                ((DUMMY_B if historical else DUMMY_A) + "\n").encode("ascii")
+            ).hexdigest(),
+        },
         "writer_guards": {
             name: {"exit": 2, "all_artifact_bytes_preserved": True}
             for name in ("freeze", "manifest-write", "init-write")
@@ -89,6 +96,35 @@ def test_any_writer_mutation_is_a_hard_failure(operation: str) -> None:
     report = _receipt()
     report["cases"]["v0.2.0"]["writer_guards"][operation]["all_artifact_bytes_preserved"] = False
     assert any(operation in issue for issue in evaluate_replay(report))
+
+
+def test_forged_matching_manifest_hashes_do_not_pass_source_receipt() -> None:
+    report = _receipt()
+    case = report["cases"]["candidate"]
+    case["manifest_sha256"] = DUMMY_B
+    case["recorded_manifest_sha256"] = DUMMY_B
+    case["manifest_checksum_matches"] = True
+    assert any("snapshot" in issue for issue in evaluate_replay(report))
+
+
+def test_forged_checksum_file_digest_is_not_qualified() -> None:
+    report = _receipt()
+    report["cases"]["v0.2.0"]["artifact_hashes_by_relative_path"][
+        "checksums/manifest.json.sha256"
+    ] = DUMMY_B
+    assert any("checksum file" in issue for issue in evaluate_replay(report))
+
+
+def test_non_ascii_checksum_receipt_is_rejected_without_crashing() -> None:
+    report = _receipt()
+    report["cases"]["candidate"]["recorded_manifest_sha256"] = "é" * 64
+    assert evaluate_replay(report)
+
+
+def test_missing_source_file_snapshot_is_blocked() -> None:
+    report = _receipt()
+    report["cases"]["candidate"].pop("artifact_hashes_by_relative_path")
+    assert any("snapshot" in issue for issue in evaluate_replay(report))
 
 
 def test_unexpected_writer_success_is_not_qualified() -> None:

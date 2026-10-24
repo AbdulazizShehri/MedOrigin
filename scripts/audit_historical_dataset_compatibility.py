@@ -234,6 +234,26 @@ def evaluate_replay(report: dict[str, Any]) -> list[str]:
             issues.append(f"{name}: missing or invalid manifest checksums")
         elif (digests[0] == digests[1]) is not contract["checksum"]:
             issues.append(f"{name}: recorded checksum contradicts computed relation")
+        # The recorded checksum relation alone is not evidence of file bytes:
+        # a matching forged pair can preserve the expected TRUE/FALSE result.
+        # Tie both declared hashes to the snapshots taken from real files.
+        snapshot = entry.get("artifact_hashes_by_relative_path")
+        if not isinstance(snapshot, dict):
+            issues.append(f"{name}: missing artifact snapshot")
+        else:
+            if snapshot.get("manifest.json") != entry.get("manifest_sha256"):
+                issues.append(f"{name}: manifest hash differs from artifact snapshot")
+            recorded = entry.get("recorded_manifest_sha256")
+            possible_checksum_files = (
+                {
+                    hashlib.sha256((recorded + newline).encode("ascii")).hexdigest()
+                    for newline in ("\n", "\r\n")
+                }
+                if isinstance(recorded, str) and recorded.isascii()
+                else set()
+            )
+            if snapshot.get("checksums/manifest.json.sha256") not in possible_checksum_files:
+                issues.append(f"{name}: checksum file differs from artifact snapshot")
         guards = entry.get("writer_guards")
         if not isinstance(guards, dict) or set(guards) != {
             "freeze",
