@@ -31,18 +31,20 @@ MAX_OUTPUT = 100_000
 INSTALLED_CHECK = """
 import hashlib
 import importlib.metadata
-import importlib.util
 import json
 import pathlib
 import sys
 
 wanted = json.load(sys.stdin)
-spec = importlib.util.find_spec("medscale")
-if spec is None or not spec.submodule_search_locations:
-    raise SystemExit(7)
-root = pathlib.Path(next(iter(spec.submodule_search_locations)))
-if importlib.metadata.version("medscale") != "0.3.0":
+try:
+    installed = importlib.metadata.distribution("medscale")
+except importlib.metadata.PackageNotFoundError:
+    raise SystemExit(7) from None
+if installed.version != "0.3.0":
     raise SystemExit(8)
+root = pathlib.Path(installed.locate_file("medscale"))
+if not root.is_dir():
+    raise SystemExit(7)
 for relative, expected in wanted.items():
     file = root.joinpath(*relative.split("/"))
     if not file.is_file() or hashlib.sha256(file.read_bytes()).hexdigest() != expected:
