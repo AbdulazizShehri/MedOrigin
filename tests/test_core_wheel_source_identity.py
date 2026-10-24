@@ -230,6 +230,28 @@ def test_rehashed_wheel_with_unapproved_file_permissions_is_rejected(
     )
 
 
+@pytest.mark.parametrize("injection", ["prefix", "suffix", "zip-comment"])
+def test_untracked_zip_envelope_payload_is_rejected(tmp_path: Path, injection: str) -> None:
+    """Content hashes do not authorize executable preambles or trailing ZIP data."""
+    original = _wheel(tmp_path / "qualified.whl")
+    baseline_code, baseline = _inspect(original)
+    assert baseline_code == 0, baseline
+    forged = tmp_path / "injected-envelope.whl"
+    content = original.read_bytes()
+    if injection == "prefix":
+        forged.write_bytes(b"UNTRACKED_EXE_PREAMBLE" + content)
+    elif injection == "suffix":
+        forged.write_bytes(content + b"UNTRACKED_TRAILER")
+    else:
+        forged.write_bytes(content)
+        with zipfile.ZipFile(forged, "a") as archive:
+            archive.comment = b"UNTRACKED_ZIP_COMMENT"
+    code, report = _inspect(forged)
+    assert code == 2, report
+    assert report["status"] == "BLOCKED"
+    assert any("wheel ZIP envelope" in str(issue) for issue in report["issues"]), report
+
+
 def test_corrupt_wheel_is_rejected(tmp_path: Path) -> None:
     bad = tmp_path / "corrupt.whl"
     bad.write_bytes(b"not a zip archive")

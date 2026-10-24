@@ -181,8 +181,28 @@ def inspect(path: Path, repository: Path) -> dict[str, object]:
         project_bytes = _git(repository, "show", f"{commit}:pyproject.toml")
         readme_bytes = _git(repository, "show", f"{commit}:README.md")
 
+        # ZIP/RECORD verifies named file contents but ignores arbitrary bytes
+        # prepended or appended to a valid wheel archive. The qualified
+        # Hatchling wheel is a plain ZIP: no self-extracting prefix, trailing
+        # bytes or archive comment. Reject an untracked executable envelope.
+        size = path.stat().st_size
+        if size < 22 or size > MAX_TOTAL_SIZE + 5_000_000:
+            issues.append("wheel ZIP envelope exceeds archive byte budget")
+        else:
+            with path.open("rb") as archive_bytes:
+                prefix = archive_bytes.read(4)
+                archive_bytes.seek(-22, 2)
+                end_record = archive_bytes.read(22)
+            if (
+                prefix != b"PK\x03\x04"
+                or end_record[:4] != b"PK\x05\x06"
+                or end_record[-2:] != b"\x00\x00"
+            ):
+                issues.append("wheel ZIP envelope contains untracked prefix, trailer or comment")
         total = 0
         with zipfile.ZipFile(path) as wheel:
+            if wheel.comment or (wheel.infolist() and wheel.infolist()[0].header_offset != 0):
+                issues.append("wheel ZIP envelope is not a plain file-only archive")
             for info in wheel.infolist():
                 name = info.filename
                 if info.is_dir():
