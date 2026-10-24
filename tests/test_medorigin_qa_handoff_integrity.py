@@ -9,7 +9,7 @@ import json
 import stat
 import zipfile
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import pytest
 
@@ -81,7 +81,7 @@ def refresh_sums(verifier: Any, files: dict[str, bytes]) -> None:
 
 
 def check(verifier: Any, fake_bundle: dict[str, bytes], tmp_path: Path) -> dict[str, object]:
-    return verifier.inspect(tmp_path, collector=lambda _path: fake_bundle)
+    return cast(dict[str, object], verifier.inspect(tmp_path, collector=lambda _path: fake_bundle))
 
 
 def test_complete_synthetic_inventory_passes(
