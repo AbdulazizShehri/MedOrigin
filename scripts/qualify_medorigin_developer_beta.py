@@ -252,8 +252,11 @@ def main(argv: list[str] | None = None) -> int:
             args.checkout.resolve(),
             args.wheel.resolve(),
             args.sdist.resolve(),
-            args.python311.resolve(),
-            args.python312.resolve(),
+            # On Linux, venv/bin/python is typically a symlink to the base
+            # interpreter; resolve() would discard the virtualenv identity.
+            # absolute() preserves the venv launcher path and its bin/medscale.
+            args.python311.absolute(),
+            args.python312.absolute(),
         )
     except QualificationError as exc:
         # Only fixed, author-controlled failure descriptions; never child output.

@@ -123,6 +123,48 @@ def test_rehearsal_diagnostic_identifies_verifier_without_echoing_tool_output(
     assert "PATIENT-SECRET" not in str(exc.value)
 
 
+def test_rehearsal_preserves_virtualenv_python_symlink(
+    rehearsal: Any, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    base = tmp_path / "base-python"
+    base.write_text("synthetic interpreter placeholder", encoding="utf-8")
+    bin_dir = tmp_path / "venv" / "bin"
+    bin_dir.mkdir(parents=True)
+    launcher = bin_dir / "python"
+    try:
+        launcher.symlink_to(base)
+    except (OSError, NotImplementedError):
+        pytest.skip("host does not permit creating symlinks")
+    captured: list[Path] = []
+
+    def fake_qualify(
+        _checkout: Path, _wheel: Path, _sdist: Path, python311: Path, python312: Path
+    ) -> dict[str, object]:
+        captured.extend((python311, python312))
+        return {"status": "SYNTHETIC_TEST_ONLY", "publication_authorized": False}
+
+    monkeypatch.setattr(rehearsal, "qualify", fake_qualify)
+    assert (
+        rehearsal.main(
+            [
+                "--checkout",
+                str(tmp_path),
+                "--wheel",
+                str(tmp_path / "wheel.whl"),
+                "--sdist",
+                str(tmp_path / "archive.tar.gz"),
+                "--python311",
+                str(launcher),
+                "--python312",
+                str(launcher),
+            ]
+        )
+        == 0
+    )
+    assert captured == [launcher.absolute(), launcher.absolute()]
+    assert launcher.resolve() == base.resolve()
+
+
 def test_rehearsal_has_no_publish_paths_or_credentials() -> None:
     content = SCRIPT.read_text(encoding="utf-8")
     for command in ("twine upload", "gh release create", "git push", "hf upload", "pip install -U"):
