@@ -247,6 +247,21 @@ def test_tag_and_pr_paths_use_identical_audited_core_projection() -> None:
     assert "vars.TESTPYPI_PUBLISH_ENABLED == 'true'" in _job_block(text, "testpypi-publish")
 
 
+def test_full_ci_eight_shards_preserve_exact_full_inventory_and_coverage() -> None:
+    """More parallelism must never silently omit any test or coverage shard."""
+    ci = (_WORKFLOW.parent / "ci.yml").read_text(encoding="utf-8")
+    shard = _job_block(ci, "pytest-shard")
+    quality = _job_block(ci, "quality")
+    assert 'PYTEST_SHARD_COUNT: "8"' in ci.split("jobs:", maxsplit=1)[0]
+    assert "shard: [0, 1, 2, 3, 4, 5, 6, 7]" in shard
+    assert "buckets = [nodeids[index::shard_count] for index in range(shard_count)]" in shard
+    assert "set(flattened) != set(nodeids)" in shard
+    assert "test_nodes < pytest-shard.txt" in shard
+    assert "name: coverage-py${{ matrix.python-version }}-shard-${{ matrix.shard }}" in shard
+    assert 'test "${#coverage_files[@]}" -eq "${PYTEST_SHARD_COUNT}"' in quality
+    assert "uv run coverage report --show-missing --fail-under=77" in quality
+
+
 def test_full_ci_shards_have_bounded_verbose_test_diagnostics() -> None:
     """Slow or stalled pytest nodes must be attributable and time-bounded."""
     ci = (_WORKFLOW.parent / "ci.yml").read_text(encoding="utf-8")
