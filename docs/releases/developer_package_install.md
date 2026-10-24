@@ -72,6 +72,32 @@ The [Workspace CI qualification](../../.github/workflows/workspace-package-quali
 
 The locally built Windows wheel had a different SHA-256. **No cross-platform reproducible-byte claim** follows from these tests. The two Linux builds only demonstrate byte identity across those tested Linux jobs. Fresh exact-tag release artifact/CI receipts are still required for a public versioned release.
 
+## Reproducible first-run synthetic FHIR example
+
+The [standalone Developer Beta synthetic FHIR demo](../../examples/synthetic_fhir_developer_beta/README.md)
+runs against the **actually installed** `medscale 0.3.0` executable, using
+only committed synthetic JSON fixtures. It exercises the documented and legacy
+FHIR commands, writes a local content-addressed validation report, rejects
+malformed JSON, and produces an inspectable receipt. The demo also supports an
+optional second Python runtime for comparing deterministic report bytes.
+If the separate `medscale-workspace 0.1.0.dev1` distribution is already installed,
+the demo can optionally include its **four-field, synthetic-only local shell
+status** via `--workspace-python /path/to/workspace/bin/python` (use
+`Scripts/python.exe` on Windows). It rejects extra metadata, incompatible
+versions, and missing environments rather than displaying any object data.
+Workspace is **not required** for the Core FHIR example, and this optional
+status does not imply a clinician GUI, real patient support or approved key
+management.
+
+It also generates a **standalone static `preview.html`** for locally
+reviewing the synthetic structural result and SHA-256 hashes in a browser,
+with no web server, external resources, JavaScript or patient data.
+
+The `valid` report status demonstrates this local structural validation
+example, **not** full HL7 FHIR conformance, clinical correctness, or an
+authorized distribution. The example has no publication path and does not
+modify the frozen research root or historical v0.2.0 data.
+
 ## Hard stop boundaries
 
 - Use synthetic data only. There is **no authorization** to enter, import or process PHI or real-patient records; no production EHR writes or autonomous diagnosis.
