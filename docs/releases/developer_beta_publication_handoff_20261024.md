@@ -70,6 +70,36 @@ reproduction, compares installed Python file bytes to the wheel, and returns
 It does not create a tag, upload an artifact, build from a mutable worktree,
 touch historical receipts, invoke a package index or use network APIs.
 
+## Local QA handoff integrity check (no installation or publication)
+
+The unpublished Windows handoff prepared on 2026-10-24 is stored at
+`C:/Users/Shehr/Desktop/MedOrigin-v0.3.0-Developer-Beta-UNPUBLISHED`
+and the sibling `.zip`. Its ZIP SHA-256 is
+`001034f6c9807159c005b28b3e0c00f4af2e7c709897b95ece02b2361a108555`.
+
+Before installing anything from this *particular* QA handoff, run the
+standard-library-only source checker:
+
+```powershell
+python scripts/verify_medorigin_qa_handoff.py "C:/Users/Shehr/Desktop/MedOrigin-v0.3.0-Developer-Beta-UNPUBLISHED.zip" --expected-zip-sha256 001034f6c9807159c005b28b3e0c00f4af2e7c709897b95ece02b2361a108555
+python scripts/verify_medorigin_qa_handoff.py "C:/Users/Shehr/Desktop/MedOrigin-v0.3.0-Developer-Beta-UNPUBLISHED"
+```
+
+The checker rejects missing/extra members, duplicate or unsafe ZIP paths,
+symlinks, bad byte digests, ambiguous JSON, type-substituted authorization
+flags and an unexpected Core/source identity; it performs **no extraction,
+execution or network operation**. Both real local copies passed with
+`MEDORIGIN_UNPUBLISHED_QA_INTEGRITY_PASS` and exactly 16 checked files.
+Adversarial verification has separate focused tests.
+
+This confirms internal consistency and matches the *previously trusted*
+Core hashes; without an independently trusted external ZIP digest or a
+publisher signature, it does **not authenticate an arbitrary downloaded
+bundle**. The unsigned bundle consists of Core #598 artifacts plus separate
+source examples from #617. It is a QA handoff, **not** a signed consumer
+installer, an approved integrated source release, or proof of independent
+security approval.
+
 ## Outstanding preparation — distinct from the later publish button
 
 1. **Independent release-boundary review #603**: review exact candidate
