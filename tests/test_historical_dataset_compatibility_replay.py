@@ -24,10 +24,37 @@ DUMMY_B = "b" * 64
 def _case(*, historical: bool) -> dict[str, Any]:
     return {
         "manifest_exit": 0,
-        "freeze": {"exit": 1 if historical else 0},
+        "freeze": {
+            "exit": 1 if historical else 0,
+            "stdout": (
+                "Dataset: synthetic-public-fixture\\nPassed: False\\nIssues:\\n"
+                "  ! [error] license.json: missing artifact for checksum\\n"
+                "  ! [error] manifest.json: sha256 mismatch"
+                if historical
+                else "Dataset: synthetic-public-fixture\\nPassed: True\\n"
+            ),
+            "stderr": "",
+        },
         "validations": {
-            "v0.2.0": {"exit": 1},
-            "candidate": {"exit": 1 if historical else 0},
+            "v0.2.0": {
+                "exit": 1,
+                "stdout": (
+                    "Dataset: synthetic-public-fixture\\nPassed: False\\nIssues:\\n"
+                    "  ! [error] license.json: missing artifact for checksum\\n"
+                    + ("  ! [error] manifest.json: sha256 mismatch" if historical else "")
+                ),
+                "stderr": "",
+            },
+            "candidate": {
+                "exit": 1 if historical else 0,
+                "stdout": (
+                    "Dataset: synthetic-public-fixture\\nPassed: False\\nIssues:\\n"
+                    "  ! [error] manifest.json: sha256 mismatch"
+                    if historical
+                    else "Dataset: synthetic-public-fixture\\nPassed: True\\n"
+                ),
+                "stderr": "",
+            },
         },
         "manifest_sha256": DUMMY_A,
         "recorded_manifest_sha256": DUMMY_B if historical else DUMMY_A,
@@ -80,6 +107,25 @@ def test_known_matrix_drifts_cannot_silently_pass(
     report = _receipt()
     report["cases"][case][field] = value
     assert any(diagnostic in issue for issue in evaluate_replay(report))
+
+
+def test_same_exit_from_unrelated_failure_does_not_qualify() -> None:
+    report = _receipt()
+    report["cases"]["v0.2.0"]["freeze"]["stdout"] = "Runtime failed unexpectedly"
+    assert any("diagnostic" in issue for issue in evaluate_replay(report))
+    report = _receipt()
+    report["cases"]["candidate"]["validations"]["v0.2.0"]["stdout"] = (
+        "Dataset: synthetic-public-fixture - other failure"
+    )
+    assert any("diagnostic" in issue for issue in evaluate_replay(report))
+
+
+def test_traceback_with_expected_exit_is_not_qualified() -> None:
+    report = _receipt()
+    report["cases"]["v0.2.0"]["validations"]["candidate"]["stderr"] = (
+        "Traceback (most recent call last): import failed"
+    )
+    assert any("diagnostic" in issue for issue in evaluate_replay(report))
 
 
 def test_historical_validators_suddenly_accepting_other_format_is_detected() -> None:

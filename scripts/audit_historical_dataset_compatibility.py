@@ -178,6 +178,25 @@ def inspect(repo: Path, workspace: Path) -> dict[str, Any]:
     }
 
 
+def _has_expected_validation_diagnostic(
+    result: object, *, passed: bool, markers: tuple[str, ...]
+) -> bool:
+    """An expected exit code alone is not evidence of the expected reason."""
+    if not isinstance(result, dict):
+        return False
+    stdout, stderr = result.get("stdout"), result.get("stderr")
+    if not isinstance(stdout, str) or not isinstance(stderr, str):
+        return False
+    if "Traceback" in stdout or "Traceback" in stderr:
+        return False
+    state = "Passed: True" if passed else "Passed: False"
+    return (
+        "Dataset: synthetic-public-fixture" in stdout
+        and state in stdout
+        and all(marker in stdout for marker in markers)
+    )
+
+
 def evaluate_replay(report: dict[str, Any]) -> list[str]:
     """Fail closed if the pinned synthetic historical-compatibility matrix drifts.
 
@@ -217,11 +236,31 @@ def evaluate_replay(report: dict[str, Any]) -> list[str]:
         freeze = entry.get("freeze")
         if not isinstance(freeze, dict) or freeze.get("exit") != contract["freeze"]:
             issues.append(f"{name}: freeze exit differs from audited baseline")
+        freeze_reasons = (
+            ("license.json: missing artifact for checksum", "manifest.json: sha256 mismatch")
+            if name == "v0.2.0"
+            else ()
+        )
+        if not _has_expected_validation_diagnostic(
+            freeze, passed=name == "candidate", markers=freeze_reasons
+        ):
+            issues.append(f"{name}: freeze diagnostic differs from audited baseline")
         validations = entry.get("validations")
         for validator in ("v0.2.0", "candidate"):
             observed = validations.get(validator) if isinstance(validations, dict) else None
             if not isinstance(observed, dict) or observed.get("exit") != contract[validator]:
                 issues.append(f"{name}: {validator} validator differs from audited baseline")
+            required_reasons = (
+                ("license.json: missing artifact for checksum",) if validator == "v0.2.0" else ()
+            ) + (("manifest.json: sha256 mismatch",) if name == "v0.2.0" else ())
+            if not _has_expected_validation_diagnostic(
+                observed,
+                passed=name == "candidate" and validator == "candidate",
+                markers=required_reasons,
+            ):
+                issues.append(
+                    f"{name}: {validator} validator diagnostic differs from audited baseline"
+                )
         if entry.get("manifest_checksum_matches") is not contract["checksum"]:
             issues.append(f"{name}: manifest checksum relation changed")
         digests = (entry.get("manifest_sha256"), entry.get("recorded_manifest_sha256"))

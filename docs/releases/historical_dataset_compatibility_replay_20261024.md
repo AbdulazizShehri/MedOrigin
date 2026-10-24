@@ -79,7 +79,12 @@ matching/nonmatching boolean remains unchanged. The checksum receipt check
 accepts LF and historical CRLF file endings while still binding the exact
 snapshot bytes; this prevents Windows/Linux newline differences from
 masquerading as source or format compatibility. This is a **regression detector of known incompatibility**,
-not a claim that old and new formats have become compatible. GitHub CI's
+not a claim that old and new formats have become compatible. The replay
+also checks that the validator summaries describe the specific observed
+historical failure: a stale `manifest.json` checksum and/or the old
+`license.json` checksum lookup, rather than blindly accepting any process
+exit code of 1. Python import errors, unexpected failure diagnostics and
+tracebacks are rejected even when their exit codes happen to match. GitHub CI's
 read-only static jobs rerun the comparison under Python 3.11 and 3.12 using
 complete Git history; receipts stay in temporary runner storage. The command
 does **not** install software, download data, modify an existing dataset, change tags, use patient/PHI data, or
