@@ -17,7 +17,7 @@ TAG = "refs/tags/v0.3.0"
 _inspect = runpy.run_path(
     str(Path(__file__).resolve().parents[1] / "scripts" / "check_release_tag_governance.py")
 )["inspect"]
-inspect = cast(Callable[[str, str, Callable[[str], Any]], dict[str, Any]], _inspect)
+inspect = cast(Callable[..., dict[str, Any]], _inspect)
 
 
 def _details(
