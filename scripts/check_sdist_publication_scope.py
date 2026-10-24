@@ -12,6 +12,7 @@ import sys
 import tarfile
 import tomllib
 import zipfile
+import zlib
 from email.parser import BytesParser
 from email.policy import default
 from pathlib import Path
@@ -331,6 +332,45 @@ def _verify_source_checkout(archive: tarfile.TarFile, repository: Path) -> list[
     return issues
 
 
+def _qualified_gzip_tar_envelope(path: Path, archive: tarfile.TarFile) -> bool:
+    """Reject hidden gzip members and bytes outside the qualified TAR entries.
+
+    A normal TAR reader stops at the end-of-archive zero blocks and may
+    silently ignore appended gzip data, even while all source hashes match.
+    Inspect one bounded gzip stream and the complete physical TAR layout.
+    """
+    limit = MAX_TOTAL_SIZE + (MAX_MEMBERS + 2) * 512 + 10_240
+    if path.stat().st_size > limit:
+        return False
+    stream = zlib.decompressobj(wbits=31)
+    extracted = bytearray()
+    with path.open("rb") as compressed:
+        while chunk := compressed.read(65_536):
+            if stream.eof:
+                return False
+            capacity = limit + 1 - len(extracted)
+            if capacity <= 0:
+                return False
+            extracted.extend(stream.decompress(chunk, capacity))
+            if len(extracted) > limit or stream.unconsumed_tail or stream.unused_data:
+                return False
+    if not stream.eof:
+        return False
+
+    offset = 0
+    for member in archive.getmembers():
+        if member.offset != offset or member.offset_data != offset + 512:
+            return False
+        offset = member.offset_data + (member.size + 511) // 512 * 512
+    # TAR terminates in two 512-byte zero blocks; any further block padding
+    # must also be zero. Nonzero data after the logical archive is untracked.
+    return (
+        len(extracted) >= offset + 1024
+        and len(extracted) % 512 == 0
+        and not any(extracted[offset:])
+    )
+
+
 def inspect(path: Path, *, source_repo: Path | None = None) -> dict[str, object]:
     issues: list[str] = []
     entries: set[str] = set()
@@ -380,11 +420,13 @@ def inspect(path: Path, *, source_repo: Path | None = None) -> dict[str, object]
                 if byte_total > MAX_TOTAL_SIZE:
                     issues.append("sdist exceeds total byte budget")
                     break
+            if not issues and not _qualified_gzip_tar_envelope(path, archive):
+                issues.append("sdist gzip/TAR envelope contains untracked or inconsistent bytes")
             if not issues:
                 issues.extend(_verify_projection(archive, entries))
             if not issues and source_repo is not None:
                 issues.extend(_verify_source_checkout(archive, source_repo))
-    except (tarfile.TarError, OSError, EOFError, ValueError, KeyError):
+    except (tarfile.TarError, OSError, EOFError, ValueError, KeyError, zlib.error):
         issues.append("sdist is corrupt or unreadable")
     missing = sorted(ESSENTIAL - entries)
     if missing:

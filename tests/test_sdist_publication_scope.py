@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import gzip
 import hashlib
 import io
 import json
@@ -232,6 +233,26 @@ def test_scope_only_receipt_cannot_impersonate_committed_git_source(tmp_path: Pa
     )
     assert checked.returncode == 2
     assert "source commit" in checked.stdout
+
+
+@pytest.mark.parametrize("mutation", ["trailing-bytes", "concatenated-gzip", "tar-tail"])
+def test_sdist_gzip_envelope_rejects_untracked_payload(tmp_path: Path, mutation: str) -> None:
+    """File and provenance hashes cannot authorize hidden archive tail bytes."""
+    original = _archive(tmp_path / "original.tar.gz")
+    baseline_code, baseline = _run(original)
+    assert baseline_code == 0, baseline
+    forged = tmp_path / (mutation + ".tar.gz")
+    raw = original.read_bytes()
+    if mutation == "trailing-bytes":
+        forged.write_bytes(raw + b"UNTRACKED_TRAILER")
+    elif mutation == "concatenated-gzip":
+        forged.write_bytes(raw + gzip.compress(b"UNTRACKED_SECOND_GZIP_MEMBER"))
+    else:
+        forged.write_bytes(gzip.compress(gzip.decompress(raw) + b"UNTRACKED_TAR_TAIL"))
+    code, report = _run(forged)
+    assert code == 2, report
+    assert report["status"] == "BLOCKED"
+    assert any("sdist gzip/TAR envelope" in str(x) for x in report["issues"]), report
 
 
 def test_corrupt_archive_is_rejected(tmp_path: Path) -> None:
