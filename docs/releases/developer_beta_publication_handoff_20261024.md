@@ -85,6 +85,32 @@ python scripts/verify_medorigin_qa_handoff.py "C:/Users/Shehr/Desktop/MedOrigin-
 python scripts/verify_medorigin_qa_handoff.py "C:/Users/Shehr/Desktop/MedOrigin-v0.3.0-Developer-Beta-UNPUBLISHED"
 ```
 
+For a **repeatable, new** QA ZIP, there is also a standard-library-only,
+read-only-source builder. It accepts only the pinned Core Wheel, sdist,
+provenance and the previously committed synthetic examples, and creates a
+**new, unpublished ZIP**, never overwriting the original:
+
+```powershell
+python scripts/assemble_medorigin_unpublished_qa.py `
+  --repository . `
+  --wheel C:/path/to/verified/medscale-0.3.0-py3-none-any.whl `
+  --sdist C:/path/to/verified/medscale-0.3.0.tar.gz `
+  --provenance C:/path/to/MEDORIGIN_SOURCE_PROVENANCE.json `
+  --output C:/path/to/new-empty-folder/MedOrigin-v0.3.0-Developer-Beta-UNPUBLISHED.zip
+```
+
+This script reads the eight fixed examples and legal notices with
+`git show` at pinned exact SHA `852ca86a`; it reads none of the mutable
+checkout example files. It requires a clean Git worktree, checks the source
+receipt and both exact known Core SHA-256 values, reuses the handoff verifier
+on the assembled members and resulting ZIP, then exclusively creates the
+output. ZIP entry order, timestamps and compression mode are fixed for
+deterministic cross-machine assembly. It does **not** build, sign or publish
+Core, install dependencies, contact GitHub or use patient data. Every
+newly produced ZIP needs its **own** SHA-256 readback; the checksum above is
+only for the earlier manually staged ZIP. Do not confuse a reproducible
+test handoff with a final authorized release artifact.
+
 The checker rejects missing/extra members, duplicate or unsafe ZIP paths,
 symlinks, bad byte digests, ambiguous JSON, type-substituted authorization
 flags and an unexpected Core/source identity; it performs **no extraction,
