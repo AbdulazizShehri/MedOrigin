@@ -60,7 +60,7 @@ def test_validation_always_uses_temporary_local_synthetic_data(
 ) -> None:
     observed: list[Path] = []
 
-    def fake_run(_cli: Path, directory: Path, label: str) -> None:
+    def fake_run(_cli: Path, directory: Path, label: str) -> dict[str, object]:
         assert label == "desktop"
         assert directory.is_dir()
         assert directory.name.startswith("medorigin-synthetic-ui-")
