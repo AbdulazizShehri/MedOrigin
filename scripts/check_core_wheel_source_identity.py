@@ -205,6 +205,13 @@ def inspect(path: Path, repository: Path) -> dict[str, object]:
                 if (info.external_attr >> 16) & 0o170000 == 0o120000:
                     issues.append("wheel symlink prohibited")
                     continue
+                # RECORD hashes only file bytes, not ZIP permission/type bits.
+                # The qualified Hatchling artifacts use 0644 regular files;
+                # accept both typed and untyped representations across hosts.
+                # Fail closed on executable, setuid, setgid or special entries.
+                if (info.external_attr >> 16) not in (0o644, 0o100644):
+                    issues.append("wheel file permissions or type differ from qualified archive")
+                    continue
                 if info.file_size > MAX_MEMBER_SIZE:
                     issues.append("wheel member exceeds byte budget")
                     break

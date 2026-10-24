@@ -118,7 +118,10 @@ def _wheel(path: Path, mutation: str | None = None) -> Path:
         entries[DIST_INFO + "RECORD"] = b"invalid,nohash,0\n"
     with zipfile.ZipFile(path, mode="w", compression=zipfile.ZIP_DEFLATED) as archive:
         for name, contents in entries.items():
-            archive.writestr(name, contents)
+            member = zipfile.ZipInfo(name)
+            # Match the qualified Hatchling wheel permission contract.
+            member.external_attr = (0o100644 if name.startswith("medscale/") else 0o644) << 16
+            archive.writestr(member, contents, compress_type=zipfile.ZIP_DEFLATED)
     return path
 
 
@@ -204,6 +207,27 @@ def test_self_rehashed_unapproved_distribution_metadata_is_rejected(
     assert code == 2, report
     assert report["status"] == "BLOCKED"
     assert any("METADATA" in str(v) for v in report["issues"]), report
+
+
+@pytest.mark.parametrize("mode", [0o100755, 0o104755, 0o120777, 0o40755])
+def test_rehashed_wheel_with_unapproved_file_permissions_is_rejected(
+    tmp_path: Path, mode: int
+) -> None:
+    """Wheel RECORD covers bytes but does not attest executable/setuid/special modes."""
+    trusted = _wheel(tmp_path / "trusted.whl")
+    altered = tmp_path / "forged-permissions.whl"
+    with zipfile.ZipFile(trusted) as source, zipfile.ZipFile(altered, "w") as output:
+        for info in source.infolist():
+            if info.filename == "medscale/__about__.py":
+                info.external_attr = mode << 16
+            output.writestr(info, source.read(info))
+    code, report = _inspect(altered)
+    assert code == 2, report
+    assert report["status"] == "BLOCKED"
+    assert any(
+        "wheel file permissions" in str(issue) or "wheel symlink prohibited" in str(issue)
+        for issue in report["issues"]
+    )
 
 
 def test_corrupt_wheel_is_rejected(tmp_path: Path) -> None:
