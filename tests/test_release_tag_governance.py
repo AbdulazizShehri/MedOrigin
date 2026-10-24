@@ -95,16 +95,26 @@ def test_partial_or_inapplicable_protection_is_refused(bad: dict[str, Any]) -> N
 def test_non_admin_bypass_never_qualifies_tag_ruleset(
     bypass: list[dict[str, Any]],
 ) -> None:
-    result = inspect(REPOSITORY, TAG, _stub(_details(bypass=bypass)))
+    result = inspect(REPOSITORY, TAG, _stub(_details(bypass=bypass)), require_bypass_actors=True)
     assert result["status"] == "BLOCKED", result
     assert result["publication_authorized"] is False
     assert result["bypass_actors_verified"] is False
 
 
+def test_read_only_tag_gate_remains_nonpublishing_when_github_masks_bypass() -> None:
+    """GITHUB_TOKEN need not have admin ruleset-write permissions."""
+    details = _details()
+    details["bypass_actors"] = None  # GitHub masks this for non-admin callers.
+    result = inspect(REPOSITORY, TAG, _stub(details))
+    assert result["status"] == "RELEASE_TAG_RULESET_PRESENT_ONLY", result
+    assert result["bypass_actors_verified"] is False
+    assert result["publication_authorized"] is False
+
+
 def test_ruleset_without_bypass_metadata_is_rejected() -> None:
     details = _details()
     del details["bypass_actors"]
-    result = inspect(REPOSITORY, TAG, _stub(details))
+    result = inspect(REPOSITORY, TAG, _stub(details), require_bypass_actors=True)
     assert result["status"] == "BLOCKED", result
     assert result["bypass_actors_verified"] is False
 
@@ -118,9 +128,20 @@ def test_admin_only_bypass_is_verified_without_authorizing_publication() -> None
                 bypass=[{"actor_id": 5, "actor_type": "RepositoryRole", "bypass_mode": "always"}]
             )
         ),
+        require_bypass_actors=True,
     )
     assert result["status"] == "RELEASE_TAG_RULESET_PRESENT_ONLY", result
     assert result["bypass_actors_verified"] is True
+    assert result["publication_authorized"] is False
+
+
+def test_non_admin_bypass_is_never_mistaken_for_verified_in_read_only_mode() -> None:
+    details = _details(
+        bypass=[{"actor_id": 4, "actor_type": "RepositoryRole", "bypass_mode": "always"}]
+    )
+    result = inspect(REPOSITORY, TAG, _stub(details))
+    assert result["status"] == "RELEASE_TAG_RULESET_PRESENT_ONLY", result
+    assert result["bypass_actors_verified"] is False
     assert result["publication_authorized"] is False
 
 

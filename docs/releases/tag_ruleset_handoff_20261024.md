@@ -1,55 +1,42 @@
-# MedOrigin Core — release v-tag ruleset administrator handoff
+# MedOrigin Core — protected v-tag governance and read-only owner review
 
-**As of 2026-10-24:** NO-GO for public release; this is a prepublication
-configuration checklist, not permission to tag, merge, upload or deploy.
+**State (2026-10-24): Active protection verified; publication remains NO-GO.**
+This page does not approve a tag, a release, a merge, clinical use or external distribution.
 
-## Observed live repository state
+## Verified repository configuration
 
 - Repository: [AbdulazizShehri/MedOrigin](https://github.com/AbdulazizShehri/MedOrigin)
-- Active main-branch ruleset: ID `20172239`, covering `refs/heads/main`.
-- No active tag-target ruleset returned by the read-only GitHub repository
-  rulesets API at this audit. Main-branch PR checks do not protect tags.
-- Read-only CLI command:
+- Protected `main` ruleset: **20172239**.
+- Active release-tag ruleset: **25773765**, name `MedOrigin protected release v-tags v1`, matching `refs/tags/v*` with **no exclusions**. Creation, update and deletion are restricted.
+- The repository administrator readback returned the *only* configured bypass actor as `RepositoryRole` ID `5` (Administrator), mode `always`. No tag was created or moved. Existing `v0.1.0`/`v0.2.0` references were preserved.
 
-  ```shell
-  python scripts/check_release_tag_governance.py \
-    --repository AbdulazizShehri/MedOrigin \
-    --tag-ref refs/tags/v0.3.0
-  ```
+**GitHub permission limitation:** a non-admin ruleset API response masks `bypass_actors` as null, even if the active ruleset has an admin-only bypass. The GitHub Actions `GITHUB_TOKEN` is not a substitute for an administrator's verified ruleset read. Do not add an administrator PAT or write-capable token to a PR-triggered workflow, source code, build job or artifact.
 
-  This **only queries** GitHub rulesets; it **does not create the example tag**.
-  Current result: `BLOCKED` with an active v-tag ruleset absent or unverifiable.
-  A nonzero result is a hard release stop.
+## Two distinct read-only checks
 
-## Separate repository-admin configuration (not done in this PR)
+1. **CI tag protection presence** (read-only/default; usable with `GITHUB_TOKEN`):
 
-1. Open [repository Rulesets](https://github.com/AbdulazizShehri/MedOrigin/settings/rules),
-   choose **New tag ruleset**, name it `MedOrigin Core protected releases`.
-2. Target **all `v*` release tags**, consistently with the repository's
-   release workflow (`refs/tags/v*`), with **no exemptions by tag pattern**.
-   Select **Active** enforcement.
-3. Select **Restrict creations**, **Restrict updates**, and **Restrict
-   deletions**. Grant narrowly scoped bypass only to the deliberately
-   authorized release actor(s); verify the chosen release actor can create
-   a future tag without allowing ordinary contributors to replace or erase it.
-4. Read back the effective GitHub ruleset using a read-only API view, rerun
-   the CLI command above, and independently review bypass actors as an
-   administrator. This automated CLI cannot verify bypass actor membership
-   because GitHub hides it from callers without ruleset-write permission.
-5. Keep the publication feature flags disabled. Do **not** create a tag until
-   ADR-0044 is explicitly resolved, historical compatibility/claim scope is
-   signed off, exact main-commit CI and independent security review are
-   recorded, and the owner specifically authorizes a future release.
+   ```shell
+   python scripts/check_release_tag_governance.py --repository AbdulazizShehri/MedOrigin --tag-ref refs/tags/v0.3.0
+   ```
 
-The proposed `release.yml` contains a **read-only gate** ahead of quality,
-artifact construction, GitHub Release and TestPyPI. It checks tag-to-main
-commit equality and these active tag restrictions. A PR or workflow-dispatch
-qualification does not publish and does not require a release tag.
+   `RELEASE_TAG_RULESET_PRESENT_ONLY` means the active v-tag restrictions were seen; `bypass_actors_verified: false` means that the API caller could not verify exemptions. It is **not** a publisher go-ahead. The existing `release.yml` uses only this nonpublishing rule-presence test.
 
-**Authority boundary:** this handoff is advisory; the credential used in this
-session does not have repository `admin` or `maintain` access and cannot
-change rulesets. Rulesets and bypass decisions must be applied by an
-authorized GitHub repository administrator.
+2. **Administrator-only bypass review** (read-only/manual; run outside untrusted CI):
 
-Reference: [GitHub rulesets creation documentation](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-rulesets/creating-rulesets-for-a-repository)
-and [available rules](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-rulesets/available-rules-for-rulesets).
+   ```shell
+   python scripts/check_release_tag_governance.py --repository AbdulazizShehri/MedOrigin --tag-ref refs/tags/v0.3.0 --verify-bypass-actors
+   ```
+
+   An authenticated repository administrator must see `bypass_actors_verified: true`, the expected ruleset ID and `issues: []`. Missing/masked exemptions, an unexpected team/app/non-admin bypass, a disabled rule or an unexpected condition fails closed. Save the reviewer identity, ruleset ID, command result, date and exact candidate SHA as a separate independent release review receipt. Do **not** copy the admin credential into that receipt.
+
+Neither command creates an actual `v0.3.0` tag. Both always report `publication_authorized: false`. A `GITHUB_TOKEN` run can confirm only the first, less privileged, condition; successful administrator review is separately required before any future release approval.
+
+## Other publication prerequisites (all remain independent)
+
+- The exact source and binary candidate must pass complete Linux Python 3.11/3.12 CI, Core and read-only artifact qualification, security scanning, and source-to-artifact review [#603](https://github.com/AbdulazizShehri/MedOrigin/issues/603).
+- Resolve ADR-0044 identity and release/version policy, scope and the *known incompatible* v0.2.0 historical persisted dataset validation in [#574](https://github.com/AbdulazizShehri/MedOrigin/issues/574). No silent migration, byte rewrite or clinical-data use.
+- Require an **independent reviewer** who signs the exact candidate SHA and an operator's separate explicit permission to create a protected release tag or enable GitHub publishing.
+- Keep `GITHUB_RELEASE_PUBLISH_ENABLED` and `TESTPYPI_PUBLISH_ENABLED` disabled until they are individually authorized. GitHub Actions PR and manual qualification paths are read-only; do not confuse passing CI with publication authority.
+
+**NO-GO until all required evidence and approvals exist.** Never infer completion from this administrator handoff alone.
