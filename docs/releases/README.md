@@ -53,6 +53,7 @@ flowchart LR
 | Document | Covers |
 |---|---|
 | [software_release_track.md](software_release_track.md) | Founder-prioritized synthetic-only package/developer-preview track, with independent scientific/clinical boundaries and evidence gates |
+| [developer_beta_publication_handoff_20261024.md](developer_beta_publication_handoff_20261024.md) | Exact-source offline dual-Python publication rehearsal, qualified artifact SHA, and outstanding requirements before any later publishing decision |
 | [prepublication_qualification_20261023.md](prepublication_qualification_20261023.md) | Read-only exact-wheel metadata audit, synthetic Windows installation evidence, and explicit no-go conditions before a future release |
 | [isolated_core_projection_20261023.md](isolated_core_projection_20261023.md) | Proposed source-attested isolated Core packaging lane that preserves frozen MRL inputs and cannot publish |
 | [core_release_decision_preflight_20261023.md](core_release_decision_preflight_20261023.md) | Unapproved architecture alternatives, exact-head evidence matrix, historical compatibility limits, and explicit review-versus-publication gates |
