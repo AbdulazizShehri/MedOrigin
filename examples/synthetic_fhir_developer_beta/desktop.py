@@ -14,8 +14,10 @@ import threading
 import tkinter as tk
 from functools import partial
 from pathlib import Path
+from tkinter import filedialog
 from typing import Any
 
+from evidence_export import save_receipt_new
 from reproduce import run_one, verify_workspace_shell
 from synthetic_cases import load_synthetic_case
 
@@ -349,6 +351,11 @@ class Desktop:
         self.copy_button = self._button(buttons, "Copy report SHA-256", self._copy, fill=False)
         self.copy_button.configure(state="disabled")
         self.copy_button.pack(side="left")
+        self.export_button = self._button(
+            buttons, "Save synthetic evidence...", self._save_receipt, fill=False
+        )
+        self.export_button.configure(state="disabled")
+        self.export_button.pack(side="left", padx=(12, 0))
 
     def _make_safety(self, page: tk.Frame) -> None:
         self._subtitle(
@@ -370,6 +377,11 @@ class Desktop:
             (
                 "UNPUBLISHED",
                 "Independent security review and package/version decisions remain open.",
+            ),
+            (
+                "EXPLICIT LOCAL EXPORT",
+                "Only synthetic status and SHA-256 digests can be saved. "
+                "Existing files are never overwritten.",
             ),
         ]
         for key, value in notes:
@@ -403,6 +415,7 @@ class Desktop:
         self.run_button.configure(state="disabled")
         self.case_button.configure(state="disabled")
         self.copy_button.configure(state="disabled")
+        self.export_button.configure(state="disabled")
         self.status.set("RUNNING - LOCAL CHECK")
         self.result_line.set("Checking bundled synthetic fixture...")
         self.report_hash.set("Not generated")
@@ -465,13 +478,39 @@ class Desktop:
                     if result["workspace"] is not None:
                         self.workspace_line.set("Workspace 0.1.0.dev1 - SYNTHETIC / offline-shell")
                     self.copy_button.configure(state="normal")
+                    self.export_button.configure(state="normal")
                 else:
                     self.last_result = None
+                    self.copy_button.configure(state="disabled")
+                    self.export_button.configure(state="disabled")
                     self.status.set("NOT QUALIFIED")
                     self.result_line.set(str(result))
         except queue.Empty:
             pass
         self.root.after(100, self._drain)
+
+    def _save_receipt(self) -> None:
+        if self.working or self.last_result is None:
+            return
+        filename = filedialog.asksaveasfilename(
+            parent=self.root,
+            title="Save synthetic-only developer evidence",
+            defaultextension=".json",
+            initialfile="medorigin-synthetic-evidence.json",
+            filetypes=[("JSON evidence (synthetic only)", "*.json")],
+        )
+        if not filename:
+            return
+        try:
+            save_receipt_new(
+                Path(filename),
+                self.last_result,
+                case_verified=self.case_status.get() == "SYNTHETIC / verified fixture",
+            )
+        except (OSError, ValueError):
+            self.status.set("EXPORT NOT SAVED - EXISTING FILE PRESERVED")
+            return
+        self.status.set("SYNTHETIC EVIDENCE SAVED")
 
     def _copy(self) -> None:
         if not self.last_result:

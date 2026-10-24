@@ -40,6 +40,29 @@ Its dependencies can require a normal *free* Python package installation
 before the local runtime can operate offline; this demo itself never uploads
 data or connects to an EHR.
 
+## Explicit synthetic-only evidence export (desktop preview)
+
+After **Validate synthetic fixture** succeeds, select
+**Save synthetic evidence...** in the native developer preview.
+Choose a new `.json` filename using the save dialog. The output contains
+**only** validated structural-check status and SHA-256 digests, flags
+indicating that the optional installed synthetic Workspace/case preview was
+verified, and explicit statements that public release, independent security
+review, and clinical use are **not** authorized.
+
+This is an **explicit local export**, not a saved patient record or a
+clinical FHIR bundle. Original JSON documents, names, encounter identifiers,
+machine-specific paths, Workspace objects and validation source data are
+**excluded**. A destination that already exists is **never overwritten**,
+and failed/partial validation does not enable export. Each successful
+receipt is deterministic for a fixed set of validated synthetic results.
+No server or network connection is involved in writing the local file.
+
+The exported receipt does **not** independently certify its SHA-256 values,
+the completeness of HL7 FHIR conformance, or historical dataset compatibility.
+Use the existing source-bound package attestations and separate review gates
+for release qualification. Do not save any real patient data here.
+
 ## Pinned synthetic case explorer (desktop preview only)
 
 The optional native Tkinter preview has a **Synthetic cases** navigation page.

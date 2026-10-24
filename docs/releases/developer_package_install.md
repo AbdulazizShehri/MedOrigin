@@ -98,6 +98,18 @@ example, **not** full HL7 FHIR conformance, clinical correctness, or an
 authorized distribution. The example has no publication path and does not
 modify the frozen research root or historical v0.2.0 data.
 
+## Synthetic-only local evidence export from native desktop
+
+The optional native Developer Beta preview also offers an explicit
+**Save synthetic evidence...** action after a successful bundled synthetic
+FHIR validation. It saves a new JSON receipt containing **only the
+structural-check status and SHA-256 digests**, plus tightly whitelisted
+synthetic Workspace flags when applicable. It never writes the source FHIR
+fixture, original patient/encounter objects, arbitrary medical records,
+machine paths, or any existing output file. The GUI export is **disabled**
+before a verified run or after failure. This is a private local developer
+artifact, not a clinical report or authorization to publish the package.
+
 ## Optional pinned synthetic case exploration
 
 The [native developer-only desktop example](../../examples/synthetic_fhir_developer_beta/README.md)
