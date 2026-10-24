@@ -39,6 +39,25 @@ def render(receipt: dict[str, Any]) -> str:
             f"<dd><code>{fixture}</code></dd></dl>"
             "</article>"
         )
+    workspace = receipt.get("workspace")
+    if workspace is not None:
+        expected = {
+            "application": "medscale-workspace",
+            "version": "0.1.0.dev1",
+            "data_class": "SYNTHETIC",
+            "mode": "offline-shell",
+            "ready": True,
+        }
+        if not isinstance(workspace, dict) or workspace != expected:
+            raise ValueError("Workspace status does not match synthetic-safe contract")
+        cards.append(
+            '<article class="result" aria-label="Optional synthetic Workspace status">'
+            '<div class="result-heading"><span class="status">READY</span>'
+            "<h3>Synthetic Workspace</h3></div>"
+            "<p>Installed <code>medscale-workspace 0.1.0.dev1</code>: "
+            "offline-shell / SYNTHETIC. No production key-provider or clinical access.</p>"
+            "</article>"
+        )
     result_cards = "\n".join(cards)
     return f"""<!doctype html>
 <html lang="en">
@@ -140,7 +159,7 @@ using only fictional synthetic FHIR data and an installed <code>medscale 0.3.0</
 <section class="stats" aria-label="Evidence summary">
 <div class="stat"><b>{len(runs)}</b><span>Installed CLI execution(s)</span></div>
 <div class="stat"><b>100%</b><span>Fixture tests passed</span></div>
-<div class="stat"><b>0</b><span>Network requests / patient records</span></div>
+<div class="stat"><b>LOCAL</b><span>Synthetic-only demonstration</span></div>
 </section>
 <section class="results" aria-label="Verified results">{result_cards}</section>
 <footer>

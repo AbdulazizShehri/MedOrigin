@@ -80,6 +80,15 @@ only committed synthetic JSON fixtures. It exercises the documented and legacy
 FHIR commands, writes a local content-addressed validation report, rejects
 malformed JSON, and produces an inspectable receipt. The demo also supports an
 optional second Python runtime for comparing deterministic report bytes.
+If the separate `medscale-workspace 0.1.0.dev1` distribution is already installed,
+the demo can optionally include its **four-field, synthetic-only local shell
+status** via `--workspace-python /path/to/workspace/bin/python` (use
+`Scripts/python.exe` on Windows). It rejects extra metadata, incompatible
+versions, and missing environments rather than displaying any object data.
+Workspace is **not required** for the Core FHIR example, and this optional
+status does not imply a clinician GUI, real patient support or approved key
+management.
+
 It also generates a **standalone static `preview.html`** for locally
 reviewing the synthetic structural result and SHA-256 hashes in a browser,
 with no web server, external resources, JavaScript or patient data.

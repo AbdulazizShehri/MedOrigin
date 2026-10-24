@@ -14,6 +14,32 @@ On Linux/macOS, supply `venv/bin/medscale` instead. To compare output bytes from
 
 The command checks the installed distribution version, validates a tiny synthetic `StructureDefinition` file, verifies its local content-addressed `report.json`, exercises the documented and legacy FHIR commands, and confirms a malformed JSON fixture exits with code **1**. Successful completion prints `MEDORIGIN_SYNTHETIC_FHIR_DEMO_PASS` and the SHA-256 digests. `--out` must name a *nonexistent* directory, which protects existing evidence from accidental overwrite. If an error occurs, treat the partial output as nonqualifying.
 
+## Optional installed synthetic Workspace status
+
+MedOrigin also has a **separate**, independently installed Python distribution,
+`medscale-workspace 0.1.0.dev1`. If you have already installed it into an
+independent Python 3.11/3.12 environment, add `--workspace-python` pointing to
+that environment's `python.exe` (Windows) or `bin/python` (macOS/Linux):
+
+```powershell
+python examples/synthetic_fhir_developer_beta/reproduce.py --cli "C:/path/to/core/venv/Scripts/medscale.exe" --workspace-python "C:/path/to/workspace/venv/Scripts/python.exe" --out "C:/path/to/new-synthetic-combined-demo"
+```
+
+The optional check executes the separately installed `python -I -m
+medscale_workspace` synthetic shell, verifies exact distribution version and
+admits **only** four known non-object metadata fields: application, SYNTHETIC
+data class, offline-shell mode and ready=true. Any unexpected fields (including
+patient names or record content), wrong version, missing package, or invalid
+status cause a **fail-closed** result and cannot appear in the static preview.
+
+The browser preview adds a clear **Synthetic Workspace** status card when this
+optional check passed. Otherwise the original Core-only FHIR example and its
+browser preview work without any Workspace installation. The Workspace shell
+is not a real clinician UI and has no production platform root-key provider.
+Its dependencies can require a normal *free* Python package installation
+before the local runtime can operate offline; this demo itself never uploads
+data or connects to an EHR.
+
 ## Offline browser preview
 
 Successful execution also writes a **static `preview.html`** in the new

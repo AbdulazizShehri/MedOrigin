@@ -74,9 +74,48 @@ def run_one(cli: Path, directory: Path, label: str) -> dict[str, Any]:
     }
 
 
+def verify_workspace_shell(interpreter: Path, directory: Path) -> dict[str, object]:
+    """Admit only the installed Workspace's non-object synthetic shell status."""
+    metadata = call(
+        interpreter,
+        ["-I", "-c", "import importlib.metadata as m; print(m.version('medscale-workspace'))"],
+        directory,
+    )
+    if metadata.returncode != 0 or metadata.stdout.strip() != "0.1.0.dev1":
+        raise ValueError("installed Workspace distribution must be medscale-workspace 0.1.0.dev1")
+    shell = call(interpreter, ["-I", "-m", "medscale_workspace"], directory)
+    if shell.returncode != 0 or len(shell.stdout) > 2048:
+        raise ValueError("synthetic Workspace shell failed or returned oversized output")
+    try:
+        payload = json.loads(shell.stdout)
+    except json.JSONDecodeError as exc:
+        raise ValueError("Workspace shell did not return valid JSON") from exc
+    allowed = {
+        "application": "medscale-workspace",
+        "data_class": "SYNTHETIC",
+        "mode": "offline-shell",
+        "ready": True,
+    }
+    if not isinstance(payload, dict) or payload != allowed:
+        # Never include untrusted payload or stderr in a failure message.
+        raise ValueError("Workspace shell status is not the safe synthetic-only contract")
+    return {
+        "application": allowed["application"],
+        "version": "0.1.0.dev1",
+        "data_class": allowed["data_class"],
+        "mode": allowed["mode"],
+        "ready": True,
+    }
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--cli", required=True, type=Path, help="Installed medscale executable")
+    parser.add_argument(
+        "--workspace-python",
+        type=Path,
+        help="Optional Python from a separately installed synthetic Workspace environment",
+    )
     parser.add_argument(
         "--alt-cli", type=Path, help="Optional installed medscale on a second Python runtime"
     )
@@ -90,6 +129,9 @@ def main(argv: list[str] | None = None) -> int:
     for cli in clis:
         if not cli.is_file():
             parser.error(f"installed CLI not found: {cli}")
+    workspace_python = args.workspace_python.resolve() if args.workspace_python else None
+    if workspace_python is not None and not workspace_python.is_file():
+        parser.error("installed Workspace Python interpreter not found")
     for fixture in (GOOD, BAD):
         if not fixture.is_file():
             parser.error(f"missing synthetic fixture: {fixture}")
@@ -109,6 +151,8 @@ def main(argv: list[str] | None = None) -> int:
             "independent_review_completed": False,
             "runs": runs,
         }
+        if workspace_python is not None:
+            receipt["workspace"] = verify_workspace_shell(workspace_python, output)
         record = output / "evidence.json"
         record.write_text(json.dumps(receipt, sort_keys=True, indent=2) + "\n", encoding="utf-8")
         preview = subprocess.run(
