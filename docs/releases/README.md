@@ -59,6 +59,7 @@ flowchart LR
 | [tag_ruleset_handoff_20261024.md](tag_ruleset_handoff_20261024.md) | Administrator-only release-tag protection checklist and read-only GitHub ruleset admission; no tag or publication authorization |
 | [successor_version_decision_574.md](successor_version_decision_574.md) | Proposed next software version, frozen-input reconciliation options, compatibility and release-authority gates — not a release approval |
 | [historical_compatibility_preflight_574.md](historical_compatibility_preflight_574.md) | Exact-tag-to-main public API, CLI and dataset-integrity preflight; behavioral and persisted-format gates still open |
+| [historical_dataset_compatibility_replay_20261024.md](historical_dataset_compatibility_replay_20261024.md) | Reproducible pinned v0.2.0-versus-candidate synthetic dataset differential, SHA-256 evidence and immutable-writer guard receipts |
 | [v0_3_0_candidate_qualification.md](v0_3_0_candidate_qualification.md) | Versioned Core developer preview candidate, exact identity tests, safety bounds and publication gates — not a release |
 | [v0_3_0_compatibility_disposition_574.md](v0_3_0_compatibility_disposition_574.md) | Bounded no-rewrite/no-auto-migration policy and frozen package-metadata isolation for source candidate, with remaining publication gates |
 | [artifact_lifecycle.md](artifact_lifecycle.md) | Every artifact class, its states and gates |
