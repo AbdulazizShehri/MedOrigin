@@ -79,7 +79,12 @@ def tool_receipt(
     script: str, args: list[str], expected_status: str, checkout: Path
 ) -> dict[str, Any]:
     """All upstream artifact verifiers are strictly read-only."""
-    out = run([sys.executable, str(checkout / "scripts" / script), *args], cwd=checkout)
+    try:
+        out = run([sys.executable, str(checkout / "scripts" / script), *args], cwd=checkout)
+    except QualificationError as exc:
+        # Only fixed, internally selected verifier names appear in diagnostics.
+        # Do not propagate stdout/stderr from possibly hostile package files.
+        raise QualificationError(f"local artifact verifier failed: {script}") from exc
     try:
         result = json.loads(out)
     except ValueError as exc:
@@ -106,7 +111,10 @@ def installed_wheel_matches(wheel: Path, python: Path, expected_minor: int) -> i
         }
     if len(expected) < 50:
         raise QualificationError("no trustworthy Python source inventory in wheel")
-    raw = run([str(python), "-I", "-c", INSTALLED_CHECK], stdin=json.dumps(expected))
+    try:
+        raw = run([str(python), "-I", "-c", INSTALLED_CHECK], stdin=json.dumps(expected))
+    except QualificationError as exc:
+        raise QualificationError("installed Python source-byte verification failed") from exc
     try:
         payload = json.loads(raw)
     except ValueError as exc:
@@ -170,19 +178,22 @@ def qualify(
     demo = SCRIPT_ROOT / "examples" / "synthetic_fhir_developer_beta" / "reproduce.py"
     with tempfile.TemporaryDirectory(prefix="medorigin-readiness-") as temp:
         output = Path(temp) / "synthetic-evidence"
-        stdout = run(
-            [
-                str(python311),
-                str(demo),
-                "--cli",
-                str(cli311),
-                "--alt-cli",
-                str(cli312),
-                "--out",
-                str(output),
-            ],
-            cwd=SCRIPT_ROOT,
-        )
+        try:
+            stdout = run(
+                [
+                    str(python311),
+                    str(demo),
+                    "--cli",
+                    str(cli311),
+                    "--alt-cli",
+                    str(cli312),
+                    "--out",
+                    str(output),
+                ],
+                cwd=SCRIPT_ROOT,
+            )
+        except QualificationError as exc:
+            raise QualificationError("synthetic installed-CLI demonstration failed") from exc
         if MARKER not in stdout.splitlines():
             raise QualificationError("synthetic FHIR demonstration not qualified")
         receipt = json.loads((output / "evidence.json").read_text(encoding="utf-8"))
@@ -227,7 +238,11 @@ def main(argv: list[str] | None = None) -> int:
             args.python311.resolve(),
             args.python312.resolve(),
         )
-    except (QualificationError, OSError, ValueError, KeyError, zipfile.BadZipFile):
+    except QualificationError as exc:
+        # Only fixed, author-controlled failure descriptions; never child output.
+        print(f"MEDORIGIN_PREPUBLICATION_REHEARSAL_BLOCKED: {exc}", file=sys.stderr)
+        return 2
+    except (OSError, ValueError, KeyError, zipfile.BadZipFile):
         print("MEDORIGIN_PREPUBLICATION_REHEARSAL_BLOCKED", file=sys.stderr)
         return 2
     print(json.dumps(result, indent=2, sort_keys=True))

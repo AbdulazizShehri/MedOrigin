@@ -35,7 +35,9 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-          fetch-depth: 0
+          # Fetch only the immutable triggering commit, not every historical
+          # branch/ref. Old extremely long branch names exceed Windows Git paths.
+          fetch-depth: 1
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
       - name: Install pinned uv, cache disabled

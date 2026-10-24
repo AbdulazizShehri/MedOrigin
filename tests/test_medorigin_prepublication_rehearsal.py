@@ -105,6 +105,24 @@ def test_rehearsal_fails_missing_inputs_without_creating_artifacts(
     assert list(tmp_path.iterdir()) == []
 
 
+def test_rehearsal_diagnostic_identifies_verifier_without_echoing_tool_output(
+    rehearsal: Any, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    def reject(*_args: object, **_kwargs: object) -> str:
+        raise rehearsal.QualificationError("local qualification command failed; PATIENT-SECRET")
+
+    monkeypatch.setattr(rehearsal, "run", reject)
+    with pytest.raises(rehearsal.QualificationError) as exc:
+        rehearsal.tool_receipt(
+            "check_core_wheel_source_identity.py",
+            [],
+            "SOURCE_BOUND_WHEEL_QUALIFIED_ONLY",
+            tmp_path,
+        )
+    assert str(exc.value) == ("local artifact verifier failed: check_core_wheel_source_identity.py")
+    assert "PATIENT-SECRET" not in str(exc.value)
+
+
 def test_rehearsal_has_no_publish_paths_or_credentials() -> None:
     content = SCRIPT.read_text(encoding="utf-8")
     for command in ("twine upload", "gh release create", "git push", "hf upload", "pip install -U"):
