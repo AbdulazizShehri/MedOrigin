@@ -71,7 +71,13 @@ def run(args: list[str], *, stdin: str | None = None, cwd: Path | None = None) -
     except (OSError, subprocess.TimeoutExpired) as exc:
         raise QualificationError("local qualification command could not complete") from exc
     if completed.returncode != 0 or len(completed.stdout) > MAX_OUTPUT:
-        raise QualificationError("local qualification command failed; no artifact admitted")
+        # Exit status is machine-generated; never include stdout or stderr,
+        # which may contain source paths or unexpected third-party payloads.
+        if completed.returncode != 0:
+            raise QualificationError(
+                f"local qualification command failed (exit {completed.returncode})"
+            )
+        raise QualificationError("local qualification command produced oversized output")
     return completed.stdout
 
 
@@ -114,7 +120,9 @@ def installed_wheel_matches(wheel: Path, python: Path, expected_minor: int) -> i
     try:
         raw = run([str(python), "-I", "-c", INSTALLED_CHECK], stdin=json.dumps(expected))
     except QualificationError as exc:
-        raise QualificationError("installed Python source-byte verification failed") from exc
+        raise QualificationError(
+            f"installed Python source-byte verification failed: {exc}"
+        ) from exc
     try:
         payload = json.loads(raw)
     except ValueError as exc:

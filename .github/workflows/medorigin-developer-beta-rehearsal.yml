@@ -57,6 +57,12 @@ jobs:
           $scratch = Join-Path $env:RUNNER_TEMP 'medorigin-beta-rehearsal'
           if (Test-Path $scratch) { throw 'Refuse to overwrite an existing rehearsal' }
           New-Item -ItemType Directory -Path $scratch | Out-Null
+          # The isolated projector atomically renames its temp directory.
+          # On hosted Windows, default TEMP is C: while RUNNER_TEMP is D:;
+          # keep both source and destination on the same volume.
+          $env:TMPDIR = $scratch
+          $env:TEMP = $scratch
+          $env:TMP = $scratch
           $stage = Join-Path $scratch 'projected'
           $dist = Join-Path $scratch 'dist'
 
