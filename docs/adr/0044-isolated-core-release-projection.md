@@ -1,6 +1,6 @@
 # ADR-0044 — Explicit isolated Core release packaging projection
 
-- **Status:** Proposed — founder adoption required before this packaging route can replace the existing one
+- **Status:** Proposed; founder approved the synthetic-only Developer Beta and no-automatic-migration *scope* on 2026-10-24, but **did not adopt this packaging architecture or authorize publication**
 - **Date:** 2026-10-23
 - **Scope:** Prepublication packaging architecture only; no release, no model training, no clinical use
 - **Tracking:** [Software release Issue #574](https://github.com/AbdulazizShehri/MedOrigin/issues/574)
