@@ -89,6 +89,10 @@ def propose(target: Path) -> dict[str, object]:
                 "projected_pyproject_sha256": sha(modified),
                 "removed_optional_section_sha256": removed_sha,
                 "scope": "synthetic_only_base_core",
+                # Hatchling reads the nearest parent .gitignore unless this
+                # isolated staging root contains one. Attest an empty local
+                # sentinel so no developer-global Graft excludes can leak.
+                "staged_vcs_ignore_sha256": sha(b""),
                 "adr_0044_amendment_accepted": False,
                 "independent_security_review_completed": False,
                 "publication_authorized": False,
@@ -96,6 +100,7 @@ def propose(target: Path) -> dict[str, object]:
             }
         )
         (temp / "pyproject.toml").write_bytes(modified)
+        (temp / ".gitignore").write_bytes(b"")
         # Windows text mode translates LF to CRLF; byte-oriented encoding
         # makes independently rebuilt proposal sdist receipts platform-stable.
         receipt_file.write_bytes(

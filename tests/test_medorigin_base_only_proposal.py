@@ -100,6 +100,8 @@ def test_source_bound_proposal_receipt_and_no_overwrite(
     receipt = json.loads(receipt_bytes)
     assert receipt_bytes == (json.dumps(receipt, indent=2, sort_keys=True) + "\n").encode("utf-8")
     assert b"\r" not in receipt_bytes
+    assert (target / ".gitignore").read_bytes() == b""
+    assert receipt["staged_vcs_ignore_sha256"] == sha(b"")
     assert receipt["schema"] == "MEDORIGIN-CORE-BASE-ONLY-PROPOSAL-1"
     assert receipt["publication_authorized"] is False
     assert receipt["adr_0044_amendment_accepted"] is False

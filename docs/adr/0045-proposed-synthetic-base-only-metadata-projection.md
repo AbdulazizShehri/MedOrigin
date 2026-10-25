@@ -39,6 +39,12 @@ scratch staging tree** with exactly one further transformation:
   `8c0db866843e15ec75b764dfff4b4d983856d1e2c6f95f4427f576427e54378a`.
   Fail closed on unknown section, unexpected TOML changes or pre-existing
   destination.
+- Stage an explicitly **empty** `.gitignore` sentinel, pinned by the
+  provenance field `staged_vcs_ignore_sha256`, so Hatchling does not climb
+  into an unrelated user's home directory to import local Graft ignore rules.
+  The sentinel is not added to canonical Git research sources and remains
+  an unapproved build-only packaging file; archive verifiers must allowlist
+  and hash it explicitly.
 - Emit the proposal provenance as canonical UTF-8 JSON with **LF** line
   endings on all platforms (including Windows), avoiding needless
   cross-platform sdist hash differences caused by newline translation.
