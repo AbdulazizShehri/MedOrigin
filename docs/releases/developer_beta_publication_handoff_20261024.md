@@ -98,7 +98,10 @@ new `scripts/assemble_medorigin_exact_head_qa.py` instead. It
 requires the pre-built, separately source-qualified Wheel, sdist, and
 source-provenance receipt from *that same* Git commit, checks their
 literal known SHA-256 digests, includes only eight synthetic FHIR
-examples and legal notices from the pinned Git tree, then produces an
+examples and legal notices from the pinned Git tree, and independently
+pins **all 15 source, executable-example, provenance and artifact SHA-256
+values** in the verifier rather than trusting the ZIP's mutable checksum
+list. It then produces an
 unpublished, deterministically ordered 16-member ZIP. It refuses
 unexpected members, falsified review/publication flags, duplicate or
 symlink archive entries, mutated artifact/provenance hashes, and

@@ -57,6 +57,48 @@ MEMBERS = frozenset(
         *(EXAMPLE_ROOT + name for name in EXAMPLES),
     }
 )
+# Every non-checksum member, including executable examples and provenance,
+# is independently pinned to the already-qualified immutable #617 source.
+# The ZIP's own SHA256SUMS is not a trust anchor.
+SOURCE_MEMBER_SHA256 = {
+    "BUNDLE_MANIFEST.json": "5e6cc422d1adf378d2d21dc847774f29379535fe1e4dee62f5831a0b39c156f0",
+    "LICENSE": "5da5b11f7d224c2a2e2a3d11c37d5ae9a6fd2d1d3d6229354b992c4dd58c3792",
+    "README_UNPUBLISHED_QA.md": "80070c1501cbb6d00c32fba96cb3c9e8241fd28e83cf8274d630fe4303b9d132",
+    "THIRD_PARTY_NOTICES.md": "ce6d3251138cd27d90bf27518e06cc50b0bc4dbb7dcf203e8ddb8695456019d7",
+    "artifacts/medscale-0.3.0-py3-none-any.whl": (
+        "a718b77794c817dfcf6a711cd97324b3626e4d65382ba39c670a7c303fae07e7"
+    ),
+    "artifacts/medscale-0.3.0.tar.gz": (
+        "85aae79bf41a935e967cde5c111b5c3f652430a25a03b43655fc7bd339a1d72a"
+    ),
+    "examples/synthetic_fhir_developer_beta/README.md": (
+        "c3a75e9e3dd9aac3ea06333af66f10baf86ebc3a17d3a57a69c6301e3436e203"
+    ),
+    "examples/synthetic_fhir_developer_beta/desktop.py": (
+        "6eb01ae36dd63b8112062bdc8b43e3b26c78c0d2d63ad4cf7b589746a39005b5"
+    ),
+    "examples/synthetic_fhir_developer_beta/evidence_export.py": (
+        "3dcda237b734b98c26061f16d8c92eec6b799ef925c936d828fa6b83dd767ffc"
+    ),
+    "examples/synthetic_fhir_developer_beta/malformed.json": (
+        "86158a37c4021be8fbfa95733f98ac90b4bc8da2595bd164452b3f750c78a378"
+    ),
+    "examples/synthetic_fhir_developer_beta/preview.py": (
+        "ab8c4dfb976265729e9073d01804c60788413f8358f47535522b24ad4f1b5bb0"
+    ),
+    "examples/synthetic_fhir_developer_beta/reproduce.py": (
+        "ae98851ffe5bf1c6a795ee44310f5717a53c7ec3261d987fc33eadcd006d8eed"
+    ),
+    "examples/synthetic_fhir_developer_beta/synthetic_cases.py": (
+        "9a551d1002c88ae947ecfd96da9b024d8c329bf466a932c78c98cdc77d4978c4"
+    ),
+    "examples/synthetic_fhir_developer_beta/synthetic_structure_definition.json": (
+        "8a3703ef9938438eee8544c9083246b7b42f15e95dbc9847df2f1deb18087b14"
+    ),
+    "provenance/MEDORIGIN_SOURCE_PROVENANCE.json": (
+        "f6fe1e8c40157b735a5abe002653abad50eb8edf3d88ed6050208f83b7d6a26c"
+    ),
+}
 MAX_ZIP = 5_000_000
 MAX_FILE = 2_000_000
 STAMP = (2020, 1, 1, 0, 0, 0)
@@ -150,6 +192,13 @@ def check_members(files: dict[str, bytes]) -> dict[str, object]:
     for name, expected in actual.items():
         if sha(files[name]) != expected:
             raise ExactHeadQualificationError("checksum mismatch")
+    # The member checksum list is attacker-editable together with the ZIP.
+    # Pin the expected source and provenance against independent local constants.
+    if set(SOURCE_MEMBER_SHA256) != MEMBERS - {CHECKSUMS}:
+        raise ExactHeadQualificationError("source hash trust inventory incomplete")
+    for name, expected in SOURCE_MEMBER_SHA256.items():
+        if sha(files[name]) != expected:
+            raise ExactHeadQualificationError("independently pinned source member differs")
     manifest = json_map(files[MANIFEST])
     contract = manifest_contract()
     if manifest != contract or any(type(manifest[k]) is not type(v) for k, v in contract.items()):

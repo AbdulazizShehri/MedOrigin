@@ -50,6 +50,11 @@ def files(maker: Any, monkeypatch: pytest.MonkeyPatch) -> dict[str, bytes]:
     }
     result[maker.PROVENANCE] = json.dumps(provenance).encode()
     refresh(maker, result)
+    monkeypatch.setattr(
+        maker,
+        "SOURCE_MEMBER_SHA256",
+        {name: maker.sha(value) for name, value in result.items() if name != maker.CHECKSUMS},
+    )
     return result
 
 
@@ -143,6 +148,29 @@ def test_adversarial_member_mutations_rejected(
         maker.check_members(altered)
 
 
+@pytest.mark.parametrize(
+    ("name", "delta"),
+    [
+        ("examples/synthetic_fhir_developer_beta/desktop.py", b"\n# tampered executable\n"),
+        ("examples/synthetic_fhir_developer_beta/reproduce.py", b"\n# injected flow\n"),
+        ("provenance/MEDORIGIN_SOURCE_PROVENANCE.json", b"\n"),
+        ("LICENSE", b"\nmodified terms\n"),
+    ],
+)
+def test_rehashed_self_attestation_cannot_replace_pinned_source(
+    maker: Any, files: dict[str, bytes], name: str, delta: bytes
+) -> None:
+    altered = files.copy()
+    altered[name] += delta
+    # Recompute *all* self-asserted ZIP checksums to simulate a hostile
+    # distributor. Keep the externally known source-member pins unchanged.
+    refresh(maker, altered)
+    with pytest.raises(
+        maker.ExactHeadQualificationError, match="independently pinned source member differs"
+    ):
+        maker.check_members(altered)
+
+
 def test_duplicate_archive_entry_is_rejected(
     maker: Any, files: dict[str, bytes], tmp_path: Path
 ) -> None:
@@ -200,6 +228,17 @@ def test_source_builder_pins_git_sha_and_core_bytes(
         raise AssertionError("unanticipated Git access")
 
     monkeypatch.setattr(maker, "git", simulated_git)
+    # The synthetic input fixture has a different generated README from the
+    # real release, so first derive its independently pinned expectation.
+    real_checker = maker.check_members
+    monkeypatch.setattr(maker, "check_members", lambda _files: {})
+    preview = maker.construct(artifacts, provenance)
+    monkeypatch.setattr(maker, "check_members", real_checker)
+    monkeypatch.setattr(
+        maker,
+        "SOURCE_MEMBER_SHA256",
+        {name: maker.sha(data) for name, data in preview.items() if name != maker.CHECKSUMS},
+    )
     built = maker.construct(artifacts, provenance)
     assert maker.check_members(built)["member_count"] == 16
     (artifacts / maker.SDIST).write_bytes(b"forged")
