@@ -1,0 +1,105 @@
+name: MedOrigin Linux base-only proposal rehearsal (unpublished)
+
+on:
+  pull_request:
+    branches:
+      - fix/medorigin-isolated-build-vcs-ignore-20261025
+
+# Builder and validator are intentionally nonpublishing; no write scopes,
+# package-index credentials, deployment environments, model installs, or upload.
+permissions:
+  contents: read
+
+jobs:
+  linux-proposal-identity:
+    name: Linux source-bound Core-only proposal (NO RELEASE)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout exact proposed source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Install uv (free)
+        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        with:
+          enable-cache: false
+
+      - name: Install Python 3.11 and 3.12
+        run: uv python install 3.11 3.12
+
+      - name: Build isolated proposed Wheel and sdist, without publication
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/stage_medorigin_base_only_proposal.py --out "$RUNNER_TEMP/medorigin-linux-proposal-source"
+          uv build --wheel --sdist "$RUNNER_TEMP/medorigin-linux-proposal-source" --out-dir "$RUNNER_TEMP/medorigin-linux-proposal-dist"
+          python3 scripts/check_base_core_publication_scope.py --dist "$RUNNER_TEMP/medorigin-linux-proposal-dist"
+
+      - name: Inspect archive contents, provenance and exact source
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import hashlib, json, os, pathlib, subprocess, tarfile, zipfile
+          dist = pathlib.Path(os.environ["RUNNER_TEMP"]) / "medorigin-linux-proposal-dist"
+          wh = dist / "medscale-0.3.0-py3-none-any.whl"
+          sd = dist / "medscale-0.3.0.tar.gz"
+          def sha(raw):
+              return hashlib.sha256(raw).hexdigest()
+          with zipfile.ZipFile(wh) as archive:
+              wheel = {info.filename: sha(archive.read(info)) for info in archive.infolist()}
+          with tarfile.open(sd, "r:gz") as archive:
+              items = {
+                  info.name: archive.extractfile(info).read()
+                  for info in archive.getmembers() if info.isfile()
+              }
+          assert len(wheel) == 255, len(wheel)
+          assert len(items) == 258, len(items)
+          assert items["medscale-0.3.0/.gitignore"] == b""
+          receipt_bytes = items["medscale-0.3.0/MEDORIGIN_SOURCE_PROVENANCE.json"]
+          receipt = json.loads(receipt_bytes)
+          assert receipt_bytes == (json.dumps(receipt, indent=2, sort_keys=True) + "\n").encode()
+          assert receipt["schema"] == "MEDORIGIN-CORE-BASE-ONLY-PROPOSAL-1"
+          assert receipt["staged_vcs_ignore_sha256"] == sha(b"")
+          assert receipt["adr_0044_amendment_accepted"] is False
+          assert receipt["publication_authorized"] is False
+          assert receipt["independent_security_review_completed"] is False
+          commit = subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()
+          assert receipt["source_git_commit"] == commit
+          assert sha(items["medscale-0.3.0/pyproject.toml"]) == receipt["projected_pyproject_sha256"]
+          assert len(receipt["source_files"]) == 254
+          for name, expected in receipt["source_files"].items():
+              packaged = items["medscale-0.3.0/" + name]
+              assert sha(packaged) == expected, name
+          def digest(index):
+              return sha(json.dumps(index, sort_keys=True, separators=(",", ":")).encode())
+          sdist_index = {key: sha(value) for key, value in items.items()}
+          print("LINUX_BASE_ONLY_SOURCE_MANIFEST_PASS")
+          print("source_commit", commit)
+          print("wheel_sha256", sha(wh.read_bytes()))
+          print("sdist_sha256", sha(sd.read_bytes()))
+          print("wheel_member_content_digest", digest(wheel))
+          print("sdist_member_content_digest", digest(sdist_index))
+          print("publication_authorized=false; adr_amendment_accepted=false")
+          PY
+
+      - name: Install offline into clean 3.11 and 3.12; replay fictional FHIR
+        shell: bash
+        run: |
+          set -euo pipefail
+          wheel="$RUNNER_TEMP/medorigin-linux-proposal-dist/medscale-0.3.0-py3-none-any.whl"
+          for version in 3.11 3.12; do
+            dir="$RUNNER_TEMP/medorigin-linux-venv-${version}"
+            uv venv --offline --python "$version" "$dir"
+            uv pip install --offline --no-index --no-deps --python "$dir/bin/python" "$wheel"
+            "$dir/bin/medscale" --version
+          done
+          "$RUNNER_TEMP/medorigin-linux-venv-3.11/bin/python" examples/synthetic_fhir_developer_beta/reproduce.py \
+            --cli "$RUNNER_TEMP/medorigin-linux-venv-3.11/bin/medscale" \
+            --alt-cli "$RUNNER_TEMP/medorigin-linux-venv-3.12/bin/medscale" \
+            --out "$RUNNER_TEMP/medorigin-linux-synthetic-replay"
+          echo 'LINUX_SYNTHETIC_BASE_ONLY_E2E_PASS; no release published'
