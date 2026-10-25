@@ -113,13 +113,16 @@ letter-spacing:-.04em}}
 .stat span {{color:#a9b6c7;
 font-size:13px}}
 .results {{display:grid;
-grid-template-columns:repeat(auto-fit,minmax(280px,1fr));
+grid-template-columns:repeat(auto-fit,minmax(min(100%,280px),1fr));
 gap:16px}}
 .result-heading {{display:flex;
+min-width:0;
 align-items:center;
 gap:12px}}
 h3 {{margin:0;
-font-size:18px}}
+font-size:18px;
+min-width:0;
+overflow-wrap:anywhere}}
 .status {{background:#1c3d35;
 color:#86ddb2;
 font-size:10px;
