@@ -1,6 +1,6 @@
 # ADR-0044 — Explicit isolated Core release packaging projection
 
-- **Status:** Proposed — founder adoption required before this packaging route can replace the existing one
+- **Status:** Accepted — founder explicitly approved isolated packaging route B on 2026-10-25; publication remains separately prohibited
 - **Date:** 2026-10-23
 - **Scope:** Prepublication packaging architecture only; no release, no model training, no clinical use
 - **Tracking:** [Software release Issue #574](https://github.com/AbdulazizShehri/MedOrigin/issues/574)
@@ -20,7 +20,7 @@ research receipts on Windows, leading to a real long-path build failure.
 A package containing those research artifacts would not be appropriately
 scoped for a developer-preview distribution.
 
-## Proposed alternative — declared projection with byte-level provenance
+## Accepted architecture — declared projection with byte-level provenance
 
 Keep `pyproject.toml`, `uv.lock`, all frozen MRL manifests, retained
 training/research evidence, historical version tags, and import namespaces
@@ -59,20 +59,31 @@ and the receipt. This is neither a concealed overlay nor a pretense that the
 historical frozen project metadata contained the new URLs. Research gates
 continue to validate their original source identity and remain fail-closed.
 
-## Known limits and decision needed
+## Known limits and independent reviewer requirements
 
 This approach duplicates a *minimal*, bounded packaging metadata surface.
 It cannot by itself establish full API compatibility with v0.2.0, clinical
 qualification, redistribution rights for optional extras, release tagging
 permission, or scientific reproducibility for new experiments.
 
-**Decision:** Accept this auditable packaging boundary as a successor software
-distribution lane, or reject it and separately authorize a new research-root
-identity with appropriate scientific migration. Do not merge PR #597's
-root-metadata mutation simply to bypass frozen research gates.
+**Owner decision (2026-10-25): ACCEPTED, route B.** The founder explicitly
+approved the auditable, isolated, read-only Core package projection while
+keeping MedOrigin **unpublished**. This adopts the **packaging architecture**,
+not a public release or a new scientific root. The historical v0.2.0 data,
+frozen `pyproject.toml` and `uv.lock`, scientific manifests, original
+research evidence, and mandatory attribution remain byte-immutable. Do not
+merge PR #597's root-metadata mutation to bypass frozen research gates.
 
-**Until this ADR becomes Accepted:** this unmerged implementation is an
-experimental qualification and future-release build proposal, not an adopted
-publisher. Its GitHub workflows build and inspect artifacts only and cannot
-create a tag, GitHub Release, package-index upload or deployment without
-separate explicit authorization and publication gates.
+**Unchanged release blockers:** independent source-to-artifact/security
+review #603 still requires its own attributable reviewer report with
+an explicit APPROVE FOR ADR DECISION or BLOCK conclusion; the owner's
+approval above cannot be substituted for a reviewer. Full source/CI,
+redistribution/licensing, and operator security gates must be met before
+any separately authorized tag, release, installer, external publication,
+clinical deployment, patient data, or protected-main merge. The current
+builder/workflows remain nonpublishing and may build/test only.
+
+**Free-only testing direction (2026-10-25):** Playwright or TestSprite may
+be used for functional/E2E QA without paid services. Such tests do not
+constitute independent security certification. Desktop development follows
+after packaging/security review work, not during this ADR adoption.
