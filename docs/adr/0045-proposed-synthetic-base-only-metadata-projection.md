@@ -39,7 +39,10 @@ scratch staging tree** with exactly one further transformation:
   `8c0db866843e15ec75b764dfff4b4d983856d1e2c6f95f4427f576427e54378a`.
   Fail closed on unknown section, unexpected TOML changes or pre-existing
   destination.
-- Emit a **different** provenance schema:
+- Emit the proposal provenance as canonical UTF-8 JSON with **LF** line
+  endings on all platforms (including Windows), avoiding needless
+  cross-platform sdist hash differences caused by newline translation.
+  Use a **different** provenance schema:
   `MEDORIGIN-CORE-BASE-ONLY-PROPOSAL-1`, with old and new metadata hashes,
   exact Git source commit, original frozen research identities, and
   `adr_0044_amendment_accepted=false`,

@@ -96,8 +96,10 @@ def propose(target: Path) -> dict[str, object]:
             }
         )
         (temp / "pyproject.toml").write_bytes(modified)
-        receipt_file.write_text(
-            json.dumps(record, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+        # Windows text mode translates LF to CRLF; byte-oriented encoding
+        # makes independently rebuilt proposal sdist receipts platform-stable.
+        receipt_file.write_bytes(
+            (json.dumps(record, indent=2, sort_keys=True) + "\n").encode("utf-8")
         )
         target.parent.mkdir(parents=True, exist_ok=True)
         if target.exists():

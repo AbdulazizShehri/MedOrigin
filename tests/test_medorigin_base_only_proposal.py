@@ -96,7 +96,10 @@ def test_source_bound_proposal_receipt_and_no_overwrite(
     assert sha(lock) == FROZEN_LOCK_SHA
     staged = tomllib.loads((target / "pyproject.toml").read_text(encoding="utf-8"))
     assert not staged["project"].get("optional-dependencies")
-    receipt = json.loads((target / "MEDORIGIN_SOURCE_PROVENANCE.json").read_text(encoding="utf-8"))
+    receipt_bytes = (target / "MEDORIGIN_SOURCE_PROVENANCE.json").read_bytes()
+    receipt = json.loads(receipt_bytes)
+    assert receipt_bytes == (json.dumps(receipt, indent=2, sort_keys=True) + "\n").encode("utf-8")
+    assert b"\r" not in receipt_bytes
     assert receipt["schema"] == "MEDORIGIN-CORE-BASE-ONLY-PROPOSAL-1"
     assert receipt["publication_authorized"] is False
     assert receipt["adr_0044_amendment_accepted"] is False
