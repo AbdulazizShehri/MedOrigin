@@ -200,7 +200,9 @@ and [disabled Dependabot alerts #621](https://github.com/AbdulazizShehri/MedOrig
 
 **Publication hard gate (proposed, unmerged):**
 `scripts/check_base_core_publication_scope.py` is invoked before GitHub Release
-and TestPyPI publication in the tag-triggered jobs of `release.yml`. It reads
+in the tag-triggered `release.yml`. The TestPyPI job depends on successful
+GitHub Release via `needs: github-release`, reusing the qualified artifacts
+without its own source checkout or additional token privileges. It reads
 **both** Wheel `METADATA` and sdist `PKG-INFO`, refusing any `Provides-Extra`
 or `Requires-Dist` and any unresolved dynamic dependency fields. It does not
 install, edit, sign, upload, release or tag a package. The currently
