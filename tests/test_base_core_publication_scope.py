@@ -178,17 +178,17 @@ def test_cli_actual_exit_and_no_release_side_effects(
 
 def test_gate_wired_before_both_publishers() -> None:
     source = (SCRIPT.parents[1] / ".github/workflows/release.yml").read_text(encoding="utf-8")
-    assert source.count("python scripts/check_base_core_publication_scope.py --dist dist") == 2
+    assert source.count("python scripts/check_base_core_publication_scope.py --dist dist") == 1
     assert source.index("Block release when optional") < source.index("name: Create Release")
-    assert source.index("Block TestPyPI when optional") < source.index(
-        "name: Publish exact artifact to TestPyPI"
-    )
-    # Both publish jobs need a checkout to read the trusted Python gate.
     github_job = source.split("  github-release:", 1)[1].split("  testpypi-publish:", 1)[0]
     pypi_job = source.split("  testpypi-publish:", 1)[1].split("  pr-artifact-build:", 1)[0]
     assert "actions/checkout@" in github_job
-    assert "actions/checkout@" in pypi_job
-    assert "persist-credentials: false" in pypi_job
+    assert "persist-credentials: false" in github_job
+    assert "needs: github-release" in pypi_job
+    assert "Block TestPyPI" not in pypi_job
+    assert "actions/checkout@" not in pypi_job
+    assert "permissions:\n      id-token: write" in pypi_job
+    assert "contents: write" not in pypi_job
 
 
 def test_no_independent_approval_or_publisher_code_in_gate() -> None:
