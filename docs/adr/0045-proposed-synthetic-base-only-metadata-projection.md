@@ -61,6 +61,12 @@ The **nonpublishing** independent-of-builder technical verifier
 `scripts/verify_medorigin_base_only_proposal.py` reconstructs the only
 permitted project transformation from frozen Git bytes, then compares every
 Wheel executable/resource and every sdist source file against exact Git HEAD.
+It additionally enforces a single complete bounded gzip stream and a TAR
+archive with no nonzero bytes past the logical end-of-archive. This closes a
+confirmed bypass where appended data after a valid sdist used to be ignored
+while the verifier returned PASS. Synthetic regression tests and the Ubuntu
+PR rehearsal explicitly reject appended gzip bytes, concatenated streams and
+hidden TAR data; no archive bytes are rewritten to conceal the problem.
 It rejects unsafe archive paths, symlinks, duplicate members, unqualified
 installer metadata, self-rehashed but modified source files, and mismatched
 `RECORD` inventory, while keeping `publication_authorized=false` even on

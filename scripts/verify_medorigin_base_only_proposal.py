@@ -18,6 +18,7 @@ import sys
 import tarfile
 import tomllib
 import zipfile
+import zlib
 from email.parser import BytesParser
 from email.policy import default
 from pathlib import Path, PurePosixPath
@@ -45,6 +46,8 @@ DIST_META = frozenset(
 MAX_MEMBERS = 2000
 MAX_MEMBER = 30_000_000
 MAX_TOTAL = 50_000_000
+# Bound inflated archive headers/padding separately from extracted payload bytes.
+MAX_TAR_ENVELOPE = MAX_TOTAL + MAX_MEMBERS * 2048
 
 
 class ProposalVerificationError(ValueError):
@@ -110,13 +113,35 @@ def load_wheel(path: Path) -> dict[str, bytes]:
 
 
 def load_sdist(path: Path) -> dict[str, bytes]:
+    """Require one exact, bounded gzip member and a completely closed TAR."""
     result: dict[str, bytes] = {}
     total = 0
     try:
-        with tarfile.open(path, "r:gz") as z:
+        if path.stat().st_size > MAX_TOTAL:
+            raise ProposalVerificationError("compressed sdist exceeds budget")
+        compressed = path.read_bytes()
+        if len(compressed) < 18 or compressed[:3] != bytes((31, 139, 8)) or compressed[3] != 0:
+            raise ProposalVerificationError("sdist uses an unqualified gzip header")
+        decoder = zlib.decompressobj(wbits=16 + zlib.MAX_WBITS)
+        archive = decoder.decompress(compressed, MAX_TAR_ENVELOPE + 1)
+        if len(archive) > MAX_TAR_ENVELOPE or decoder.unconsumed_tail:
+            raise ProposalVerificationError("inflated sdist envelope exceeds budget")
+        archive += decoder.flush()
+        if len(archive) > MAX_TAR_ENVELOPE:
+            raise ProposalVerificationError("inflated sdist envelope exceeds budget")
+        if not decoder.eof or decoder.unused_data:
+            raise ProposalVerificationError("sdist has an incomplete or appended gzip stream")
+        if len(archive) % 512:
+            raise ProposalVerificationError("sdist TAR blocks are not aligned")
+        with tarfile.open(fileobj=io.BytesIO(archive), mode="r:") as z:
             members = z.getmembers()
             if not members or len(members) > MAX_MEMBERS:
                 raise ProposalVerificationError("sdist entry limit exceeded")
+            trailer = max(info.offset_data + ((info.size + 511) // 512) * 512 for info in members)
+            # TAR must end in the standard zero blocks. Extra TAR headers
+            # after the logical end must not become an unverified payload.
+            if trailer > len(archive) - 1024 or any(archive[trailer:]):
+                raise ProposalVerificationError("sdist contains hidden TAR trailer bytes")
             for info in members:
                 name = info.name.rstrip("/") if info.isdir() else info.name
                 safe_name(name)
@@ -135,7 +160,7 @@ def load_sdist(path: Path) -> dict[str, bytes]:
                 if total > MAX_TOTAL:
                     raise ProposalVerificationError("sdist inflation budget exceeded")
                 result[name] = contents
-    except (OSError, tarfile.TarError, EOFError) as exc:
+    except (OSError, tarfile.TarError, EOFError, zlib.error) as exc:
         raise ProposalVerificationError("sdist archive unreadable") from exc
     return result
 
