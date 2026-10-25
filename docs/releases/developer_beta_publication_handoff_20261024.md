@@ -165,16 +165,61 @@ source examples from #617. It is a QA handoff, **not** a signed consumer
 installer, an approved integrated source release, or proof of independent
 security approval.
 
+## Security boundary for optional inference/training extras — 2026-10-25
+
+**The qualified v0.3.0 Developer Beta is the base, synthetic-only Core
+installation.** Optional inference/training extras are **NOT SECURITY-QUALIFIED**
+and are NOT authorized as part of this beta handoff.
+
+The exact, source-bound Wheel `medscale-0.3.0-py3-none-any.whl`
+(SHA-256 `a718b77794c817dfcf6a711cd97324b3626e4d65382ba39c670a7c303fae07e7`)
+has **no unconditional `Requires-Dist`**. Its optional research and training
+metadata nevertheless advertises `pillow==12.3.0` and
+`accelerate==1.14.0` when selected extras are installed. Neither library
+was installed in the clean, offline, base Core Python 3.11/3.12 rehearsals.
+
+Free `pip-audit==2.10.0` queries on the 11 direct, exact-pinned optional
+dependencies returned advisories in **two** packages:
+
+- **Pillow 12.3.0**: multiple confirmed upstream security fixes, including
+  critical/high image-decoder problems, are shipped in **Pillow 13.0.0**
+  (2026-10-16). See the
+  [upstream security release notes](https://pillow.readthedocs.io/en/stable/releasenotes/13.0.0.html).
+- **Accelerate 1.14.0**: the
+  [PYSEC-2026-3804 advisory](https://osv.dev/vulnerability/PYSEC-2026-3804)
+  documents checkpoint `weight_map` path traversal/file-read and DoS
+  behavior. A safe replacement version is **not yet qualified** in MedOrigin.
+
+The free PyPI advisory service returned 38 vulnerability **records** and OSV
+returned 43 across the same two packages, **not necessarily that many distinct
+or applicable CVEs** (some records/aliases overlap). The scan intentionally
+did **not** resolve optional transitive dependencies, two range-only extras,
+their platform wheels, licenses or execution paths. See
+[security follow-up #622](https://github.com/AbdulazizShehri/MedOrigin/issues/622)
+and [disabled Dependabot alerts #621](https://github.com/AbdulazizShehri/MedOrigin/issues/621).
+
+**Policy:** Do not install or advertise these extras as safe/qualified for
+the Developer Beta. Do not change the frozen `pyproject.toml`, `uv.lock`,
+canonical MRL manifests, historical `v0.2.0` receipts, or published project
+metadata to remove alerts. Any amended isolated packaging projection that
+removes or updates dependency metadata exceeds the currently accepted
+ADR-0044 four-URL transformation, and needs a **separate, explicit governance
+decision and exact-source package requalification**. Independent security
+review #603 remains outstanding. Base Core technical PASS is not a claim of
+overall release authorization or of optional-extras security.
+
 ## Outstanding preparation — distinct from the later publish button
 
 1. **Independent release-boundary review #603**: review exact candidate
    source-to-wheel/sdist/provenance, hostile archives, release workflow trust,
    redistribution, and persisted-format decisions. Author-run testing and
    CodeQL do not count as the external/independent reviewer receipt.
-2. **Decision #574 / ADR-0044**: approve or reject the isolated Core projection,
-   make the package/version/branding choice explicit, and preserve frozen
-   research root/lock/MRL bytes. Do not combine a source-projection route
-   with the older successor-root recommendation without reconciling policy.
+2. **Owner decision #574 / ADR-0044 (completed 2026-10-25)**: route B,
+   the isolated, read-only Core projection, is **Accepted**; retain unchanged
+   frozen research root/lock/MRL bytes. The package/version/branding and
+   optional-extras security limitations above remain explicit. Any new
+   dependency-metadata transformation requires a separate approved change;
+   do not revive the successor-root mutation without reconciliation.
 3. **Integrated exact-head CI and packaging**: the original Core #598 has
    successful hosted checks. This source example stack (#612–#616 and later)
    has not been merged. Once a final release-source tree is selected,
