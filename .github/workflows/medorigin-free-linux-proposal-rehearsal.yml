@@ -4,6 +4,7 @@ on:
   pull_request:
     branches:
       - fix/medorigin-isolated-build-vcs-ignore-20261025
+      - test/medorigin-free-linux-packaging-rehearsal-20261025
 
 # Builder and validator are intentionally nonpublishing; no write scopes,
 # package-index credentials, deployment environments, model installs, or upload.
@@ -85,6 +86,54 @@ jobs:
           print("wheel_member_content_digest", digest(wheel))
           print("sdist_member_content_digest", digest(sdist_index))
           print("publication_authorized=false; adr_amendment_accepted=false")
+          PY
+
+      - name: Verify exact committed Git source against Wheel and sdist independently
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/verify_medorigin_base_only_proposal.py --dist "$RUNNER_TEMP/medorigin-linux-proposal-dist"
+
+      - name: Refuse hostile Wheel even when RECORD is rehashed
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import base64, csv, hashlib, io, json, os, pathlib, shutil, subprocess, sys, zipfile
+          good = pathlib.Path(os.environ["RUNNER_TEMP"]) / "medorigin-linux-proposal-dist"
+          tampered = pathlib.Path(os.environ["RUNNER_TEMP"]) / "medorigin-linux-hostile-dist"
+          tampered.mkdir()
+          shutil.copyfile(good / "medscale-0.3.0.tar.gz", tampered / "medscale-0.3.0.tar.gz")
+          original = good / "medscale-0.3.0-py3-none-any.whl"
+          altered = tampered / original.name
+          record = "medscale-0.3.0.dist-info/RECORD"
+          victim = "medscale/__init__.py"
+          with zipfile.ZipFile(original) as source:
+              members = [(i, source.read(i)) for i in source.infolist()]
+          new_code = next(data for info, data in members if info.filename == victim) + b"\\n# unauthorized change\\n"
+          with zipfile.ZipFile(altered, "w") as target:
+              for info, payload in members:
+                  if info.filename == victim:
+                      payload = new_code
+                  elif info.filename == record:
+                      lines = list(csv.reader(io.StringIO(payload.decode("utf-8"))))
+                      for row in lines:
+                          if row[0] == victim:
+                              digest = base64.urlsafe_b64encode(hashlib.sha256(new_code).digest()).rstrip(b"=").decode()
+                              row[1], row[2] = "sha256=" + digest, str(len(new_code))
+                      out = io.StringIO(newline="")
+                      csv.writer(out, lineterminator="\\n").writerows(lines)
+                      payload = out.getvalue().encode("utf-8")
+                  target.writestr(info, payload)
+          result = subprocess.run(
+              [sys.executable, "scripts/verify_medorigin_base_only_proposal.py", "--dist", str(tampered)],
+              check=False, capture_output=True, text=True, timeout=90,
+          )
+          receipt = json.loads(result.stdout)
+          assert result.returncode == 2, result.stdout + result.stderr
+          assert receipt["status"] == "BLOCKED", receipt
+          assert "Wheel code differs from Git source" in receipt["reason"], receipt
+          print("LINUX_ADVERSARIAL_REHASHED_WHEEL_REFUSED")
           PY
 
       - name: Install offline into clean 3.11 and 3.12; replay fictional FHIR

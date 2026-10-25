@@ -56,6 +56,16 @@ scratch staging tree** with exactly one further transformation:
   `publication_authorized=false`.
 
 Script: `scripts/stage_medorigin_base_only_proposal.py`.
+
+The **nonpublishing** independent-of-builder technical verifier
+`scripts/verify_medorigin_base_only_proposal.py` reconstructs the only
+permitted project transformation from frozen Git bytes, then compares every
+Wheel executable/resource and every sdist source file against exact Git HEAD.
+It rejects unsafe archive paths, symlinks, duplicate members, unqualified
+installer metadata, self-rehashed but modified source files, and mismatched
+`RECORD` inventory, while keeping `publication_authorized=false` even on
+success. Passing this automated check is not acceptance of ADR-0045 or
+independent security signoff #603.
 This script does not create releases, push Git, build models or change
 protected main. It uses only the standard library and the existing,
 immutable-source ADR-0044 stage implementation.
