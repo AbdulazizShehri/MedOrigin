@@ -85,6 +85,42 @@ python scripts/verify_medorigin_qa_handoff.py "C:/Users/Shehr/Desktop/MedOrigin-
 python scripts/verify_medorigin_qa_handoff.py "C:/Users/Shehr/Desktop/MedOrigin-v0.3.0-Developer-Beta-UNPUBLISHED"
 ```
 
+### Exact-HEAD v0.3.0 QA ZIP (single-source handoff)
+
+The earlier, preserved two-source QA ZIP uses Core #598 plus separate
+#617 example source and intentionally remains verifiable by the original
+`verify_medorigin_qa_handoff.py` and `assemble_medorigin_unpublished_qa.py`.
+**Do not re-label or silently rewrite that historical bundle.**
+
+For the **exact, already qualified Developer Beta source** at
+`62870f7f55848d289f78941b862092b9a0f366a0` (Draft #617), use the
+new `scripts/assemble_medorigin_exact_head_qa.py` instead. It
+requires the pre-built, separately source-qualified Wheel, sdist, and
+source-provenance receipt from *that same* Git commit, checks their
+literal known SHA-256 digests, includes only eight synthetic FHIR
+examples and legal notices from the pinned Git tree, then produces an
+unpublished, deterministically ordered 16-member ZIP. It refuses
+unexpected members, falsified review/publication flags, duplicate or
+symlink archive entries, mutated artifact/provenance hashes, and
+accidental overwrites. The standalone verification action does not
+extract or execute the ZIP and can compare it to a trusted external
+ZIP SHA-256. The QA assembly tool may reside on a **later tooling-only
+commit**; its product source identity remains the earlier, explicitly
+pinned #617 SHA rather than pretending the new tooling was included
+in the Core Wheel.
+
+```powershell
+python scripts/assemble_medorigin_exact_head_qa.py build C:/path/to/empty-output/MedOrigin-v0.3.0-62870f7f-Developer-Beta-UNPUBLISHED.zip --artifacts C:/path/to/exact-head-dist --provenance C:/path/to/exact-head-projection/MEDORIGIN_SOURCE_PROVENANCE.json
+python scripts/assemble_medorigin_exact_head_qa.py verify C:/path/to/empty-output/MedOrigin-v0.3.0-62870f7f-Developer-Beta-UNPUBLISHED.zip --expected-sha256 bb82d997d80dc8d037b2a83ad652db5c4837dd7a7a824bb7ec978781c2ad2503
+```
+
+The SHA example above refers to the original Windows exact-HEAD QA ZIP
+already reproduced and verified at this exact Git source. A future
+candidate revision needs **new** exact source, artifact hashes,
+independent review and a new assembler contract: do not reuse this
+pinned script for changed software sources. It does **not** create a
+standalone signed desktop installer or authorize publishing.
+
 For a **repeatable, new** QA ZIP, there is also a standard-library-only,
 read-only-source builder. It accepts only the pinned Core Wheel, sdist,
 provenance and the previously committed synthetic examples, and creates a
