@@ -198,6 +198,22 @@ their platform wheels, licenses or execution paths. See
 [security follow-up #622](https://github.com/AbdulazizShehri/MedOrigin/issues/622)
 and [disabled Dependabot alerts #621](https://github.com/AbdulazizShehri/MedOrigin/issues/621).
 
+**Publication hard gate (proposed, unmerged):**
+`scripts/check_base_core_publication_scope.py` is invoked before GitHub Release
+and TestPyPI publication in the tag-triggered jobs of `release.yml`. It reads
+**both** Wheel `METADATA` and sdist `PKG-INFO`, refusing any `Provides-Extra`
+or `Requires-Dist` and any unresolved dynamic dependency fields. It does not
+install, edit, sign, upload, release or tag a package. The currently
+source-qualified v0.3.0 Wheel/sdist fail this stricter admission check on
+purpose: `BLOCKED` / exit code 2, with `publication_authorized=false`.
+A passing base-only synthetic fixture is only an admission test; it is not
+approval to publish or a replacement for independent review #603. To unblock,
+obtain a separately approved optional-extras isolation/source-projection
+amendment, produce **new** Wheel/sdist and exact source-bound provenance,
+review any direct/transitive dependencies, and rerun the full release pipeline.
+This additional safety gate **does not change existing qualified ZIP bytes**
+or the immutability of the scientific source root.
+
 **Policy:** Do not install or advertise these extras as safe/qualified for
 the Developer Beta. Do not change the frozen `pyproject.toml`, `uv.lock`,
 canonical MRL manifests, historical `v0.2.0` receipts, or published project
