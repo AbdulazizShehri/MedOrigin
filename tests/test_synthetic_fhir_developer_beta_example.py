@@ -267,3 +267,21 @@ def test_missing_workspace_python_rejected_without_making_output(tmp_path: Path)
         )
     assert raised.value.code == 2
     assert not out.exists()
+
+
+def test_static_preview_long_labels_have_narrow_viewport_wrap_contract() -> None:
+    renderer = _preview_module()
+    receipt = {
+        "runs": [
+            {
+                "label": "x" * 500,
+                "structural_status": "valid",
+                "malformed_exit": 1,
+            }
+        ]
+    }
+    html = renderer.render(receipt)
+    assert "x" * 500 in html
+    assert "grid-template-columns:repeat(auto-fit,minmax(min(100%,280px),1fr))" in html
+    assert "overflow-wrap:anywhere" in html
+    assert "min-width:0" in html
