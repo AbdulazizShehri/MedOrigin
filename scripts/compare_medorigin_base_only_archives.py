@@ -7,13 +7,18 @@ No archive rewriting, signing, staging, release, publishing, or ADR adoption.
 from __future__ import annotations
 
 import argparse
+import gzip
+import hashlib
 import json
+import struct
 import sys
 import tarfile
 import zipfile
 from pathlib import Path
 
 from verify_medorigin_base_only_proposal import (
+    MAX_MEMBERS,
+    MAX_TOTAL,
     ProposalVerificationError,
     digest,
     load_sdist,
@@ -23,6 +28,7 @@ from verify_medorigin_base_only_proposal import (
 
 WHEEL = "medscale-0.3.0-py3-none-any.whl"
 SDIST = "medscale-0.3.0.tar.gz"
+MAX_TAR_DIAGNOSTIC = MAX_TOTAL + MAX_MEMBERS * 2048
 
 
 def _fingerprint(members: dict[str, bytes]) -> str:
@@ -46,6 +52,37 @@ def _zip_headers(path: Path) -> dict[str, dict[str, object]]:
             }
             for member in archive.infolist()
         }
+
+
+def _zip_compressed_fingerprint(path: Path) -> str:
+    """Hash compressed ZIP member streams without rebuilding the artifact."""
+    entries: list[tuple[str, str]] = []
+    with path.open("rb") as stream, zipfile.ZipFile(path) as archive:
+        for member in archive.infolist():
+            stream.seek(member.header_offset)
+            header = stream.read(30)
+            if len(header) != 30 or header[:4] != b"PK\x03\x04":
+                raise ProposalVerificationError("missing ZIP member local header")
+            name_length, extra_length = struct.unpack_from("<HH", header, 26)
+            stream.seek(member.header_offset + 30 + name_length + extra_length)
+            compressed = stream.read(member.compress_size)
+            if len(compressed) != member.compress_size:
+                raise ProposalVerificationError("incomplete ZIP compressed stream")
+            entries.append((member.filename, digest(compressed)))
+    return digest(json.dumps(sorted(entries), separators=(",", ":")).encode("ascii"))
+
+
+def _tar_payload_hash(path: Path) -> str:
+    """Hash verified decompressed TAR bytes, including TAR headers/padding."""
+    checksum = hashlib.sha256()
+    inflated = 0
+    with gzip.open(path, "rb") as archive:
+        while chunk := archive.read(1024 * 1024):
+            inflated += len(chunk)
+            if inflated > MAX_TAR_DIAGNOSTIC:
+                raise ProposalVerificationError("inflated TAR diagnostic exceeds budget")
+            checksum.update(chunk)
+    return checksum.hexdigest()
 
 
 def _tar_headers(path: Path) -> dict[str, dict[str, object]]:
@@ -115,9 +152,18 @@ def compare(
             "archive_header_difference": _changed_headers(a_meta, b_meta),
         }
         if kind == "sdist":
+            a_tar, b_tar = _tar_payload_hash(a_path), _tar_payload_hash(b_path)
+            result[kind]["decompressed_tar_sha256"] = a_tar
+            result[kind]["decompressed_tar_identical"] = a_tar == b_tar
             result[kind]["gzip_header_identical"] = (
                 a_path.read_bytes()[:10] == b_path.read_bytes()[:10]
             )
+        else:
+            a_streams = _zip_compressed_fingerprint(a_path)
+            b_streams = _zip_compressed_fingerprint(b_path)
+            result[kind]["compressed_member_streams_identical"] = a_streams == b_streams
+            result[kind]["left_compressed_stream_fingerprint"] = a_streams
+            result[kind]["right_compressed_stream_fingerprint"] = b_streams
     both_equal = all(result[k]["archive_bytes_identical"] for k in ("wheel", "sdist"))
     result["status"] = (
         "SOURCE_BOUND_ARCHIVES_BYTE_IDENTICAL"

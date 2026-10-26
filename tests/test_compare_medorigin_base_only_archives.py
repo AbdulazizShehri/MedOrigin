@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import gzip
 import importlib.util
 import io
 import shutil
@@ -126,3 +127,44 @@ def test_reject_member_differences_even_if_mocked_gate_says_pass(
 def test_refuses_same_directory(audit: Any, tmp_path: Path) -> None:
     with pytest.raises(audit.ProposalVerificationError, match="distinct directories"):
         audit.compare(ROOT, tmp_path, tmp_path)
+
+
+def test_same_tar_bytes_different_gzip_compression(
+    audit: Any, monkeypatch: Any, tmp_path: Path
+) -> None:
+    left, right = tmp_path / "left", tmp_path / "right"
+    _make_pair(left, 3, 0)
+    right.mkdir()
+    shutil.copyfile(left / audit.WHEEL, right / audit.WHEEL)
+    tar = gzip.decompress((left / audit.SDIST).read_bytes())
+    # Use a larger, compressible valid TAR payload while keeping every member unchanged.
+    (left / audit.SDIST).write_bytes(gzip.compress(tar, compresslevel=1, mtime=0))
+    (right / audit.SDIST).write_bytes(gzip.compress(tar, compresslevel=9, mtime=0))
+    monkeypatch.setattr(audit, "verify", lambda *_: {"source_git_commit": "test-source"})
+    result = audit.compare(ROOT, left, right)
+    assert result["sdist"]["decompressed_tar_identical"]
+    assert not result["sdist"]["archive_bytes_identical"]
+    assert result["wheel"]["compressed_member_streams_identical"]
+
+
+def test_equal_zip_members_different_compression_streams(
+    audit: Any, monkeypatch: Any, tmp_path: Path
+) -> None:
+    left, right = tmp_path / "left", tmp_path / "right"
+    _make_pair(left, 3, 0)
+    _make_pair(right, 3, 0)
+    payload = b"algorithm=deterministic\n" * 10000
+    for folder, level in ((left, 1), (right, 9)):
+        with zipfile.ZipFile(
+            folder / audit.WHEEL,
+            "w",
+            compression=zipfile.ZIP_DEFLATED,
+            compresslevel=level,
+        ) as archive:
+            archive.writestr("medscale/safe.py", payload)
+    monkeypatch.setattr(audit, "verify", lambda *_: {"source_git_commit": "test-source"})
+    result = audit.compare(ROOT, left, right)
+    assert result["wheel"]["member_count"] == 1
+    assert result["wheel"]["compressed_member_streams_identical"] is False
+    assert not result["wheel"]["archive_bytes_identical"]
+    assert result["sdist"]["decompressed_tar_identical"]

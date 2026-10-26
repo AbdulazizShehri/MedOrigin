@@ -30,6 +30,10 @@ The report distinguishes:
 - A canonical digest of sorted member names and uncompressed member bytes.
 - ZIP creator-system, timestamp, file-mode, compression and other header
   differences; TAR member metadata changes; gzip fixed-header differences.
+- Decompressed full TAR byte identity, including padding and raw member headers,
+  to distinguish unchanged TAR data from OS-specific gzip compression.
+- Exact compressed ZIP member-stream fingerprints, distinguishing unchanged
+  Wheel payload files from different deflate outputs and ZIP creator metadata.
 
 A passing member comparison **does not** imply byte-identical archives.
 Where archives differ, investigate build toolchain, compression and header
