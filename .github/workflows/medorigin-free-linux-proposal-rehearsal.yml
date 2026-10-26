@@ -95,6 +95,19 @@ jobs:
           set -euo pipefail
           python3 scripts/verify_medorigin_base_only_proposal.py --dist "$RUNNER_TEMP/medorigin-linux-proposal-dist"
 
+      - name: Independently rebuild and require identical source-bound archives
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/stage_medorigin_base_only_proposal.py --out "$RUNNER_TEMP/medorigin-linux-proposal-source-second"
+          uv build --offline --wheel --sdist "$RUNNER_TEMP/medorigin-linux-proposal-source-second" --out-dir "$RUNNER_TEMP/medorigin-linux-proposal-dist-second"
+          python3 scripts/compare_medorigin_base_only_archives.py \
+            --repo . \
+            --left "$RUNNER_TEMP/medorigin-linux-proposal-dist" \
+            --right "$RUNNER_TEMP/medorigin-linux-proposal-dist-second" \
+            --require-identical
+          echo 'LINUX_SAME_HOST_REPRODUCIBLE_ARCHIVES_PASS; publication_authorized=false'
+
       - name: Refuse hostile Wheel even when RECORD is rehashed
         shell: bash
         run: |

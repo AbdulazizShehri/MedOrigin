@@ -74,7 +74,9 @@ def _changed_headers(
     return {"changed_count": len(changed), "first_changed_members": changed[:20]}
 
 
-def compare(repository: Path, left: Path, right: Path) -> dict[str, object]:
+def compare(
+    repository: Path, left: Path, right: Path, *, require_identical: bool = False
+) -> dict[str, object]:
     """Compare artifacts only after both independently pass Git-bound verification."""
     left = left.resolve()
     right = right.resolve()
@@ -122,6 +124,10 @@ def compare(repository: Path, left: Path, right: Path) -> dict[str, object]:
         if both_equal
         else "SOURCE_BOUND_MEMBERS_EQUAL_ARCHIVE_ENVELOPES_DIFFER"
     )
+    if require_identical and not both_equal:
+        raise ProposalVerificationError(
+            "require-identical: source-bound archives have different outer bytes"
+        )
     return result
 
 
@@ -130,9 +136,14 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--repo", type=Path, default=Path(__file__).resolve().parents[1])
     parser.add_argument("--left", type=Path, required=True, help="First dist directory")
     parser.add_argument("--right", type=Path, required=True, help="Second dist directory")
+    parser.add_argument(
+        "--require-identical",
+        action="store_true",
+        help="Refuse nonidentical archive bytes even when all members match",
+    )
     args = parser.parse_args(argv)
     try:
-        output = compare(args.repo, args.left, args.right)
+        output = compare(args.repo, args.left, args.right, require_identical=args.require_identical)
     except (
         ProposalVerificationError,
         OSError,

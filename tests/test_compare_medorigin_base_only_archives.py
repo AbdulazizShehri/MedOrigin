@@ -83,6 +83,30 @@ def test_byte_identical_copy(audit: Any, monkeypatch: Any, tmp_path: Path) -> No
     assert result["sdist"]["archive_bytes_identical"]
 
 
+def test_strict_mode_refuses_equal_members_with_different_archives(
+    audit: Any, monkeypatch: Any, tmp_path: Path
+) -> None:
+    left, right = tmp_path / "left", tmp_path / "right"
+    _make_pair(left, 0, 10)
+    _make_pair(right, 3, 20)
+    monkeypatch.setattr(audit, "verify", lambda *_: {"source_git_commit": "test-source"})
+    with pytest.raises(audit.ProposalVerificationError, match="require-identical"):
+        audit.compare(ROOT, left, right, require_identical=True)
+
+
+def test_strict_mode_passes_identical_archives(
+    audit: Any, monkeypatch: Any, tmp_path: Path
+) -> None:
+    left, right = tmp_path / "left", tmp_path / "right"
+    _make_pair(left, 3, 0)
+    right.mkdir()
+    for name in (audit.WHEEL, audit.SDIST):
+        shutil.copyfile(left / name, right / name)
+    monkeypatch.setattr(audit, "verify", lambda *_: {"source_git_commit": "test-source"})
+    result = audit.compare(ROOT, left, right, require_identical=True)
+    assert result["status"] == "SOURCE_BOUND_ARCHIVES_BYTE_IDENTICAL"
+
+
 def test_gate_must_run_first(audit: Any, tmp_path: Path) -> None:
     with pytest.raises(audit.ProposalVerificationError):
         audit.compare(ROOT, tmp_path / "not-a-dist", tmp_path / "also-not-a-dist")

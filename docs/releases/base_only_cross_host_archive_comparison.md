@@ -12,6 +12,11 @@ python scripts/compare_medorigin_base_only_archives.py \
   --right /path/to/macos-dist
 ```
 
+For two **independent builds on one canonical platform**, append
+`--require-identical` to reject any outer-archive byte differences rather than
+merely report them. The Linux nonpublishing PR rehearsal invokes this strict
+mode on freshly staged independent builds, without uploading artifacts.
+
 Each directory must contain exactly the qualified `medscale-0.3.0` Wheel and
 sdist. The script first runs the strict source-to-Git verifier **on both
 directories**, including exact committed bytes, dependency metadata,
