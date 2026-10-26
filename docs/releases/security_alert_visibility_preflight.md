@@ -24,6 +24,12 @@ there are no private/unreported vulnerabilities.
 
 Any disabled, inaccessible, missing, truncated, malformed, or non-200 signal
 is clearly reported as unavailable and **blocks visibility admission**.
+Every returned alert must have a positive integer `number`, without
+duplicates across fetched pages, and an open state if a state field is
+supplied. A repeated alert, a closed alert returned by an open-only query,
+or an ambiguous API error is **unverifiable**, not a credible count. A
+generic server/network error is not mislabeled as a confirmed permission
+denial; only specific GitHub errors justify that distinction.
 Nonzero visible alerts likewise require a separate triage decision.
 The command exits 2 for such blockers. It never calls the repository
 settings API, requests higher privileges, pushes changes or uploads artifacts.

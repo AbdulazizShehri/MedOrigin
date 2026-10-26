@@ -41,6 +41,13 @@ def classify(
             or page_count < 1
             or page_count > _MAX_PAGES
             or not complete
+            or any(
+                type(item.get("number")) is not int
+                or item["number"] < 1
+                or item.get("state", "open") != "open"
+                for item in payload
+            )
+            or len({item["number"] for item in payload}) != len(payload)
         ):
             return {"status": "UNVERIFIABLE", "visible_alert_count": None}
         return {"status": "VISIBLE", "visible_alert_count": len(payload)}
@@ -124,12 +131,21 @@ def live(repository: str) -> dict[str, Any]:
             # never silently call a denied result "zero alerts".
             if result_code != 0 or not isinstance(result, list):
                 message = str(result.get("message", "")) if isinstance(result, dict) else ""
-                if "alerts are disabled" in message.casefold():
+                if result_code != 0 and "alerts are disabled" in message.casefold():
                     status = 403
-                elif "not found" in message.casefold():
+                elif result_code != 0 and "not found" in message.casefold():
                     status = 404
+                elif result_code != 0 and (
+                    "forbidden" in message.casefold()
+                    or "resource not accessible" in message.casefold()
+                    or "bad credentials" in message.casefold()
+                ):
+                    status = 403
                 else:
-                    status = 403 if result_code else 0
+                    # gh does not expose HTTP status on failure by default.
+                    # Unknown network, API, and server failures are NOT proven
+                    # permission errors; keep them explicitly unverifiable.
+                    status = 0
                 payload = result
                 break
             pages.extend(result)

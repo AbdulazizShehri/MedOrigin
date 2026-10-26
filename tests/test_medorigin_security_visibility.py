@@ -32,6 +32,11 @@ def audit_tool() -> Any:
         (500, {"message": "Internal Server Error"}, "UNVERIFIABLE", None),
         (200, {"message": "not a list"}, "UNVERIFIABLE", None),
         (200, [{"number": 1}, "bad-item"], "UNVERIFIABLE", None),
+        (200, [{}], "UNVERIFIABLE", None),
+        (200, [{"number": True}], "UNVERIFIABLE", None),
+        (200, [{"number": -2}], "UNVERIFIABLE", None),
+        (200, [{"number": 5}, {"number": 5}], "UNVERIFIABLE", None),
+        (200, [{"number": 9, "state": "dismissed"}], "UNVERIFIABLE", None),
     ],
 )
 def test_security_signal_status_is_never_implicitly_empty(
@@ -110,8 +115,8 @@ def test_paginated_fetch_preserves_counts(audit_tool: Any, monkeypatch: Any) -> 
     def response(endpoint: str) -> tuple[int, Any]:
         calls.append(endpoint)
         if endpoint.endswith("&page=1"):
-            return 0, [{"number": index} for index in range(100)]
-        return 0, [{"number": 100}]
+            return 0, [{"number": index} for index in range(1, 101)]
+        return 0, [{"number": 101}]
 
     monkeypatch.setattr(audit_tool, "_gh_json", response)
     result = audit_tool.live("AbdulazizShehri/MedOrigin")
@@ -145,3 +150,48 @@ def test_missing_scanner_signal_blocks(audit_tool: Any) -> None:
     result = audit_tool.audit({})
     assert result["status"] == "BLOCKED"
     assert len(result["issues"]) == 3
+
+
+def test_duplicate_alert_numbers_across_pages_block(audit_tool: Any, monkeypatch: Any) -> None:
+    def api(path: str) -> tuple[int, Any]:
+        if path.endswith("&page=1"):
+            return 0, [{"number": x} for x in range(1, 101)]
+        return 0, [{"number": 100}]
+
+    monkeypatch.setattr(audit_tool, "_gh_json", api)
+    result = audit_tool.live("AbdulazizShehri/MedOrigin")
+    assert result["status"] == "BLOCKED"
+    assert all(
+        result["repository_security_signals"][key]["status"] == "UNVERIFIABLE"
+        for key in ("dependabot", "code_scanning", "secret_scanning")
+    )
+    assert result["publication_authorized"] is False
+
+
+def test_unknown_server_failure_not_relabelled_access_denied(
+    audit_tool: Any, monkeypatch: Any
+) -> None:
+    monkeypatch.setattr(
+        audit_tool,
+        "_gh_json",
+        lambda _: (1, {"message": "Internal Server Error"}),
+    )
+    result = audit_tool.live("AbdulazizShehri/MedOrigin")
+    assert all(
+        signal["status"] == "UNVERIFIABLE"
+        for signal in result["repository_security_signals"].values()
+    )
+    assert result["status"] == "BLOCKED"
+
+
+def test_access_denied_still_reported_distinctly(audit_tool: Any, monkeypatch: Any) -> None:
+    monkeypatch.setattr(
+        audit_tool,
+        "_gh_json",
+        lambda _: (1, {"message": "Resource not accessible by integration"}),
+    )
+    result = audit_tool.live("AbdulazizShehri/MedOrigin")
+    assert all(
+        signal["status"] == "ACCESS_DENIED"
+        for signal in result["repository_security_signals"].values()
+    )
