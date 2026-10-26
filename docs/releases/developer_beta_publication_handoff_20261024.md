@@ -4,6 +4,14 @@
 synthetic-only developer package. It is **not a release, release authorization,
 independent security signoff, or a claim of clinician readiness**.
 
+**Newer publisher boundary finding (October 26):** the tag-build Core
+projection still advertises unqualified optional dependency metadata and
+does not match the independently tested base-only proposal. The tag build
+must fail before artifact handoff, pending an authorized ADR/source decision.
+See [publisher/source parity blocker](publisher_source_parity_no_go_20261026.md).
+The historical QA receipts below remain immutable records of earlier
+candidates, not approval for the latest integration head.
+
 ## Delivery identity and intended first package
 
 - Product/repository: **MedOrigin** at `AbdulazizShehri/MedOrigin`.

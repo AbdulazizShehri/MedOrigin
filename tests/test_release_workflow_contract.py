@@ -62,6 +62,53 @@ def test_pr_safe_release_qualification_triggers_on_trust_boundary_edits() -> Non
         assert f'      - "{path}"' in qualification_paths, path
 
 
+def test_tag_build_rejects_unqualified_extras_before_artifact_upload() -> None:
+    """A successful static audit cannot silently bypass the actual tag build."""
+    text = _workflow_text()
+    build = _job_block(text, "build")
+    gate = "python3 scripts/check_base_core_publication_scope.py --dist dist"
+    stage = "scripts/stage_medorigin_core_projection.py"
+    assert "github.event_name == 'push'" in build
+    assert "needs: quality" in build
+    assert build.count(stage) == 1
+    assert build.count(gate) == 1
+    assert build.index("uv build ") < build.index(gate)
+    assert build.index("scripts/check_core_wheel_source_identity.py") < build.index(gate)
+    assert build.index("scripts/check_sdist_publication_scope.py") < build.index(gate)
+    assert build.index(gate) < build.index("actions/upload-artifact@")
+    assert "continue-on-error: true" not in build
+    assert "|| true" not in build
+
+    # The release must still check the exact downloaded distribution,
+    # separately from the new early build gate.
+    release = _job_block(text, "github-release")
+    assert "needs: [quality, build, install-smoke]" in release
+    assert release.count(gate.replace("python3", "python")) == 1
+    assert release.index(gate.replace("python3", "python")) < release.index(
+        "softprops/action-gh-release@"
+    )
+    pypi = _job_block(text, "testpypi-publish")
+    assert "needs: github-release" in pypi
+
+    triggers = text.split("  workflow_dispatch:", maxsplit=1)[0]
+    assert "'scripts/check_base_core_publication_scope.py'" in triggers
+    assert "'tests/test_base_core_publication_scope.py'" in triggers
+
+
+def test_tag_scope_gate_is_not_inserted_into_nonpublishing_qualification() -> None:
+    text = _workflow_text()
+    build = _job_block(text, "build")
+    prescope = "scripts/check_base_core_publication_scope.py --dist dist"
+    assert prescope in build
+    # Read-only PR qualification is allowed to inspect the original canonical
+    # source artifact; it never publishes it or approves the optional extras.
+    for job in ("pr-artifact-build", "pr-artifact-roundtrip", "pr-clean-wheel-smoke"):
+        section = _job_block(text, job)
+        assert prescope not in section
+        assert "softprops/action-gh-release@" not in section
+        assert "pypa/gh-action-pypi-publish@" not in section
+
+
 def test_testpypi_publish_job_is_fail_closed_and_least_privilege() -> None:
     text = _workflow_text()
     block = _job_block(text, "testpypi-publish")
