@@ -114,7 +114,11 @@ def _wheel(path: Path) -> EmailMessage:
             if item.file_size > _MAX_METADATA_BYTES:
                 raise PublicationScopeError("wheel: METADATA exceeds budget")
             raw = archive.read(item)
-            return _metadata(raw, "wheel")
+            parsed = _metadata(raw, "wheel")
+            expected = f"medscale-{parsed['Version']}.dist-info/METADATA"
+            if item.filename != expected:
+                raise PublicationScopeError("wheel: dist-info version disagrees with metadata")
+            return parsed
     except (OSError, RuntimeError, zipfile.BadZipFile, ValueError) as exc:
         if isinstance(exc, PublicationScopeError):
             raise
@@ -125,6 +129,7 @@ def _bounded_sdist_metadata(archive: tarfile.TarFile) -> EmailMessage:
     total = 0
     matches = 0
     metadata_bytes: bytes | None = None
+    metadata_path: str | None = None
     for count, item in enumerate(archive, start=1):
         if count > _MAX_MEMBERS:
             raise PublicationScopeError("sdist: archive member limit exceeded")
@@ -144,9 +149,13 @@ def _bounded_sdist_metadata(archive: tarfile.TarFile) -> EmailMessage:
                 raise PublicationScopeError("sdist: PKG-INFO unreadable")
             with member:
                 metadata_bytes = member.read(_MAX_METADATA_BYTES + 1)
+                metadata_path = item.name
     if matches != 1 or metadata_bytes is None:
         raise PublicationScopeError("sdist: exactly one regular PKG-INFO required")
-    return _metadata(metadata_bytes, "sdist")
+    parsed = _metadata(metadata_bytes, "sdist")
+    if metadata_path != f"medscale-{parsed['Version']}/PKG-INFO":
+        raise PublicationScopeError("sdist: source directory version disagrees with metadata")
+    return parsed
 
 
 def _sdist(path: Path) -> EmailMessage:
@@ -183,7 +192,21 @@ def inspect(dist: Path) -> dict[str, object]:
                 continue
             try:
                 metadata = check(item)
-                versions[kind] = str(metadata["Version"])
+                version = str(metadata["Version"])
+                versions[kind] = version
+                if kind == "wheel":
+                    prefix = re.escape(f"medscale-{version}")
+                    filename_ok = (
+                        re.fullmatch(
+                            rf"{prefix}(?:-[0-9][A-Za-z0-9_.]*)?-[A-Za-z0-9_.]+-[A-Za-z0-9_.]+-[A-Za-z0-9_.]+[.]whl",
+                            item.name,
+                        )
+                        is not None
+                    )
+                else:
+                    filename_ok = item.name == f"medscale-{version}.tar.gz"
+                if not filename_ok:
+                    issues.append(f"{kind}: filename does not match metadata version")
                 issues.extend(_check_policy(metadata, kind))
             except PublicationScopeError as exc:
                 issues.append(str(exc))

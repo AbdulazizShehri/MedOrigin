@@ -101,7 +101,11 @@ def test_base_only_realistic_pair_is_eligible_but_not_authorized(
         (metadata(), metadata(dependency="accelerate==1.14.0"), "sdist: runtime dependencies"),
         (metadata(dynamic="Provides-Extra"), metadata(), "dynamic dependency"),
         (metadata(), metadata(dynamic="Requires-Dist"), "dynamic dependency"),
-        (metadata(version="0.3.0"), metadata(version="0.4.0"), "versions disagree"),
+        (
+            metadata(version="0.3.0"),
+            metadata(version="0.4.0"),
+            "source directory version disagrees",
+        ),
         (metadata(name="other-project"), metadata(), "unexpected distribution"),
         (metadata(duplicate_name=True), metadata(), "ambiguous Name"),
     ],
@@ -282,4 +286,47 @@ def test_sdist_bounded_inflation_includes_tar_envelope(
     result = checker.inspect(folder)
     assert result["status"] == "BLOCKED"
     assert any("sdist: inflated TAR envelope exceeds budget" in issue for issue in result["issues"])
+    assert result["publication_authorized"] is False
+
+
+@pytest.mark.parametrize("kind", ["wheel", "sdist"])
+def test_artifact_filename_version_mismatch_blocked(
+    checker: Any, tmp_path: Path, kind: str
+) -> None:
+    folder = make_dist(tmp_path / "filename-mismatch")
+    if kind == "wheel":
+        original = folder / "medscale-0.3.0-py3-none-any.whl"
+        original.rename(folder / "medscale-0.4.0-py3-none-any.whl")
+    else:
+        original = folder / "medscale-0.3.0.tar.gz"
+        original.rename(folder / "medscale-0.4.0.tar.gz")
+    result = checker.inspect(folder)
+    assert result["status"] == "BLOCKED"
+    assert any(
+        f"{kind}: filename does not match metadata version" in issue for issue in result["issues"]
+    )
+    assert result["publication_authorized"] is False
+
+
+@pytest.mark.parametrize("kind", ["wheel", "sdist"])
+def test_embedded_metadata_directory_version_mismatch_blocked(
+    checker: Any, tmp_path: Path, kind: str
+) -> None:
+    folder = make_dist(tmp_path / "embedded-mismatch")
+    if kind == "wheel":
+        path = folder / "medscale-0.3.0-py3-none-any.whl"
+        with zipfile.ZipFile(path, "w") as archive:
+            archive.writestr("medscale-0.4.0.dist-info/METADATA", metadata())
+        expected = "wheel: dist-info version disagrees with metadata"
+    else:
+        path = folder / "medscale-0.3.0.tar.gz"
+        with tarfile.open(path, "w:gz") as archive:
+            raw = metadata()
+            entry = tarfile.TarInfo("medscale-0.4.0/PKG-INFO")
+            entry.size = len(raw)
+            archive.addfile(entry, io.BytesIO(raw))
+        expected = "sdist: source directory version disagrees with metadata"
+    result = checker.inspect(folder)
+    assert result["status"] == "BLOCKED"
+    assert expected in result["issues"]
     assert result["publication_authorized"] is False
