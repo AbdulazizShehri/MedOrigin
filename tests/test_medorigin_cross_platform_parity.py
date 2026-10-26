@@ -105,3 +105,21 @@ def test_cross_host_audit_fails_closed(tamper: str):
         right["platform"] = "windows"
     with pytest.raises(subject.ParityError):
         subject.compare(left, right)
+
+
+def test_macos_and_linux_whole_archives_identical_if_bytes_agree():
+    subject = _load()
+    result = subject.compare(_record("darwin"), _record("linux"))
+    assert result["status"] == "CONTENT_AND_ARCHIVE_PARITY_VERIFIED"
+    assert result["publication_authorized"] is False
+
+
+def test_windows_and_macos_wheel_headers_may_differ_without_member_changes():
+    subject = _load()
+    windows, macos = _record("windows"), _record("darwin")
+    macos["archives"]["wheel"]["archive_sha256"] = "b" * 64
+    result = subject.compare(windows, macos)
+    assert result["archives"]["sdist"]["whole_archive_byte_identical"] is True
+    assert result["archives"]["wheel"]["members_byte_identical"] is True
+    assert result["archives"]["wheel"]["whole_archive_byte_identical"] is False
+    assert result["status"] == "CONTENT_PARITY_VERIFIED_ARCHIVE_HEADERS_DIFFER"
