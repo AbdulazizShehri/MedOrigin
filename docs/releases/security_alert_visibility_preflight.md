@@ -1,58 +1,31 @@
-# Security alert coverage — GitHub read-only visibility audit
+# MedOrigin GitHub security-alert visibility (read-only)
 
-Tracks [#621](https://github.com/AbdulazizShehri/MedOrigin/issues/621).
-It is **not** a scan proving that dependencies are safe, does not resolve
-vulnerabilities, and grants no release or model qualification.
+**Current state (26 October 2026): free alert visibility enabled; 60 unresolved Dependabot advisories on the research lock.**
 
-Run from an authenticated workstation with the free GitHub CLI:
+This document supersedes the **pre-remediation** diagnostic in [#621](https://github.com/AbdulazizShehri/MedOrigin/issues/621), which had seen a `403 Dependabot alerts are disabled` API response. The repository owner has since enabled **free Dependabot vulnerability alerts** and baseline **public repository Secret Scanning**; both endpoints now answer read-only requests. Issue #621 was closed for restoring **visibility only**, not for eliminating vulnerabilities. Research extras risk remains open in [#622](https://github.com/AbdulazizShehri/MedOrigin/issues/622).
+
+## Reproduce current signals
+
+Run from an authorized workstation with GitHub CLI credentials that can read the repository alerts:
 
 ```bash
 python scripts/check_medorigin_security_visibility.py \
   --repository AbdulazizShehri/MedOrigin
 ```
 
-The tool attempts three **read-only** sources, using bounded full pagination:
+The tool makes read-only GitHub requests for **open** Dependabot, Code Scanning and Secret Scanning alerts. Dependabot uses **GitHub Link-cursor pagination**, via `gh api --paginate --slurp` rather than obsolete `page=N` offset pagination (which returns HTTP 400). Response pages have strict count, duplicate-alert, integer-number, open-state and malformed-payload checks. Missing permissions, disabled features, truncation, network errors and malformed pages fail **closed** rather than being reported as zero alerts. The command never changes repository settings, dependencies, GitHub rules, token scopes or artifacts.
 
-1. Dependabot open alerts
-2. Code scanning open alerts
-3. Secret scanning open alerts
+At exact source `308c69e134d77af6cdac57f93acda1dd21916de0`, an authorized owner-side replay returned:
+- **Dependabot:** 60 visible open advisory records; the expected verdict is `BLOCKED`.
+- **Code Scanning:** zero *visible open* alerts.
+- **Secret Scanning:** zero *visible open* alerts.
 
-A successful, complete empty `200 []` response means only **zero currently
-visible open alerts**. It does **not** establish that vulnerability scanning
-covers all dependencies, that any individual dependency is safe, or that
-there are no private/unreported vulnerabilities.
+The repository continued to report **60 Dependabot records** on later pushes through candidate `671bd66b`: **6 critical, 29 high, 21 moderate, 4 low**. All are reported against the immutable `uv.lock`; advisory record counts **do not establish** 60 exploitable dependencies in an isolated install of Core. Critical findings include Pillow advisories and certifi; additional records cover aiohttp, urllib3, filelock, accelerate, and other research or transitive libraries. See [#622 scoped advisory receipt](https://github.com/AbdulazizShehri/MedOrigin/issues/622).
 
-Any disabled, inaccessible, missing, truncated, malformed, or non-200 signal
-is clearly reported as unavailable and **blocks visibility admission**.
-Every returned alert must have a positive integer `number`, without
-duplicates across fetched pages, and an open state if a state field is
-supplied. A repeated alert, a closed alert returned by an open-only query,
-or an ambiguous API error is **unverifiable**, not a credible count. A
-generic server/network error is not mislabeled as a confirmed permission
-denial; only specific GitHub errors justify that distinction.
-Nonzero visible alerts likewise require a separate triage decision.
-The command exits 2 for such blockers. It never calls the repository
-settings API, requests higher privileges, pushes changes or uploads artifacts.
-It also always reports `vulnerability_free=false` and
-`publication_authorized=false`.
+The scientific canonical root `project.dependencies=[]`, while optional experiment/training extras include direct pinned `pillow==12.3.0` and `accelerate==1.14.0`. The proposed **ADR-0045** isolated Core-only Wheel/sdist declares zero `Requires-Dist` and `Provides-Extra` items, but this metadata deletion remains **unaccepted**; it is not an automatic security waiver. Frozen scientific `pyproject.toml` and `uv.lock` must not be secretly changed, upgraded or rehashed.
 
-On October 26, 2026, the existing `Dependabot alerts` endpoint returned
-`403: Dependabot alerts are disabled for this repository`. This is a
-**missing observability signal**, not an assurance of zero vulnerabilities.
-The existing vulnerability finding in optional pinned `pillow==12.3.0`
-and `accelerate==1.14.0` is separately documented in
-[#622](https://github.com/AbdulazizShehri/MedOrigin/issues/622).
-It is not fixed by enabling alerts.
+## Distinguish visibility from release permission
 
-**Owner/admin action:** enable GitHub dependency graph and **free** Dependabot
-vulnerability alerts if eligible, after verifying that enabling them does
-not incur any paid billing. Do not change `pyproject.toml`, `uv.lock`,
-the frozen scientific research assets, Dependabot update-PR limits, or
-paid security options without a separately authorized governed decision.
-Re-run the read-only audit and attach the exact response and SHA for #621
-and the independent reviewer #603. A returned `200 []` is visibility
-evidence, not a security signoff.
+A complete `200 []` response from a scanner says only **no open alerts currently visible to that caller**; it cannot certify vulnerability-free software, full supply-chain coverage, or absence of exploitable issues. In particular, the current 60-open-Dependabot result is expected to make `check_medorigin_security_visibility.py` return exit 2 and `publication_authorized=false`. It is a truthful security gate, **not a broken test**.
 
-The synthetic CI job tests the classifier and failure cases using a
-read-only GitHub token; it does **not** misrepresent mock API responses as
-real security scanning or mutate repository settings.
+The accepted nonpublishing technical candidate at exact HEAD `671bd66b` has [20/20 hosted CI](https://github.com/AbdulazizShehri/MedOrigin/actions/runs/40354002283) and [4/4 three-platform offline installed-Core checks](https://github.com/AbdulazizShehri/MedOrigin/actions/runs/40354002532). Separate authorization is still needed for named independent review [#603](https://github.com/AbdulazizShehri/MedOrigin/issues/603), founder ADR-0045 decision, dependency issue #622, and any public release or GitHub `main` merge. Do not turn scanning on/off, enable automated updates, use paid security services, publish files, or process clinical data in this read-only workflow.
