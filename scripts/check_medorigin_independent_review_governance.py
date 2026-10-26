@@ -14,6 +14,7 @@ import json
 import re
 import subprocess
 import sys
+from collections.abc import Sequence
 from typing import Any
 
 EXPECTED_CHECKS = frozenset({"quality (py3.11)", "quality (py3.12)", "analyze (python)"})
@@ -21,7 +22,7 @@ DEFAULT_RULESET_ID = 20172239
 
 
 def assess(
-    ruleset: dict[str, Any], pull: dict[str, Any], reviews: list[dict[str, Any]]
+    ruleset: dict[str, Any], pull: dict[str, Any], reviews: Sequence[object]
 ) -> dict[str, Any]:
     issues: list[str] = []
     conditions = ruleset.get("conditions")

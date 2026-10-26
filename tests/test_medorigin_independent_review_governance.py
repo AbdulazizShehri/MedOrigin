@@ -232,3 +232,14 @@ def test_malformed_ruleset_params_fail_closed(
     result = gate.assess(good_rule, good_pr, good_reviews)
     assert result["status"] == "BLOCKED"
     assert result["publication_authorized"] is False
+
+
+def test_malformed_review_entries_fail_closed(
+    gate: Any, good_rule: Any, good_pr: Any, good_reviews: Any
+) -> None:
+    # Mixed server responses must not be accepted merely because another
+    # review object happens to contain an apparently eligible approval.
+    result = gate.assess(good_rule, good_pr, [good_reviews[0], "malformed"])
+    assert result["status"] == "BLOCKED"
+    assert "malformed PR review entry" in result["issues"]
+    assert result["publication_authorized"] is False

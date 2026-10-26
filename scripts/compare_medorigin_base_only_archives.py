@@ -131,6 +131,7 @@ def compare(
     }
     if left_gate["source_git_commit"] != right_gate["source_git_commit"]:
         raise ProposalVerificationError("comparison spans different Git source revisions")
+    archive_equal: dict[str, bool] = {}
     for kind, filename, load in (
         ("wheel", WHEEL, load_wheel),
         ("sdist", SDIST, load_sdist),
@@ -143,7 +144,7 @@ def compare(
         a_hash, b_hash = digest(a_path.read_bytes()), digest(b_path.read_bytes())
         a_meta = _zip_headers(a_path) if kind == "wheel" else _tar_headers(a_path)
         b_meta = _zip_headers(b_path) if kind == "wheel" else _tar_headers(b_path)
-        result[kind] = {
+        entry: dict[str, object] = {
             "left_sha256": a_hash,
             "right_sha256": b_hash,
             "archive_bytes_identical": a_hash == b_hash,
@@ -153,18 +154,18 @@ def compare(
         }
         if kind == "sdist":
             a_tar, b_tar = _tar_payload_hash(a_path), _tar_payload_hash(b_path)
-            result[kind]["decompressed_tar_sha256"] = a_tar
-            result[kind]["decompressed_tar_identical"] = a_tar == b_tar
-            result[kind]["gzip_header_identical"] = (
-                a_path.read_bytes()[:10] == b_path.read_bytes()[:10]
-            )
+            entry["decompressed_tar_sha256"] = a_tar
+            entry["decompressed_tar_identical"] = a_tar == b_tar
+            entry["gzip_header_identical"] = a_path.read_bytes()[:10] == b_path.read_bytes()[:10]
         else:
             a_streams = _zip_compressed_fingerprint(a_path)
             b_streams = _zip_compressed_fingerprint(b_path)
-            result[kind]["compressed_member_streams_identical"] = a_streams == b_streams
-            result[kind]["left_compressed_stream_fingerprint"] = a_streams
-            result[kind]["right_compressed_stream_fingerprint"] = b_streams
-    both_equal = all(result[k]["archive_bytes_identical"] for k in ("wheel", "sdist"))
+            entry["compressed_member_streams_identical"] = a_streams == b_streams
+            entry["left_compressed_stream_fingerprint"] = a_streams
+            entry["right_compressed_stream_fingerprint"] = b_streams
+        archive_equal[kind] = a_hash == b_hash
+        result[kind] = entry
+    both_equal = all(archive_equal[k] for k in ("wheel", "sdist"))
     result["status"] = (
         "SOURCE_BOUND_ARCHIVES_BYTE_IDENTICAL"
         if both_equal

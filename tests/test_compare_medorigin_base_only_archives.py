@@ -34,20 +34,20 @@ def audit() -> Any:
 def _make_pair(folder: Path, creator: int, timestamp: int, altered: bool = False) -> None:
     folder.mkdir()
     with zipfile.ZipFile(folder / "medscale-0.3.0-py3-none-any.whl", "w") as out:
-        info = zipfile.ZipInfo("medscale/safe.py", (2020, 1, 1, 0, 0, 0))
-        info.create_system = creator
-        info.compress_type = zipfile.ZIP_DEFLATED
-        out.writestr(info, b"safe = True\n" if not altered else b"unsafe = True\n")
+        zip_info = zipfile.ZipInfo("medscale/safe.py", (2020, 1, 1, 0, 0, 0))
+        zip_info.create_system = creator
+        zip_info.compress_type = zipfile.ZIP_DEFLATED
+        out.writestr(zip_info, b"safe = True\n" if not altered else b"unsafe = True\n")
     # Write a qualified simple gzip envelope: tarfile.open(path, "w:gz")
     # adds a filename (FNAME) gzip header flag, which the stricter source-bound
     # verifier correctly rejects. Keep the verifier strict and fix this fixture.
     tar = io.BytesIO()
     with tarfile.open(fileobj=tar, mode="w") as out:
         data = b"safe = True\n"
-        info = tarfile.TarInfo("medscale-0.3.0/medscale/safe.py")
-        info.size = len(data)
-        info.mtime = timestamp
-        out.addfile(info, io.BytesIO(data))
+        tar_info = tarfile.TarInfo("medscale-0.3.0/medscale/safe.py")
+        tar_info.size = len(data)
+        tar_info.mtime = timestamp
+        out.addfile(tar_info, io.BytesIO(data))
     (folder / "medscale-0.3.0.tar.gz").write_bytes(gzip.compress(tar.getvalue(), mtime=0))
 
 
