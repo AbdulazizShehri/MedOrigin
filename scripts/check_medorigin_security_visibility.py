@@ -111,11 +111,70 @@ def _gh_json(path: str) -> Any:
     return process.returncode, payload
 
 
+def _gh_cursor_json(path: str) -> tuple[int, Any]:
+    """Use GitHub Link cursors (not unsupported page=N) for Dependabot."""
+    process = subprocess.run(
+        ["gh", "api", "--paginate", "--slurp", path],
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+    try:
+        payload = json.loads(process.stdout)
+    except (json.JSONDecodeError, TypeError):
+        payload = {"message": process.stderr.strip()}
+    return process.returncode, payload
+
+
+def _failure_status(result_code: int, result: Any) -> int:
+    message = str(result.get("message", "")) if isinstance(result, dict) else ""
+    lowered = message.casefold()
+    if result_code != 0 and "alerts are disabled" in lowered:
+        return 403
+    if result_code != 0 and "not found" in lowered:
+        return 404
+    if result_code != 0 and any(
+        word in lowered for word in ("forbidden", "resource not accessible", "bad credentials")
+    ):
+        return 403
+    return 0
+
+
 def live(repository: str) -> dict[str, Any]:
     if not re.fullmatch(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+", repository):
         raise ValueError("invalid repository")
     reports: dict[str, dict[str, Any]] = {}
     for key, endpoint in _ENDPOINTS.items():
+        if key == "dependabot":
+            # GitHub removed offset page=N pagination in October 2025.
+            # The CLI follows the cursor Link headers and --slurp groups
+            # pages, allowing a bounded, complete local validation.
+            code, slurped = _gh_cursor_json(
+                f"repos/{repository}/{endpoint}?state=open&per_page={_PAGE_SIZE}"
+            )
+            valid = (
+                code == 0
+                and isinstance(slurped, list)
+                and 1 <= len(slurped) <= _MAX_PAGES
+                and all(isinstance(page, list) and len(page) <= _PAGE_SIZE for page in slurped)
+            )
+            if valid:
+                alerts = [alert for page in slurped for alert in page]
+                reports[key] = {
+                    "http_status": 200,
+                    "payload": alerts,
+                    "page_count": len(slurped),
+                    "complete": True,
+                }
+            else:
+                reports[key] = {
+                    "http_status": _failure_status(code, slurped),
+                    "payload": slurped,
+                    "page_count": len(slurped) if isinstance(slurped, list) else 0,
+                    "complete": False,
+                }
+            continue
         pages: list[dict[str, Any]] = []
         status = 200
         payload: Any = []
@@ -130,22 +189,7 @@ def live(repository: str) -> dict[str, Any]:
             # Distinguish a returned success JSON array from denied access,
             # never silently call a denied result "zero alerts".
             if result_code != 0 or not isinstance(result, list):
-                message = str(result.get("message", "")) if isinstance(result, dict) else ""
-                if result_code != 0 and "alerts are disabled" in message.casefold():
-                    status = 403
-                elif result_code != 0 and "not found" in message.casefold():
-                    status = 404
-                elif result_code != 0 and (
-                    "forbidden" in message.casefold()
-                    or "resource not accessible" in message.casefold()
-                    or "bad credentials" in message.casefold()
-                ):
-                    status = 403
-                else:
-                    # gh does not expose HTTP status on failure by default.
-                    # Unknown network, API, and server failures are NOT proven
-                    # permission errors; keep them explicitly unverifiable.
-                    status = 0
+                status = _failure_status(result_code, result)
                 payload = result
                 break
             pages.extend(result)

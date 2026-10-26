@@ -119,19 +119,35 @@ def test_paginated_fetch_preserves_counts(audit_tool: Any, monkeypatch: Any) -> 
         return 0, [{"number": 101}]
 
     monkeypatch.setattr(audit_tool, "_gh_json", response)
+    monkeypatch.setattr(
+        audit_tool,
+        "_gh_cursor_json",
+        lambda _: (
+            0,
+            [
+                [{"number": index} for index in range(1, 101)],
+                [{"number": 101}],
+            ],
+        ),
+    )
     result = audit_tool.live("AbdulazizShehri/MedOrigin")
     assert result["status"] == "BLOCKED"
     assert all(
         result["repository_security_signals"][key]["visible_alert_count"] == 101
         for key in ("dependabot", "code_scanning", "secret_scanning")
     )
-    assert len(calls) == 6
+    assert len(calls) == 4
 
 
 def test_error_payload_is_not_treated_as_no_alerts(audit_tool: Any, monkeypatch: Any) -> None:
     monkeypatch.setattr(
         audit_tool,
         "_gh_json",
+        lambda _: (1, {"message": "Dependabot alerts are disabled for this repository."}),
+    )
+    monkeypatch.setattr(
+        audit_tool,
+        "_gh_cursor_json",
         lambda _: (1, {"message": "Dependabot alerts are disabled for this repository."}),
     )
     result = audit_tool.live("AbdulazizShehri/MedOrigin")
@@ -159,6 +175,17 @@ def test_duplicate_alert_numbers_across_pages_block(audit_tool: Any, monkeypatch
         return 0, [{"number": 100}]
 
     monkeypatch.setattr(audit_tool, "_gh_json", api)
+    monkeypatch.setattr(
+        audit_tool,
+        "_gh_cursor_json",
+        lambda _: (
+            0,
+            [
+                [{"number": index} for index in range(1, 101)],
+                [{"number": 100}],
+            ],
+        ),
+    )
     result = audit_tool.live("AbdulazizShehri/MedOrigin")
     assert result["status"] == "BLOCKED"
     assert all(
@@ -176,6 +203,11 @@ def test_unknown_server_failure_not_relabelled_access_denied(
         "_gh_json",
         lambda _: (1, {"message": "Internal Server Error"}),
     )
+    monkeypatch.setattr(
+        audit_tool,
+        "_gh_cursor_json",
+        lambda _: (1, {"message": "Internal Server Error"}),
+    )
     result = audit_tool.live("AbdulazizShehri/MedOrigin")
     assert all(
         signal["status"] == "UNVERIFIABLE"
@@ -190,8 +222,73 @@ def test_access_denied_still_reported_distinctly(audit_tool: Any, monkeypatch: A
         "_gh_json",
         lambda _: (1, {"message": "Resource not accessible by integration"}),
     )
+    monkeypatch.setattr(
+        audit_tool,
+        "_gh_cursor_json",
+        lambda _: (1, {"message": "Resource not accessible by integration"}),
+    )
     result = audit_tool.live("AbdulazizShehri/MedOrigin")
     assert all(
         signal["status"] == "ACCESS_DENIED"
         for signal in result["repository_security_signals"].values()
     )
+
+
+def test_dependabot_cursor_request_never_sends_unsupported_page(
+    audit_tool: Any, monkeypatch: Any
+) -> None:
+    from types import SimpleNamespace
+
+    seen: list[list[str]] = []
+
+    def process(argv: list[str], **kwargs: Any) -> Any:
+        seen.append(argv)
+        return SimpleNamespace(
+            stdout='[[{"number": 1}, {"number": 2}]]',
+            stderr="",
+            returncode=0,
+        )
+
+    monkeypatch.setattr(audit_tool.subprocess, "run", process)
+    code, pages = audit_tool._gh_cursor_json(
+        "repos/AbdulazizShehri/MedOrigin/dependabot/alerts?state=open&per_page=100"
+    )
+    assert code == 0
+    assert len(pages) == 1 and len(pages[0]) == 2
+    assert len(seen) == 1
+    assert seen[0][0:4] == ["gh", "api", "--paginate", "--slurp"]
+    assert not any("&page=" in arg or "?page=" in arg for arg in seen[0])
+
+
+def test_dependabot_cursor_page_budget_and_malformed_pages_block(
+    audit_tool: Any, monkeypatch: Any
+) -> None:
+    monkeypatch.setattr(audit_tool, "_gh_json", lambda _: (0, []))
+    for pages in (
+        [],
+        [42],
+        [[{"number": 1}] for _ in range(31)],
+        [[{"number": 1}] * 101],
+        [[{"number": 1}], [{"number": 1}]],
+    ):
+        monkeypatch.setattr(audit_tool, "_gh_cursor_json", lambda _, value=pages: (0, value))
+        result = audit_tool.live("AbdulazizShehri/MedOrigin")
+        assert result["status"] == "BLOCKED"
+        assert result["repository_security_signals"]["dependabot"]["status"] == "UNVERIFIABLE"
+        assert result["publication_authorized"] is False
+
+
+def test_dependabot_cursor_visible_alerts_remain_release_blocked(
+    audit_tool: Any, monkeypatch: Any
+) -> None:
+    monkeypatch.setattr(audit_tool, "_gh_json", lambda _: (0, []))
+    monkeypatch.setattr(
+        audit_tool,
+        "_gh_cursor_json",
+        lambda _: (0, [[{"number": n, "state": "open"} for n in range(1, 61)]]),
+    )
+    result = audit_tool.live("AbdulazizShehri/MedOrigin")
+    assert result["repository_security_signals"]["dependabot"]["visible_alert_count"] == 60
+    assert result["status"] == "BLOCKED"
+    assert "60 visible alerts require assessment" in result["issues"][0]
+    assert result["vulnerability_free"] is False
