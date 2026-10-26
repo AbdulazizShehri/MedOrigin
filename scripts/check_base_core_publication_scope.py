@@ -11,6 +11,7 @@ independent security signoff, or scientific source migration.
 from __future__ import annotations
 
 import argparse
+import gzip
 import json
 import re
 import tarfile
@@ -19,15 +20,40 @@ from email import policy
 from email.message import EmailMessage
 from email.parser import BytesParser
 from pathlib import Path
+from typing import BinaryIO
 
 _MAX_ARCHIVE_BYTES = 30_000_000
 _MAX_METADATA_BYTES = 262_144
+_MAX_MEMBERS = 2000
+_MAX_SINGLE_MEMBER_BYTES = 30_000_000
+_MAX_TOTAL_DECLARED_BYTES = 50_000_000
+_MAX_TAR_INFLATED_BYTES = _MAX_TOTAL_DECLARED_BYTES + _MAX_MEMBERS * 2048
 _WHEEL_METADATA = re.compile(r"medscale-[^/]+[.]dist-info/METADATA")
 _SDIST_METADATA = re.compile(r"medscale-[^/]+/PKG-INFO")
 
 
 class PublicationScopeError(ValueError):
     """Nonclinical base Core publication scope is not demonstrably safe."""
+
+
+class _BoundedInflatedReader:
+    """Bound gzip TAR bytes including headers/PAX before a tar parser sees them."""
+
+    def __init__(self, stream: BinaryIO) -> None:
+        self._stream = stream
+        self._read = 0
+
+    def read(self, size: int = -1) -> bytes:
+        remaining = _MAX_TAR_INFLATED_BYTES - self._read
+        if remaining < 0:
+            raise PublicationScopeError("sdist: inflated TAR envelope exceeds budget")
+        if size < 0 or size > remaining + 1:
+            size = remaining + 1
+        chunk = self._stream.read(size)
+        self._read += len(chunk)
+        if self._read > _MAX_TAR_INFLATED_BYTES:
+            raise PublicationScopeError("sdist: inflated TAR envelope exceeds budget")
+        return chunk
 
 
 def _metadata(raw: bytes, label: str) -> EmailMessage:
@@ -67,7 +93,17 @@ def _check_policy(message: EmailMessage, label: str) -> list[str]:
 def _wheel(path: Path) -> EmailMessage:
     try:
         with zipfile.ZipFile(path) as archive:
-            matches = [m for m in archive.infolist() if _WHEEL_METADATA.fullmatch(m.filename)]
+            members = archive.infolist()
+            if len(members) > _MAX_MEMBERS:
+                raise PublicationScopeError("wheel: archive member limit exceeded")
+            total = 0
+            for item in members:
+                if item.file_size < 0 or item.file_size > _MAX_SINGLE_MEMBER_BYTES:
+                    raise PublicationScopeError("wheel: inflated member exceeds budget")
+                total += item.file_size
+                if total > _MAX_TOTAL_DECLARED_BYTES:
+                    raise PublicationScopeError("wheel: inflated archive exceeds budget")
+            matches = [m for m in members if _WHEEL_METADATA.fullmatch(m.filename)]
             if len(matches) != 1 or matches[0].is_dir():
                 raise PublicationScopeError("wheel: exactly one METADATA required")
             item = matches[0]
@@ -81,21 +117,44 @@ def _wheel(path: Path) -> EmailMessage:
         raise PublicationScopeError("wheel: invalid archive") from exc
 
 
-def _sdist(path: Path) -> EmailMessage:
-    try:
-        with tarfile.open(path, "r:gz") as archive:
-            matches = [m for m in archive.getmembers() if _SDIST_METADATA.fullmatch(m.name)]
-            if len(matches) != 1 or not matches[0].isfile():
+def _bounded_sdist_metadata(archive: tarfile.TarFile) -> EmailMessage:
+    total = 0
+    matches = 0
+    metadata_bytes: bytes | None = None
+    for count, item in enumerate(archive, start=1):
+        if count > _MAX_MEMBERS:
+            raise PublicationScopeError("sdist: archive member limit exceeded")
+        if item.size < 0 or item.size > _MAX_SINGLE_MEMBER_BYTES:
+            raise PublicationScopeError("sdist: inflated member exceeds budget")
+        total += item.size
+        if total > _MAX_TOTAL_DECLARED_BYTES:
+            raise PublicationScopeError("sdist: inflated archive exceeds budget")
+        if _SDIST_METADATA.fullmatch(item.name):
+            matches += 1
+            if matches > 1 or not item.isfile():
                 raise PublicationScopeError("sdist: exactly one regular PKG-INFO required")
-            item = matches[0]
             if item.size > _MAX_METADATA_BYTES:
                 raise PublicationScopeError("sdist: PKG-INFO exceeds budget")
             member = archive.extractfile(item)
             if member is None:
                 raise PublicationScopeError("sdist: PKG-INFO unreadable")
             with member:
-                raw = member.read(_MAX_METADATA_BYTES + 1)
-            return _metadata(raw, "sdist")
+                metadata_bytes = member.read(_MAX_METADATA_BYTES + 1)
+    if matches != 1 or metadata_bytes is None:
+        raise PublicationScopeError("sdist: exactly one regular PKG-INFO required")
+    return _metadata(metadata_bytes, "sdist")
+
+
+def _sdist(path: Path) -> EmailMessage:
+    try:
+        # Stream the gzip TAR; getmembers() materializes the entire inflated
+        # index before a caller can enforce a file-count or inflation budget.
+        # Bound declared sizes before extracting any metadata entry.
+        with (
+            gzip.open(path, "rb") as inflater,
+            tarfile.open(fileobj=_BoundedInflatedReader(inflater), mode="r|") as archive,
+        ):
+            return _bounded_sdist_metadata(archive)
     except (OSError, EOFError, tarfile.TarError, ValueError) as exc:
         if isinstance(exc, PublicationScopeError):
             raise

@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import gzip
 import importlib.util
 import io
 import json
+import struct
 import subprocess
 import sys
 import tarfile
@@ -196,3 +198,88 @@ def test_no_independent_approval_or_publisher_code_in_gate() -> None:
     assert "github.event_name" not in source
     assert "gh release create" not in source
     assert "twine upload" not in source
+
+
+def test_wheel_forged_inflated_size_fails_closed(checker: Any, tmp_path: Path) -> None:
+    folder = make_dist(tmp_path / "bomb")
+    wheel = folder / "medscale-0.3.0-py3-none-any.whl"
+    raw = bytearray(wheel.read_bytes())
+    central_header = raw.find(b"PK\x01\x02")
+    assert central_header >= 0
+    # Central directory declared original size: no huge allocation needed.
+    struct.pack_into("<I", raw, central_header + 24, checker._MAX_SINGLE_MEMBER_BYTES + 1)
+    wheel.write_bytes(raw)
+    result = checker.inspect(folder)
+    assert result["status"] == "BLOCKED"
+    assert any("wheel: inflated member exceeds budget" in issue for issue in result["issues"])
+    assert result["publication_authorized"] is False
+
+
+def test_sdist_forged_inflated_size_fails_before_extraction(checker: Any, tmp_path: Path) -> None:
+    folder = make_dist(tmp_path / "bomb")
+    oversized = tarfile.TarInfo("medscale-0.3.0/huge-data.bin")
+    oversized.size = checker._MAX_SINGLE_MEMBER_BYTES + 1
+    # A checksum-valid header advertises a large payload that is NOT present;
+    # the metadata gate must reject it before attempting to decompress data.
+    (folder / "medscale-0.3.0.tar.gz").write_bytes(
+        gzip.compress(oversized.tobuf() + b"\0" * 1024, mtime=0)
+    )
+    result = checker.inspect(folder)
+    assert result["status"] == "BLOCKED"
+    assert any("sdist: inflated member exceeds budget" in issue for issue in result["issues"])
+    assert result["publication_authorized"] is False
+
+
+def test_wheel_member_count_budget_fails_closed(checker: Any, tmp_path: Path) -> None:
+    folder = make_dist(tmp_path / "many-wheel")
+    wheel = folder / "medscale-0.3.0-py3-none-any.whl"
+    with zipfile.ZipFile(wheel, "a", compression=zipfile.ZIP_DEFLATED) as archive:
+        for n in range(checker._MAX_MEMBERS):
+            archive.writestr(f"medscale/junk_{n:05}.txt", b"")
+    result = checker.inspect(folder)
+    assert result["status"] == "BLOCKED"
+    assert any("wheel: archive member limit exceeded" in issue for issue in result["issues"])
+
+
+def test_sdist_member_count_budget_fails_closed(checker: Any, tmp_path: Path) -> None:
+    folder = make_dist(tmp_path / "many-sdist")
+    sdist = folder / "medscale-0.3.0.tar.gz"
+    with tarfile.open(sdist, "w:gz") as archive:
+        info = tarfile.TarInfo("medscale-0.3.0/PKG-INFO")
+        source = metadata()
+        info.size = len(source)
+        archive.addfile(info, io.BytesIO(source))
+        for n in range(checker._MAX_MEMBERS):
+            directory = tarfile.TarInfo(f"medscale-0.3.0/extra-{n:05}/")
+            directory.type = tarfile.DIRTYPE
+            archive.addfile(directory)
+    result = checker.inspect(folder)
+    assert result["status"] == "BLOCKED"
+    assert any("sdist: archive member limit exceeded" in issue for issue in result["issues"])
+
+
+def test_sdist_duplicate_metadata_fails_closed(checker: Any, tmp_path: Path) -> None:
+    folder = make_dist(tmp_path / "duplicate")
+    sdist = folder / "medscale-0.3.0.tar.gz"
+    with tarfile.open(sdist, "w:gz") as archive:
+        for _ in range(2):
+            raw = metadata()
+            item = tarfile.TarInfo("medscale-0.3.0/PKG-INFO")
+            item.size = len(raw)
+            archive.addfile(item, io.BytesIO(raw))
+    result = checker.inspect(folder)
+    assert result["status"] == "BLOCKED"
+    assert any("sdist: exactly one regular PKG-INFO" in issue for issue in result["issues"])
+
+
+def test_sdist_bounded_inflation_includes_tar_envelope(
+    checker: Any, monkeypatch: Any, tmp_path: Path
+) -> None:
+    folder = make_dist(tmp_path / "inflation-envelope")
+    # Small budget forces an otherwise-valid TAR envelope over the limit,
+    # proving the stream reader counts headers/padding and not only file sizes.
+    monkeypatch.setattr(checker, "_MAX_TAR_INFLATED_BYTES", 1024)
+    result = checker.inspect(folder)
+    assert result["status"] == "BLOCKED"
+    assert any("sdist: inflated TAR envelope exceeds budget" in issue for issue in result["issues"])
+    assert result["publication_authorized"] is False
