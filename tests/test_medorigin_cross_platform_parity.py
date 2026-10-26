@@ -195,5 +195,7 @@ def test_offline_command_fails_closed_when_command_fails(
     with pytest.raises(subject.ParityError) as info:
         subject._offline_command(["uv", "pip", "install", "--no-index"], tmp_path)
     assert "secret" not in str(info.value)
-    assert seen[0]["env"]["UV_OFFLINE"] == "1"
-    assert seen[0]["env"]["UV_NO_PROGRESS"] == "1"
+    env = seen[0]["env"]
+    assert isinstance(env, dict)
+    assert env.get("UV_OFFLINE") == "1"
+    assert env.get("UV_NO_PROGRESS") == "1"
