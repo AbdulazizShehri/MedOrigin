@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import importlib
 import json
 import os
 import platform
@@ -57,7 +58,9 @@ def build_manifest(repo: Path) -> dict[str, Any]:
     # These imports intentionally happen only in build mode. The compare mode
     # remains standard-library-only and cannot build or publish anything.
     from check_base_core_publication_scope import inspect
-    from hatchling.build import build_sdist, build_wheel
+
+    # Build backend exists only in the isolated packaging environment, not static CI.
+    backend = importlib.import_module("hatchling.build")
     from stage_medorigin_base_only_proposal import propose
     from verify_medorigin_base_only_proposal import load_sdist, load_wheel, verify
 
@@ -74,8 +77,8 @@ def build_manifest(repo: Path) -> dict[str, Any]:
         previous = Path.cwd()
         try:
             os.chdir(stage)
-            wheel_name = build_wheel(str(dist))
-            sdist_name = build_sdist(str(dist))
+            wheel_name = backend.build_wheel(str(dist))
+            sdist_name = backend.build_sdist(str(dist))
         finally:
             os.chdir(previous)
         if (wheel_name, sdist_name) != (EXPECTED_FILES["wheel"], EXPECTED_FILES["sdist"]):

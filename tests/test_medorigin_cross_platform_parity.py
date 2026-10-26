@@ -5,11 +5,12 @@ from __future__ import annotations
 import copy
 import importlib.util
 from pathlib import Path
+from typing import Any
 
 import pytest
 
 
-def _load():
+def _load() -> Any:
     path = (
         Path(__file__).resolve().parents[1]
         / "scripts"
@@ -22,7 +23,7 @@ def _load():
     return module
 
 
-def _record(system: str, *, archive_hash: str = "a"):
+def _record(system: str, *, archive_hash: str = "a") -> dict[str, Any]:
     return {
         "schema": "MEDORIGIN_CORE_PARITY_REVIEW_V1",
         "source_git_commit": "f27faada48311fa09e712842e11f4f9fe1e412ac",
@@ -47,7 +48,7 @@ def _record(system: str, *, archive_hash: str = "a"):
     }
 
 
-def test_same_contents_different_archive_headers_do_not_authorize_publication():
+def test_same_contents_different_archive_headers_do_not_authorize_publication() -> None:
     subject = _load()
     result = subject.compare(_record("windows"), _record("linux", archive_hash="b"))
     assert result["status"] == "CONTENT_PARITY_VERIFIED_ARCHIVE_HEADERS_DIFFER"
@@ -57,7 +58,7 @@ def test_same_contents_different_archive_headers_do_not_authorize_publication():
     assert not any(item["whole_archive_byte_identical"] for item in result["archives"].values())
 
 
-def test_identical_archive_payloads_and_headers_report_exact_parity():
+def test_identical_archive_payloads_and_headers_report_exact_parity() -> None:
     subject = _load()
     result = subject.compare(_record("windows"), _record("linux"))
     assert result["status"] == "CONTENT_AND_ARCHIVE_PARITY_VERIFIED"
@@ -79,7 +80,7 @@ def test_identical_archive_payloads_and_headers_report_exact_parity():
         "same_platform",
     ],
 )
-def test_cross_host_audit_fails_closed(tamper: str):
+def test_cross_host_audit_fails_closed(tamper: str) -> None:
     subject = _load()
     left, right = _record("windows"), _record("linux")
     right = copy.deepcopy(right)
@@ -107,14 +108,14 @@ def test_cross_host_audit_fails_closed(tamper: str):
         subject.compare(left, right)
 
 
-def test_macos_and_linux_whole_archives_identical_if_bytes_agree():
+def test_macos_and_linux_whole_archives_identical_if_bytes_agree() -> None:
     subject = _load()
     result = subject.compare(_record("darwin"), _record("linux"))
     assert result["status"] == "CONTENT_AND_ARCHIVE_PARITY_VERIFIED"
     assert result["publication_authorized"] is False
 
 
-def test_windows_and_macos_wheel_headers_may_differ_without_member_changes():
+def test_windows_and_macos_wheel_headers_may_differ_without_member_changes() -> None:
     subject = _load()
     windows, macos = _record("windows"), _record("darwin")
     macos["archives"]["wheel"]["archive_sha256"] = "b" * 64
