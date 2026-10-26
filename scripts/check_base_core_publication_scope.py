@@ -17,6 +17,7 @@ import json
 import re
 import tarfile
 import zipfile
+import zlib
 from email import policy
 from email.message import EmailMessage
 from email.parser import BytesParser
@@ -125,9 +126,10 @@ def _wheel(path: Path) -> EmailMessage:
         raise PublicationScopeError("wheel: invalid archive") from exc
 
 
-def _bounded_sdist_metadata(archive: tarfile.TarFile) -> EmailMessage:
+def _bounded_sdist_metadata(archive: tarfile.TarFile) -> tuple[EmailMessage, int]:
     total = 0
     matches = 0
+    last_member_end = 0
     metadata_bytes: bytes | None = None
     metadata_path: str | None = None
     for count, item in enumerate(archive, start=1):
@@ -138,6 +140,7 @@ def _bounded_sdist_metadata(archive: tarfile.TarFile) -> EmailMessage:
         total += item.size
         if total > _MAX_TOTAL_DECLARED_BYTES:
             raise PublicationScopeError("sdist: inflated archive exceeds budget")
+        last_member_end = max(last_member_end, item.offset_data + ((item.size + 511) // 512) * 512)
         if _SDIST_METADATA.fullmatch(item.name):
             matches += 1
             if matches > 1 or not item.isfile():
@@ -155,7 +158,38 @@ def _bounded_sdist_metadata(archive: tarfile.TarFile) -> EmailMessage:
     parsed = _metadata(metadata_bytes, "sdist")
     if metadata_path != f"medscale-{parsed['Version']}/PKG-INFO":
         raise PublicationScopeError("sdist: source directory version disagrees with metadata")
-    return parsed
+    return parsed, last_member_end
+
+
+def _verify_sdist_physical_envelope(path: Path, last_member_end: int) -> None:
+    """Reject appended gzip members, invalid footers and hidden TAR bytes.
+
+    This second streaming pass validates every compressed byte; a streaming TAR
+    reader alone stops at its logical end and need not check the gzip footer.
+    """
+    decoder = zlib.decompressobj(wbits=31)
+    inflated = 0
+    with path.open("rb") as stream:
+        while chunk := stream.read(65_536):
+            if decoder.eof:
+                raise PublicationScopeError("sdist: trailing gzip data")
+            capacity = _MAX_TAR_INFLATED_BYTES + 1 - inflated
+            if capacity <= 0:
+                raise PublicationScopeError("sdist: inflated TAR envelope exceeds budget")
+            raw = decoder.decompress(chunk, capacity)
+            start = inflated
+            inflated += len(raw)
+            if inflated > _MAX_TAR_INFLATED_BYTES or decoder.unconsumed_tail:
+                raise PublicationScopeError("sdist: inflated TAR envelope exceeds budget")
+            if decoder.unused_data:
+                raise PublicationScopeError("sdist: appended gzip data")
+            trailer_start = max(0, last_member_end - start)
+            if trailer_start < len(raw) and any(raw[trailer_start:]):
+                raise PublicationScopeError("sdist: hidden TAR trailer")
+    if not decoder.eof:
+        raise PublicationScopeError("sdist: incomplete gzip stream")
+    if inflated < last_member_end + 1024 or inflated % 512:
+        raise PublicationScopeError("sdist: malformed TAR terminator")
 
 
 def _sdist(path: Path) -> EmailMessage:
@@ -167,8 +201,10 @@ def _sdist(path: Path) -> EmailMessage:
             gzip.open(path, "rb") as inflater,
             tarfile.open(fileobj=_BoundedInflatedReader(inflater), mode="r|") as archive,
         ):
-            return _bounded_sdist_metadata(archive)
-    except (OSError, EOFError, tarfile.TarError, ValueError) as exc:
+            metadata, last_member_end = _bounded_sdist_metadata(archive)
+        _verify_sdist_physical_envelope(path, last_member_end)
+        return metadata
+    except (OSError, EOFError, tarfile.TarError, zlib.error, ValueError) as exc:
         if isinstance(exc, PublicationScopeError):
             raise
         raise PublicationScopeError("sdist: invalid archive") from exc

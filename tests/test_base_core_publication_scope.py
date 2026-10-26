@@ -330,3 +330,41 @@ def test_embedded_metadata_directory_version_mismatch_blocked(
     assert result["status"] == "BLOCKED"
     assert expected in result["issues"]
     assert result["publication_authorized"] is False
+
+
+@pytest.mark.parametrize(
+    ("kind", "expected"),
+    [
+        ("appended-bytes", "sdist: appended gzip data"),
+        ("concatenated-member", "sdist: appended gzip data"),
+        ("truncated-footer", "sdist: incomplete gzip stream"),
+        ("hidden-tar-payload", "sdist: hidden TAR trailer"),
+        ("damaged-crc", "sdist: invalid archive"),
+    ],
+)
+def test_sdist_publisher_gate_rejects_hidden_physical_payloads(
+    checker: Any, tmp_path: Path, kind: str, expected: str
+) -> None:
+    folder = make_dist(tmp_path / kind)
+    path = folder / "medscale-0.3.0.tar.gz"
+    original = path.read_bytes()
+    if kind == "appended-bytes":
+        altered = original + b"secret-data"
+    elif kind == "concatenated-member":
+        altered = original + gzip.compress(b"hidden-member", mtime=0)
+    elif kind == "truncated-footer":
+        altered = original[:-4]
+    elif kind == "damaged-crc":
+        damaged = bytearray(original)
+        damaged[-8] ^= 0x01
+        altered = bytes(damaged)
+    else:
+        inflated = bytearray(gzip.decompress(original))
+        assert len(inflated) > 4096
+        inflated[4096] = 0x5A
+        altered = gzip.compress(inflated, mtime=0)
+    path.write_bytes(altered)
+    result = checker.inspect(folder)
+    assert result["status"] == "BLOCKED"
+    assert any(expected in issue for issue in result["issues"])
+    assert result["publication_authorized"] is False
