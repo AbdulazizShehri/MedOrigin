@@ -1,0 +1,48 @@
+# Read-only test of the review-admission diagnostic; no GitHub settings or releases changed.
+name: MedOrigin independent-review governance diagnostic (NO RELEASE)
+
+on:
+  pull_request:
+    branches:
+      - test/medorigin-cross-platform-artifact-diagnostics-20261026
+    paths:
+      - "scripts/check_medorigin_independent_review_governance.py"
+      - "tests/test_medorigin_independent_review_governance.py"
+      - "docs/releases/independent_review_governance_preflight.md"
+      - ".github/workflows/medorigin-independent-review-diagnostic.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  pure-governance-tests:
+    name: Read-only review-gate unit tests (NO RELEASE)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout exact PR head without credentials
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+          ref: ${{ github.event.pull_request.head.sha }}
+      - name: Install uv (free)
+        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        with:
+          enable-cache: false
+      - name: Run pure tests and style checks without release credentials
+        shell: bash
+        run: |
+          set -euo pipefail
+          uv python install 3.11
+          uv venv --python 3.11 "$RUNNER_TEMP/review-gate-venv"
+          uv pip install --python "$RUNNER_TEMP/review-gate-venv/bin/python" pytest ruff
+          PYTHONPATH=src "$RUNNER_TEMP/review-gate-venv/bin/python" -m pytest \
+            tests/test_medorigin_independent_review_governance.py -q
+          "$RUNNER_TEMP/review-gate-venv/bin/ruff" check \
+            scripts/check_medorigin_independent_review_governance.py \
+            tests/test_medorigin_independent_review_governance.py
+          "$RUNNER_TEMP/review-gate-venv/bin/ruff" format --check \
+            scripts/check_medorigin_independent_review_governance.py \
+            tests/test_medorigin_independent_review_governance.py
+          echo 'READ_ONLY_REVIEW_GOVERNANCE_TESTS_PASS; no release authorized'
