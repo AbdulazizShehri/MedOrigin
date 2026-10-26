@@ -274,7 +274,7 @@ def test_static_preview_long_labels_have_narrow_viewport_wrap_contract() -> None
     receipt = {
         "runs": [
             {
-                "label": 'test <img src=x onerror=window.__medoriginInjected=true>' * 12,
+                "label": "test <img src=x onerror=window.__medoriginInjected=true>" * 12,
                 "structural_status": "valid",
                 "malformed_exit": 1,
             }

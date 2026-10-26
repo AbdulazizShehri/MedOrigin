@@ -38,12 +38,17 @@ def _make_pair(folder: Path, creator: int, timestamp: int, altered: bool = False
         info.create_system = creator
         info.compress_type = zipfile.ZIP_DEFLATED
         out.writestr(info, b"safe = True\n" if not altered else b"unsafe = True\n")
-    with tarfile.open(folder / "medscale-0.3.0.tar.gz", "w:gz") as out:
+    # Write a qualified simple gzip envelope: tarfile.open(path, "w:gz")
+    # adds a filename (FNAME) gzip header flag, which the stricter source-bound
+    # verifier correctly rejects. Keep the verifier strict and fix this fixture.
+    tar = io.BytesIO()
+    with tarfile.open(fileobj=tar, mode="w") as out:
         data = b"safe = True\n"
         info = tarfile.TarInfo("medscale-0.3.0/medscale/safe.py")
         info.size = len(data)
         info.mtime = timestamp
         out.addfile(info, io.BytesIO(data))
+    (folder / "medscale-0.3.0.tar.gz").write_bytes(gzip.compress(tar.getvalue(), mtime=0))
 
 
 def test_source_bound_equal_members_different_envelopes(
