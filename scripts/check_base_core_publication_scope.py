@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import argparse
 import gzip
+import io
 import json
 import re
 import tarfile
@@ -20,7 +21,6 @@ from email import policy
 from email.message import EmailMessage
 from email.parser import BytesParser
 from pathlib import Path
-from typing import BinaryIO
 
 _MAX_ARCHIVE_BYTES = 30_000_000
 _MAX_METADATA_BYTES = 262_144
@@ -36,12 +36,16 @@ class PublicationScopeError(ValueError):
     """Nonclinical base Core publication scope is not demonstrably safe."""
 
 
-class _BoundedInflatedReader:
+class _BoundedInflatedReader(io.RawIOBase):
     """Bound gzip TAR bytes including headers/PAX before a tar parser sees them."""
 
-    def __init__(self, stream: BinaryIO) -> None:
+    def __init__(self, stream: gzip.GzipFile) -> None:
+        super().__init__()
         self._stream = stream
         self._read = 0
+
+    def readable(self) -> bool:
+        return True
 
     def read(self, size: int = -1) -> bytes:
         remaining = _MAX_TAR_INFLATED_BYTES - self._read
