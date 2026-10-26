@@ -5,6 +5,7 @@ from __future__ import annotations
 import gzip
 import importlib.util
 import io
+import os
 import sys
 import tarfile
 from pathlib import Path
@@ -107,9 +108,11 @@ def test_non_aligned_tar_payload_refused(gate: Any, sample_sdist: tuple[Path, by
 
 
 def test_real_source_bound_sdist_envelope_when_available(gate: Any) -> None:
-    artifact = Path(r"C:\Users\Shehr\work\MedOrigin-PR630-20261025-dist\medscale-0.3.0.tar.gz")
-    if not artifact.exists():
-        pytest.skip("External Windows exact-head sdist fixture is optional")
+    dist = os.environ.get("MEDORIGIN_PROPOSAL_TEST_DIST")
+    if not dist:
+        pytest.skip("Only run real-artifact fixture when exact-head build is supplied")
+    artifact = Path(dist) / "medscale-0.3.0.tar.gz"
+    assert artifact.is_file(), "Expected exact-head sdist missing"
     contents = gate.load_sdist(artifact)
     assert len(contents) == 258
     assert contents["medscale-0.3.0/.gitignore"] == b""

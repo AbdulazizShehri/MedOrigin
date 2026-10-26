@@ -99,6 +99,7 @@ jobs:
       - name: Run real exact-head artifact verifier regression (NO SKIPS)
         shell: bash
         env:
+          PYTHONPATH: src
           MEDORIGIN_PROPOSAL_TEST_DIST: ${{ runner.temp }}/medorigin-linux-proposal-dist
         run: |
           set -euo pipefail
