@@ -1,0 +1,147 @@
+"""No-credentials, synthetic cases for MedOrigin free security visibility audit."""
+
+from __future__ import annotations
+
+import importlib.util
+from pathlib import Path
+from typing import Any
+
+import pytest
+
+SCRIPT = Path(__file__).resolve().parents[1] / "scripts/check_medorigin_security_visibility.py"
+
+
+@pytest.fixture
+def audit_tool() -> Any:
+    spec = importlib.util.spec_from_file_location("medorigin_security_visibility", SCRIPT)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+@pytest.mark.parametrize(
+    ("http_status", "payload", "state", "count"),
+    [
+        (200, [], "VISIBLE", 0),
+        (200, [{"number": 1}], "VISIBLE", 1),
+        (403, {"message": "Dependabot alerts are disabled for this repository."}, "DISABLED", None),
+        (403, {"message": "Resource not accessible by integration"}, "ACCESS_DENIED", None),
+        (401, {"message": "Bad credentials"}, "ACCESS_DENIED", None),
+        (404, {"message": "Not Found"}, "UNAVAILABLE_OR_NOT_FOUND", None),
+        (500, {"message": "Internal Server Error"}, "UNVERIFIABLE", None),
+        (200, {"message": "not a list"}, "UNVERIFIABLE", None),
+        (200, [{"number": 1}, "bad-item"], "UNVERIFIABLE", None),
+    ],
+)
+def test_security_signal_status_is_never_implicitly_empty(
+    audit_tool: Any, http_status: int, payload: Any, state: str, count: int | None
+) -> None:
+    result = audit_tool.classify(http_status, payload)
+    assert result["status"] == state
+    assert result["visible_alert_count"] == count
+
+
+def test_missing_page_blocks_instead_of_truncating(audit_tool: Any) -> None:
+    assert audit_tool.classify(200, [], complete=False)["status"] == "UNVERIFIABLE"
+    assert audit_tool.classify(200, [], page_count=31)["status"] == "UNVERIFIABLE"
+
+
+def test_visible_zero_across_all_scanners_does_not_mean_secure(audit_tool: Any) -> None:
+    result = audit_tool.audit(
+        {
+            name: {
+                "http_status": 200,
+                "payload": [],
+                "page_count": 1,
+                "complete": True,
+            }
+            for name in ("dependabot", "code_scanning", "secret_scanning")
+        }
+    )
+    assert result["status"] == "SECURITY_ALERT_SIGNALS_VISIBLE_ONLY"
+    assert result["vulnerability_free"] is False
+    assert result["publication_authorized"] is False
+    assert result["independent_security_review_complete"] is False
+
+
+def test_disabled_dependabot_fails_even_with_other_empty_signals(audit_tool: Any) -> None:
+    sample = {
+        name: {
+            "http_status": 200,
+            "payload": [],
+            "page_count": 1,
+            "complete": True,
+        }
+        for name in ("dependabot", "code_scanning", "secret_scanning")
+    }
+    sample["dependabot"] = {
+        "http_status": 403,
+        "payload": {"message": "Dependabot alerts are disabled for this repository."},
+        "page_count": 1,
+        "complete": False,
+    }
+    result = audit_tool.audit(sample)
+    assert result["status"] == "BLOCKED"
+    assert result["repository_security_signals"]["dependabot"]["status"] == "DISABLED"
+    assert result["repository_security_signals"]["code_scanning"]["visible_alert_count"] == 0
+    assert result["publication_authorized"] is False
+
+
+def test_visible_alerts_need_triage(audit_tool: Any) -> None:
+    data = {
+        name: {
+            "http_status": 200,
+            "payload": [],
+            "page_count": 1,
+            "complete": True,
+        }
+        for name in ("dependabot", "code_scanning", "secret_scanning")
+    }
+    data["code_scanning"]["payload"] = [{"number": 4}]
+    result = audit_tool.audit(data)
+    assert result["status"] == "BLOCKED"
+    assert "1 visible alerts" in result["issues"][0]
+
+
+def test_paginated_fetch_preserves_counts(audit_tool: Any, monkeypatch: Any) -> None:
+    calls: list[str] = []
+
+    def response(endpoint: str) -> tuple[int, Any]:
+        calls.append(endpoint)
+        if endpoint.endswith("&page=1"):
+            return 0, [{"number": index} for index in range(100)]
+        return 0, [{"number": 100}]
+
+    monkeypatch.setattr(audit_tool, "_gh_json", response)
+    result = audit_tool.live("AbdulazizShehri/MedOrigin")
+    assert result["status"] == "BLOCKED"
+    assert all(
+        result["repository_security_signals"][key]["visible_alert_count"] == 101
+        for key in ("dependabot", "code_scanning", "secret_scanning")
+    )
+    assert len(calls) == 6
+
+
+def test_error_payload_is_not_treated_as_no_alerts(audit_tool: Any, monkeypatch: Any) -> None:
+    monkeypatch.setattr(
+        audit_tool,
+        "_gh_json",
+        lambda _: (1, {"message": "Dependabot alerts are disabled for this repository."}),
+    )
+    result = audit_tool.live("AbdulazizShehri/MedOrigin")
+    assert result["status"] == "BLOCKED"
+    assert all(
+        item["status"] == "DISABLED" for item in result["repository_security_signals"].values()
+    )
+
+
+def test_invalid_repository_refused(audit_tool: Any) -> None:
+    with pytest.raises(ValueError):
+        audit_tool.live("somebody/../wrong")
+
+
+def test_missing_scanner_signal_blocks(audit_tool: Any) -> None:
+    result = audit_tool.audit({})
+    assert result["status"] == "BLOCKED"
+    assert len(result["issues"]) == 3
