@@ -14,10 +14,15 @@ The read-only CI workflow
    provenance, installer metadata, members, RECORD, licenses) and
    `check_base_core_publication_scope.py` (blocked extras, bounded archives,
    gzip/TAR and version binding).
-4. Emits bounded metadata-only manifests: archive SHA-256, exact member-name
+4. In the same temporary directory, offline-installs the source-verified Wheel
+   using `uv pip install --no-index --no-deps` into separate clean Python
+   3.11 and 3.12 venvs, byte-checks every installed Python module, executes
+   real installed `medscale` CLI commands against synthetic FHIR fixtures,
+   and rejects wrong report hashes or malformed-input behavior.
+5. Emits bounded metadata-only manifests: archive SHA-256, exact member-name
    to member-content SHA-256 maps, and ZIP creator-system diagnostics. The
    source Wheel and sdist are never uploaded or distributed by this workflow.
-5. Compares each of the three OS pairs (Windows/Linux, Windows/macOS,
+6. Compares each of the three OS pairs (Windows/Linux, Windows/macOS,
    Linux/macOS), checking member maps **and** whole archive SHA-256 hashes.
    Any source commit, member bytes, count, malformed evidence, changed build
    backend, or false publication gate fails closed.

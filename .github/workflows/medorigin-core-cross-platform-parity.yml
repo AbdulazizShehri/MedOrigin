@@ -24,7 +24,7 @@ jobs:
   produce-source-bound-inventory:
     name: Source-bound Core inventory (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 25
+    timeout-minutes: 35
     strategy:
       fail-fast: false
       matrix:
@@ -47,10 +47,10 @@ jobs:
         with:
           version: "0.12.19"
           enable-cache: false
-      - name: Install Python 3.11
+      - name: Install Python 3.11 and 3.12 for offline installed-runtime checks
         shell: bash
-        run: uv python install 3.11
-      - name: Build, source-attest, scope-gate and inventory scratch artifacts
+        run: uv python install 3.11 3.12
+      - name: Build, source-attest, offline-install both Pythons and exercise synthetic FHIR
         shell: bash
         run: |
           set -euo pipefail

@@ -32,6 +32,11 @@ def _record(system: str, *, archive_hash: str = "a") -> dict[str, Any]:
         "publication_authorized": False,
         "adr_0045_accepted": False,
         "source_bound_verified": True,
+        "installed_python_versions": ["3.11", "3.12"],
+        "installed_python_source_count": 249,
+        "synthetic_report_sha256": (
+            "991d319d9c567db3a71985661a12abb67c8432ff43b439c08759f8ee1d52fbd9"
+        ),
         "archives": {
             name: {
                 "archive_sha256": archive_hash * 64,
@@ -78,6 +83,9 @@ def test_identical_archive_payloads_and_headers_report_exact_parity() -> None:
         "wrong_member_count",
         "malformed_digest",
         "same_platform",
+        "missing_runtime_evidence",
+        "wrong_runtime_count",
+        "wrong_report_digest",
     ],
 )
 def test_cross_host_audit_fails_closed(tamper: str) -> None:
@@ -104,6 +112,13 @@ def test_cross_host_audit_fails_closed(tamper: str) -> None:
         right["archives"]["sdist"]["archive_sha256"] = "zzz"
     elif tamper == "same_platform":
         right["platform"] = "windows"
+    elif tamper == "missing_runtime_evidence":
+        del right["installed_python_versions"]
+    elif tamper == "wrong_runtime_count":
+        right["installed_python_source_count"] = 248
+        left["installed_python_source_count"] = 249
+    elif tamper == "wrong_report_digest":
+        right["synthetic_report_sha256"] = "a" * 64
     with pytest.raises(subject.ParityError):
         subject.compare(left, right)
 
@@ -124,3 +139,61 @@ def test_windows_and_macos_wheel_headers_may_differ_without_member_changes() -> 
     assert result["archives"]["wheel"]["members_byte_identical"] is True
     assert result["archives"]["wheel"]["whole_archive_byte_identical"] is False
     assert result["status"] == "CONTENT_PARITY_VERIFIED_ARCHIVE_HEADERS_DIFFER"
+
+
+def test_runtime_evidence_is_attested_in_pairwise_result() -> None:
+    subject = _load()
+    record = subject.compare(_record("darwin"), _record("linux"))
+    assert record["offline_installed_python_versions"] == ["3.11", "3.12"]
+    assert record["offline_installed_source_count"] == 249
+    assert record["synthetic_report_sha256"] == subject.SYNTHETIC_REPORT_SHA256
+    assert record["publication_authorized"] is False
+
+
+def test_synthetic_evidence_rejects_tampered_reports(tmp_path: Path) -> None:
+    import json
+
+    subject = _load()
+    report = tmp_path / "evidence.json"
+    baseline = {
+        "runs": [
+            {
+                "report_sha256": subject.SYNTHETIC_REPORT_SHA256,
+                "structural_status": "valid",
+                "malformed_exit": 1,
+            }
+        ]
+        * 2
+    }
+    report.write_text(json.dumps(baseline), encoding="utf-8")
+    subject._verify_synthetic_evidence(report)
+    for tampered in (
+        {"runs": baseline["runs"][:1]},
+        {"runs": [baseline["runs"][0], dict(baseline["runs"][0], report_sha256="f" * 64)]},
+        {"runs": [baseline["runs"][0], dict(baseline["runs"][0], malformed_exit=0)]},
+        {"runs": [baseline["runs"][0], dict(baseline["runs"][0], structural_status="invalid")]},
+        {"runs": [baseline["runs"][0], dict(baseline["runs"][0], malformed_exit=True)]},
+    ):
+        report.write_text(json.dumps(tampered), encoding="utf-8")
+        with pytest.raises(subject.ParityError):
+            subject._verify_synthetic_evidence(report)
+
+
+def test_offline_command_fails_closed_when_command_fails(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    import subprocess
+
+    subject = _load()
+    seen: list[dict[str, object]] = []
+
+    def fake(args: list[str], **kwargs: object) -> subprocess.CompletedProcess[bytes]:
+        seen.append({"args": args, **kwargs})
+        return subprocess.CompletedProcess(args, returncode=2, stdout=b"", stderr=b"secret")
+
+    monkeypatch.setattr(subject.subprocess, "run", fake)
+    with pytest.raises(subject.ParityError) as info:
+        subject._offline_command(["uv", "pip", "install", "--no-index"], tmp_path)
+    assert "secret" not in str(info.value)
+    assert seen[0]["env"]["UV_OFFLINE"] == "1"
+    assert seen[0]["env"]["UV_NO_PROGRESS"] == "1"

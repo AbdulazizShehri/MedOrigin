@@ -15,6 +15,7 @@ import json
 import os
 import platform
 import re
+import subprocess
 import sys
 import tempfile
 import zipfile
@@ -52,6 +53,109 @@ def _inventory(name: str, path: Path, members: dict[str, bytes]) -> dict[str, An
                 {entry.create_system for entry in archive.infolist()}
             )
     return record
+
+
+SYNTHETIC_REPORT_SHA256 = "991d319d9c567db3a71985661a12abb67c8432ff43b439c08759f8ee1d52fbd9"
+
+
+def _offline_command(args: list[str], repo: Path) -> None:
+    """No shell, no package-index access, and no trust in tool stderr."""
+    env = dict(os.environ)
+    env["UV_OFFLINE"] = "1"
+    env["UV_NO_PROGRESS"] = "1"
+    try:
+        proc = subprocess.run(
+            args,
+            cwd=repo,
+            env=env,
+            capture_output=True,
+            timeout=180,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        raise ParityError("offline runtime qualification command unavailable") from exc
+    if proc.returncode:
+        raise ParityError("offline runtime qualification command rejected")
+
+
+def _verify_synthetic_evidence(path: Path) -> None:
+    """Check the same real installed-CLI FHIR evidence contract on each host."""
+    try:
+        receipt = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        raise ParityError("missing or malformed installed synthetic evidence") from exc
+    if (
+        not isinstance(receipt, dict)
+        or not isinstance(receipt.get("runs"), list)
+        or len(receipt["runs"]) != 2
+        or any(
+            not isinstance(row, dict)
+            or row.get("report_sha256") != SYNTHETIC_REPORT_SHA256
+            or row.get("structural_status") != "valid"
+            or type(row.get("malformed_exit")) is not int
+            or row["malformed_exit"] != 1
+            for row in receipt["runs"]
+        )
+    ):
+        raise ParityError("installed synthetic FHIR identity or refusal drift")
+
+
+def _verify_offline_install(repo: Path, wheel: Path, scratch: Path) -> dict[str, Any]:
+    """Exercise two clean interpreter installs of exactly the verified Wheel."""
+    from qualify_medorigin_developer_beta import installed_wheel_matches
+
+    venvs: dict[int, Path] = {}
+    scripts: dict[int, Path] = {}
+    for minor in (11, 12):
+        venv = scratch / f"python3{minor}"
+        _offline_command(["uv", "venv", "--python", f"3.{minor}", str(venv)], repo)
+        bin_path = venv / ("Scripts" if os.name == "nt" else "bin")
+        python = bin_path / ("python.exe" if os.name == "nt" else "python")
+        cli = bin_path / ("medscale.exe" if os.name == "nt" else "medscale")
+        _offline_command(
+            [
+                "uv",
+                "pip",
+                "install",
+                "--python",
+                str(python),
+                "--no-index",
+                "--no-deps",
+                str(wheel),
+            ],
+            repo,
+        )
+        if not cli.is_file():
+            raise ParityError("installed Core CLI missing")
+        count = installed_wheel_matches(wheel, python, minor)
+        if count < 50:
+            raise ParityError("incomplete installed Core source inventory")
+        venvs[minor] = python
+        scripts[minor] = cli
+        if minor == 11:
+            expected_count = count
+        elif count != expected_count:
+            raise ParityError("installed 3.11/3.12 source inventories diverged")
+    evidence = scratch / "synthetic-fhir"
+    _offline_command(
+        [
+            str(venvs[12]),
+            str(repo / "examples" / "synthetic_fhir_developer_beta" / "reproduce.py"),
+            "--cli",
+            str(scripts[11]),
+            "--alt-cli",
+            str(scripts[12]),
+            "--out",
+            str(evidence),
+        ],
+        repo,
+    )
+    _verify_synthetic_evidence(evidence / "evidence.json")
+    return {
+        "installed_python_versions": ["3.11", "3.12"],
+        "installed_python_source_count": expected_count,
+        "synthetic_report_sha256": SYNTHETIC_REPORT_SHA256,
+    }
 
 
 def build_manifest(repo: Path) -> dict[str, Any]:
@@ -98,7 +202,9 @@ def build_manifest(repo: Path) -> dict[str, Any]:
             "wheel": _inventory("wheel", dist / wheel_name, load_wheel(dist / wheel_name)),
             "sdist": _inventory("sdist", dist / sdist_name, load_sdist(dist / sdist_name)),
         }
+        installed = _verify_offline_install(repo, dist / wheel_name, root)
         return {
+            **installed,
             "schema": SCHEMA,
             "source_git_commit": source_receipt["source_git_commit"],
             "platform": platform.system().lower(),
@@ -119,6 +225,9 @@ def _validate(record: Any) -> dict[str, Any]:
         "publication_authorized",
         "adr_0045_accepted",
         "source_bound_verified",
+        "installed_python_versions",
+        "installed_python_source_count",
+        "synthetic_report_sha256",
         "archives",
     }:
         raise ParityError("malformed evidence schema")
@@ -131,6 +240,10 @@ def _validate(record: Any) -> dict[str, Any]:
         or record["publication_authorized"] is not False
         or record["adr_0045_accepted"] is not False
         or record["source_bound_verified"] is not True
+        or record["installed_python_versions"] != ["3.11", "3.12"]
+        or type(record["installed_python_source_count"]) is not int
+        or record["installed_python_source_count"] < 50
+        or record["synthetic_report_sha256"] != SYNTHETIC_REPORT_SHA256
     ):
         raise ParityError("unqualified cross-platform evidence")
     archives = record["archives"]
@@ -177,6 +290,8 @@ def compare(left: Any, right: Any) -> dict[str, Any]:
         raise ParityError("need independent host operating systems")
     if a["source_git_commit"] != b["source_git_commit"]:
         raise ParityError("cannot compare artifacts from different Git commits")
+    if a["installed_python_source_count"] != b["installed_python_source_count"]:
+        raise ParityError("installed Python source inventory counts differ across hosts")
     archives: dict[str, Any] = {}
     for kind in EXPECTED:
         first, second = a["archives"][kind], b["archives"][kind]
@@ -205,6 +320,9 @@ def compare(left: Any, right: Any) -> dict[str, Any]:
         ),
         "source_git_commit": a["source_git_commit"],
         "platforms": sorted((a["platform"], b["platform"])),
+        "offline_installed_python_versions": a["installed_python_versions"],
+        "offline_installed_source_count": a["installed_python_source_count"],
+        "synthetic_report_sha256": SYNTHETIC_REPORT_SHA256,
         "archives": archives,
         "publication_authorized": False,
         "adr_0045_accepted": False,
