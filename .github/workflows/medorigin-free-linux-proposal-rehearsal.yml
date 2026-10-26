@@ -5,6 +5,7 @@ on:
     branches:
       - fix/medorigin-isolated-build-vcs-ignore-20261025
       - test/medorigin-free-linux-packaging-rehearsal-20261025
+      - test/medorigin-base-proposal-full-provenance-20261025
 
 # Builder and validator are intentionally nonpublishing; no write scopes,
 # package-index credentials, deployment environments, model installs, or upload.
