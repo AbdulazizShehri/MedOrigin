@@ -96,35 +96,37 @@ def audit(reports: dict[str, dict[str, Any]]) -> dict[str, Any]:
     }
 
 
-def _gh_json(path: str) -> Any:
+def _gh_api_json(argv: list[str]) -> tuple[int, Any]:
+    """Decode GitHub's UTF-8 JSON independent of Windows console code pages.
+
+    Capture raw bytes to detect invalid UTF-8 in the calling thread instead
+    of silently losing stdout inside subprocess reader threads.
+    """
     process = subprocess.run(
-        ["gh", "api", path],
+        argv,
         capture_output=True,
-        text=True,
         timeout=30,
         check=False,
     )
     try:
-        payload = json.loads(process.stdout)
+        stdout = process.stdout.decode("utf-8")
+        stderr = process.stderr.decode("utf-8")
+    except (AttributeError, UnicodeDecodeError):
+        return 1, {"message": "GitHub CLI returned undecodable UTF-8 output"}
+    try:
+        payload = json.loads(stdout)
     except (json.JSONDecodeError, TypeError):
-        payload = {"message": process.stderr.strip()}
+        payload = {"message": stderr.strip()}
     return process.returncode, payload
+
+
+def _gh_json(path: str) -> tuple[int, Any]:
+    return _gh_api_json(["gh", "api", path])
 
 
 def _gh_cursor_json(path: str) -> tuple[int, Any]:
     """Use GitHub Link cursors (not unsupported page=N) for Dependabot."""
-    process = subprocess.run(
-        ["gh", "api", "--paginate", "--slurp", path],
-        capture_output=True,
-        text=True,
-        timeout=30,
-        check=False,
-    )
-    try:
-        payload = json.loads(process.stdout)
-    except (json.JSONDecodeError, TypeError):
-        payload = {"message": process.stderr.strip()}
-    return process.returncode, payload
+    return _gh_api_json(["gh", "api", "--paginate", "--slurp", path])
 
 
 def _failure_status(result_code: int, result: Any) -> int:

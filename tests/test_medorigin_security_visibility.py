@@ -244,8 +244,8 @@ def test_dependabot_cursor_request_never_sends_unsupported_page(
     def process(argv: list[str], **kwargs: Any) -> Any:
         seen.append(argv)
         return SimpleNamespace(
-            stdout='[[{"number": 1}, {"number": 2}]]',
-            stderr="",
+            stdout=b'[[{"number": 1}, {"number": 2}]]',
+            stderr=b"",
             returncode=0,
         )
 
@@ -292,3 +292,53 @@ def test_dependabot_cursor_visible_alerts_remain_release_blocked(
     assert result["status"] == "BLOCKED"
     assert "60 visible alerts require assessment" in result["issues"][0]
     assert result["vulnerability_free"] is False
+
+
+@pytest.mark.parametrize("paginated", [False, True])
+def test_gh_json_utf8_bytes(audit_tool: Any, monkeypatch: Any, paginated: bool) -> None:
+    """GitHub Unicode alerts must decode even with a legacy Windows locale."""
+    import json
+    from types import SimpleNamespace
+
+    entry = {"number": 42, "summary": "بيانات تجريبية - café"}
+    payload = [[entry]] if paginated else [entry]
+    calls: list[tuple[list[str], dict[str, Any]]] = []
+
+    def response(argv: list[str], **kwargs: Any) -> Any:
+        calls.append((argv, kwargs))
+        return SimpleNamespace(
+            stdout=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
+            stderr=b"",
+            returncode=0,
+        )
+
+    monkeypatch.setattr(audit_tool.subprocess, "run", response)
+    code, decoded = (
+        audit_tool._gh_cursor_json("repos/owner/repo/dependabot/alerts")
+        if paginated
+        else audit_tool._gh_json("repos/owner/repo/code-scanning/alerts")
+    )
+    assert code == 0
+    assert decoded == payload
+    assert len(calls) == 1
+    assert calls[0][1]["capture_output"] is True
+    assert "text" not in calls[0][1] and "encoding" not in calls[0][1]
+
+
+@pytest.mark.parametrize("paginated", [False, True])
+def test_invalid_gh_utf8_fails_closed(audit_tool: Any, monkeypatch: Any, paginated: bool) -> None:
+    """Never treat an undecodable CLI reply as zero visible alerts."""
+    from types import SimpleNamespace
+
+    monkeypatch.setattr(
+        audit_tool.subprocess,
+        "run",
+        lambda *_, **__: SimpleNamespace(stdout=b"\xff", stderr=b"", returncode=0),
+    )
+    code, payload = (
+        audit_tool._gh_cursor_json("repos/owner/repo/dependabot/alerts")
+        if paginated
+        else audit_tool._gh_json("repos/owner/repo/code-scanning/alerts")
+    )
+    assert code != 0
+    assert payload == {"message": "GitHub CLI returned undecodable UTF-8 output"}
