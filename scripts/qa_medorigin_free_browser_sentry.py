@@ -87,11 +87,16 @@ def _browser_checks(html: Path, edge: Path) -> None:
 
             # Only the pure renderer is used here. A malicious receipt MUST NOT be
             # admitted by preview.admit_receipt() or any publication workflow.
+            adversarial_label = (
+                "test "
+                + "MEDORIGIN_UNBROKEN_SYNTHETIC_LABEL_" * 20
+                + '<img src=x onerror="window.__medorigin_xss=1">'
+            )
             adversarial = preview.render(
                 {
                     "runs": [
                         {
-                            "label": '<img src=x onerror="window.__medorigin_xss=1">',
+                            "label": adversarial_label,
                             "report_sha256": "</code><script>window.__medorigin_xss=2</script>",
                             "fixture_sha256": '<iframe src="https://example.invalid/">',
                             "structural_status": "valid",
@@ -100,14 +105,21 @@ def _browser_checks(html: Path, edge: Path) -> None:
                     ]
                 }
             )
-            page = browser.new_page()
-            failures, external = _assert_page(page)
-            page.set_content(adversarial)
-            if page.evaluate("window.__medorigin_xss") is not None:
-                raise AssertionError("injected script executed")
-            if page.locator("img, iframe, script").count() or external or failures:
-                raise AssertionError("injected HTML became active or escaped browser")
-            page.close()
+            # Regression for #620: even an unusually long HTML-escaped label
+            # must remain visible without horizontal scroll at phone widths.
+            for width, height in VIEWPORTS:
+                page = browser.new_page(viewport={"width": width, "height": height})
+                failures, external = _assert_page(page)
+                page.set_content(adversarial)
+                if page.locator("article.result h3").inner_text() != adversarial_label:
+                    raise AssertionError("escaped synthetic label was lost or altered")
+                if page.evaluate("document.documentElement.scrollWidth > innerWidth + 1"):
+                    raise AssertionError("long escaped label overflows viewport")
+                if page.evaluate("window.__medorigin_xss") is not None:
+                    raise AssertionError("injected script executed")
+                if page.locator("img, iframe, script").count() or external or failures:
+                    raise AssertionError("injected HTML became active or escaped browser")
+                page.close()
         finally:
             browser.close()
 
