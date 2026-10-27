@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import platform
 import sys
 import tempfile
 import time
@@ -20,7 +21,9 @@ import desktop  # type: ignore[import-not-found]  # noqa: E402
 
 
 def run_smoke(cli: Path, *, timeout_seconds: float = 40.0) -> None:
-    if sys.platform != "win32":
+    # Dynamic OS check keeps this CLI lintable from Linux CI while refusing
+    # any non-Windows GUI run at runtime.
+    if platform.system() != "Windows":
         raise RuntimeError("native desktop smoke test requires a Windows GUI runner")
     if not cli.is_file():
         raise ValueError("installed Core CLI executable is missing")
