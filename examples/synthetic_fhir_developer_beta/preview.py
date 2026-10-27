@@ -6,12 +6,143 @@ external fonts, analytics, uploads, or clinical interpretation.
 
 from __future__ import annotations
 
+import hashlib
+import json
+import re
 from html import escape
+from pathlib import Path, PurePosixPath
 from typing import Any
 
 
 def _safe(value: object) -> str:
     return escape(str(value), quote=True)
+
+
+_HEX_SHA256 = re.compile(r"[0-9a-f]{64}\Z")
+_RECEIPT_SCHEMA = "medorigin-local-synthetic-fhir-example/v1"
+_SCOPE = "synthetic structural validation, not full HL7 conformance"
+_INSTALLED_VERSION = "medscale 0.3.0"
+_WORKSPACE = {
+    "application": "medscale-workspace",
+    "version": "0.1.0.dev1",
+    "data_class": "SYNTHETIC",
+    "mode": "offline-shell",
+    "ready": True,
+}
+_MAX_REPORT_BYTES = 1_000_000
+
+
+def unique_json_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    """Reject duplicate keys at every depth; a later key may hide PHI."""
+    result: dict[str, Any] = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError("duplicate key in synthetic receipt")
+        result[key] = value
+    return result
+
+
+def admit_receipt(receipt: object, *, directory: Path) -> dict[str, Any]:
+    """Fail closed on unsupported or forged synthetic-preview evidence fields.
+
+    No cryptographic signer is implied. Recompute the report file digest and
+    pin the bundled fixture, type/keys, relative path and negative control.
+    """
+    if not isinstance(receipt, dict):
+        raise ValueError("synthetic evidence must be an object")
+    required = {
+        "schema",
+        "scope",
+        "publication_authorized",
+        "clinical_authorized",
+        "independent_review_completed",
+        "runs",
+    }
+    if set(receipt) not in (required, required | {"workspace"}):
+        raise ValueError("unexpected synthetic receipt fields")
+    if (
+        receipt["schema"] != _RECEIPT_SCHEMA
+        or receipt["scope"] != _SCOPE
+        or any(
+            receipt[key] is not False
+            for key in (
+                "publication_authorized",
+                "clinical_authorized",
+                "independent_review_completed",
+            )
+        )
+    ):
+        raise ValueError("synthetic receipt scope not admitted")
+    runs = receipt["runs"]
+    if not isinstance(runs, list) or len(runs) not in (1, 2):
+        raise ValueError("unexpected synthetic runs")
+    fixture_file = Path(__file__).resolve().parent / "synthetic_structure_definition.json"
+    fixture_hash = hashlib.sha256(fixture_file.read_bytes()).hexdigest()
+    expected_runs = {
+        "label",
+        "installed_version",
+        "fixture_sha256",
+        "report_sha256",
+        "report_path",
+        "structural_status",
+        "valid_exit",
+        "malformed_exit",
+    }
+    root = directory.resolve()
+    report_hashes: list[str] = []
+    for i, row in enumerate(runs, start=1):
+        if not isinstance(row, dict) or set(row) != expected_runs:
+            raise ValueError("unexpected synthetic run fields")
+        if (
+            row["label"] != f"run_{i}"
+            or row["installed_version"] != _INSTALLED_VERSION
+            or row["fixture_sha256"] != fixture_hash
+            or row["structural_status"] != "valid"
+            or type(row["valid_exit"]) is not int
+            or row["valid_exit"] != 0
+            or type(row["malformed_exit"]) is not int
+            or row["malformed_exit"] != 1
+            or not isinstance(row["report_sha256"], str)
+            or _HEX_SHA256.fullmatch(row["report_sha256"]) is None
+        ):
+            raise ValueError("synthetic run identity or validation outcome invalid")
+        path = row["report_path"]
+        if not isinstance(path, str) or len(path) > 240 or "\\" in path:
+            raise ValueError("unsafe synthetic report path")
+        relative = PurePosixPath(path)
+        if (
+            relative.is_absolute()
+            or ".." in relative.parts
+            or len(relative.parts) < 3
+            or relative.parts[0] != f"reports_run_{i}"
+            or relative.name != "report.json"
+            or ":" in path
+        ):
+            raise ValueError("unexpected synthetic report path")
+        candidate = (root / relative).resolve()
+        if not candidate.is_relative_to(root) or not candidate.is_file():
+            raise ValueError("synthetic report file is missing or outside evidence root")
+        if candidate.stat().st_size > _MAX_REPORT_BYTES:
+            raise ValueError("oversized synthetic report")
+        raw = candidate.read_bytes()
+        if hashlib.sha256(raw).hexdigest() != row["report_sha256"]:
+            raise ValueError("synthetic report content digest mismatch")
+        report = json.loads(raw, object_pairs_hook=unique_json_object)
+        if not isinstance(report, dict) or report.get("status") != "valid":
+            raise ValueError("synthetic report status cannot be verified")
+        report_hashes.append(row["report_sha256"])
+    if len(set(report_hashes)) != 1:
+        raise ValueError("cross-interpreter synthetic reports differ")
+    if "workspace" in receipt and (
+        not isinstance(receipt["workspace"], dict)
+        or set(receipt["workspace"]) != set(_WORKSPACE)
+        or any(
+            type(receipt["workspace"][k]) is not type(v) or receipt["workspace"][k] != v
+            for k, v in _WORKSPACE.items()
+        )
+    ):
+        raise ValueError("optional synthetic Workspace fields not admitted")
+    return receipt
 
 
 def render(receipt: dict[str, Any]) -> str:
@@ -182,7 +313,6 @@ def main(argv: list[str] | None = None) -> int:
     """Render a JSON evidence file into a local static HTML page."""
     import argparse
     import json
-    from pathlib import Path
 
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--receipt", type=Path, required=True)
@@ -191,10 +321,11 @@ def main(argv: list[str] | None = None) -> int:
     if not args.receipt.is_file() or args.receipt.stat().st_size > 100_000:
         parser.error("missing or oversized synthetic evidence receipt")
     try:
-        receipt = json.loads(args.receipt.read_text(encoding="utf-8"))
-        if not isinstance(receipt, dict):
-            raise ValueError("receipt must be a JSON object")
-        markup = render(receipt)
+        receipt = json.loads(
+            args.receipt.read_text(encoding="utf-8"),
+            object_pairs_hook=unique_json_object,
+        )
+        markup = render(admit_receipt(receipt, directory=args.receipt.parent))
         with args.out.open("x", encoding="utf-8", newline="\n") as output:
             output.write(markup)
     except (OSError, ValueError, TypeError) as exc:

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import importlib.util
 import json
 import sys
@@ -286,3 +287,141 @@ def test_static_preview_long_labels_have_narrow_viewport_wrap_contract() -> None
     assert "grid-template-columns:repeat(auto-fit,minmax(min(100%,280px),1fr))" in html
     assert "overflow-wrap:anywhere" in html
     assert "min-width:0" in html
+
+
+def _synthetic_receipt_with_report(tmp_path: Path) -> dict[str, Any]:
+    report = tmp_path / "reports_run_1" / "sha" / "report.json"
+    report.parent.mkdir(parents=True)
+    report.write_text('{"status":"valid"}\n', encoding="utf-8")
+    return {
+        "schema": "medorigin-local-synthetic-fhir-example/v1",
+        "scope": "synthetic structural validation, not full HL7 conformance",
+        "publication_authorized": False,
+        "clinical_authorized": False,
+        "independent_review_completed": False,
+        "runs": [
+            {
+                "label": "run_1",
+                "installed_version": "medscale 0.3.0",
+                "fixture_sha256": hashlib.sha256(
+                    (EXAMPLE / "synthetic_structure_definition.json").read_bytes()
+                ).hexdigest(),
+                "report_sha256": hashlib.sha256(report.read_bytes()).hexdigest(),
+                "report_path": "reports_run_1/sha/report.json",
+                "structural_status": "valid",
+                "valid_exit": 0,
+                "malformed_exit": 1,
+            }
+        ],
+    }
+
+
+def test_preview_cli_admits_exact_synthetic_receipt(tmp_path: Path) -> None:
+    preview = _preview_module()
+    receipt = _synthetic_receipt_with_report(tmp_path)
+    source = tmp_path / "evidence.json"
+    source.write_text(json.dumps(receipt), encoding="utf-8")
+    output = tmp_path / "preview.html"
+    assert preview.main(["--receipt", str(source), "--out", str(output)]) == 0
+    html = output.read_text(encoding="utf-8")
+    assert receipt["runs"][0]["report_sha256"] in html
+    assert "script-src 'none'" in html
+
+
+@pytest.mark.parametrize(
+    "tamper",
+    [
+        "publication_true",
+        "review_true",
+        "extra_root_field",
+        "patient_field",
+        "boolean_exit",
+        "wrong_label",
+        "incorrect_fixture",
+        "invalid_report_sha",
+        "wrong_report_sha",
+        "relative_traversal",
+        "wrong_version",
+        "unexpected_workspace",
+        "wrong_scope",
+        "invalid_structural_status",
+    ],
+)
+def test_preview_cli_fail_closed_on_fake_synthetic_evidence(tmp_path: Path, tamper: str) -> None:
+    preview = _preview_module()
+    data = _synthetic_receipt_with_report(tmp_path)
+    row = data["runs"][0]
+    if tamper == "publication_true":
+        data["publication_authorized"] = True
+    elif tamper == "review_true":
+        data["independent_review_completed"] = True
+    elif tamper == "extra_root_field":
+        data["patient_name"] = "PRIVATE-NOT-FOR-PREVIEW"
+    elif tamper == "patient_field":
+        row["patient_name"] = "PRIVATE-NOT-FOR-PREVIEW"
+    elif tamper == "boolean_exit":
+        row["malformed_exit"] = True
+    elif tamper == "wrong_label":
+        row["label"] = "another user"
+    elif tamper == "incorrect_fixture":
+        row["fixture_sha256"] = "a" * 64
+    elif tamper == "invalid_report_sha":
+        row["report_sha256"] = "<img onerror=alert(1)>"
+    elif tamper == "wrong_report_sha":
+        row["report_sha256"] = "a" * 64
+    elif tamper == "relative_traversal":
+        row["report_path"] = "../private/report.json"
+    elif tamper == "wrong_version":
+        row["installed_version"] = "medscale 0.2.0"
+    elif tamper == "unexpected_workspace":
+        data["workspace"] = {"application": "medscale-workspace", "ready": 1}
+    elif tamper == "wrong_scope":
+        data["scope"] = "clinical"
+    elif tamper == "invalid_structural_status":
+        row["structural_status"] = "unknown"
+
+    source = tmp_path / "evidence.json"
+    source.write_text(json.dumps(data), encoding="utf-8")
+    output = tmp_path / "preview.html"
+    with pytest.raises(SystemExit) as raised:
+        preview.main(["--receipt", str(source), "--out", str(output)])
+    assert raised.value.code == 1
+    assert not output.exists()
+
+
+@pytest.mark.parametrize(
+    "source_json",
+    [
+        '{"schema": "ok", "schema": "changed"}',
+        '{"runs": [{"malformed_exit": 1, "malformed_exit": 0}]}',
+        '{"workspace": {"ready": false, "ready": true}}',
+    ],
+)
+def test_preview_cli_refuses_duplicate_json_keys(tmp_path: Path, source_json: str) -> None:
+    preview = _preview_module()
+    receipt = tmp_path / "evidence.json"
+    receipt.write_text(source_json, encoding="utf-8")
+    destination = tmp_path / "preview.html"
+    with pytest.raises(SystemExit) as raised:
+        preview.main(["--receipt", str(receipt), "--out", str(destination)])
+    assert raised.value.code == 1
+    assert not destination.exists()
+
+
+def test_preview_cli_refuses_report_bytes_changed_after_receipt(tmp_path: Path) -> None:
+    preview = _preview_module()
+    receipt = _synthetic_receipt_with_report(tmp_path)
+    report = tmp_path / receipt["runs"][0]["report_path"]
+    report.write_text('{"status":"invalid"}\n', encoding="utf-8")
+    with pytest.raises(ValueError, match="digest mismatch"):
+        preview.admit_receipt(receipt, directory=tmp_path)
+
+
+def test_preview_cli_refuses_ambiguous_report_json(tmp_path: Path) -> None:
+    preview = _preview_module()
+    receipt = _synthetic_receipt_with_report(tmp_path)
+    report = tmp_path / receipt["runs"][0]["report_path"]
+    report.write_text('{"status":"invalid","status":"valid"}', encoding="utf-8")
+    receipt["runs"][0]["report_sha256"] = hashlib.sha256(report.read_bytes()).hexdigest()
+    with pytest.raises(ValueError, match="duplicate key"):
+        preview.admit_receipt(receipt, directory=tmp_path)

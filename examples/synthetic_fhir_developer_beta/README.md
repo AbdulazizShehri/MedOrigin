@@ -14,6 +14,21 @@ On Linux/macOS, supply `venv/bin/medscale` instead. To compare output bytes from
 
 The command checks the installed distribution version, validates a tiny synthetic `StructureDefinition` file, verifies its local content-addressed `report.json`, exercises the documented and legacy FHIR commands, and confirms a malformed JSON fixture exits with code **1**. Successful completion prints `MEDORIGIN_SYNTHETIC_FHIR_DEMO_PASS` and the SHA-256 digests. `--out` must name a *nonexistent* directory, which protects existing evidence from accidental overwrite. If an error occurs, treat the partial output as nonqualifying.
 
+## Static HTML preview receipt admission
+
+The standalone `preview.py --receipt ... --out ...` utility renders **only** a
+locally consistent, pinned synthetic demonstration receipt. It rejects
+unknown or duplicated JSON fields at any depth, unexpected package/version,
+unsafe report paths (including traversal), wrong fixture hashes, non-hex
+SHA-256 strings, mismatched report-file bytes or negative-control exits, and
+optional Workspace results outside the strict synthetic allowlist. It
+rechecks the referenced local report before showing a `PASSED` badge. An
+existing HTML file is never overwritten. These checks limit misleading
+previews and accidental disclosure, but the receipt is **not cryptographically
+signed**: a party able to replace both the input and its local report can
+still fabricate synthetic-looking contents. It is not a clinical or security
+certification.
+
 ## Optional installed synthetic Workspace status
 
 MedOrigin also has a **separate**, independently installed Python distribution,
