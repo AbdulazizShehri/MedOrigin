@@ -21,13 +21,14 @@ locally consistent, pinned synthetic demonstration receipt. It rejects
 unknown or duplicated JSON fields at any depth, unexpected package/version,
 unsafe report paths (including traversal), wrong fixture hashes, non-hex
 SHA-256 strings, mismatched report-file bytes or negative-control exits, and
-optional Workspace results outside the strict synthetic allowlist. It
-rechecks the referenced local report before showing a `PASSED` badge. An
-existing HTML file is never overwritten. These checks limit misleading
-previews and accidental disclosure, but the receipt is **not cryptographically
-signed**: a party able to replace both the input and its local report can
-still fabricate synthetic-looking contents. It is not a clinical or security
-certification.
+optional Workspace results outside the strict synthetic allowlist. It also
+verifies the referenced report's **complete known schema**, canonical input
+hash of the bundled fictional fixture, validator identity, fixed timestamp,
+and empty errors/warnings; a fabricated `valid` report is not admitted merely
+because its digest was recomputed in the receipt. An existing HTML file is
+never overwritten. The receipt is **not cryptographically signed**: the
+known synthetic evidence can be regenerated or replayed without proving who
+ran it. It is not a clinical or security certification.
 
 ## Optional installed synthetic Workspace status
 

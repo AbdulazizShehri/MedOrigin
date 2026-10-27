@@ -292,7 +292,28 @@ def test_static_preview_long_labels_have_narrow_viewport_wrap_contract() -> None
 def _synthetic_receipt_with_report(tmp_path: Path) -> dict[str, Any]:
     report = tmp_path / "reports_run_1" / "sha" / "report.json"
     report.parent.mkdir(parents=True)
-    report.write_text('{"status":"valid"}\n', encoding="utf-8")
+    fixture = json.loads(
+        (EXAMPLE / "synthetic_structure_definition.json").read_text(encoding="utf-8")
+    )
+    input_hash = hashlib.sha256(
+        json.dumps(fixture, sort_keys=True, ensure_ascii=False, separators=(",", ":")).encode(
+            "utf-8"
+        )
+    ).hexdigest()
+    payload = {
+        "created_at": "2026-10-24T00:00:00Z",
+        "errors": [],
+        "format_version": "fhirkit-validation-report/v1",
+        "input_hash": input_hash,
+        "report_id": "",
+        "status": "valid",
+        "validator_name": "medscale-fhirkit-local",
+        "validator_version": "0.1.0",
+        "warnings": [],
+    }
+    report.write_text(
+        json.dumps(payload, sort_keys=True, separators=(",", ":")) + "\n", encoding="utf-8"
+    )
     return {
         "schema": "medorigin-local-synthetic-fhir-example/v1",
         "scope": "synthetic structural validation, not full HL7 conformance",
@@ -424,4 +445,29 @@ def test_preview_cli_refuses_ambiguous_report_json(tmp_path: Path) -> None:
     report.write_text('{"status":"invalid","status":"valid"}', encoding="utf-8")
     receipt["runs"][0]["report_sha256"] = hashlib.sha256(report.read_bytes()).hexdigest()
     with pytest.raises(ValueError, match="duplicate key"):
+        preview.admit_receipt(receipt, directory=tmp_path)
+
+
+@pytest.mark.parametrize(
+    ("field", "tampered_value"),
+    [
+        ("input_hash", "0" * 64),
+        ("created_at", "2026-10-27T00:00:00Z"),
+        ("validator_name", "untrusted-fhir-validator"),
+        ("errors", ["hidden error"]),
+        ("patient_name", "FICTIONAL-SENTINEL-NOT-ALLOWED"),
+    ],
+)
+def test_preview_rejects_rehashed_forged_report(
+    tmp_path: Path, field: str, tampered_value: object
+) -> None:
+    """Both report and receipt digests can be forged without report-schema validation."""
+    preview = _preview_module()
+    receipt = _synthetic_receipt_with_report(tmp_path)
+    report = tmp_path / receipt["runs"][0]["report_path"]
+    payload = json.loads(report.read_text(encoding="utf-8"))
+    payload[field] = tampered_value
+    report.write_text(json.dumps(payload, sort_keys=True) + "\n", encoding="utf-8")
+    receipt["runs"][0]["report_sha256"] = hashlib.sha256(report.read_bytes()).hexdigest()
+    with pytest.raises(ValueError, match="synthetic report identity or content invalid"):
         preview.admit_receipt(receipt, directory=tmp_path)

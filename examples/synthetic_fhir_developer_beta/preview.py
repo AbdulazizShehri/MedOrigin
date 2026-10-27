@@ -77,7 +77,25 @@ def admit_receipt(receipt: object, *, directory: Path) -> dict[str, Any]:
     if not isinstance(runs, list) or len(runs) not in (1, 2):
         raise ValueError("unexpected synthetic runs")
     fixture_file = Path(__file__).resolve().parent / "synthetic_structure_definition.json"
-    fixture_hash = hashlib.sha256(fixture_file.read_bytes()).hexdigest()
+    fixture_bytes = fixture_file.read_bytes()
+    fixture_hash = hashlib.sha256(fixture_bytes).hexdigest()
+    fixture_payload = json.loads(fixture_bytes, object_pairs_hook=unique_json_object)
+    expected_input_hash = hashlib.sha256(
+        json.dumps(
+            fixture_payload, sort_keys=True, ensure_ascii=False, separators=(",", ":")
+        ).encode("utf-8")
+    ).hexdigest()
+    expected_report = {
+        "created_at": "2026-10-24T00:00:00Z",
+        "errors": [],
+        "format_version": "fhirkit-validation-report/v1",
+        "input_hash": expected_input_hash,
+        "report_id": "",
+        "status": "valid",
+        "validator_name": "medscale-fhirkit-local",
+        "validator_version": "0.1.0",
+        "warnings": [],
+    }
     expected_runs = {
         "label",
         "installed_version",
@@ -128,8 +146,11 @@ def admit_receipt(receipt: object, *, directory: Path) -> dict[str, Any]:
         if hashlib.sha256(raw).hexdigest() != row["report_sha256"]:
             raise ValueError("synthetic report content digest mismatch")
         report = json.loads(raw, object_pairs_hook=unique_json_object)
-        if not isinstance(report, dict) or report.get("status") != "valid":
-            raise ValueError("synthetic report status cannot be verified")
+        # A matching digest alone is insufficient: an attacker could replace
+        # both the report and receipt with a fabricated 'valid' record. Admit
+        # only the exact, fictional fixture's known deterministic CLI report.
+        if report != expected_report:
+            raise ValueError("synthetic report identity or content invalid")
         report_hashes.append(row["report_sha256"])
     if len(set(report_hashes)) != 1:
         raise ValueError("cross-interpreter synthetic reports differ")
