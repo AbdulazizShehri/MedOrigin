@@ -13,6 +13,7 @@ import re
 import subprocess
 import sys
 import tempfile
+from importlib import import_module
 from pathlib import Path
 from typing import Any
 
@@ -56,7 +57,9 @@ def _assert_page(page: Any) -> tuple[list[str], list[str]]:
 
 
 def _browser_checks(html: Path, edge: Path) -> None:
-    from playwright.sync_api import sync_playwright
+    # Import only during this optional QA job; the Core package and hosted
+    # static environments intentionally do not depend on Playwright.
+    sync_playwright = import_module("playwright.sync_api").sync_playwright
 
     with sync_playwright() as playwright:
         browser = playwright.chromium.launch(
