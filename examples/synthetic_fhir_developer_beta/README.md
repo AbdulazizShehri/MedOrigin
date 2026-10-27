@@ -139,6 +139,19 @@ clinical interpretation, permanent dataset store, server, or cloud call is
 implemented in this preview.** A missing Tk runtime should be treated as
 an unsupported optional GUI environment, not a failure of the Core CLI.
 
+### Installed Windows desktop E2E qualification
+
+The nonpublishing GitHub Developer Beta offline-rehearsal workflow builds and
+independently installs the Core Wheel on both Python 3.11 and 3.12. On Windows,
+it additionally invokes the **real native Tkinter UI** using each installed
+`medscale.exe` through
+`scripts/smoke_medorigin_native_desktop_installed.py --cli <installed-core-cli>`.
+This checks navigation and scrolling at 850 × 610, runs the bundled fictional
+FHIR fixture through the actual installed CLI, validates the result digest,
+exports a local synthetic-only JSON receipt, and rejects overwriting that
+receipt. The test fails if the hosted Windows GUI/Tcl runtime is unavailable;
+it never substitutes mocked CLI output or publishes an artifact.
+
 ## Offline browser preview
 
 Successful execution also writes a **static `preview.html`** in the new

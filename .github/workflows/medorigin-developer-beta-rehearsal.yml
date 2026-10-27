@@ -5,6 +5,8 @@ on:
   pull_request:
     paths:
       - "scripts/qualify_medorigin_developer_beta.py"
+      - "scripts/smoke_medorigin_native_desktop_installed.py"
+      - "tests/test_synthetic_fhir_native_desktop_demo.py"
       - "scripts/stage_medorigin_core_projection.py"
       - "scripts/check_core_wheel_source_identity.py"
       - "scripts/check_sdist_publication_scope.py"
@@ -97,6 +99,21 @@ jobs:
             --checkout . --wheel $wheel --sdist $sdist `
             --python311 $python311 --python312 $python312
           if ($LASTEXITCODE -ne 0) { throw 'Exact-artifact Developer Beta rehearsal failed' }
+
+          if ($IsWindows) {
+            # Real native Tk UI and newly installed Core executables, not mocks.
+            # Windows hosted CI provides the native Tcl/Tk runtime; any missing
+            # desktop/runtime fails closed rather than silently passing.
+            foreach ($runtime in @($venv311, $venv312)) {
+              $python = Join-Path $runtime 'Scripts/python.exe'
+              $cli = Join-Path $runtime 'Scripts/medscale.exe'
+              & $python scripts/smoke_medorigin_native_desktop_installed.py `
+                --cli $cli --timeout-seconds 75
+              if ($LASTEXITCODE -ne 0) {
+                throw 'Native Windows installed Core desktop E2E failed'
+              }
+            }
+          }
 
           if ((git status --porcelain) -ne $null) {
             $dirty = @(git status --porcelain)
