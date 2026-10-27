@@ -121,8 +121,11 @@ To display the separately installed **synthetic-only Workspace** status:
 python examples/synthetic_fhir_developer_beta/desktop.py --cli "C:/path/to/core/venv/Scripts/medscale.exe" --workspace-python "C:/path/to/workspace/venv/Scripts/python.exe"
 ```
 
-This *functional developer preview*, not a full clinical GUI, has three
-screens: Overview, Synthetic validation and Safety & scope. Select
+This *functional developer preview*, not a full clinical GUI, has four
+screens: Overview, Synthetic cases, Synthetic validation and Safety & scope.
+All four screens support vertical scrolling using the scrollbar or mouse wheel,
+including at the minimum 850 × 610 window size, so long safety instructions
+and result details remain accessible. Select
 **Validate synthetic fixture** to invoke the **installed CLI** asynchronously;
 the UI remains responsive, checks a bundled fictional fixture, and displays
 only a whitelisted result and its SHA-256 digest. **Copy report SHA-256** copies

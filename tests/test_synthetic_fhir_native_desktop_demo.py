@@ -133,3 +133,37 @@ def test_native_window_initializes_and_pages_navigate(desktop: Any) -> None:
         assert app.active == "Safety & scope"
     finally:
         root.destroy()
+
+
+def test_all_native_pages_can_scroll_to_their_end_at_minimum_window_size(
+    desktop: Any,
+) -> None:
+    """The last synthetic safety instruction must be accessible on a small screen."""
+    if os.name != "nt" and not os.environ.get("DISPLAY"):
+        pytest.skip("no graphical display in hosted CI")
+    import tkinter as tk
+    from types import SimpleNamespace
+
+    root = tk.Tk()
+    try:
+        app = desktop.Desktop(root, Path(sys.executable))
+        root.geometry("850x610-2000-2000")
+        for name in ("Overview", "Synthetic cases", "Synthetic validation", "Safety & scope"):
+            app._switch(name)
+            root.update()
+            assert app.canvas.winfo_height() > 0
+            assert app.pages[name].winfo_reqheight() > app.canvas.winfo_height()
+            assert app.canvas.yview()[0] == 0
+            app._scroll_page(SimpleNamespace(delta=-120))
+            root.update()
+            assert app.canvas.yview()[0] > 0, name
+            app.canvas.yview_moveto(1)
+            root.update()
+            assert app.canvas.yview()[1] == 1, name
+        # Switching pages resets the view without losing the other widgets.
+        app._switch("Synthetic validation")
+        root.update()
+        assert app.canvas.yview()[0] == 0
+        assert app.run_button.winfo_exists()
+    finally:
+        root.destroy()

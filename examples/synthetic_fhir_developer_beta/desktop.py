@@ -98,6 +98,7 @@ class Desktop:
         )
         self.nav_buttons: dict[str, tk.Button] = {}
         self.pages: dict[str, tk.Frame] = {}
+        self.page_window: int | None = None
         self._layout()
         self._switch("Overview")
         root.after(100, self._drain)
@@ -194,8 +195,24 @@ class Desktop:
 
         host = tk.Frame(body, bg=BACKGROUND)
         host.pack(side="left", fill="both", expand=True, padx=38, pady=35)
+        scrollbar = tk.Scrollbar(host, orient="vertical")
+        scrollbar.pack(side="right", fill="y")
+        self.canvas = tk.Canvas(
+            host,
+            bg=BACKGROUND,
+            borderwidth=0,
+            highlightthickness=0,
+            yscrollcommand=scrollbar.set,
+        )
+        self.canvas.pack(side="left", fill="both", expand=True)
+        scrollbar.configure(command=self.canvas.yview)
+        self.canvas.bind("<Configure>", self._resize_page)
+        self.root.bind("<MouseWheel>", self._scroll_page)
+        self.root.bind("<Button-4>", self._scroll_page)
+        self.root.bind("<Button-5>", self._scroll_page)
         for name in ("Overview", "Synthetic cases", "Synthetic validation", "Safety & scope"):
-            self.pages[name] = tk.Frame(host, bg=BACKGROUND)
+            self.pages[name] = tk.Frame(self.canvas, bg=BACKGROUND)
+            self.pages[name].bind("<Configure>", self._update_scroll_region)
         self._make_overview(self.pages["Overview"])
         self._make_cases(self.pages["Synthetic cases"])
         self._make_validation(self.pages["Synthetic validation"])
@@ -393,11 +410,40 @@ class Desktop:
                 anchor="w", padx=20, pady=(0, 14)
             )
 
+    def _update_scroll_region(self, _event: Any = None) -> None:
+        bounds = self.canvas.bbox("all")
+        if bounds is not None:
+            self.canvas.configure(scrollregion=bounds)
+
+    def _resize_page(self, event: Any) -> None:
+        if self.page_window is not None:
+            self.canvas.itemconfigure(self.page_window, width=max(1, int(event.width)))
+        self._update_scroll_region()
+
+    def _scroll_page(self, event: Any) -> None:
+        # Tk reports wheel notches differently on Windows/macOS and X11.
+        direction = 0
+        if getattr(event, "num", None) == 4:
+            direction = -1
+        elif getattr(event, "num", None) == 5:
+            direction = 1
+        elif getattr(event, "delta", 0):
+            direction = -1 if event.delta > 0 else 1
+        if direction:
+            self.canvas.yview_scroll(direction, "units")
+
     def _switch(self, name: str) -> None:
-        for page in self.pages.values():
-            page.pack_forget()
+        self.canvas.delete("current-page")
         self.active = name
-        self.pages[name].pack(fill="both", expand=True)
+        self.page_window = self.canvas.create_window(
+            (0, 0),
+            window=self.pages[name],
+            anchor="nw",
+            width=max(1, self.canvas.winfo_width()),
+            tags="current-page",
+        )
+        self.canvas.yview_moveto(0)
+        self._update_scroll_region()
         for label, widget in self.nav_buttons.items():
             widget.configure(
                 bg=SURFACE_LIGHT if label == name else SURFACE,
