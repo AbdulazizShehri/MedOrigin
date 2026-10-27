@@ -152,6 +152,25 @@ exports a local synthetic-only JSON receipt, and rejects overwriting that
 receipt. The test fails if the hosted Windows GUI/Tcl runtime is unavailable;
 it never substitutes mocked CLI output or publishes an artifact.
 
+### Free browser and error-capture QA
+
+The separate nonpublishing
+`.github/workflows/medorigin-free-automated-qa.yml` job uses an isolated
+QA interpreter with **Playwright and Sentry SDK** on the free Windows GitHub
+runner. It independently installs the source-bound Core Wheel in Python
+3.11 and 3.12 environments, produces fictional FHIR evidence, and tests the
+static preview in Edge at mobile, compact desktop and wide screen sizes.
+It also checks that three HTML/JavaScript injection payloads cannot execute.
+Sentry uses an **in-memory transport only** and confirms one intentionally
+rejected synthetic receipt event is captured without network transmission.
+The QA packages are downloaded into a separate temporary environment; the
+Core Wheel metadata and clean Core environments are not modified.
+
+**TestSprite is not part of this workflow.** Its service requires a separately
+authorized free account/API key and a compatible reachable test target. We do
+not spend credits, expose the offline preview to the public internet or claim
+TestSprite coverage without an actual completed run.
+
 ## Offline browser preview
 
 Successful execution also writes a **static `preview.html`** in the new
