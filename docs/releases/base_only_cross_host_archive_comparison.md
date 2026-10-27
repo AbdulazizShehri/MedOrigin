@@ -9,8 +9,16 @@ For two independently built distributions from the **same exact Git commit**, ru
 python scripts/compare_medorigin_base_only_archives.py \
   --repo . \
   --left /path/to/windows-dist \
-  --right /path/to/macos-dist
+  --right /path/to/macos-dist \
+  --out /path/to/new-comparison-receipt.json
 ```
+
+Console output now contains only a fixed, non-sensitive verification status.
+The optional `--out` writes the full archive, member and header comparison to
+a new local evidence file, refusing to overwrite existing receipts. Review
+its contents under evidence-access controls rather than printing full source
+member details to general-purpose CI logs. Without `--out`, detailed evidence
+is not emitted.
 
 For two **independent builds on one canonical platform**, append
 `--require-identical` to reject any outer-archive byte differences rather than

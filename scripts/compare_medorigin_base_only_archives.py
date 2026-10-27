@@ -188,6 +188,9 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Refuse nonidentical archive bytes even when all members match",
     )
+    parser.add_argument(
+        "--out", type=Path, help="Explicit path for full review receipt (must not exist)"
+    )
     args = parser.parse_args(argv)
     try:
         output = compare(args.repo, args.left, args.right, require_identical=args.require_identical)
@@ -206,7 +209,26 @@ def main(argv: list[str] | None = None) -> int:
             )
         )
         return 2
-    print(json.dumps(output, sort_keys=True, indent=2))
+    if args.out is not None:
+        try:
+            # Original archive-member names stay in this explicitly requested file.
+            with args.out.open("x", encoding="utf-8", newline="\n") as receipt:
+                json.dump(output, receipt, sort_keys=True, indent=2)
+                receipt.write("\n")
+        except OSError:
+            print(
+                '{"status":"BLOCKED","reason":"receipt_write_failed","publication_authorized":false}'
+            )
+            return 2
+    if output["status"] == "SOURCE_BOUND_ARCHIVES_BYTE_IDENTICAL":
+        print('{"status":"SOURCE_BOUND_ARCHIVES_BYTE_IDENTICAL","publication_authorized":false}')
+    elif output["status"] == "SOURCE_BOUND_MEMBERS_EQUAL_ARCHIVE_ENVELOPES_DIFFER":
+        print(
+            '{"status":"SOURCE_BOUND_MEMBERS_EQUAL_ARCHIVE_ENVELOPES_DIFFER",'
+            '"publication_authorized":false}'
+        )
+    else:
+        raise ProposalVerificationError("unsupported archive diagnostic status")
     return 0
 
 

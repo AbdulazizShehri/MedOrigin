@@ -143,3 +143,24 @@ def test_real_dist_when_supplied_remains_unpublished(gate: Any) -> None:
     assert result["status"] == "BASE_ONLY_PROPOSAL_SOURCE_BOUND_VERIFIED"
     assert result["publication_authorized"] is False
     assert result["independent_review_complete"] is False
+
+
+def test_cli_uses_explicit_receipt_without_logging_full_verifier_data(
+    gate: Any, monkeypatch: Any, tmp_path: Path, capsys: Any
+) -> None:
+    marker = "PRIVATE-SENTINEL-VERIFIER"
+    evidence = {
+        "status": "BASE_ONLY_PROPOSAL_SOURCE_BOUND_VERIFIED",
+        "publication_authorized": False,
+        "unexpected_detail": marker,
+    }
+    monkeypatch.setattr(gate, "verify", lambda *_args: evidence)
+    receipt = tmp_path / "verified-receipt.json"
+    argv = ["--dist", str(tmp_path), "--out", str(receipt)]
+    assert gate.main(argv) == 0
+    output = capsys.readouterr().out
+    assert marker not in output
+    assert json.loads(output)["status"] == "BASE_ONLY_PROPOSAL_SOURCE_BOUND_VERIFIED"
+    assert json.loads(receipt.read_text(encoding="utf-8")) == evidence
+    assert gate.main(argv) == 2
+    assert json.loads(receipt.read_text(encoding="utf-8")) == evidence

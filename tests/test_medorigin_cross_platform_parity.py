@@ -199,3 +199,53 @@ def test_offline_command_fails_closed_when_command_fails(
     assert isinstance(env, dict)
     assert env.get("UV_OFFLINE") == "1"
     assert env.get("UV_NO_PROGRESS") == "1"
+
+
+@pytest.mark.parametrize(
+    "status",
+    ["CONTENT_AND_ARCHIVE_PARITY_VERIFIED", "CONTENT_PARITY_VERIFIED_ARCHIVE_HEADERS_DIFFER"],
+)
+def test_compare_cli_keeps_sensitive_details_in_explicit_file(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str], status: str
+) -> None:
+    import json
+
+    subject = _load()
+    marker = "PRIVATE-SENTINEL-PLATFORM-MANIFEST"
+    evidence = {"status": status, "publication_authorized": False, "private": marker}
+    monkeypatch.setattr(subject, "compare", lambda *_args: evidence)
+    left, right = tmp_path / "left.json", tmp_path / "right.json"
+    left.write_text("{}", encoding="utf-8")
+    right.write_text("{}", encoding="utf-8")
+    receipt = tmp_path / "parity.json"
+    assert (
+        subject.main(
+            ["compare", "--left", str(left), "--right", str(right), "--output", str(receipt)]
+        )
+        == 0
+    )
+    output = capsys.readouterr().out
+    assert marker not in output
+    assert json.loads(output)["status"] == status
+    assert json.loads(receipt.read_text(encoding="utf-8")) == evidence
+
+
+def test_build_cli_keeps_source_metadata_off_stdout(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    import json
+
+    subject = _load()
+    marker = "PRIVATE-SENTINEL-SOURCE-MEMBER"
+    evidence = {
+        "status": "SOURCE_BOUND_ARTIFACT_MANIFEST_VERIFIED",
+        "publication_authorized": False,
+        "member": marker,
+    }
+    monkeypatch.setattr(subject, "build_manifest", lambda *_args: evidence)
+    receipt = tmp_path / "inventory.json"
+    assert subject.main(["build", "--output", str(receipt)]) == 0
+    output = capsys.readouterr().out
+    assert marker not in output
+    assert json.loads(output)["status"] == "SOURCE_BOUND_ARTIFACT_MANIFEST_VERIFIED"
+    assert json.loads(receipt.read_text(encoding="utf-8")) == evidence

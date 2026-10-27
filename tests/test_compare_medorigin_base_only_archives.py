@@ -173,3 +173,33 @@ def test_equal_zip_members_different_compression_streams(
     assert result["wheel"]["compressed_member_streams_identical"] is False
     assert not result["wheel"]["archive_bytes_identical"]
     assert result["sdist"]["decompressed_tar_identical"]
+
+
+def test_cli_uses_explicit_receipt_without_logging_member_names(
+    audit: Any, monkeypatch: Any, tmp_path: Path, capsys: Any
+) -> None:
+    import json
+
+    marker = "PRIVATE-SENTINEL-MEMBER-NAME"
+    evidence = {
+        "status": "SOURCE_BOUND_ARCHIVES_BYTE_IDENTICAL",
+        "publication_authorized": False,
+        "sensitive_member_name": marker,
+    }
+    monkeypatch.setattr(audit, "compare", lambda *_args, **_kwargs: evidence)
+    receipt = tmp_path / "qualified-comparison.json"
+    argv = [
+        "--left",
+        str(tmp_path / "left"),
+        "--right",
+        str(tmp_path / "right"),
+        "--out",
+        str(receipt),
+    ]
+    assert audit.main(argv) == 0
+    stdout = capsys.readouterr().out
+    assert marker not in stdout
+    assert json.loads(stdout)["status"] == "SOURCE_BOUND_ARCHIVES_BYTE_IDENTICAL"
+    assert json.loads(receipt.read_text(encoding="utf-8")) == evidence
+    assert audit.main(argv) == 2
+    assert json.loads(receipt.read_text(encoding="utf-8")) == evidence

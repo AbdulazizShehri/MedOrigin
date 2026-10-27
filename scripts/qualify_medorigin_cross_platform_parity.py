@@ -357,21 +357,18 @@ def main(argv: list[str] | None = None) -> int:
                     json.dump(result, output, sort_keys=True, indent=2)
                     output.write("\n")
         if args.command == "build":
-            summary = {
-                "status": "SOURCE_BOUND_ARTIFACT_MANIFEST_VERIFIED",
-                "source_git_commit": result["source_git_commit"],
-                "platform": result["platform"],
-                "member_counts": {
-                    name: entry["member_count"] for name, entry in result["archives"].items()
-                },
-                "archive_sha256": {
-                    name: entry["archive_sha256"] for name, entry in result["archives"].items()
-                },
-                "publication_authorized": False,
-            }
-            print(json.dumps(summary, sort_keys=True))
+            print(
+                '{"status":"SOURCE_BOUND_ARTIFACT_MANIFEST_VERIFIED","publication_authorized":false}'
+            )
+        elif result["status"] == "CONTENT_AND_ARCHIVE_PARITY_VERIFIED":
+            print('{"status":"CONTENT_AND_ARCHIVE_PARITY_VERIFIED","publication_authorized":false}')
+        elif result["status"] == "CONTENT_PARITY_VERIFIED_ARCHIVE_HEADERS_DIFFER":
+            print(
+                '{"status":"CONTENT_PARITY_VERIFIED_ARCHIVE_HEADERS_DIFFER",'
+                '"publication_authorized":false}'
+            )
         else:
-            print(json.dumps(result, sort_keys=True))
+            raise ParityError("unsupported cross-host parity status")
     except (ParityError, OSError, ValueError, KeyError, RuntimeError) as exc:
         print(
             json.dumps(

@@ -341,6 +341,9 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--repo", type=Path, default=Path(__file__).resolve().parents[1])
     parser.add_argument("--dist", type=Path, required=True)
+    parser.add_argument(
+        "--out", type=Path, help="Explicit path for full review receipt (must not exist)"
+    )
     args = parser.parse_args(argv)
     try:
         result = verify(args.repo, args.dist)
@@ -349,7 +352,18 @@ def main(argv: list[str] | None = None) -> int:
             json.dumps({"status": "BLOCKED", "reason": str(exc), "publication_authorized": False})
         )
         return 2
-    print(json.dumps(result, sort_keys=True, indent=2))
+    if args.out is not None:
+        try:
+            # Full source/artifact provenance stays in this explicitly requested file.
+            with args.out.open("x", encoding="utf-8", newline="\n") as receipt:
+                json.dump(result, receipt, sort_keys=True, indent=2)
+                receipt.write("\n")
+        except OSError:
+            print(
+                '{"status":"BLOCKED","reason":"receipt_write_failed","publication_authorized":false}'
+            )
+            return 2
+    print('{"status":"BASE_ONLY_PROPOSAL_SOURCE_BOUND_VERIFIED","publication_authorized":false}')
     return 0
 
 

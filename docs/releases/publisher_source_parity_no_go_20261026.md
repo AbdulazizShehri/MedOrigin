@@ -67,7 +67,7 @@ python scripts/check_base_core_publication_scope.py --dist /tmp/medorigin-canoni
 python scripts/stage_medorigin_base_only_proposal.py --out /tmp/medorigin-base-only
 uv build --offline --wheel --sdist /tmp/medorigin-base-only --out-dir /tmp/medorigin-base-only-dist
 python scripts/check_base_core_publication_scope.py --dist /tmp/medorigin-base-only-dist
-python scripts/verify_medorigin_base_only_proposal.py --dist /tmp/medorigin-base-only-dist
+python scripts/verify_medorigin_base_only_proposal.py --dist /tmp/medorigin-base-only-dist --out /tmp/new-source-verification-receipt.json
 # Expected: scope clean and source-bound verified, but publication_authorized=false.
 ```
 
