@@ -219,6 +219,54 @@ def test_wheel_forged_inflated_size_fails_closed(checker: Any, tmp_path: Path) -
     assert result["publication_authorized"] is False
 
 
+@pytest.mark.parametrize(
+    ("variant", "expected"),
+    [
+        ("appended", "wheel: noncanonical ZIP trailer"),
+        ("prefixed", "wheel: unaccounted ZIP envelope bytes"),
+        ("comment", "wheel: noncanonical ZIP trailer"),
+        ("concatenated", "wheel: unaccounted ZIP envelope bytes"),
+    ],
+)
+def test_wheel_rejects_unaccounted_physical_payloads(
+    checker: Any, tmp_path: Path, variant: str, expected: str
+) -> None:
+    folder = make_dist(tmp_path / variant)
+    wheel = folder / "medscale-0.3.0-py3-none-any.whl"
+    original = wheel.read_bytes()
+    if variant == "appended":
+        wheel.write_bytes(original + b"UNQUALIFIED-TRAILER")
+    elif variant == "prefixed":
+        wheel.write_bytes(b"UNQUALIFIED-PREFIX" + original)
+    elif variant == "comment":
+        with zipfile.ZipFile(wheel, "a") as archive:
+            archive.comment = b"UNQUALIFIED-COMMENT"
+    else:
+        second = io.BytesIO()
+        with zipfile.ZipFile(second, "w") as archive:
+            archive.writestr("medscale-0.3.0.dist-info/METADATA", metadata())
+        wheel.write_bytes(original + second.getvalue())
+    # The standard ZIP parser still reads apparently valid Wheel metadata.
+    with zipfile.ZipFile(wheel) as archive:
+        assert archive.read("medscale-0.3.0.dist-info/METADATA") == metadata()
+    result = checker.inspect(folder)
+    assert result["status"] == "BLOCKED"
+    assert any(expected in issue for issue in result["issues"])
+    assert result["publication_authorized"] is False
+
+
+def test_comment_free_compressed_wheel_still_passes_scope_gate(
+    checker: Any, tmp_path: Path
+) -> None:
+    folder = make_dist(tmp_path / "compressed")
+    wheel = folder / "medscale-0.3.0-py3-none-any.whl"
+    with zipfile.ZipFile(wheel, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr("medscale-0.3.0.dist-info/METADATA", metadata())
+    result = checker.inspect(folder)
+    assert result["status"] == "BASE_CORE_PUBLICATION_SCOPE_CLEAN"
+    assert result["publication_authorized"] is False
+
+
 def test_sdist_forged_inflated_size_fails_before_extraction(checker: Any, tmp_path: Path) -> None:
     folder = make_dist(tmp_path / "bomb")
     oversized = tarfile.TarInfo("medscale-0.3.0/huge-data.bin")
