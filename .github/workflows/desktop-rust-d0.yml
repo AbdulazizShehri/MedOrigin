@@ -1,0 +1,57 @@
+name: Experimental Rust desktop D0 (no publish)
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "experiments/desktop-d0-rust/**"
+      - ".github/workflows/desktop-rust-d0.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: rust-d0-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  raw-sha-parity:
+    name: Rust synthetic parity (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    defaults:
+      run:
+        working-directory: experiments/desktop-d0-rust
+    steps:
+      - name: Checkout exact PR source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha }}
+      - name: Install pinned Rust toolchain (free runner)
+        shell: bash
+        run: rustup toolchain install 1.88.0 --profile minimal --component rustfmt --component clippy
+      - name: Generate provisional lock for review (not an approved release)
+        shell: bash
+        run: cargo +1.88.0 generate-lockfile
+      - name: Rustfmt
+        shell: bash
+        run: cargo +1.88.0 fmt --all -- --check
+      - name: Rust Clippy
+        shell: bash
+        run: cargo +1.88.0 clippy --locked --all-targets -- -D warnings
+      - name: Rust synthetic golden and negative tests
+        shell: bash
+        run: cargo +1.88.0 test --locked --all-targets
+      - name: Preserve experimental dependency lock for later review
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: desktop-d0-rust-lock-${{ matrix.os }}
+          path: experiments/desktop-d0-rust/Cargo.lock
+          if-no-files-found: warn
+          retention-days: 7
