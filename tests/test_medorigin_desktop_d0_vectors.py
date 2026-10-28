@@ -51,7 +51,6 @@ def test_raw_sha_keeps_padding_and_invalid_utf8(d0: ModuleType) -> None:
     )
 
 
-
 def test_existing_python_fhir_stage_results_match_manifest(d0: ModuleType) -> None:
     """Source truth, not a handwritten parser claim, decides each D0 outcome."""
     workspace_src = str(_ROOT / "apps" / "workspace" / "src")
