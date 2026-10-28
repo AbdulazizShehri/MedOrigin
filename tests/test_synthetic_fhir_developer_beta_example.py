@@ -270,10 +270,18 @@ def test_static_preview_optional_workspace_card_has_no_extra_fields() -> None:
     receipt["workspace"]["patient_name"] = "PRIVATE-SENTINEL"  # type: ignore[index]
     with pytest.raises(ValueError):
         preview.render(receipt)
-    del receipt["workspace"]["patient_name"]
-    receipt["workspace"]["ready"] = 1
+    numeric_ready = {
+        "runs": [{"structural_status": "valid", "malformed_exit": 1}],
+        "workspace": {
+            "application": "medscale-workspace",
+            "version": "0.1.0.dev1",
+            "data_class": "SYNTHETIC",
+            "mode": "offline-shell",
+            "ready": 1,
+        },
+    }
     with pytest.raises(ValueError, match="synthetic-safe contract"):
-        preview.render(receipt)
+        preview.render(numeric_ready)
 
 
 def test_missing_workspace_python_rejected_without_making_output(tmp_path: Path) -> None:
