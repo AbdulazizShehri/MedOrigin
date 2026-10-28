@@ -109,7 +109,9 @@ def test_preview_renderer_refuses_ambiguous_boolean_or_coerced_exit(
 
 
 @pytest.mark.parametrize("bad_exit", [True, 1, 0.0])
-def test_preview_renderer_refuses_failed_or_coerced_valid_exit(bad_exit: object) -> None:
+def test_preview_renderer_refuses_failed_or_coerced_valid_exit(
+    bad_exit: object,
+) -> None:
     renderer = _preview_module()
     row = {"structural_status": "valid", "malformed_exit": 1, "valid_exit": bad_exit}
     with pytest.raises(ValueError, match="only verified valid"):
