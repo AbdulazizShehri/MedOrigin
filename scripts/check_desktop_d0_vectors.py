@@ -20,7 +20,7 @@ _SOURCE_COMMIT: Final = "dd84bb7b4177fbc169a04370772610ec66fa41df"
 _PATIENT: Final = b'{"resourceType":"Patient","id":"synthetic","active":true}'
 _FHIR_LIMIT: Final = 32768
 _SOURCE_PATIENT_LITERAL: Final = (
-    "payload = b'{\"resourceType\":\"Patient\",\"id\":\"synthetic\",\"active\":true}'"
+    'payload = b\'{"resourceType":"Patient","id":"synthetic","active":true}\''
 )
 
 
@@ -76,7 +76,7 @@ def verify_manifest(
     source = source_path.read_text(encoding="utf-8")
     if (
         _SOURCE_PATIENT_LITERAL not in source
-        or 'fhir.MAXIMUM_RESOURCE_BYTES + 1' not in source
+        or "fhir.MAXIMUM_RESOURCE_BYTES + 1" not in source
         or 'payload += b" " * (fhir.MAXIMUM_RESOURCE_BYTES - len(payload))' not in source
     ):
         raise FixtureContractError("source fixture expressions have changed")
