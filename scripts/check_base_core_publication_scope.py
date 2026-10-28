@@ -168,12 +168,7 @@ def _verify_wheel_physical_envelope(path: Path, members: list[zipfile.ZipInfo]) 
                 or uncompressed_size != member.file_size
             ):
                 raise PublicationScopeError("wheel: local ZIP header mismatch")
-            cursor += (
-                _ZIP_LOCAL_HEADER.size
-                + filename_length
-                + extra_length
-                + member.compress_size
-            )
+            cursor += _ZIP_LOCAL_HEADER.size + filename_length + extra_length + member.compress_size
     if cursor != directory_offset:
         raise PublicationScopeError("wheel: hidden ZIP member gap")
 
