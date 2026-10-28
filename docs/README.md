@@ -39,6 +39,7 @@ are welcome.
 - [Research program](research/README.md) — scientific method and experiments
 - [Clinical Workspace specification](../specs/medscale-clinical-workspace-v1/README.md) — current bounded implementation
 - [Software release track](releases/software_release_track.md) — independent synthetic-only developer-package gates
+- [Rust-first desktop transition (proposal)](architecture/rust_first_desktop_transition.md) — measured migration path, offline threat boundaries and parity gates; no runtime yet
 - [Program rules](governance/rules.md) and [research scope](vision/MEDSCALE_RESEARCH_VISION.md)
 
 ## Canonical sources & precedence
