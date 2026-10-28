@@ -104,9 +104,12 @@ def main(argv: list[str] | None = None) -> int:
     except (OSError, UnicodeError, ValueError) as exc:
         print(f"DESKTOP_D0_VECTORS_BLOCKED: {exc}", file=sys.stderr)
         return 2
+    vectors = result["vectors"]
+    if not isinstance(vectors, list):
+        raise FixtureContractError("manifest vectors must be a list")
     print(
         "DESKTOP_D0_RAW_VECTORS_VERIFIED: "
-        f"{len(result['vectors'])} synthetic cases; "
+        f"{len(vectors)} synthetic cases; "
         "Rust parity and publication NOT qualified"
     )
     return 0
