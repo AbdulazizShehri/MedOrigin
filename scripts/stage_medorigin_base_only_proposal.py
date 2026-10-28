@@ -14,6 +14,7 @@ import argparse
 import copy
 import hashlib
 import json
+import shutil
 import sys
 import tempfile
 import tomllib
@@ -68,6 +69,8 @@ def propose(target: Path) -> dict[str, object]:
     target = target.resolve()
     if target.exists() or target == ROOT or ROOT in target.parents:
         raise BaseOnlyProposalError("refuse existing or in-repository proposal output")
+    # The accepted ADR-0044 stage renames its scratch directory internally;
+    # first build on the system temp volume to preserve that contract.
     with tempfile.TemporaryDirectory(prefix="medorigin-base-only-proposal-") as scratch:
         temp = Path(scratch) / "source"
         upstream = stage(temp)
@@ -107,9 +110,17 @@ def propose(target: Path) -> dict[str, object]:
             (json.dumps(record, indent=2, sort_keys=True) + "\n").encode("utf-8")
         )
         target.parent.mkdir(parents=True, exist_ok=True)
-        if target.exists():
-            raise BaseOnlyProposalError("destination appeared during staging")
-        temp.rename(target)
+        # Only the final rename must be on the destination volume. Copy the
+        # complete validated proposal into a private sibling staging tree,
+        # then move within that volume without exposing a partial target.
+        with tempfile.TemporaryDirectory(
+            prefix="medorigin-base-only-destination-", dir=target.parent
+        ) as destination_scratch:
+            staged = Path(destination_scratch) / "source"
+            shutil.copytree(temp, staged)
+            if target.exists():
+                raise BaseOnlyProposalError("destination appeared during staging")
+            staged.rename(target)
         return {
             "status": "BASE_ONLY_PROPOSAL_NOT_QUALIFIED",
             "source_git_commit": upstream["source_commit"],

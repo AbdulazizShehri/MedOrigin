@@ -122,6 +122,43 @@ def test_source_bound_proposal_receipt_and_no_overwrite(
     assert sha(root) == FROZEN_PROJECT_SHA
 
 
+def test_proposal_staging_uses_destination_volume(
+    proposal: Any, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    original_temporary_directory = proposal.tempfile.TemporaryDirectory
+    observed: list[Path] = []
+
+    def tracked_directory(*args: Any, **kwargs: Any) -> Any:
+        if kwargs.get("prefix") == "medorigin-base-only-destination-":
+            observed.append(Path(kwargs["dir"]))
+        return original_temporary_directory(*args, **kwargs)
+
+    monkeypatch.setattr(proposal.tempfile, "TemporaryDirectory", tracked_directory)
+    target = tmp_path / "other-volume-like-folder" / "staged"
+    result = proposal.propose(target)
+    assert observed == [target.parent.resolve()]
+    assert result["publication_authorized"] is False
+    assert result["adr_amendment_accepted"] is False
+    assert (target / "MEDORIGIN_SOURCE_PROVENANCE.json").is_file()
+
+
+def test_cross_volume_copy_failure_leaves_no_partial_output(
+    proposal: Any, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    target = tmp_path / "destination" / "staged"
+
+    def broken_copy(_source: Path, destination: Path) -> Any:
+        destination.mkdir()
+        (destination / "partial-bytes").write_bytes(b"unqualified")
+        raise OSError("simulated cross-volume copy failure")
+
+    monkeypatch.setattr(proposal.shutil, "copytree", broken_copy)
+    with pytest.raises(OSError, match="simulated cross-volume copy failure"):
+        proposal.propose(target)
+    assert not target.exists()
+    assert not list(target.parent.glob("medorigin-base-only-destination-*"))
+
+
 def test_no_release_capabilities_in_proposal() -> None:
     contents = SCRIPT.read_text(encoding="utf-8")
     for operation in ("git push", "gh release create", "twine upload", "hf upload"):
