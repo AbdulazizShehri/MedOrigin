@@ -24,7 +24,9 @@ def benchmark() -> ModuleType:
     return module
 
 
-def test_python_baseline_is_explicitly_not_rust_or_release(benchmark: ModuleType) -> None:
+def test_python_baseline_is_explicitly_not_rust_or_release(
+    benchmark: ModuleType,
+) -> None:
     result = benchmark.measure_reference(iterations=3)
     assert result["schema"] == "medorigin-desktop-d0-python-sha256-benchmark-v1"
     assert result["qualification"] == "PYTHON_REFERENCE_ONLY"
@@ -73,6 +75,8 @@ def test_cli_never_writes_a_measurement_file(tmp_path: Path) -> None:
     assert list(tmp_path.iterdir()) == []
 
 
-def test_cli_rejects_invalid_benchmark_size(benchmark: ModuleType, capsys: pytest.CaptureFixture[str]) -> None:
+def test_cli_rejects_invalid_benchmark_size(
+    benchmark: ModuleType, capsys: pytest.CaptureFixture[str]
+) -> None:
     assert benchmark.main(["--iterations", "0"]) == 2
     assert "DESKTOP_D0_BASELINE_BLOCKED" in capsys.readouterr().err
