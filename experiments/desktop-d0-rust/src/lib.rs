@@ -92,10 +92,26 @@ mod tests {
     #[test]
     fn all_four_synthetic_golden_raw_byte_vectors_match_python() {
         let golden = [
-            ("patient-minimal", 57, "747e1e038d6cc9a39a9cee209f621841cf6a9748d82be42fa545f19cfd6877a0"),
-            ("patient-invalid-utf8", 1, "a8100ae6aa1940d0b663bb31cd466142ebbdbd5187131b92d93818987832eb89"),
-            ("patient-over-limit", 32_769, "b929f15ca4f3fa28f54991ed0cb8ac5f430e388ee08bf401a853d8af91e44538"),
-            ("patient-exact-limit", 32_768, "ea711ce560191a81c0722c4a26592e0e2d9abb2186b6fd3af6897cd89d417d4e"),
+            (
+                "patient-minimal",
+                57,
+                "747e1e038d6cc9a39a9cee209f621841cf6a9748d82be42fa545f19cfd6877a0",
+            ),
+            (
+                "patient-invalid-utf8",
+                1,
+                "a8100ae6aa1940d0b663bb31cd466142ebbdbd5187131b92d93818987832eb89",
+            ),
+            (
+                "patient-over-limit",
+                32_769,
+                "b929f15ca4f3fa28f54991ed0cb8ac5f430e388ee08bf401a853d8af91e44538",
+            ),
+            (
+                "patient-exact-limit",
+                32_768,
+                "ea711ce560191a81c0722c4a26592e0e2d9abb2186b6fd3af6897cd89d417d4e",
+            ),
         ];
         for (fixture_id, bytes, digest) in golden {
             let actual = hash_fixture_raw_v1(fixture_id, MAX_PROTOTYPE_INPUT_BYTES)
@@ -109,20 +125,50 @@ mod tests {
 
     #[test]
     fn unknown_fixture_and_untrusted_paths_never_gain_file_access() {
-        for invalid in ["", "patient-minimal/../secret", "../secret", "C:\\secret", "/etc/passwd", "patient-minimal\0"] {
-            assert_eq!(hash_fixture_raw_v1(invalid, 65_536), Err(HashError::UnknownFixture));
+        for invalid in [
+            "",
+            "patient-minimal/../secret",
+            "../secret",
+            "C:\\secret",
+            "/etc/passwd",
+            "patient-minimal\0",
+        ] {
+            assert_eq!(
+                hash_fixture_raw_v1(invalid, 65_536),
+                Err(HashError::UnknownFixture)
+            );
         }
         assert_eq!(HashError::UnknownFixture.code(), "unknown_fixture");
     }
 
     #[test]
     fn bounds_enforced_before_allocation() {
-        assert_eq!(hash_fixture_raw_v1("patient-minimal", 0), Err(HashError::InvalidLimit));
-        assert_eq!(hash_fixture_raw_v1("patient-minimal", 65_537), Err(HashError::InvalidLimit));
-        assert_eq!(hash_fixture_raw_v1("patient-over-limit", 32_768), Err(HashError::InputTooLarge));
-        assert_eq!(hash_fixture_raw_v1("patient-exact-limit", 32_767), Err(HashError::InputTooLarge));
-        assert_eq!(hash_fixture_raw_v1("patient-minimal", 56), Err(HashError::InputTooLarge));
-        assert_eq!(hash_fixture_raw_v1("patient-minimal", 57).expect("limit inclusive").bytes, 57);
+        assert_eq!(
+            hash_fixture_raw_v1("patient-minimal", 0),
+            Err(HashError::InvalidLimit)
+        );
+        assert_eq!(
+            hash_fixture_raw_v1("patient-minimal", 65_537),
+            Err(HashError::InvalidLimit)
+        );
+        assert_eq!(
+            hash_fixture_raw_v1("patient-over-limit", 32_768),
+            Err(HashError::InputTooLarge)
+        );
+        assert_eq!(
+            hash_fixture_raw_v1("patient-exact-limit", 32_767),
+            Err(HashError::InputTooLarge)
+        );
+        assert_eq!(
+            hash_fixture_raw_v1("patient-minimal", 56),
+            Err(HashError::InputTooLarge)
+        );
+        assert_eq!(
+            hash_fixture_raw_v1("patient-minimal", 57)
+                .expect("limit inclusive")
+                .bytes,
+            57
+        );
     }
 
     #[test]
