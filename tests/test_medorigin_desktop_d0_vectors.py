@@ -44,14 +44,13 @@ def test_raw_sha_keeps_padding_and_invalid_utf8(d0: ModuleType) -> None:
     assert len(cases["patient-exact-limit"]) == 32768
     assert len(cases["patient-over-limit"]) == 32769
     assert cases["patient-exact-limit"].startswith(cases["patient-minimal"])
-    assert hashlib.sha256(cases["patient-exact-limit"]).digest() != hashlib.sha256(
-        cases["patient-minimal"]
-    ).digest()
+    assert (
+        hashlib.sha256(cases["patient-exact-limit"]).digest()
+        != hashlib.sha256(cases["patient-minimal"]).digest()
+    )
 
 
-def test_changed_manifest_is_blocked(
-    d0: ModuleType, tmp_path: Path
-) -> None:
+def test_changed_manifest_is_blocked(d0: ModuleType, tmp_path: Path) -> None:
     original = d0._MANIFEST.read_text(encoding="utf-8")
     changed = original.replace(
         "747e1e038d6cc9a39a9cee209f621841cf6a9748d82be42fa545f19cfd6877a0",
@@ -64,9 +63,7 @@ def test_changed_manifest_is_blocked(
         d0.verify_manifest(manifest_path=path)
 
 
-def test_changed_source_contract_is_blocked(
-    d0: ModuleType, tmp_path: Path
-) -> None:
+def test_changed_source_contract_is_blocked(d0: ModuleType, tmp_path: Path) -> None:
     source = tmp_path / "changed.py"
     source.write_text("def not_the_original_fixture(): pass\n", encoding="utf-8")
     with pytest.raises(d0.FixtureContractError, match="source fixture expressions"):
