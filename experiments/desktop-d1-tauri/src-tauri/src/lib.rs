@@ -13,7 +13,7 @@ struct PreviewStatus {
     outbound_network_enabled: bool,
 }
 
-#[derive(Serialize)]
+#[derive(Debug, Serialize)]
 struct FixtureHashResponse {
     contract: &'static str,
     fixture_id: &'static str,
