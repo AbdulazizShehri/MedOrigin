@@ -33,6 +33,7 @@ _MAX_TAR_INFLATED_BYTES = _MAX_TOTAL_DECLARED_BYTES + _MAX_MEMBERS * 2048
 _WHEEL_METADATA = re.compile(r"medscale-[^/]+[.]dist-info/METADATA")
 _SDIST_METADATA = re.compile(r"medscale-[^/]+/PKG-INFO")
 _ZIP_EOCD = struct.Struct("<4s4H2LH")
+_ZIP_LOCAL_HEADER = struct.Struct("<4s5H3L2H")
 
 
 class PublicationScopeError(ValueError):
@@ -133,8 +134,48 @@ def _verify_wheel_physical_envelope(path: Path, members: list[zipfile.ZipInfo]) 
         raise PublicationScopeError("wheel: noncanonical ZIP trailer or comment")
     if directory_offset + directory_size != size - _ZIP_EOCD.size:
         raise PublicationScopeError("wheel: unaccounted ZIP envelope bytes")
-    if min(member.header_offset for member in members) != 0:
-        raise PublicationScopeError("wheel: prepended ZIP data")
+    # The central directory can be shifted by editing its EOCD offset while
+    # inserting arbitrary bytes between ZIP members and the directory. Verify
+    # the exact local-header/data boundaries instead of trusting ZipFile's
+    # permissive directory index.
+    cursor = 0
+    with path.open("rb") as stream:
+        for member in sorted(members, key=lambda item: item.header_offset):
+            if member.header_offset != cursor:
+                raise PublicationScopeError("wheel: hidden ZIP member gap")
+            stream.seek(cursor)
+            raw = stream.read(_ZIP_LOCAL_HEADER.size)
+            if len(raw) != _ZIP_LOCAL_HEADER.size:
+                raise PublicationScopeError("wheel: incomplete local ZIP header")
+            (
+                signature,
+                _version,
+                flags,
+                compression,
+                _time,
+                _date,
+                _crc,
+                compressed_size,
+                uncompressed_size,
+                filename_length,
+                extra_length,
+            ) = _ZIP_LOCAL_HEADER.unpack(raw)
+            if (
+                signature != b"PK\x03\x04"
+                or flags & 0x08
+                or compression != member.compress_type
+                or compressed_size != member.compress_size
+                or uncompressed_size != member.file_size
+            ):
+                raise PublicationScopeError("wheel: local ZIP header mismatch")
+            cursor += (
+                _ZIP_LOCAL_HEADER.size
+                + filename_length
+                + extra_length
+                + member.compress_size
+            )
+    if cursor != directory_offset:
+        raise PublicationScopeError("wheel: hidden ZIP member gap")
 
 
 def _wheel(path: Path) -> EmailMessage:
@@ -143,7 +184,6 @@ def _wheel(path: Path) -> EmailMessage:
             members = archive.infolist()
             if len(members) > _MAX_MEMBERS:
                 raise PublicationScopeError("wheel: archive member limit exceeded")
-            _verify_wheel_physical_envelope(path, members)
             total = 0
             for item in members:
                 if item.file_size < 0 or item.file_size > _MAX_SINGLE_MEMBER_BYTES:
@@ -151,6 +191,7 @@ def _wheel(path: Path) -> EmailMessage:
                 total += item.file_size
                 if total > _MAX_TOTAL_DECLARED_BYTES:
                     raise PublicationScopeError("wheel: inflated archive exceeds budget")
+            _verify_wheel_physical_envelope(path, members)
             matches = [m for m in members if _WHEEL_METADATA.fullmatch(m.filename)]
             if len(matches) != 1 or matches[0].is_dir():
                 raise PublicationScopeError("wheel: exactly one METADATA required")
