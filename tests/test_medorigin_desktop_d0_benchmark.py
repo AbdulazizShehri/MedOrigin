@@ -28,6 +28,9 @@ def test_python_baseline_is_explicitly_not_rust_or_release(benchmark: ModuleType
     result = benchmark.measure_reference(iterations=3)
     assert result["schema"] == "medorigin-desktop-d0-python-sha256-benchmark-v1"
     assert result["qualification"] == "PYTHON_REFERENCE_ONLY"
+    assert result["source_commit"] == "dd84bb7b4177fbc169a04370772610ec66fa41df"
+    manifest_sha256 = result["source_manifest_sha256"]
+    assert isinstance(manifest_sha256, str) and len(manifest_sha256) == 64
     assert result["rust_parity_qualified"] is False
     assert result["publication_authorized"] is False
     assert result["memory_measure"] == "tracemalloc_peak_bytes_not_RSS"
