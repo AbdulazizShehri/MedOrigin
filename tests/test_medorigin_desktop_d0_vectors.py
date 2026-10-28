@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import importlib
 import importlib.util
 import json
 import subprocess
@@ -48,6 +49,38 @@ def test_raw_sha_keeps_padding_and_invalid_utf8(d0: ModuleType) -> None:
         hashlib.sha256(cases["patient-exact-limit"]).digest()
         != hashlib.sha256(cases["patient-minimal"]).digest()
     )
+
+
+
+def test_existing_python_fhir_stage_results_match_manifest(d0: ModuleType) -> None:
+    """Source truth, not a handwritten parser claim, decides each D0 outcome."""
+    workspace_src = str(_ROOT / "apps" / "workspace" / "src")
+    if workspace_src not in sys.path:
+        sys.path.insert(0, workspace_src)
+    fhir = importlib.import_module("medscale_workspace.fhir_r4")
+    cases = d0.case_bytes()
+    expected = d0.expected_manifest()
+    for item in expected["vectors"]:
+        raw = cases[item["id"]]
+        report = fhir.validate_payload(fhir.FhirResourceType.PATIENT, "synthetic", raw)
+        parse = report.stage("parse")
+        assert parse.evaluated
+        outcome = item["expected_python_fhir_parse"]
+        if outcome == "accept":
+            assert parse.passed
+            assert report.stage("structure").passed
+            assert report.stage("profile").passed
+        else:
+            assert not parse.passed
+            assert not report.stage("structure").evaluated
+            assert not report.stage("profile").evaluated
+            if outcome == "reject-size":
+                assert "exceeds the admitted resource size" in parse.detail
+            else:
+                assert outcome == "reject-parse"
+                assert "not JSON" in parse.detail
+        assert not report.stage("reference").evaluated
+        assert not report.stage("provenance").evaluated
 
 
 def test_changed_manifest_is_blocked(d0: ModuleType, tmp_path: Path) -> None:
