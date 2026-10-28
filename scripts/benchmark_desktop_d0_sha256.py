@@ -73,6 +73,11 @@ def measure_reference(iterations: int = 256) -> dict[str, object]:
     source = _load_reference()
     manifest = cast(dict[str, object], source.verify_manifest())
     cases = cast(dict[str, bytes], source.case_bytes())
+    source_commit = manifest.get("source_commit")
+    if not isinstance(source_commit, str) or len(source_commit) != 40:
+        raise ValueError("source commit is not pinned")
+    canonical_manifest = json.dumps(manifest, sort_keys=True, indent=2) + "\n"
+    manifest_sha256 = hashlib.sha256(canonical_manifest.encode("utf-8")).hexdigest()
     vectors = manifest.get("vectors")
     if not isinstance(vectors, list):
         raise ValueError("source-bound manifest vectors missing")
@@ -90,6 +95,8 @@ def measure_reference(iterations: int = 256) -> dict[str, object]:
         measured.append(result)
     return {
         "schema": _SCHEMA,
+        "source_commit": source_commit,
+        "source_manifest_sha256": manifest_sha256,
         "qualification": "PYTHON_REFERENCE_ONLY",
         "rust_parity_qualified": False,
         "publication_authorized": False,
