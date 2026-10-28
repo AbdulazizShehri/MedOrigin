@@ -19,7 +19,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  PYTEST_SHARD_COUNT: "4"
+  PYTEST_SHARD_COUNT: "8"
 
 jobs:
   static:
@@ -63,6 +63,15 @@ jobs:
       - name: Docs link hygiene
         run: uv run python scripts/check_docs_links.py
 
+      # CI checks out full Git history above; this only exports the pinned
+      # historical and current source into isolated synthetic temp trees.
+      # Exit 0 means the documented incompatibility was reproduced, NOT release-ready.
+      - name: Historical synthetic dataset format replay (read-only)
+        run: >-
+          uv run --no-sync python scripts/audit_historical_dataset_compatibility.py
+          --repo .
+          --json-out "${{ runner.temp }}/medorigin-history-${{ matrix.python-version }}.json"
+
       - name: MRL canonical closeout evidence live binding
         if: github.event_name == 'pull_request' && matrix.python-version == '3.11'
         env:
@@ -85,11 +94,13 @@ jobs:
     name: pytest shard ${{ matrix.shard }} (py${{ matrix.python-version }})
     needs: static
     runs-on: ubuntu-latest
+    # Bound stalled shards: the previous successful shard-3 run took ~15 min.
+    timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
         python-version: ["3.11", "3.12"]
-        shard: [0, 1, 2, 3]
+        shard: [0, 1, 2, 3, 4, 5, 6, 7]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -218,7 +229,12 @@ jobs:
         run: |
           mapfile -t test_nodes < pytest-shard.txt
           test "${#test_nodes[@]}" -gt 0
-          uv run --no-sync pytest             --cov             --cov-report=             --cov-fail-under=0             "${test_nodes[@]}"
+          # Show each test node while it executes to identify a stalled case.
+          # Preserve complete coverage and fail closed on the job timeout.
+          uv run --no-sync pytest \
+            -vv --durations=15 \
+            --cov --cov-report= --cov-fail-under=0 \
+            "${test_nodes[@]}"
           test -s "${COVERAGE_FILE}"
 
       - name: Preserve shard coverage

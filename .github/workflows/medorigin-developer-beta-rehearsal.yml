@@ -1,0 +1,122 @@
+# Build and test exactly the PR-head source. Never publish or upload artifacts.
+name: MedOrigin Developer Beta offline rehearsal
+
+on:
+  pull_request:
+    paths:
+      - "scripts/qualify_medorigin_developer_beta.py"
+      - "scripts/smoke_medorigin_native_desktop_installed.py"
+      - "tests/test_synthetic_fhir_native_desktop_demo.py"
+      - "scripts/stage_medorigin_core_projection.py"
+      - "scripts/check_core_wheel_source_identity.py"
+      - "scripts/check_sdist_publication_scope.py"
+      - "scripts/inspect_release_wheel_metadata.py"
+      - "examples/synthetic_fhir_developer_beta/**"
+      - "tests/test_medorigin_prepublication_rehearsal.py"
+      - ".github/workflows/medorigin-developer-beta-rehearsal.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: medorigin-beta-rehearsal-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  exact-artifact-rehearsal:
+    name: Offline rehearsal (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 35
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2025]
+    steps:
+      - name: Checkout exact revision, without persisted credentials
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          # Fetch only the immutable triggering commit, not every historical
+          # branch/ref. Old extremely long branch names exceed Windows Git paths.
+          fetch-depth: 1
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - name: Install pinned uv, cache disabled
+        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        with:
+          enable-cache: false
+
+      - name: Build from committed source, verify and execute two clean installs
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          uv python install '3.11' '3.12'
+          if ($LASTEXITCODE -ne 0) { throw 'Python installation failed' }
+
+          $pythonBuild = (& uv python find '3.12').Trim()
+          if ($LASTEXITCODE -ne 0) { throw 'Cannot find build interpreter' }
+          $scratch = Join-Path $env:RUNNER_TEMP 'medorigin-beta-rehearsal'
+          if (Test-Path $scratch) { throw 'Refuse to overwrite an existing rehearsal' }
+          New-Item -ItemType Directory -Path $scratch | Out-Null
+          # The isolated projector atomically renames its temp directory.
+          # On hosted Windows, default TEMP is C: while RUNNER_TEMP is D:;
+          # keep both source and destination on the same volume.
+          $env:TMPDIR = $scratch
+          $env:TEMP = $scratch
+          $env:TMP = $scratch
+          $stage = Join-Path $scratch 'projected'
+          $dist = Join-Path $scratch 'dist'
+
+          & $pythonBuild scripts/stage_medorigin_core_projection.py --out $stage
+          if ($LASTEXITCODE -ne 0) { throw 'Committed-source projection rejected' }
+
+          uv build --sdist --wheel $stage --out-dir $dist
+          if ($LASTEXITCODE -ne 0) { throw 'Package build failed' }
+
+          $wheel = Join-Path $dist 'medscale-0.3.0-py3-none-any.whl'
+          $sdist = Join-Path $dist 'medscale-0.3.0.tar.gz'
+          if (!(Test-Path $wheel) -or !(Test-Path $sdist)) {
+            throw 'Expected exact package artifacts missing'
+          }
+
+          $venv311 = Join-Path $scratch 'py311'
+          $venv312 = Join-Path $scratch 'py312'
+          uv venv --python '3.11' $venv311
+          if ($LASTEXITCODE -ne 0) { throw 'Python 3.11 venv failed' }
+          uv venv --python '3.12' $venv312
+          if ($LASTEXITCODE -ne 0) { throw 'Python 3.12 venv failed' }
+
+          $suffix = if ($IsWindows) { 'Scripts/python.exe' } else { 'bin/python' }
+          $python311 = Join-Path $venv311 $suffix
+          $python312 = Join-Path $venv312 $suffix
+          uv pip install --python $python311 --no-index --no-deps $wheel
+          if ($LASTEXITCODE -ne 0) { throw 'Python 3.11 offline wheel install failed' }
+          uv pip install --python $python312 --no-index --no-deps $wheel
+          if ($LASTEXITCODE -ne 0) { throw 'Python 3.12 offline wheel install failed' }
+
+          & $pythonBuild scripts/qualify_medorigin_developer_beta.py `
+            --checkout . --wheel $wheel --sdist $sdist `
+            --python311 $python311 --python312 $python312
+          if ($LASTEXITCODE -ne 0) { throw 'Exact-artifact Developer Beta rehearsal failed' }
+
+          if ($IsWindows) {
+            # Real native Tk UI and newly installed Core executables, not mocks.
+            # Windows hosted CI provides the native Tcl/Tk runtime; any missing
+            # desktop/runtime fails closed rather than silently passing.
+            foreach ($runtime in @($venv311, $venv312)) {
+              $python = Join-Path $runtime 'Scripts/python.exe'
+              $cli = Join-Path $runtime 'Scripts/medscale.exe'
+              & $python scripts/smoke_medorigin_native_desktop_installed.py `
+                --cli $cli --timeout-seconds 75
+              if ($LASTEXITCODE -ne 0) {
+                throw 'Native Windows installed Core desktop E2E failed'
+              }
+            }
+          }
+
+          if ((git status --porcelain) -ne $null) {
+            $dirty = @(git status --porcelain)
+            if ($dirty.Count -gt 0) { throw 'Source checkout mutated during qualification' }
+          }
+          Write-Output 'TECHNICAL_ONLY_NOT_PUBLISHED'
