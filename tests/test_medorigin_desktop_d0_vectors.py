@@ -60,7 +60,9 @@ def test_existing_python_fhir_stage_results_match_manifest(d0: ModuleType) -> No
     fhir = importlib.import_module("medscale_workspace.fhir_r4")
     cases = d0.case_bytes()
     expected = d0.expected_manifest()
-    for item in expected["vectors"]:
+    vectors = expected["vectors"]
+    assert isinstance(vectors, list)
+    for item in vectors:
         raw = cases[item["id"]]
         report = fhir.validate_payload(fhir.FhirResourceType.PATIENT, "synthetic", raw)
         parse = report.stage("parse")
