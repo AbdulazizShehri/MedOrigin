@@ -27,6 +27,10 @@ cargo test --locked
 
 Compare all four expected SHA-256 hex values *byte-for-byte* against the **source-bound** Python test corpus in [PR #658](https://github.com/AbdulazizShehri/MedOrigin/pull/658). Initial failures must block qualification. The independent benchmark in [PR #659](https://github.com/AbdulazizShehri/MedOrigin/pull/659) measures Python only, not Rust performance.
 
+### Reproducible synthetic API timing (exploratory)
+
+Run `cargo run --release --locked --example bench_api` to measure **the complete Rust API call** across the four in-memory fixtures with 512 iterations after warmup. The executable includes fixture allocation and SHA-256 hex formatting in timed work; it is **not directly comparable** to the Python-only digest timing in PR #659. It does not measure process RSS, guarantee a throughput floor, or claim a production speedup.
+
 The first eventual desktop command must undergo a separate IPC, path traversal/symlink/TOCTOU, size-budget, no-network/no-telemetry, privacy and native installer threat review. The source-only in-memory prototype is **not** that command.
 
 **Release authorization:** `false`. **Rust production parity qualified:** `false`. **Clinical/PHI authorization:** `false`.
