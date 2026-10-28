@@ -247,12 +247,8 @@ def test_wheel_rejects_unaccounted_physical_payloads(
         assert eocd >= 0
         directory_offset = struct.unpack_from("<I", original, eocd + 16)[0]
         gap = b"UNQUALIFIED-INTERNAL-PAYLOAD"
-        mutated = bytearray(
-            original[:directory_offset] + gap + original[directory_offset:]
-        )
-        struct.pack_into(
-            "<I", mutated, eocd + len(gap) + 16, directory_offset + len(gap)
-        )
+        mutated = bytearray(original[:directory_offset] + gap + original[directory_offset:])
+        struct.pack_into("<I", mutated, eocd + len(gap) + 16, directory_offset + len(gap))
         wheel.write_bytes(mutated)
     elif variant == "comment":
         with zipfile.ZipFile(wheel, "a") as archive:
