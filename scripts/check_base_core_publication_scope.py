@@ -15,6 +15,7 @@ import gzip
 import io
 import json
 import re
+import struct
 import tarfile
 import zipfile
 import zlib
@@ -31,6 +32,7 @@ _MAX_TOTAL_DECLARED_BYTES = 50_000_000
 _MAX_TAR_INFLATED_BYTES = _MAX_TOTAL_DECLARED_BYTES + _MAX_MEMBERS * 2048
 _WHEEL_METADATA = re.compile(r"medscale-[^/]+[.]dist-info/METADATA")
 _SDIST_METADATA = re.compile(r"medscale-[^/]+/PKG-INFO")
+_ZIP_EOCD = struct.Struct("<4s4H2LH")
 
 
 class PublicationScopeError(ValueError):
@@ -95,12 +97,53 @@ def _check_policy(message: EmailMessage, label: str) -> list[str]:
     return issues
 
 
+def _verify_wheel_physical_envelope(path: Path, members: list[zipfile.ZipInfo]) -> None:
+    """Reject ZIP payload outside a single canonical, comment-free Wheel envelope.
+
+    ZipFile permits prepended self-extracting payloads, trailing junk and
+    archive comments. None is required for our bounded release artifacts.
+    The central directory must immediately precede the final EOCD record.
+    """
+    size = path.stat().st_size
+    if size < _ZIP_EOCD.size or not members:
+        raise PublicationScopeError("wheel: malformed ZIP envelope")
+    with path.open("rb") as stream:
+        stream.seek(-_ZIP_EOCD.size, io.SEEK_END)
+        trailer = stream.read(_ZIP_EOCD.size)
+    if len(trailer) != _ZIP_EOCD.size:
+        raise PublicationScopeError("wheel: incomplete ZIP trailer")
+    (
+        signature,
+        disk,
+        directory_disk,
+        disk_members,
+        total_members,
+        directory_size,
+        directory_offset,
+        comment_size,
+    ) = _ZIP_EOCD.unpack(trailer)
+    if (
+        signature != b"PK\x05\x06"
+        or disk != 0
+        or directory_disk != 0
+        or disk_members != total_members
+        or total_members != len(members)
+        or comment_size != 0
+    ):
+        raise PublicationScopeError("wheel: noncanonical ZIP trailer or comment")
+    if directory_offset + directory_size != size - _ZIP_EOCD.size:
+        raise PublicationScopeError("wheel: unaccounted ZIP envelope bytes")
+    if min(member.header_offset for member in members) != 0:
+        raise PublicationScopeError("wheel: prepended ZIP data")
+
+
 def _wheel(path: Path) -> EmailMessage:
     try:
         with zipfile.ZipFile(path) as archive:
             members = archive.infolist()
             if len(members) > _MAX_MEMBERS:
                 raise PublicationScopeError("wheel: archive member limit exceeded")
+            _verify_wheel_physical_envelope(path, members)
             total = 0
             for item in members:
                 if item.file_size < 0 or item.file_size > _MAX_SINGLE_MEMBER_BYTES:
