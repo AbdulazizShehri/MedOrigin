@@ -34,7 +34,15 @@ HEX256 = re.compile(r"[0-9a-f]{64}\Z")
 
 def public_result(run: dict[str, Any]) -> dict[str, str]:
     """Whitelist the non-PHI information allowed in the desktop preview."""
-    if run.get("structural_status") != "valid" or run.get("malformed_exit") != 1:
+    if (
+        run.get("structural_status") != "valid"
+        or type(run.get("malformed_exit")) is not int
+        or run["malformed_exit"] != 1
+        or (
+            "valid_exit" in run
+            and (type(run["valid_exit"]) is not int or run["valid_exit"] != 0)
+        )
+    ):
         raise ValueError("synthetic validator or negative control did not pass")
     report = run.get("report_sha256")
     fixture = run.get("fixture_sha256")

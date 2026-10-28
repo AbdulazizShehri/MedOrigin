@@ -48,6 +48,32 @@ def test_public_projection_whitelists_fields(desktop: Any) -> None:
         {"structural_status": "valid", "malformed_exit": 0},
         {"structural_status": "valid", "malformed_exit": 1, "report_sha256": "xyz"},
         {"structural_status": "valid", "malformed_exit": 1, "report_sha256": "A" * 64},
+        {
+            "structural_status": "valid",
+            "malformed_exit": True,
+            "report_sha256": GOOD_HEX,
+            "fixture_sha256": OTHER_HEX,
+        },
+        {
+            "structural_status": "valid",
+            "malformed_exit": 1.0,
+            "report_sha256": GOOD_HEX,
+            "fixture_sha256": OTHER_HEX,
+        },
+        {
+            "structural_status": "valid",
+            "malformed_exit": 1,
+            "valid_exit": True,
+            "report_sha256": GOOD_HEX,
+            "fixture_sha256": OTHER_HEX,
+        },
+        {
+            "structural_status": "valid",
+            "malformed_exit": 1,
+            "valid_exit": 1,
+            "report_sha256": GOOD_HEX,
+            "fixture_sha256": OTHER_HEX,
+        },
     ],
 )
 def test_public_projection_rejects_invalid_evidence(desktop: Any, broken: Any) -> None:

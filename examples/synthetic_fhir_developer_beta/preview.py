@@ -175,7 +175,15 @@ def render(receipt: dict[str, Any]) -> str:
     for run in runs:
         if not isinstance(run, dict):
             raise ValueError("invalid local synthetic CLI result")
-        if run.get("structural_status") != "valid" or run.get("malformed_exit") != 1:
+        if (
+            run.get("structural_status") != "valid"
+            or type(run.get("malformed_exit")) is not int
+            or run["malformed_exit"] != 1
+            or (
+                "valid_exit" in run
+                and (type(run["valid_exit"]) is not int or run["valid_exit"] != 0)
+            )
+        ):
             raise ValueError("only verified valid synthetic reports may be previewed")
         label = _safe(run.get("label", "unknown"))
         digest = _safe(run.get("report_sha256", "unavailable"))
@@ -200,7 +208,14 @@ def render(receipt: dict[str, Any]) -> str:
             "mode": "offline-shell",
             "ready": True,
         }
-        if not isinstance(workspace, dict) or workspace != expected:
+        if (
+            not isinstance(workspace, dict)
+            or set(workspace) != set(expected)
+            or any(
+                type(workspace[key]) is not type(value) or workspace[key] != value
+                for key, value in expected.items()
+            )
+        ):
             raise ValueError("Workspace status does not match synthetic-safe contract")
         cards.append(
             '<article class="result" aria-label="Optional synthetic Workspace status">'

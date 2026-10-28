@@ -98,6 +98,24 @@ def test_preview_refuses_failed_validation_and_rejected_negative_control() -> No
         renderer.render({"runs": [{"structural_status": "valid", "malformed_exit": 0}]})
 
 
+@pytest.mark.parametrize("bad_exit", [True, 1.0, "1"])
+def test_preview_renderer_refuses_ambiguous_boolean_or_coerced_exit(
+    bad_exit: object,
+) -> None:
+    renderer = _preview_module()
+    row = {"structural_status": "valid", "malformed_exit": bad_exit}
+    with pytest.raises(ValueError, match="only verified valid"):
+        renderer.render({"runs": [row]})
+
+
+@pytest.mark.parametrize("bad_exit", [True, 1, 0.0])
+def test_preview_renderer_refuses_failed_or_coerced_valid_exit(bad_exit: object) -> None:
+    renderer = _preview_module()
+    row = {"structural_status": "valid", "malformed_exit": 1, "valid_exit": bad_exit}
+    with pytest.raises(ValueError, match="only verified valid"):
+        renderer.render({"runs": [row]})
+
+
 def test_preview_never_overwrites_existing_html(tmp_path: Path) -> None:
     renderer = _preview_module()
     receipt = tmp_path / "evidence.json"
@@ -249,6 +267,10 @@ def test_static_preview_optional_workspace_card_has_no_extra_fields() -> None:
 
     receipt["workspace"]["patient_name"] = "PRIVATE-SENTINEL"  # type: ignore[index]
     with pytest.raises(ValueError):
+        preview.render(receipt)
+    del receipt["workspace"]["patient_name"]
+    receipt["workspace"]["ready"] = 1
+    with pytest.raises(ValueError, match="synthetic-safe contract"):
         preview.render(receipt)
 
 
