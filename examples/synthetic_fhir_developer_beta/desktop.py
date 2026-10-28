@@ -38,10 +38,7 @@ def public_result(run: dict[str, Any]) -> dict[str, str]:
         run.get("structural_status") != "valid"
         or type(run.get("malformed_exit")) is not int
         or run["malformed_exit"] != 1
-        or (
-            "valid_exit" in run
-            and (type(run["valid_exit"]) is not int or run["valid_exit"] != 0)
-        )
+        or ("valid_exit" in run and (type(run["valid_exit"]) is not int or run["valid_exit"] != 0))
     ):
         raise ValueError("synthetic validator or negative control did not pass")
     report = run.get("report_sha256")
