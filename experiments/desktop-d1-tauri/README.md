@@ -7,8 +7,8 @@
 - One fixed local window, visibly marked **SYNTHETIC / DEVELOPER PREVIEW**.
 - Exactly two native commands: `preview_status` and `hash_fixture`.
 - Four *fictional, static in-memory* samples with source-bound SHA-256 golden digests. UI accepts only an enumerated fixture ID; Rust validates it again and enforces a byte cap.
-- No HTTP server in the release binary, opener/shell/filesystem/updater plugin, remote assets, telemetry, model weights, Python worker, network permissions, files outside the shipped bundle, patient records or EHR interaction. Vite's localhost server is a **development-only** tool, not an offline release feature.
-- Tauri capability permits core window functionality only; strict CSP blocks outbound fetch. Packaging is disabled (`bundle.active=false`), and the app version is intentionally `0.0.0`.
+- No application HTTP server in the compiled preview, opener/shell/filesystem/updater plugin, remote assets, application telemetry, model weights, Python worker, application network permission, patient records or EHR interaction. Vite's localhost server is **development-only**. **WebView2 itself may contact external services** even when the app has no network plugin; this is not yet an offline/zero-egress-qualified runtime.
+- Tauri capability permits core window functionality only; CSP restricts application fetch to local Tauri IPC, **not WebView2's own background network traffic**. Packaging is disabled (`bundle.active=false`), and the app version is intentionally `0.0.0`.
 - Rust errors are stable non-sensitive codes. No user-controlled path, URL or file contents enters the command.
 
 ## Local developer qualification (free tooling)
@@ -24,6 +24,23 @@ cargo test --locked
 ```
 
 A bundle/uninstaller is **not generated**; verify the native window only by running `npm run tauri dev` on an authorized development device and inspecting its behavior. The general D0 Rust 3-OS evidence is not a substitute for D1 Tauri build evidence on each OS.
+
+## Reproducible native Windows UI and egress checks
+
+From an **interactive** Windows desktop, build the local debug preview with `npm run tauri build -- --debug --no-bundle`, then run:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File tests/windows-uia-smoke.ps1 -ExePath '<absolute-path-to-built-debug-exe>'
+# Launch the same executable separately; capture its PID as $p.Id:
+$p = Start-Process -FilePath '<absolute-path-to-built-debug-exe>' -PassThru
+Start-Sleep -Seconds 5
+powershell -NoProfile -ExecutionPolicy Bypass -File tests/windows-egress-snapshot.ps1 -RootPid $p.Id
+Stop-Process -Id $p.Id -Force
+```
+
+The UI Automation smoke test verifies all four fictional fixture IDs through **React → Tauri IPC → Rust → React** and checks exact SHA-256 goldens. The invalid-encoding and oversize samples are *expected to hash successfully*; this does **not** mean they pass FHIR validation. The egress audit inspects the root process and descendant WebView2 processes; it exits 2 on observed established non-loopback TCP sockets. A clean snapshot is **not** proof of zero network activity.
+
+**Observed security NO-GO on Windows, 2026-10-29:** With the local D1 debug preview running, `msedgewebview2.exe` descendants established **external IPv6 TCP port 443** connections (two to three in repeated snapshots). The same problem persisted with `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS='--disable-background-networking --disable-component-update'`. This is a runtime observation, not proof of what content was sent or whether the app initiated the traffic. Do **not** claim the desktop is zero-egress/offline-isolated, or allow PHI, release, or clinical use. Any future resolution requires a separately reviewed, application-scoped OS isolation policy and packet-level verification; do not disable system-wide WebView2 security updates or firewall other applications.
 
 ## Known blocks
 

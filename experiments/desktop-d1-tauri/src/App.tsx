@@ -8,7 +8,8 @@ type PreviewStatus = {
   data_access: string;
   release_authorized: boolean;
   production_parity_qualified: boolean;
-  outbound_network_enabled: boolean;
+  app_network_plugins_enabled: boolean;
+  webview_runtime_egress_qualified: boolean;
 };
 type HashResult = {
   contract: string;
@@ -67,8 +68,8 @@ export default function App() {
         <section className="hero">
           <div className="eyebrow">DESKTOP EXPERIMENT · D1</div>
           <h1>Evidence, locally verified.</h1>
-          <p>A minimal Rust-powered preview for fictional test fixtures. No patient data, remote services, or background telemetry.</p>
-          <div className="status-strip"><span className="status-pill">LOCAL PROCESS</span><span className="status-pill">READ-ONLY</span><span className="status-pill">NOT RELEASED</span></div>
+          <p>A minimal Rust-powered preview for fictional test fixtures. No patient data or application network features. WebView2 background egress is not yet isolated.</p>
+          <div className="status-strip"><span className="status-pill">LOCAL PROCESS</span><span className="status-pill">READ-ONLY</span><span className="status-pill">NOT RELEASED</span><span className="status-pill">NETWORK ISOLATION NOT VERIFIED</span></div>
         </section>
         <div className="workspace-grid">
           <section className="panel">
@@ -104,7 +105,7 @@ export default function App() {
         </div>
         <footer className="notice">
           <span className="notice-icon">i</span>
-          <div><strong>Unreleased engineering preview</strong><p>{status ? "Rust command bridge active. Four fixed synthetic cases only." : "Local native bridge not yet confirmed."} No clinician workflows, health records, network access, installer qualification, or publishing authorization.</p></div>
+          <div><strong>Unreleased engineering preview</strong><p>{status ? "Rust command bridge active. Four fixed synthetic cases only." : "Local native bridge not yet confirmed."} No clinician workflows, health records, application network plugins, installer qualification, or publishing authorization. WebView2 runtime egress is unqualified.</p></div>
         </footer>
       </main>
     </div>

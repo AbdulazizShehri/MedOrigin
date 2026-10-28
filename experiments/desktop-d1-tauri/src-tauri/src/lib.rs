@@ -10,7 +10,8 @@ struct PreviewStatus {
     data_access: &'static str,
     release_authorized: bool,
     production_parity_qualified: bool,
-    outbound_network_enabled: bool,
+    app_network_plugins_enabled: bool,
+    webview_runtime_egress_qualified: bool,
 }
 
 #[derive(Debug, Serialize)]
@@ -30,7 +31,8 @@ fn preview_status() -> PreviewStatus {
         data_access: "four_allowlisted_in_memory_fixtures_only",
         release_authorized: false,
         production_parity_qualified: false,
-        outbound_network_enabled: false,
+        app_network_plugins_enabled: false,
+        webview_runtime_egress_qualified: false,
     }
 }
 
@@ -62,11 +64,12 @@ mod tests {
     use super::*;
 
     #[test]
-    fn preview_is_explicitly_nonpublishing_and_local() {
+    fn preview_is_nonpublishing_and_disclaims_runtime_network_isolation() {
         let status = preview_status();
         assert!(!status.release_authorized);
         assert!(!status.production_parity_qualified);
-        assert!(!status.outbound_network_enabled);
+        assert!(!status.app_network_plugins_enabled);
+        assert!(!status.webview_runtime_egress_qualified);
         assert_eq!(status.mode, "SYNTHETIC_DEVELOPER_PREVIEW");
     }
 
