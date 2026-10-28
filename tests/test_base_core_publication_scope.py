@@ -226,6 +226,7 @@ def test_wheel_forged_inflated_size_fails_closed(checker: Any, tmp_path: Path) -
         ("prefixed", "wheel: unaccounted ZIP envelope bytes"),
         ("comment", "wheel: noncanonical ZIP trailer"),
         ("concatenated", "wheel: unaccounted ZIP envelope bytes"),
+        ("gap-before-directory", "wheel: hidden ZIP member gap"),
     ],
 )
 def test_wheel_rejects_unaccounted_physical_payloads(
@@ -238,6 +239,21 @@ def test_wheel_rejects_unaccounted_physical_payloads(
         wheel.write_bytes(original + b"UNQUALIFIED-TRAILER")
     elif variant == "prefixed":
         wheel.write_bytes(b"UNQUALIFIED-PREFIX" + original)
+    elif variant == "gap-before-directory":
+        # GitHub artifact and Python ZipFile still see valid METADATA.
+        # The previous EOCD-only guard accepted hidden bytes before the
+        # central directory when that directory's offset was adjusted.
+        eocd = original.rfind(b"PK\x05\x06")
+        assert eocd >= 0
+        directory_offset = struct.unpack_from("<I", original, eocd + 16)[0]
+        gap = b"UNQUALIFIED-INTERNAL-PAYLOAD"
+        mutated = bytearray(
+            original[:directory_offset] + gap + original[directory_offset:]
+        )
+        struct.pack_into(
+            "<I", mutated, eocd + len(gap) + 16, directory_offset + len(gap)
+        )
+        wheel.write_bytes(mutated)
     elif variant == "comment":
         with zipfile.ZipFile(wheel, "a") as archive:
             archive.comment = b"UNQUALIFIED-COMMENT"
