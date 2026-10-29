@@ -106,8 +106,9 @@ jobs:
               "Documentation": "https://github.com/AbdulazizShehri/MedOrigin/tree/main/docs",
               "Issues": "https://github.com/AbdulazizShehri/MedOrigin/issues",
           }
+          info = metadata("medscale")
           actual = {}
-          for entry in metadata("medscale").get_all("Project-URL") or []:
+          for entry in info.get_all("Project-URL") or []:
               key, separator, url = entry.partition(", ")
               if not separator or key in actual:
                   raise SystemExit("Invalid or duplicate wheel Project-URL entry")
@@ -117,7 +118,16 @@ jobs:
                   raise SystemExit(
                       f"Release blocked: {key} Project-URL is not canonical MedOrigin"
                   )
-          print("Installed wheel public project URLs: canonical MedOrigin")
+          # The approved Developer Beta release target is Core-only.
+          # Frozen MRL research/training extras remain unsafe under #622.
+          # Reading installed METADATA here catches the exact built wheel;
+          # it does not rewrite source, locks, wheels or historical evidence.
+          if info.get_all("Provides-Extra") or info.get_all("Requires-Dist"):
+              raise SystemExit(
+                  "Release blocked: core-only scope forbids advertised extras "
+                  "or dependencies (#622)"
+              )
+          print("Installed wheel Core-only METADATA: canonical MedOrigin")
           PY
 
   github-release:
