@@ -192,6 +192,21 @@ def test_load_report_rejects_duplicate_status_without_leaking_storage_details(
     assert 'invalid","status' not in str(exc.value)
 
 
+def test_nullable_v1_report_roundtrips_with_canonical_status_encoding(
+    tmp_path: Path,
+) -> None:
+    # A nullable in-memory status is part of the public v1 report contract.
+    report = ValidationReport()
+    canonical = report_to_json(report)
+    assert '"status":""' in canonical
+    loaded = load_report_from_json(canonical)
+    assert loaded.status is None
+    assert report_to_json(loaded) == canonical
+    assert report_hash(loaded) == report_hash(report)
+    path = store_report(report, root=tmp_path)
+    assert load_report(report_hash(report), root=tmp_path) == path.read_text(encoding="utf-8")
+
+
 def test_report_round_trip_storage(tmp_path: Path) -> None:
     report = validate_fhir(_rule_input())
     stored = store_report(report, root=tmp_path)
