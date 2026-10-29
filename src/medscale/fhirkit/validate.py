@@ -5,6 +5,7 @@ from __future__ import annotations
 import contextlib
 import json
 import os
+import re
 import subprocess
 import tempfile
 from pathlib import Path
@@ -12,6 +13,7 @@ from typing import Any
 
 from medscale.fhirkit.errors import (
     FhirMissingDependencyError,
+    FhirValidationError,
     InvalidReportError,
     UnavailableValidatorError,
 )
@@ -34,22 +36,29 @@ def _search_path_command() -> list[str] | None:
 
 
 def validate_fhir(input_payload: dict[str, Any], created_at: str | None = None) -> ValidationReport:
-    """Validate a local FHIR payload deterministically.
+    """Check the minimum FHIR resource envelope without network access.
 
-    This path is always available and never performs network calls.
+    This deterministic local path does *not* check FHIR schemas, profiles,
+    element cardinalities or clinical correctness. A positive result is
+    only a resource-envelope preflight, not complete FHIR conformance.
     """
-    from medscale.reproducibility import canonical_json, content_hash
+    from medscale.reproducibility import content_hash
 
-    input_hash = content_hash(input_payload)
-    if canonical_json(input_payload) != canonical_json(input_payload):
-        raise ValueError("unreachable canonical_json contract")
+    if not isinstance(input_payload, dict):
+        raise FhirValidationError("FHIR resource must be a JSON object")
+
+    resource_type = input_payload.get("resourceType")
+    valid_envelope = (
+        isinstance(resource_type, str)
+        and re.fullmatch(r"[A-Z][A-Za-z0-9]*", resource_type) is not None
+    )
     return ValidationReport(
         report_id=None,
-        input_hash=input_hash,
+        input_hash=content_hash(input_payload),
         validator_name=FHIR_VALIDATOR_NAME,
         validator_version=FHIR_VALIDATOR_VERSION,
-        status="valid",
-        errors=(),
+        status="valid" if valid_envelope else "invalid",
+        errors=() if valid_envelope else ("invalid or missing FHIR resourceType",),
         warnings=(),
         created_at=created_at,
         format_version=FORMAT_VERSION,
