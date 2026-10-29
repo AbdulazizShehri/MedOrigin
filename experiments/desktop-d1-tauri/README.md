@@ -48,15 +48,18 @@ The UI Automation smoke test verifies all four fictional fixture IDs through **R
 
 Windows Sandbox is an optional, disposable **test environment**, not the application isolation mechanism for an installed MedOrigin desktop. Its availability depends on Windows edition, virtualization, and enabled Windows Sandbox prerequisites; do not silently enable OS features.
 
-After building the **synthetic-only local debug executable** (no installer), generate a profile from an approved local executable on a Windows host:
+After building the **synthetic-only local debug executable** (no installer), record its SHA-256 digest and compare that digest against an **independently approved build receipt**. A digest computed from an arbitrary downloaded executable does not establish its authenticity. The generator requires the caller-pinned 64-hex-character digest before creating the mapped directory; a mismatch fails before staging. Then generate a profile from that approved local executable on a Windows host:
 
 ```powershell
+$exe = 'D:\MedOrigin-D1-target\debug\medorigin-desktop-d1-preview.exe'
+$approvedSha256 = '<paste-reviewed-64-character-SHA256-digest>' # Must match independently reviewed build receipt
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File tests/windows-offline-sandbox-profile.ps1 `
-  -ExePath 'D:\MedOrigin-D1-target\debug\medorigin-desktop-d1-preview.exe' `
+  -ExePath $exe `
+  -ExpectedSha256 $approvedSha256 `
   -OutputDirectory "$env:TEMP\medorigin-d1-sandbox-rehearsal"
 ```
 
-The output directory must **not** already exist, and its parent must exist. Inspect `medorigin-synthetic-offline.wsb` before manually opening it with Windows Sandbox. The generated profile disables Sandbox networking, clipboard, redirection, microphone, vGPU, and printer; enables Protected Client; maps **only a SHA-256-verified copy of the one synthetic preview executable** read-only. It never automatically starts the executable or changes host firewall rules. Inside Sandbox, open `C:\MedOriginSyntheticOnly\medorigin-desktop-d1-preview.exe` manually, and run only fictional fixture checks. A separate WebView2 runtime may be unavailable in the clean Sandbox, which must be recorded as a failed/inconclusive rehearsal rather than bypassed.
+The output directory must **not** already exist, and its parent must exist. The generator verifies the binary against the **caller-pinned** SHA-256 before creating the output directory, then checks the staged copy against the same digest; its receipt prints `D1_SOURCE_SHA256`. This prevents accidental staging of an incorrectly named or different executable, but is not a substitute for binary signature/provenance verification. Inspect `medorigin-synthetic-offline.wsb` before manually opening it with Windows Sandbox. The generated profile disables Sandbox networking, clipboard, redirection, microphone, vGPU, and printer; enables Protected Client; maps **only a SHA-256-verified copy of the one synthetic preview executable** read-only. It never automatically starts the executable or changes host firewall rules. Inside Sandbox, open `C:\MedOriginSyntheticOnly\medorigin-desktop-d1-preview.exe` manually, and run only fictional fixture checks. A separate WebView2 runtime may be unavailable in the clean Sandbox, which must be recorded as a failed/inconclusive rehearsal rather than bypassed.
 
 ```powershell
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File tests/windows-offline-sandbox-profile-selftest.ps1
