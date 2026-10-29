@@ -69,6 +69,23 @@ This source-only regression **does not launch Windows Sandbox** and cannot attes
 
 Reference: [Microsoft — Windows Sandbox configuration](https://learn.microsoft.com/en-us/windows/security/threat-protection/windows-sandbox/windows-sandbox-configure-using-wsb-file).
 
+## Fail-closed normal-host Windows qualification (synthetic only)
+
+The standalone `tests/windows-host-qualification.ps1` combines four UI Automation fixture vectors and an actual process-tree TCP/UDP snapshot into a local audit receipt. Run it only on an authorized interactive Windows development host with an **independently reviewed SHA-256** for the exact debug executable. The output directory must not already exist:
+
+```powershell
+$exe = 'D:\MedOrigin-D1-target\debug\medorigin-desktop-d1-preview.exe'
+$approvedSha256 = '<approved-64-hex-SHA256-from-build-receipt>'
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File tests/windows-host-qualification.ps1 `
+  -ExePath $exe `
+  -ExpectedSha256 $approvedSha256 `
+  -AuditDirectory "$env:TEMP\medorigin-d1-host-qualification-new"
+```
+
+The runner verifies the exact executable name, fixed-drive paths, pinned hash and absent output directory *before* launching UI tests. Its `qualification.json` **always** records `network_isolation_qualified=false`, `clinical_qualified=false` and `release_qualified=false`, because a single socket snapshot cannot prove zero egress or replace packet capture and OS-level app-scoped enforcement. A detected external connection emits `D1_HOST_EGRESS_NO_GO`; failures exit nonzero and must not be suppressed. The detailed `network-process-tree.txt` contains network endpoints and remains **local by default**; inspect/redact it before ever sharing evidence. The runner stops the app it launched in a `finally` block, and does not modify the host firewall or run Windows Sandbox.
+
+`tests/windows-host-qualification-selftest.ps1` performs three source-only refusal regressions (wrong digest, incorrect executable name and relative output) without launching an app; the isolated Windows CI job runs those negative tests. The local 2026-10-29 hardware test on the existing D1 debug executable passed UIA 4/4 but detected **two established external TCP connections** among eight processes, so the runtime remains **NO-GO**. This test does not qualify a release and is not a fresh executable rebuild.
+
 ## Known blocks
 
 This independent D1 experiment must remain a **Draft** until a separately accepted topology/language decision (ADR-0003 + proposed ADR-0013), reviewed dependency locks/licenses/advisories, Windows/macOS/Linux app-level tests, verified zero network calls, IPC negative tests, WebView2 behavior, accessibility, process resource budgets and signed installer/uninstall lifecycle receipts. No release, tag, protected-main merge, PHI authorization or clinical-performance claim may be inferred from successful builds.
