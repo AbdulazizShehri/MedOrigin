@@ -1,0 +1,67 @@
+name: Experimental Native Rust D2 (no publish)
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "experiments/desktop-d2-native-egui/**"
+      - ".github/workflows/desktop-native-d2.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: medorigin-native-d2-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  synthetic-native-parity:
+    name: Native Rust synthetic parity (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 55
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    defaults:
+      run:
+        working-directory: experiments/desktop-d2-native-egui
+    steps:
+      - name: Checkout exact head without persistent credentials
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - name: Install pinned native Rust toolchain
+        shell: bash
+        run: rustup toolchain install 1.97.1 --profile minimal --component rustfmt --component clippy
+      - name: Install Linux native windowing headers
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev libxkbcommon-dev libwayland-dev libssl-dev
+      - name: Verify committed deterministic Cargo lock
+        shell: bash
+        run: |
+          test -f Cargo.lock
+          cargo +1.97.1 metadata --locked --no-deps --format-version 1 > /dev/null
+      - name: Verify Rust formatting
+        shell: bash
+        run: cargo +1.97.1 fmt --all -- --check
+      - name: Compile and test four fictional fixture vectors
+        shell: bash
+        run: cargo +1.97.1 test --locked --all-targets
+      - name: Deny compiler and Clippy warnings
+        shell: bash
+        run: cargo +1.97.1 clippy --locked --all-targets -- -D warnings
+      - name: Preserve dependency lock for license and security review
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: medorigin-native-d2-lock-${{ matrix.os }}
+          path: experiments/desktop-d2-native-egui/Cargo.lock
+          if-no-files-found: warn
+          retention-days: 7
+
+# No GUI execution, installer, tag, package upload, release, PHI, or model training.

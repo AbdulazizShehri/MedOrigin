@@ -1,0 +1,15 @@
+[package]
+name = "medorigin-desktop-d2-native-egui"
+version = "0.0.0"
+edition = "2024"
+rust-version = "1.95"
+publish = false
+license = "Apache-2.0"
+description = "Isolated synthetic-only native Rust GUI experiment with no WebView runtime"
+
+[dependencies]
+eframe = { version = "=0.36.0", default-features = false, features = ["default_fonts", "glow", "x11", "wayland"] }
+medorigin-desktop-d0-rust-prototype = { path = "../desktop-d0-rust" }
+
+[lints.rust]
+unsafe_code = "forbid"
