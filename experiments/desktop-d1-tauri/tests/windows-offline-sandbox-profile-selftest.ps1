@@ -86,10 +86,10 @@ try {
   # Refuse unmounted drive-letter roots: syntactically local-looking paths are
   # not sufficient, since an actual drive letter can also map to a network share.
   $missingDrive = @('Z','Y','X','W','V','U','T','S') | Where-Object {
-    ([IO.DriveInfo]::new(($_ + ':\\'))).DriveType -eq [IO.DriveType]::NoRootDirectory
+    ([IO.DriveInfo]::new(($_ + ':\'))).DriveType -eq [IO.DriveType]::NoRootDirectory
   } | Select-Object -First 1
   if (-not $missingDrive) { throw 'No unmounted drive available for fixed-drive refusal regression' }
-  $unmountedOutput = $missingDrive + ':\\medorigin-d1-refuse-' + [guid]::NewGuid().ToString('N')
+  $unmountedOutput = $missingDrive + ':\medorigin-d1-refuse-' + [guid]::NewGuid().ToString('N')
   $denied = $false
   try { & $generator -ExePath $source -OutputDirectory $unmountedOutput -ExpectedSha256 $approvedSha | Out-Null }
   catch { $denied = $true }
