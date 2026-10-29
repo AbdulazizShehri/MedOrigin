@@ -1,0 +1,78 @@
+name: Experimental MedOrigin Desktop D1 (no publish)
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "experiments/desktop-d1-tauri/**"
+      - "experiments/desktop-d0-rust/**"
+      - ".github/workflows/desktop-d1-preview.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: medorigin-d1-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  windows-preview-source:
+    name: Windows D1 Tauri source only
+    runs-on: windows-latest
+    timeout-minutes: 55
+    steps:
+      - name: Checkout immutable pull-request head
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha }}
+      - name: Node runtime
+        run: node --version; npm --version
+      - name: Install locked UI dependencies
+        working-directory: experiments/desktop-d1-tauri
+        run: npm ci --no-audit --no-fund
+      - name: Build offline-bundled React UI
+        working-directory: experiments/desktop-d1-tauri
+        run: npm run build
+      - name: Install pinned Rust compiler
+        run: rustup toolchain install 1.97.1 --profile minimal --component rustfmt
+      - name: Check Rust formatting
+        working-directory: experiments/desktop-d1-tauri/src-tauri
+        run: cargo +1.97.1 fmt --all -- --check
+      - name: Check locked desktop Rust
+        working-directory: experiments/desktop-d1-tauri/src-tauri
+        run: cargo +1.97.1 check --locked
+      - name: Test strictly synthetic local command bridge
+        working-directory: experiments/desktop-d1-tauri/src-tauri
+        run: cargo +1.97.1 test --locked --lib
+      - name: Assert no installer or network plugins enabled
+        shell: pwsh
+        run: |
+          $root = 'experiments/desktop-d1-tauri'
+          $config = Get-Content "$root/src-tauri/tauri.conf.json" -Raw | ConvertFrom-Json
+          if ($config.bundle.active -ne $false) { throw 'Packaging must remain disabled' }
+          if ($config.app.security.csp -notmatch "connect-src ipc: http://ipc.localhost") { throw 'Local-only Tauri IPC required' }
+          $capabilities = Get-Content "$root/src-tauri/capabilities/default.json" -Raw | ConvertFrom-Json
+          $extra = @($capabilities.permissions | Where-Object { $_ -ne 'core:default' })
+          if ($extra.Count -gt 0) { throw 'Unreviewed native capability' }
+          if (Test-Path "$root/src-tauri/target/release/bundle") { throw 'Bundling not authorized' }
+
+      - name: Parse source-controlled Windows UIA and egress probes
+        shell: pwsh
+        run: |
+          foreach ($file in @(
+            'experiments/desktop-d1-tauri/tests/windows-uia-smoke.ps1',
+            'experiments/desktop-d1-tauri/tests/windows-egress-snapshot.ps1',
+            'experiments/desktop-d1-tauri/tests/windows-egress-probe-selftest.ps1'
+          )) {
+            $tokens = $null
+            $parseErrors = $null
+            [System.Management.Automation.Language.Parser]::ParseFile(
+              (Resolve-Path $file).Path, [ref]$tokens, [ref]$parseErrors
+            ) | Out-Null
+            if ($parseErrors.Count -gt 0) { throw "PowerShell parse error in $file" }
+          }
+
+      - name: Fail-closed synthetic egress probe regression
+        shell: pwsh
+        run: powershell.exe -NoProfile -ExecutionPolicy Bypass -File experiments/desktop-d1-tauri/tests/windows-egress-probe-selftest.ps1
