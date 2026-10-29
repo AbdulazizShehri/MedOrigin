@@ -99,6 +99,81 @@ def test_public_fhir_dispatch_rejects_non_object_root(
     assert "FHIR resource must be a JSON object" in captured.err
 
 
+@pytest.mark.parametrize(
+    "invalid_root",
+    [
+        "{}",
+        '{"resourceType": null}',
+        '{"resourceType": 123}',
+        '{"resourceType": ""}',
+        '{"resourceType": "   "}',
+        '{"resourceType": "patient"}',
+        '{"resourceType": []}',
+    ],
+)
+@pytest.mark.parametrize("summary_only", [False, True])
+def test_fhir_cli_rejects_missing_or_invalid_resource_type(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    invalid_root: str,
+    summary_only: bool,
+) -> None:
+    source = tmp_path / "invalid-fhir-resource.json"
+    source.write_text(invalid_root, encoding="utf-8")
+    output_dir = tmp_path / "reports"
+    argv = [str(source), "--output-dir", str(output_dir)]
+    if summary_only:
+        argv.append("--summary-only")
+    assert fhir_cli.main(argv) == 1
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert "FHIR resourceType" in captured.err
+    assert "Traceback" not in captured.err
+    assert not output_dir.exists()
+
+
+@pytest.mark.parametrize(
+    "non_fhir_json",
+    [
+        '{"resourceType":"Patient","id":"x","id":"y"}',
+        '{"resourceType":"Patient","meta":{"versionId":"a","versionId":"b"}}',
+        '{"resourceType":"Patient","value":NaN}',
+        '{"resourceType":"Patient","value":Infinity}',
+        '{"resourceType":"Patient","value":-Infinity}',
+    ],
+)
+@pytest.mark.parametrize("summary_only", [False, True])
+def test_fhir_cli_rejects_duplicate_keys_and_nonfinite_numbers(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    non_fhir_json: str,
+    summary_only: bool,
+) -> None:
+    source = tmp_path / "invalid-fhir-json.json"
+    source.write_text(non_fhir_json, encoding="utf-8")
+    output_dir = tmp_path / "reports"
+    argv = [str(source), "--output-dir", str(output_dir)]
+    if summary_only:
+        argv.append("--summary-only")
+    assert fhir_cli.main(argv) == 1
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert "input read error:" in captured.err
+    assert "Traceback" not in captured.err
+    assert not output_dir.exists()
+
+
+def test_fhir_dispatch_rejects_missing_resource_type(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    source = tmp_path / "missing-resource-type.json"
+    source.write_text("{}", encoding="utf-8")
+    assert public_cli_main(["fhir", "validate", str(source)]) == 1
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert "FHIR resourceType" in captured.err
+
+
 def test_bare_legacy_fhir_file_dispatch_remains_supported(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
