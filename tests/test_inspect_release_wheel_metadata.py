@@ -23,7 +23,11 @@ SCRIPT = Path(__file__).resolve().parents[1] / "scripts" / "inspect_release_whee
 
 
 def inspect_wheel(
-    wheel: Path, *, expected_version: str | None = None, distribution: str = "medscale"
+    wheel: Path,
+    *,
+    expected_version: str | None = None,
+    distribution: str = "medscale",
+    require_core_only: bool = False,
 ) -> dict[str, Any]:
     """Exercise the operator CLI instead of importing scripts under an alias."""
     command = [
@@ -36,6 +40,8 @@ def inspect_wheel(
     ]
     if expected_version is not None:
         command.extend(["--expected-version", expected_version])
+    if require_core_only:
+        command.append("--require-core-only")
     completed = subprocess.run(command, check=False, text=True, capture_output=True)
     assert completed.returncode in (0, 2), completed.stderr
     data = json.loads(completed.stdout)
@@ -50,6 +56,8 @@ def _wheel(
     name: str = "medscale",
     version: str = "0.3.0",
     duplicate: bool = False,
+    extras: tuple[str, ...] = (),
+    requires: tuple[str, ...] = (),
 ) -> Path:
     message = Message()
     message["Metadata-Version"] = "2.3"
@@ -59,9 +67,43 @@ def _wheel(
         message["Project-URL"] = f"{key}, {url}"
     if duplicate:
         message["Project-URL"] = f"Homepage, {EXPECTED_URLS['Homepage']}"
+    for extra in extras:
+        message["Provides-Extra"] = extra
+    for requirement in requires:
+        message["Requires-Dist"] = requirement
     with zipfile.ZipFile(path, "w") as archive:
         archive.writestr(f"{name}-{version}.dist-info/METADATA", message.as_bytes())
     return path
+
+
+@pytest.mark.parametrize(
+    ("extras", "requires", "should_block"),
+    [
+        ((), (), False),
+        (("training-hf-sft",), (), True),
+        ((), ("pillow==12.3.0; extra == 'rq1-runtime-feasibility'",), True),
+        (
+            ("rq1-runtime-feasibility",),
+            ("accelerate==1.14.0; extra == 'rq1-runtime-feasibility'",),
+            True,
+        ),
+    ],
+)
+def test_strict_core_only_wheel_policy_is_fail_closed(
+    tmp_path: Path,
+    extras: tuple[str, ...],
+    requires: tuple[str, ...],
+    should_block: bool,
+) -> None:
+    wheel = _wheel(tmp_path / "synthetic-core-candidate.whl", extras=extras, requires=requires)
+    result = inspect_wheel(wheel, expected_version="0.3.0", require_core_only=True)
+    assert result["publication_authorized"] is False
+    if should_block:
+        assert result["status"] == "BLOCKED"
+        assert any("core-only" in issue for issue in result["issues"])
+    else:
+        assert result["status"] == "METADATA_QUALIFIED_ONLY"
+        assert result["issues"] == []
 
 
 def test_valid_metadata_is_not_publication_authorization(tmp_path: Path) -> None:
