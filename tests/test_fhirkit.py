@@ -41,6 +41,36 @@ def test_validate_fhir_always_available() -> None:
     assert report.format_version == "fhirkit-validation-report/v1"
 
 
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {},
+        {"resourceType": None},
+        {"resourceType": ""},
+        {"resourceType": " "},
+        {"resourceType": "patient"},
+        {"resourceType": 4},
+        {"resourceType": []},
+    ],
+)
+def test_local_fhir_validator_never_marks_missing_resource_type_valid(
+    payload: dict[str, object],
+) -> None:
+    """The public Python API must not make the CLI's rejected input look valid."""
+    report = validate_fhir(payload)
+    assert report.status == "invalid"
+    assert report.validator_name == FHIR_VALIDATOR_NAME
+    assert report.errors == ("invalid or missing FHIR resourceType",)
+    assert report.input_hash == content_hash(payload)
+
+
+def test_local_fhir_validator_rejects_non_object_python_input() -> None:
+    from medscale.fhirkit import FhirValidationError
+
+    with pytest.raises(FhirValidationError, match="FHIR resource must be a JSON object"):
+        validate_fhir([])  # type: ignore[arg-type]
+
+
 def test_report_hash_is_deterministic() -> None:
     report = validate_fhir(_rule_input())
     assert report_hash(report) == report_hash(report)
