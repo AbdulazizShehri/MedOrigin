@@ -460,27 +460,63 @@ def test_external_validator_rejects_undecodable_output_without_leaking_bytes(
     assert list(tmp_path.iterdir()) == []
 
 
-def test_external_validator_timeout_is_bounded_and_redacted(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+@pytest.mark.parametrize("stream", ["stdout", "stderr"])
+def test_external_validator_bounds_untrusted_output_and_cleans_scratch(
+    stream: str,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    import subprocess
+    import sys as _sys
 
     from medscale.fhirkit import UnavailableValidatorError, validate_fhir_with_validator
 
-    scratch_files: list[Path] = []
-
-    def timeout_runner(argv: list[str], **kwargs: object) -> None:
-        scratch_files.append(Path(argv[-1]))
-        assert kwargs["timeout"] == 120
-        raise subprocess.TimeoutExpired(argv, timeout=120)
-
-    monkeypatch.setattr("medscale.fhirkit.validate.subprocess.run", timeout_runner)
+    code = f"import sys; sys.{stream}.buffer.write(b'X' * (2 * 1024 * 1024)); sys.exit(0)"
     monkeypatch.setattr("medscale.fhirkit.validate.tempfile.tempdir", str(tmp_path))
-    with pytest.raises(UnavailableValidatorError, match="timed out") as exc:
-        validate_fhir_with_validator(_rule_input(), command=["fictional-validator"])
+    with pytest.raises(UnavailableValidatorError, match="output limit") as exc:
+        validate_fhir_with_validator(_rule_input(), command=[_sys.executable, "-c", code])
     assert str(tmp_path) not in str(exc.value)
-    assert scratch_files and not scratch_files[0].exists()
-    assert not scratch_files[0].parent.exists()
+    assert "XXXXX" not in str(exc.value)
+    assert list(tmp_path.iterdir()) == []
+
+
+@pytest.mark.parametrize("stream", ["stdout", "stderr"])
+def test_external_validator_output_limit_terminates_live_subprocess(
+    stream: str,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import sys as _sys
+
+    from medscale.fhirkit import UnavailableValidatorError, validate_fhir_with_validator
+
+    code = (
+        "import sys, time; "
+        f"sys.{stream}.buffer.write(b'X' * (2 * 1024 * 1024)); "
+        f"sys.{stream}.flush(); "
+        "time.sleep(30)"
+    )
+    monkeypatch.setattr("medscale.fhirkit.validate.tempfile.tempdir", str(tmp_path))
+    monkeypatch.setattr("medscale.fhirkit.validate._VALIDATOR_TIMEOUT_SECONDS", 5)
+    with pytest.raises(UnavailableValidatorError, match="output limit"):
+        validate_fhir_with_validator(_rule_input(), command=[_sys.executable, "-c", code])
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_external_validator_timeout_is_bounded_and_redacted(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    import sys as _sys
+
+    from medscale.fhirkit import UnavailableValidatorError, validate_fhir_with_validator
+
+    monkeypatch.setattr("medscale.fhirkit.validate.tempfile.tempdir", str(tmp_path))
+    monkeypatch.setattr("medscale.fhirkit.validate._VALIDATOR_TIMEOUT_SECONDS", 0.1)
+    with pytest.raises(UnavailableValidatorError, match="timed out") as exc:
+        validate_fhir_with_validator(
+            _rule_input(), command=[_sys.executable, "-c", "import time; time.sleep(5)"]
+        )
+    assert str(tmp_path) not in str(exc.value)
+    assert list(tmp_path.iterdir()) == []
 
 
 def test_external_validator_spawn_failure_is_redacted_and_cleans_scratch(
@@ -488,40 +524,33 @@ def test_external_validator_spawn_failure_is_redacted_and_cleans_scratch(
 ) -> None:
     from medscale.fhirkit import UnavailableValidatorError, validate_fhir_with_validator
 
-    scratch_files: list[Path] = []
-
-    def failed_runner(argv: list[str], **kwargs: object) -> None:
-        scratch_files.append(Path(argv[-1]))
-        raise OSError("private path /home/fictional/secret was inaccessible")
-
-    monkeypatch.setattr("medscale.fhirkit.validate.subprocess.run", failed_runner)
     monkeypatch.setattr("medscale.fhirkit.validate.tempfile.tempdir", str(tmp_path))
+    missing_executable = tmp_path / "fictional-no-such-validator"
     with pytest.raises(UnavailableValidatorError, match="could not be started") as exc:
-        validate_fhir_with_validator(_rule_input(), command=["fictional-validator"])
-    assert "private path" not in str(exc.value)
-    assert scratch_files and not scratch_files[0].exists()
-    assert not scratch_files[0].parent.exists()
+        validate_fhir_with_validator(_rule_input(), command=[str(missing_executable)])
+    assert str(tmp_path) not in str(exc.value)
+    assert list(tmp_path.iterdir()) == []
 
 
 def test_external_validator_nonzero_exit_does_not_echo_tool_output(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    import subprocess
+    import sys as _sys
 
     from medscale.fhirkit import UnavailableValidatorError, validate_fhir_with_validator
 
-    def failed_runner(argv: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
-        return subprocess.CompletedProcess(
-            argv, returncode=2, stdout="fictional PRIVATE_STDOUT", stderr="fictional PRIVATE_STDERR"
-        )
-
-    monkeypatch.setattr("medscale.fhirkit.validate.subprocess.run", failed_runner)
     monkeypatch.setattr("medscale.fhirkit.validate.tempfile.tempdir", str(tmp_path))
+    command = [
+        _sys.executable,
+        "-c",
+        "import sys; print('fictional PRIVATE_STDOUT'); "
+        "sys.stderr.write('fictional PRIVATE_STDERR'); sys.exit(2)",
+    ]
     with pytest.raises(UnavailableValidatorError, match="nonzero exit") as exc:
-        validate_fhir_with_validator(_rule_input(), command=["fictional-secret-validator"])
+        validate_fhir_with_validator(_rule_input(), command=command)
     assert "PRIVATE" not in str(exc.value)
-    assert "fictional-secret-validator" not in str(exc.value)
     assert str(tmp_path) not in str(exc.value)
+    assert list(tmp_path.iterdir()) == []
 
 
 @pytest.mark.parametrize(
