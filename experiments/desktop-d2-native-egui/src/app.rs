@@ -102,10 +102,10 @@ mod tests {
     #[test]
     fn synthetic_ui_view_model_never_uses_unapproved_data() {
         let mut app = MedOriginNativePreview::default();
-        for selected in 0..FIXTURES.len() {
+        for (selected, fixture) in FIXTURES.iter().enumerate() {
             app.selected = selected;
             let actual = app.hash_selected().expect("synthetic fixture must match");
-            assert!(actual.contains(FIXTURES[selected].sha256));
+            assert!(actual.contains(fixture.sha256));
         }
     }
 

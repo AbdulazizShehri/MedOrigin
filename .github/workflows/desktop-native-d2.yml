@@ -41,6 +41,10 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev libxkbcommon-dev libwayland-dev libssl-dev
+      - name: Refuse unsafe native-host qualification inputs (no GUI launched)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: powershell.exe -NoProfile -ExecutionPolicy Bypass -File tests/windows-native-host-qualification-selftest.ps1
       - name: Verify committed deterministic Cargo lock
         shell: bash
         run: |
