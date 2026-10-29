@@ -25,7 +25,22 @@ def store_report(report: ValidationReport, root: Path | None = None) -> Path:
     target_dir = fhirkit_reports_dir(root) / report_hash_value
     target_path = target_dir / _DEFAULT_FILENAME
     target_path.parent.mkdir(parents=True, exist_ok=True)
-    target_path.write_text(report_json, encoding="utf-8", newline="\n")
+    try:
+        # Exclusive creation is atomic: never truncate an existing artifact or
+        # follow a pre-existing report.json symlink to an unrelated user file.
+        with target_path.open("x", encoding="utf-8", newline="\n") as output:
+            output.write(report_json)
+    except FileExistsError as exc:
+        if target_path.is_symlink():
+            raise FhirStorageError("refusing a symlink at the FHIR report path") from exc
+        try:
+            existing = target_path.read_text(encoding="utf-8")
+        except (OSError, UnicodeError) as read_exc:
+            raise FhirStorageError("existing FHIR report is unreadable") from read_exc
+        if existing != report_json:
+            raise FhirStorageError("existing FHIR report differs from canonical content") from exc
+    except OSError as exc:
+        raise FhirStorageError("unable to create FHIR report artifact") from exc
     return target_path
 
 

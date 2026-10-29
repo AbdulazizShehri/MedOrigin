@@ -9,6 +9,7 @@ import pytest
 
 from medscale.fhirkit import (
     FHIR_VALIDATOR_NAME,
+    FhirStorageError,
     InvalidReportError,
     ValidationReport,
     load_report_from_json,
@@ -54,6 +55,44 @@ def test_report_round_trip_storage(tmp_path: Path) -> None:
     loaded = load_report_from_json(stored.read_text(encoding="utf-8"))
     assert loaded.format_version == report.format_version
     assert loaded.input_hash == report.input_hash
+
+
+def test_existing_report_artifact_cannot_be_overwritten(tmp_path: Path) -> None:
+    report = validate_fhir(_rule_input())
+    target = store_report(report, root=tmp_path)
+    target.write_text("preserve these existing bytes", encoding="utf-8")
+
+    with pytest.raises(FhirStorageError):
+        store_report(report, root=tmp_path)
+    assert target.read_text(encoding="utf-8") == "preserve these existing bytes"
+
+
+def test_repeat_store_preserves_original_file_timestamp(tmp_path: Path) -> None:
+    import os
+
+    report = validate_fhir(_rule_input())
+    target = store_report(report, root=tmp_path)
+    preserved_ns = 946684800_000_000_000
+    os.utime(target, ns=(preserved_ns, preserved_ns))
+    assert store_report(report, root=tmp_path) == target
+    assert target.stat().st_mtime_ns == preserved_ns
+
+
+def test_existing_symlink_artifact_cannot_overwrite_target(tmp_path: Path) -> None:
+    report = validate_fhir(_rule_input())
+    target = fhirkit_reports_dir(tmp_path) / report_hash(report) / "report.json"
+    target.parent.mkdir(parents=True)
+    victim = tmp_path / "unrelated-user-file.txt"
+    victim.write_text("preserve unrelated data", encoding="utf-8")
+    try:
+        target.symlink_to(victim)
+    except (OSError, NotImplementedError) as exc:
+        pytest.skip(f"symlink creation not supported by this host: {exc}")
+
+    with pytest.raises(FhirStorageError):
+        store_report(report, root=tmp_path)
+    assert target.is_symlink()
+    assert victim.read_text(encoding="utf-8") == "preserve unrelated data"
 
 
 def test_validate_report_schema_rejects_invalid_shape() -> None:
