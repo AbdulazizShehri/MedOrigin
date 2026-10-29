@@ -8,6 +8,11 @@ param(
 )
 $ErrorActionPreference = 'Stop'
 
+# Refuse UNC, drive-relative and other nonlocal inputs BEFORE reading the file.
+# A normal file lookup or hash on a UNC path could otherwise trigger SMB I/O.
+if ($ExePath -notmatch '^[A-Za-z]:\\' -or $OutputDirectory -notmatch '^[A-Za-z]:\\') {
+  throw 'Only absolute local drive paths are allowed'
+}
 $source = Get-Item -LiteralPath $ExePath -ErrorAction Stop
 if ($source.PSIsContainer -or $source.Name -cne 'medorigin-desktop-d1-preview.exe') {
   throw 'Only the synthetic MedOrigin D1 preview executable is permitted'
