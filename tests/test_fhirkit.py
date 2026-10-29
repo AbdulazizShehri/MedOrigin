@@ -293,7 +293,7 @@ def test_storage_contract_is_content_addressed() -> None:
 def _echo_empty_report_command() -> list[str]:
     import sys as _sys
 
-    return [_sys.executable, "-c", "print('{}')"]
+    return [_sys.executable, "-c", 'print(\'{"status":"valid","errors":[]}\')']
 
 
 def _echo_input_path_command() -> list[str]:
@@ -302,7 +302,8 @@ def _echo_input_path_command() -> list[str]:
     return [
         _sys.executable,
         "-c",
-        "import json, sys; print(json.dumps({'warnings': [sys.argv[1]]}))",
+        "import json, sys; "
+        "print(json.dumps({'status':'valid', 'errors': [], 'warnings': [sys.argv[1]]}))",
     ]
 
 
@@ -368,6 +369,41 @@ def test_external_validator_nonzero_exit_does_not_echo_tool_output(
     assert "PRIVATE" not in str(exc.value)
     assert "fictional-secret-validator" not in str(exc.value)
     assert str(tmp_path) not in str(exc.value)
+
+
+@pytest.mark.parametrize(
+    "unqualified_output",
+    [
+        "",
+        "{}",
+        "[]",
+        "42",
+        '{"status":"unknown"}',
+        '{"resourceType":"OperationOutcome","issue":[]}',
+    ],
+)
+def test_external_validator_requires_explicit_supported_status(
+    unqualified_output: str,
+) -> None:
+    import sys as _sys
+
+    from medscale.fhirkit import InvalidReportError, validate_fhir_with_validator
+
+    command = [_sys.executable, "-c", f"print({unqualified_output!r})"]
+    with pytest.raises(InvalidReportError, match="explicit valid or invalid status"):
+        validate_fhir_with_validator(_rule_input(), command=command)
+
+
+def test_external_validator_honors_invalid_status_without_errors() -> None:
+    import sys as _sys
+
+    from medscale.fhirkit import validate_fhir_with_validator
+
+    response = '{"status":"invalid","errors":[]}'
+    command = [_sys.executable, "-c", f"print({response!r})"]
+    report = validate_fhir_with_validator(_rule_input(), command=command)
+    assert report.status == "invalid"
+    assert report.errors == ()
 
 
 def test_external_validator_never_clobbers_cwd_file(
