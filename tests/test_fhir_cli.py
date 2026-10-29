@@ -222,6 +222,46 @@ def test_fhir_cli_valid_json_stores_report(tmp_path: Path, monkeypatch: pytest.M
     assert reports, "expected a stored FHIR validation report"
 
 
+def test_fhir_cli_storage_root_file_returns_one_without_traceback(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    payload = {"resourceType": "Patient", "id": "fictional"}
+    source = tmp_path / "synthetic.json"
+    source.write_text(json.dumps(payload), encoding="utf-8")
+    output_root = tmp_path / "keep-this-file.txt"
+    output_root.write_text("unaltered user bytes", encoding="utf-8")
+
+    assert fhir_cli.main([str(source), "--output-dir", str(output_root)]) == 1
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert "report storage error:" in captured.err
+    assert "Traceback" not in captured.err
+    assert output_root.read_text(encoding="utf-8") == "unaltered user bytes"
+
+
+def test_fhir_cli_conflicting_existing_report_returns_one_without_clobber(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    from medscale.fhirkit import report_hash, validate_fhir
+    from medscale.fhirkit.storage import fhirkit_reports_dir
+
+    payload = {"resourceType": "Patient", "id": "fictional"}
+    source = tmp_path / "synthetic.json"
+    source.write_text(json.dumps(payload), encoding="utf-8")
+    output_root = tmp_path / "reports"
+    digest = report_hash(validate_fhir(payload))
+    report_path = fhirkit_reports_dir(output_root) / digest / "report.json"
+    report_path.parent.mkdir(parents=True)
+    report_path.write_text("preserve corrupted fixture bytes", encoding="utf-8")
+
+    assert fhir_cli.main([str(source), "--output-dir", str(output_root)]) == 1
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert "report storage error:" in captured.err
+    assert "Traceback" not in captured.err
+    assert report_path.read_text(encoding="utf-8") == "preserve corrupted fixture bytes"
+
+
 def test_fhir_cli_invalid_json_returns_nonzero(tmp_path: Path) -> None:
     input_file = tmp_path / "bad.json"
     input_file.write_text("{not json", encoding="utf-8")

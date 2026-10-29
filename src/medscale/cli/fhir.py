@@ -13,6 +13,7 @@ import re
 import sys
 from pathlib import Path
 
+from medscale.fhirkit.errors import FhirStorageError
 from medscale.fhirkit.report import load_report_from_json, report_to_json
 from medscale.fhirkit.storage import store_report
 from medscale.fhirkit.validate import validate_fhir
@@ -117,7 +118,13 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     report = validate_fhir(payload, created_at=args.created_at)
-    path = store_report(report, root=args.output_dir)
+    try:
+        path = store_report(report, root=args.output_dir)
+    except (FhirStorageError, OSError):
+        # No traceback or private filesystem paths in the CLI's diagnostic.
+        # Never print a successful report if it was not safely persisted.
+        print("report storage error: unable to persist FHIR report", file=sys.stderr)
+        return 1
     print(report_to_json(load_report_from_json(report_to_json(report))))
     print(f"report stored at: {path}", file=sys.stderr)
     return 0
