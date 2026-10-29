@@ -20,6 +20,24 @@ D1 source candidate, the Python Research Core or the Workspace.
   the verification button. This added Rust/Windows accessibility dependencies
   to the locked dependency graph; their licenses and advisories require review.
 
+## Browser/network dependency regression guard
+
+`tests/browser_free_boundary.rs` runs automatically with `cargo test
+--locked --all-targets` in the existing Windows/Linux/macOS matrix. It checks
+that D2's direct dependencies remain the native `eframe` UI plus the existing
+D0 Rust contract, AccessKit remains enabled without eframe default features,
+the committed lock contains no known WebView2/browser engines or selected HTTP
+client/server stacks, and authored `src/*.rs` files do not introduce common
+direct socket, browser, or external process-launch entry points. Four regression
+tests include deliberately forbidden synthetic examples to verify the guard.
+
+This is a **narrow code-review tripwire**, not a complete static analysis,
+supply-chain guarantee, operating-system sandbox or packet-capture proof.
+Platform-specific dependencies such as `tokio` and `web-sys` may appear in the
+multi-platform lockfile without showing that D2 sent any network traffic. Any
+intentional feature or dependency expansion needs separate review and a new
+audited baseline; never relax this gate silently to enable clinical data.
+
 ## Build and qualification
 Use Rust 1.97.1 and checked-in Cargo.lock, from this folder:
 
