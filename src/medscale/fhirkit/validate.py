@@ -212,14 +212,19 @@ def validate_fhir_with_validator(
     if "validation-report" in parsed or "ValidationReport" in parsed:
         validator_name = parsed.get("validator_name") or validator_name
         validator_version = parsed.get("validator_version") or validator_version
+    # Only accept simple text-array diagnostics from this custom protocol.
+    # Arbitrary JSON values must not be stringified into user-facing reports
+    # (HL7 OperationOutcome issues require a separate semantic adapter).
+    for field_name in ("errors", "issue", "warnings"):
+        value = parsed.get(field_name)
+        if value is not None and (
+            not isinstance(value, list) or not all(isinstance(item, str) for item in value)
+        ):
+            raise InvalidReportError("external validator diagnostics must be text arrays")
     raw_errors = parsed.get("errors") or parsed.get("issue") or ()
     raw_warnings = parsed.get("warnings") or ()
-    if not isinstance(raw_errors, (list, tuple)):
-        raw_errors = (str(raw_errors),)
-    if not isinstance(raw_warnings, (list, tuple)):
-        raw_warnings = (str(raw_warnings),)
-    errors = tuple(str(item) for item in raw_errors)
-    warnings = tuple(str(item) for item in raw_warnings)
+    errors = tuple(raw_errors)
+    warnings = tuple(raw_warnings)
     if not errors and validator_name != FHIR_VALIDATOR_NAME:
         warnings = (*warnings, "validator parsed output without explicit errors")
 
