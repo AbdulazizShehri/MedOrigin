@@ -276,6 +276,51 @@ def _echo_input_path_command() -> list[str]:
     ]
 
 
+def test_external_validator_timeout_is_bounded_and_redacted(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    import subprocess
+
+    import medscale.fhirkit.validate as validator_mod
+    from medscale.fhirkit import UnavailableValidatorError, validate_fhir_with_validator
+
+    scratch_files: list[Path] = []
+
+    def timeout_runner(argv: list[str], **kwargs: object) -> None:
+        scratch_files.append(Path(argv[-1]))
+        assert kwargs["timeout"] == 120
+        raise subprocess.TimeoutExpired(argv, timeout=120)
+
+    monkeypatch.setattr(validator_mod.subprocess, "run", timeout_runner)
+    monkeypatch.setattr(validator_mod.tempfile, "tempdir", str(tmp_path))
+    with pytest.raises(UnavailableValidatorError, match="timed out") as exc:
+        validate_fhir_with_validator(_rule_input(), command=["fictional-validator"])
+    assert str(tmp_path) not in str(exc.value)
+    assert scratch_files and not scratch_files[0].exists()
+    assert not scratch_files[0].parent.exists()
+
+
+def test_external_validator_spawn_failure_is_redacted_and_cleans_scratch(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    import medscale.fhirkit.validate as validator_mod
+    from medscale.fhirkit import UnavailableValidatorError, validate_fhir_with_validator
+
+    scratch_files: list[Path] = []
+
+    def failed_runner(argv: list[str], **kwargs: object) -> None:
+        scratch_files.append(Path(argv[-1]))
+        raise OSError("private path /home/fictional/secret was inaccessible")
+
+    monkeypatch.setattr(validator_mod.subprocess, "run", failed_runner)
+    monkeypatch.setattr(validator_mod.tempfile, "tempdir", str(tmp_path))
+    with pytest.raises(UnavailableValidatorError, match="could not be started") as exc:
+        validate_fhir_with_validator(_rule_input(), command=["fictional-validator"])
+    assert "private path" not in str(exc.value)
+    assert scratch_files and not scratch_files[0].exists()
+    assert not scratch_files[0].parent.exists()
+
+
 def test_external_validator_never_clobbers_cwd_file(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
