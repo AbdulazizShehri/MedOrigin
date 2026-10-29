@@ -42,8 +42,8 @@ function Get-NetUDPEndpoint {
   [CmdletBinding()] param()
   if ('__SCENARIO__' -eq 'udp-error') { throw 'synthetic UDP query failure' }
   if ('__SCENARIO__' -eq 'udp-bound' -or '__SCENARIO__' -eq 'child-udp') {
-    $pid = if ('__SCENARIO__' -eq 'child-udp') { 12346 } else { 12345 }
-    [pscustomobject]@{ OwningProcess = $pid; LocalAddress = '0.0.0.0'; LocalPort = 5353 }
+    $ownerPid = if ('__SCENARIO__' -eq 'child-udp') { 12346 } else { 12345 }
+    [pscustomobject]@{ OwningProcess = $ownerPid; LocalAddress = '0.0.0.0'; LocalPort = 5353 }
   }
 }
 & '__PROBE__' -RootPid 12345
