@@ -74,7 +74,16 @@ try {
       throw ('Unapproved source hash allowed staging: ' + $scenario.name)
     }
   }
-  Write-Output 'D1_OFFLINE_SANDBOX_PROFILE_SELFTEST_PASS (pinned SHA-256; source-only; sandbox NOT launched)'
+  # A path outside an absolute local drive is rejected before any file reads.
+  $relativeOutput = 'd1-should-not-create-' + [guid]::NewGuid().ToString('N')
+  $denied = $false
+  try { & $generator -ExePath $source -OutputDirectory $relativeOutput -ExpectedSha256 $approvedSha | Out-Null }
+  catch { $denied = $true }
+  if (-not $denied -or (Test-Path -LiteralPath $relativeOutput)) {
+    Remove-Item -LiteralPath $relativeOutput -Recurse -Force -ErrorAction SilentlyContinue
+    throw 'Non-absolute output path was not rejected before staging'
+  }
+  Write-Output 'D1_OFFLINE_SANDBOX_PROFILE_SELFTEST_PASS (pinned SHA-256; local paths; source-only; sandbox NOT launched)'
 }
 finally {
   Remove-Item -LiteralPath $root -Recurse -Force -ErrorAction SilentlyContinue
