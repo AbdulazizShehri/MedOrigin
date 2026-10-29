@@ -7,7 +7,11 @@ try {
   $source = Join-Path $root 'medorigin-desktop-d1-preview.exe'
   [IO.File]::WriteAllBytes($source, [byte[]](0x4d, 0x5a, 0x00, 0x01))
   $output = Join-Path $root 'profile & synthetic'
-  $logs = @(& $generator -ExePath $source -OutputDirectory $output)
+  $approvedSha = (Get-FileHash -LiteralPath $source -Algorithm SHA256).Hash
+  $logs = @(& $generator -ExePath $source -OutputDirectory $output -ExpectedSha256 $approvedSha)
+  if (-not ($logs -match ('D1_SOURCE_SHA256=' + $approvedSha))) {
+    throw 'Staging receipt omitted the pinned source digest'
+  }
   if (-not ($logs -match 'D1_SANDBOX_PROFILE_CREATED=')) {
     throw 'Generator did not emit profile path'
   }
@@ -51,12 +55,26 @@ try {
   $bad = Join-Path $root 'not-the-d1-preview.exe'
   [IO.File]::WriteAllBytes($bad, [byte[]](0x4d, 0x5a))
   $denied = $false
-  try { & $generator -ExePath $bad -OutputDirectory (Join-Path $root 'bad-output') | Out-Null }
+  try { & $generator -ExePath $bad -OutputDirectory (Join-Path $root 'bad-output') -ExpectedSha256 $approvedSha | Out-Null }
   catch { $denied = $true }
   if (-not $denied -or (Test-Path -LiteralPath (Join-Path $root 'bad-output'))) {
     throw 'Unexpected executable name was not rejected before staging'
   }
-  Write-Output 'D1_OFFLINE_SANDBOX_PROFILE_SELFTEST_PASS (source-only; sandbox NOT launched)'
+  # A correctly named file with an unexpected digest is not authorized to stage.
+  $wrongSha = if ($approvedSha -eq ('0' * 64)) { '1' * 64 } else { '0' * 64 }
+  foreach ($scenario in @(
+    @{ name = 'wrong-digest'; digest = $wrongSha },
+    @{ name = 'malformed-digest'; digest = 'not-a-sha256' }
+  )) {
+    $denied = $false
+    $rejectedOutput = Join-Path $root $scenario.name
+    try { & $generator -ExePath $source -OutputDirectory $rejectedOutput -ExpectedSha256 $scenario.digest | Out-Null }
+    catch { $denied = $true }
+    if (-not $denied -or (Test-Path -LiteralPath $rejectedOutput)) {
+      throw ('Unapproved source hash allowed staging: ' + $scenario.name)
+    }
+  }
+  Write-Output 'D1_OFFLINE_SANDBOX_PROFILE_SELFTEST_PASS (pinned SHA-256; source-only; sandbox NOT launched)'
 }
 finally {
   Remove-Item -LiteralPath $root -Recurse -Force -ErrorAction SilentlyContinue
