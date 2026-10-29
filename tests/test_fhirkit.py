@@ -102,6 +102,45 @@ def test_report_hash_is_deterministic() -> None:
     assert len(report_hash(report)) == 64
 
 
+@pytest.mark.parametrize(
+    "bad_report_json",
+    [
+        "{",
+        '{"status":"valid","status":"invalid"}',
+        '{"warnings":[NaN]}',
+        '{"warnings":[Infinity]}',
+        '{"warnings":[1e999]}',
+        '{"errors":"not-an-array"}',
+        '{"warnings":{"not":"an array"}}',
+        '{"errors":[{"private":"not a message"}]}',
+        '{"errors":[false]}',
+        '{"warnings":[4]}',
+    ],
+)
+def test_load_report_rejects_malformed_or_ambiguous_json(
+    bad_report_json: str,
+) -> None:
+    with pytest.raises(InvalidReportError) as exc:
+        load_report_from_json(bad_report_json)
+    assert bad_report_json not in str(exc.value)
+
+
+def test_load_report_rejects_duplicate_status_without_leaking_storage_details(
+    tmp_path: Path,
+) -> None:
+    report = validate_fhir(_rule_input())
+    saved = store_report(report, root=tmp_path)
+    clean = saved.read_text(encoding="utf-8")
+    assert '"status":"valid"' in clean
+    saved.write_text(
+        clean.replace('"status":"valid"', '"status":"invalid","status":"valid"'),
+        encoding="utf-8",
+    )
+    with pytest.raises(FhirStorageError, match="invalid or noncanonical") as exc:
+        load_report(report_hash(report), root=tmp_path)
+    assert 'invalid","status' not in str(exc.value)
+
+
 def test_report_round_trip_storage(tmp_path: Path) -> None:
     report = validate_fhir(_rule_input())
     stored = store_report(report, root=tmp_path)
