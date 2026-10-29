@@ -584,6 +584,61 @@ def test_external_validator_rejects_ambiguous_or_nonfinite_json_output(
     assert invalid_validator_output not in str(exc.value)
 
 
+@pytest.mark.parametrize(
+    "invalid_output",
+    [
+        '{"status":"valid","errors":"fictional confidential error"}',
+        '{"status":"valid","errors":{"detail":"fictional confidential error"}}',
+        '{"status":"valid","errors":[1]}',
+        '{"status":"valid","errors":[false]}',
+        '{"status":"valid","errors":[{"severity":"error"}]}',
+        '{"status":"valid","warnings":"fictional confidential warning"}',
+        '{"status":"valid","warnings":[{"detail":"fictional confidential warning"}]}',
+        '{"status":"valid","warnings":[null]}',
+        '{"status":"invalid","issue":{"detail":"fictional confidential issue"}}',
+        '{"status":"valid","errors":[],"issue":[false]}',
+    ],
+)
+def test_external_validator_rejects_untyped_diagnostics_without_echo(
+    invalid_output: str,
+) -> None:
+    import sys as _sys
+
+    from medscale.fhirkit import InvalidReportError, validate_fhir_with_validator
+
+    command = [_sys.executable, "-c", f"print({invalid_output!r})"]
+    with pytest.raises(InvalidReportError, match="diagnostics") as exc:
+        validate_fhir_with_validator(_rule_input(), command=command)
+    assert invalid_output not in str(exc.value)
+    assert "confidential" not in str(exc.value)
+
+
+@pytest.mark.parametrize(
+    ("payload", "expected_status", "expected_errors", "expected_warnings"),
+    [
+        ('{"status":"valid","warnings":["fictional notice"]}', "valid", (), ("fictional notice",)),
+        ('{"status":"invalid","errors":["fictional error"]}', "invalid", ("fictional error",), ()),
+        ('{"status":"valid","issue":["fictional issue"]}', "invalid", ("fictional issue",), ()),
+    ],
+)
+def test_external_validator_preserves_text_diagnostic_protocol(
+    payload: str,
+    expected_status: str,
+    expected_errors: tuple[str, ...],
+    expected_warnings: tuple[str, ...],
+) -> None:
+    import sys as _sys
+
+    from medscale.fhirkit import validate_fhir_with_validator
+
+    report = validate_fhir_with_validator(
+        _rule_input(), command=[_sys.executable, "-c", f"print({payload!r})"]
+    )
+    assert report.status == expected_status
+    assert report.errors == expected_errors
+    assert report.warnings == expected_warnings
+
+
 def test_external_validator_never_clobbers_cwd_file(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
