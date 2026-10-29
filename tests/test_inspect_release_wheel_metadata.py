@@ -58,6 +58,7 @@ def _wheel(
     duplicate: bool = False,
     extras: tuple[str, ...] = (),
     requires: tuple[str, ...] = (),
+    metadata_dir: str | None = None,
 ) -> Path:
     message = Message()
     message["Metadata-Version"] = "2.3"
@@ -72,8 +73,27 @@ def _wheel(
     for requirement in requires:
         message["Requires-Dist"] = requirement
     with zipfile.ZipFile(path, "w") as archive:
-        archive.writestr(f"{name}-{version}.dist-info/METADATA", message.as_bytes())
+        archive.writestr(
+            f"{metadata_dir or f'{name}-{version}.dist-info'}/METADATA",
+            message.as_bytes(),
+        )
     return path
+
+
+@pytest.mark.parametrize(
+    "metadata_dir",
+    [
+        "nested/medscale-0.3.0.dist-info",
+        "unrelated-0.3.0.dist-info",
+        "medscale-9.9.9.dist-info",
+    ],
+)
+def test_core_wheel_rejects_unbound_metadata_location(tmp_path: Path, metadata_dir: str) -> None:
+    wheel = _wheel(tmp_path / "synthetic-candidate.whl", metadata_dir=metadata_dir)
+    result = inspect_wheel(wheel, expected_version="0.3.0", require_core_only=True)
+    assert result["status"] == "BLOCKED"
+    assert result["publication_authorized"] is False
+    assert any("METADATA path" in issue for issue in result["issues"])
 
 
 @pytest.mark.parametrize(
