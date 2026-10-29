@@ -69,6 +69,12 @@ def main(argv: list[str] | None = None) -> int:
         print(f"input read error: {exc}", file=sys.stderr)
         return 1
 
+    # A FHIR resource cannot have a scalar or array JSON root. Reject these
+    # before the summary-only shortcut or any content-addressed report writes.
+    if not isinstance(payload, dict):
+        print("input read error: FHIR resource must be a JSON object", file=sys.stderr)
+        return 1
+
     if args.summary_only:
         print(json.dumps(payload, sort_keys=True, ensure_ascii=False))
         return 0
