@@ -13,6 +13,10 @@ try {
     @{ name = 'missing-creation'; expected = 1; marker = 'D1 root creation timestamp unavailable' },
     @{ name = 'root-exit-mid-snapshot'; expected = 1; marker = 'D1 root process changed during snapshot' },
     @{ name = 'pid-reused'; expected = 1; marker = 'D1 root process changed during snapshot' },
+    @{ name = 'child-exit-mid-snapshot'; expected = 1; marker = 'D1 child process changed during snapshot' },
+    @{ name = 'child-pid-reused'; expected = 1; marker = 'D1 child process changed during snapshot' },
+    @{ name = 'child-reparented'; expected = 1; marker = 'D1 child process changed during snapshot' },
+    @{ name = 'missing-child-creation'; expected = 1; marker = 'D1 child process changed during snapshot' },
     @{ name = 'query-error'; expected = 1; marker = 'synthetic socket query failure' },
     @{ name = 'process-error'; expected = 1; marker = 'synthetic process query failure' },
     @{ name = 'udp-error'; expected = 1; marker = 'synthetic UDP query failure' },
@@ -35,8 +39,18 @@ function Get-CimInstance {
   if ('__SCENARIO__' -eq 'missing-creation') { $creation = $null }
   [pscustomobject]@{ ProcessId = 12345; ParentProcessId = 0; CreationDate = $creation }
   if ('__SCENARIO__' -eq 'grandchild-external') {
-    [pscustomobject]@{ ProcessId = 23456; ParentProcessId = 12345 }
-    [pscustomobject]@{ ProcessId = 34567; ParentProcessId = 23456 }
+    [pscustomobject]@{ ProcessId = 23456; ParentProcessId = 12345; CreationDate = '2026-10-29T00:00:01' }
+    [pscustomobject]@{ ProcessId = 34567; ParentProcessId = 23456; CreationDate = '2026-10-29T00:00:02' }
+  }
+  if ('__SCENARIO__' -in @('child-exit-mid-snapshot','child-pid-reused','child-reparented','missing-child-creation')) {
+    if (-not ('__SCENARIO__' -eq 'child-exit-mid-snapshot' -and $script:processQueries -gt 1)) {
+      $childCreation = '2026-10-29T00:00:01'
+      if ('__SCENARIO__' -eq 'missing-child-creation') { $childCreation = $null }
+      if ('__SCENARIO__' -eq 'child-pid-reused' -and $script:processQueries -gt 1) { $childCreation = '2026-10-29T00:00:03' }
+      $childParent = 12345
+      if ('__SCENARIO__' -eq 'child-reparented' -and $script:processQueries -gt 1) { $childParent = 45678 }
+      [pscustomobject]@{ ProcessId = 23456; ParentProcessId = $childParent; CreationDate = $childCreation }
+    }
   }
   if ('__SCENARIO__' -eq 'unrelated-external') {
     [pscustomobject]@{ ProcessId = 45678; ParentProcessId = 0 }
@@ -87,4 +101,4 @@ exit $LASTEXITCODE
 finally {
   Remove-Item -LiteralPath $testDir -Recurse -Force -ErrorAction SilentlyContinue
 }
-Write-Output 'D1_EGRESS_PROBE_12_OF_12_PASS (mocked sockets only; NOT zero-egress proof)'
+Write-Output 'D1_EGRESS_PROBE_16_OF_16_PASS (mocked sockets only; NOT zero-egress proof)'
