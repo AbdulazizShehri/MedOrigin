@@ -10,6 +10,7 @@
 - No application HTTP server in the compiled preview, opener/shell/filesystem/updater plugin, remote assets, application telemetry, model weights, Python worker, application network permission, patient records or EHR interaction. Vite's localhost server is **development-only**. **WebView2 itself may contact external services** even when the app has no network plugin; this is not yet an offline/zero-egress-qualified runtime.
 - Tauri capability permits core window functionality only; CSP restricts application fetch to local Tauri IPC, **not WebView2's own background network traffic**. Packaging is disabled (`bundle.active=false`), and the app version is intentionally `0.0.0`.
 - Rust errors are stable non-sensitive codes. No user-controlled path, URL or file contents enters the command.
+- Frontend validation now fails closed on unexpected native preview safety flags or a fixture hash response with mismatched ID, contract, digest, payload byte count or release flags. The dependency-free Node test validates all four fixed vectors and adversarial responses; it does not establish runtime network isolation, clinical validation or release readiness.
 
 ## Local developer qualification (free tooling)
 
@@ -17,6 +18,7 @@
 cd experiments/desktop-d1-tauri
 npm ci --no-audit --no-fund
 npm run build
+node --experimental-strip-types --test tests/nativeContract.test.mjs
 cd src-tauri
 cargo fmt --all -- --check
 cargo check --locked

@@ -34,6 +34,9 @@ jobs:
       - name: Build offline-bundled React UI
         working-directory: experiments/desktop-d1-tauri
         run: npm run build
+      - name: Fail-closed native bridge response regression
+        working-directory: experiments/desktop-d1-tauri
+        run: node --experimental-strip-types --test tests/nativeContract.test.mjs
       - name: Install pinned Rust compiler
         run: rustup toolchain install 1.97.1 --profile minimal --component rustfmt
       - name: Check Rust formatting
