@@ -54,6 +54,20 @@ The window harness invokes the independent process-tree snapshot repeatedly. It 
 
 **Observed security NO-GO on Windows, 2026-10-29:** With the local D1 debug preview running, `msedgewebview2.exe` descendants established **external IPv6 TCP port 443** connections (two to three in repeated snapshots). The same problem persisted with `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS='--disable-background-networking --disable-component-update'`. This is a runtime observation, not proof of what content was sent or whether the app initiated the traffic. Do **not** claim the desktop is zero-egress/offline-isolated, or allow PHI, release, or clinical use. Any future resolution requires a separately reviewed, application-scoped OS isolation policy and packet-level verification; do not disable system-wide WebView2 security updates or firewall other applications.
 
+## Optional native MXC network-denied developer experiment (Windows)
+
+For an **authorized interactive Windows test machine** with native MXC support and Codex CLI 0.162 or later, the following free **sandbox subcommand** (no model invocation or paid API) can bound a D1 developer preview without changing the host firewall, Windows service configuration, WebView2 updates, or other applications:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File tests/windows-mxc-offline-qualification.ps1 -ExePath '<absolute-path-to-existing-debug-exe>'
+```
+
+This is an **experimental qualification harness, not a MedOrigin app feature**. It first requires a successful host TCP connection to a synthetic fixed test endpoint (`1.1.1.1:443`); an unreachable endpoint makes the comparison inconclusive and fails closed. It then proves that the same attempt is denied inside a one-shot `codex -c windows.sandbox=mxc sandbox --permission-profile :workspace` command. Next it runs all four real D1 UI Automation/IPC fixture checks inside the same restricted command environment. Finally it holds a separate native preview under MXC and, from the **ordinary authorized Windows host**, binds its exact PID and runs the existing multi-sample process-tree socket observer. This separation is intentional: MXC denies the CIM queries required by the observer when run *inside* the sandbox. The harness rejects pre-existing/ambiguous D1 processes, an unavailable MXC capability, failed UIA, nonzero observer exit, missing clear marker, and incomplete sandbox cleanup.
+
+A successful run demonstrates **only** a bounded developer machine/command sandbox test (denied direct test TCP, working synthetic UI, and no external TCP observed in that sampled WebView2 process tree). It is **not** a network control inside the MedOrigin application, a general-purpose application launch policy, packet-level proof, proof about UDP/DNS/short-lived connections, or evidence that a packaged, independently launched desktop is safe for offline/PHI use. The release blocker [#662](https://github.com/AbdulazizShehri/MedOrigin/issues/662) **remains NO-GO** until an independently audited product-scoped mechanism and its actual deployment evidence exist. Windows Sandbox is a distinct optional Windows feature and is not supported on Windows Home; this experiment does **not** enable or emulate that feature.
+
+Sources: [native MXC sandbox documentation](https://learn.chatgpt.com/docs/windows/windows-sandbox) and [Windows Sandbox edition restrictions](https://learn.microsoft.com/en-us/windows/security/application-security/application-isolation/windows-sandbox).
+
 ## Known blocks
 
 This independent D1 experiment must remain a **Draft** until a separately accepted topology/language decision (ADR-0003 + proposed ADR-0013), reviewed dependency locks/licenses/advisories, Windows/macOS/Linux app-level tests, verified zero network calls, IPC negative tests, WebView2 behavior, accessibility, process resource budgets and signed installer/uninstall lifecycle receipts. No release, tag, protected-main merge, PHI authorization or clinical-performance claim may be inferred from successful builds.
