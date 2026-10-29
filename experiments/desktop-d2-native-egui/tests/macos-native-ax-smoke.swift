@@ -47,6 +47,13 @@ func button(named name: String, in elements: [AXUIElement]) -> AXUIElement? {
     }
 }
 
+func selector(named name: String, in elements: [AXUIElement]) -> AXUIElement? {
+    elements.first {
+        (read($0, kAXRoleAttribute) as? String) == (kAXCheckBoxRole as String)
+            && nameOf($0) == name
+    }
+}
+
 func errorExit(_ reason: String) -> Never {
     fputs("D2_MAC_NATIVE_AX_NO_GO: " + reason + "\n", stderr)
     exit(2)
@@ -60,14 +67,22 @@ guard AXIsProcessTrusted() else {
     errorExit("macOS accessibility authorization missing")
 }
 let app = AXUIElementCreateApplication(pid)
-guard let windows = read(app, kAXWindowsAttribute) as? [AXUIElement],
-      let window = windows.first
+var firstWindow: AXUIElement?
+for _ in 0..<40 {
+    if let windows = read(app, kAXWindowsAttribute) as? [AXUIElement],
+       let window = windows.first {
+        firstWindow = window
+        break
+    }
+    Thread.sleep(forTimeInterval: 0.25)
+}
+guard let window = firstWindow
 else { errorExit("no accessible native MedOrigin window") }
 
 var controls: [AXUIElement] = []
 for _ in 0..<30 {
     controls = allDescendants(of: window)
-    if expected.allSatisfy({ button(named: $0.name, in: controls) != nil })
+    if expected.allSatisfy({ selector(named: $0.name, in: controls) != nil })
         && button(named: verifyName, in: controls) != nil {
         break
     }
@@ -84,7 +99,7 @@ guard let verify = button(named: verifyName, in: controls) else {
     errorExit("synthetic SHA verification control not exposed in NSAccessibility")
 }
 for fixture in expected {
-    guard let selector = button(named: fixture.name, in: controls) else {
+    guard let selector = selector(named: fixture.name, in: controls) else {
         errorExit("missing selector control: \(fixture.name)")
     }
     guard AXUIElementPerformAction(selector, kAXPressAction as CFString) == .success else {
