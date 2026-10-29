@@ -7,12 +7,14 @@ on:
       - "experiments/desktop-d1-tauri/**"
       - "experiments/desktop-d0-rust/**"
       - ".github/workflows/desktop-d1-preview.yml"
+  # Read-only Windows source qualification for exact manually selected draft heads.
+  workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: medorigin-d1-${{ github.event.pull_request.number }}
+  group: medorigin-d1-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -21,11 +23,11 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 55
     steps:
-      - name: Checkout immutable pull-request head
+      - name: Checkout exact PR or manual branch head
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-          ref: ${{ github.event.pull_request.head.sha }}
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
       - name: Node runtime
         run: node --version; npm --version
       - name: Install locked UI dependencies
@@ -65,7 +67,8 @@ jobs:
             'experiments/desktop-d1-tauri/tests/windows-egress-snapshot.ps1',
             'experiments/desktop-d1-tauri/tests/windows-egress-probe-selftest.ps1',
             'experiments/desktop-d1-tauri/tests/windows-egress-window.ps1',
-            'experiments/desktop-d1-tauri/tests/windows-egress-window-selftest.ps1'
+            'experiments/desktop-d1-tauri/tests/windows-egress-window-selftest.ps1',
+            'experiments/desktop-d1-tauri/tests/windows-mxc-offline-qualification.ps1'
           )) {
             $tokens = $null
             $parseErrors = $null
