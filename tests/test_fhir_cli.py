@@ -31,6 +31,39 @@ def test_public_fhir_validate_rejects_malformed_json(tmp_path: Path) -> None:
     assert public_cli_main(["fhir", "validate", str(source)]) == 1
 
 
+@pytest.mark.parametrize("summary_only", [False, True])
+def test_fhir_cli_rejects_invalid_utf8_without_traceback_or_report(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], summary_only: bool
+) -> None:
+    """Malformed UTF-8 must fail closed instead of exposing a Python traceback."""
+    source = tmp_path / "invalid-utf8.json"
+    source.write_bytes(bytes([0xFF, 0xFE, 0x80]))
+    output_dir = tmp_path / "reports"
+    argv = [str(source), "--output-dir", str(output_dir)]
+    if summary_only:
+        argv.append("--summary-only")
+
+    assert fhir_cli.main(argv) == 1
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert "input read error:" in captured.err
+    assert "Traceback" not in captured.err
+    assert not output_dir.exists()
+
+
+def test_public_fhir_dispatch_rejects_invalid_utf8_without_traceback(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The public command must not leak decoder tracebacks on invalid bytes."""
+    source = tmp_path / "invalid-utf8.json"
+    source.write_bytes(bytes([0xFF, 0xFE, 0x80]))
+    assert public_cli_main(["fhir", "validate", str(source)]) == 1
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert "input read error:" in captured.err
+    assert "Traceback" not in captured.err
+
+
 def test_bare_legacy_fhir_file_dispatch_remains_supported(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
