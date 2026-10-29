@@ -9,6 +9,8 @@ import os
 import re
 import subprocess
 import tempfile
+import threading
+import time
 from pathlib import Path
 from typing import Any
 
@@ -25,6 +27,8 @@ from medscale.fhirkit.report import (
 
 FHIR_VALIDATOR_NAME = "medscale-fhirkit-local"
 FHIR_VALIDATOR_VERSION = "0.1.0"
+_VALIDATOR_TIMEOUT_SECONDS = 120
+_VALIDATOR_OUTPUT_LIMIT_BYTES = 1024 * 1024
 
 
 def _search_path_command() -> list[str] | None:
@@ -112,31 +116,82 @@ def _reject_validator_nonfinite_constant(_value: str) -> Any:
 
 
 def _run_validator(command: list[str], input_path: Path) -> str:
+    """Capture both streams with bounded memory and terminate noisy validators."""
     try:
-        completed = subprocess.run(
+        process = subprocess.Popen(
             [*command, str(input_path)],
-            check=False,
-            capture_output=True,
-            text=True,
-            timeout=120,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
         )
-    except subprocess.TimeoutExpired:
-        # Avoid leaking the private scratch pathname in command/exception reprs.
-        raise UnavailableValidatorError("external FHIR validator timed out") from None
-    except UnicodeError:
-        # subprocess.run(text=True) decodes both stdout and stderr, even on a
-        # nonzero exit. Do not expose the decoder's untrusted input bytes.
-        raise UnavailableValidatorError(
-            "external FHIR validator produced undecodable output"
-        ) from None
     except OSError:
         raise UnavailableValidatorError("external FHIR validator could not be started") from None
-    stdout = completed.stdout.strip()
-    if completed.returncode != 0:
-        # External tool output and command arguments may contain patient fields,
-        # private paths or credentials. Never expose them in failure messages.
-        raise UnavailableValidatorError("external FHIR validator returned a nonzero exit status")
-    return stdout
+
+    captured = (bytearray(), bytearray())
+    excessive_output = threading.Event()
+    reader_error = threading.Event()
+
+    def read_bounded(stream: Any, result: bytearray) -> None:
+        try:
+            while True:
+                chunk = stream.read1(8192)
+                if not chunk:
+                    return
+                if len(result) + len(chunk) > _VALIDATOR_OUTPUT_LIMIT_BYTES:
+                    excessive_output.set()
+                    return
+                result.extend(chunk)
+        except (OSError, ValueError):
+            reader_error.set()
+
+    assert process.stdout is not None and process.stderr is not None
+    readers = [
+        threading.Thread(target=read_bounded, args=(process.stdout, captured[0]), daemon=True),
+        threading.Thread(target=read_bounded, args=(process.stderr, captured[1]), daemon=True),
+    ]
+    for reader in readers:
+        reader.start()
+
+    deadline = time.monotonic() + _VALIDATOR_TIMEOUT_SECONDS
+    try:
+        while process.poll() is None:
+            if excessive_output.is_set():
+                raise UnavailableValidatorError("external FHIR validator exceeded output limit")
+            if reader_error.is_set():
+                raise UnavailableValidatorError("external FHIR validator output could not be read")
+            if time.monotonic() >= deadline:
+                raise UnavailableValidatorError("external FHIR validator timed out")
+            excessive_output.wait(min(0.02, max(0.0, deadline - time.monotonic())))
+
+        for reader in readers:
+            reader.join(timeout=max(0.0, deadline - time.monotonic()))
+        if any(reader.is_alive() for reader in readers):
+            raise UnavailableValidatorError("external FHIR validator timed out")
+        if excessive_output.is_set():
+            raise UnavailableValidatorError("external FHIR validator exceeded output limit")
+        if reader_error.is_set():
+            raise UnavailableValidatorError("external FHIR validator output could not be read")
+        try:
+            stdout = captured[0].decode("utf-8").strip()
+            captured[1].decode("utf-8")
+        except UnicodeError:
+            raise UnavailableValidatorError(
+                "external FHIR validator produced undecodable output"
+            ) from None
+        if process.returncode != 0:
+            raise UnavailableValidatorError(
+                "external FHIR validator returned a nonzero exit status"
+            )
+        return stdout
+    finally:
+        if process.poll() is None:
+            with contextlib.suppress(OSError):
+                process.kill()
+        with contextlib.suppress(subprocess.TimeoutExpired):
+            process.wait(timeout=1)
+        for reader in readers:
+            reader.join(timeout=0.1)
+        process.stdout.close()
+        process.stderr.close()
 
 
 def validate_fhir_with_validator(
