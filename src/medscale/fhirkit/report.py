@@ -60,6 +60,10 @@ def validate_report_schema(report: ValidationReport) -> None:
             isinstance(item, str) for item in diagnostics
         ):
             raise InvalidReportError("report diagnostics must be text tuples")
+    # Prevent a persisted report from contradicting its own diagnostics:
+    # success must never coexist with an explicit validation error.
+    if report.status == "valid" and report.errors:
+        raise InvalidReportError("valid report cannot contain errors")
 
 
 def _sorted_report_payload(report: ValidationReport) -> dict[str, Any]:
