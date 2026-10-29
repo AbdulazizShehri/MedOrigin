@@ -142,6 +142,12 @@ def _run_validator(command: list[str], input_path: Path) -> str:
                 result.extend(chunk)
         except (OSError, ValueError):
             reader_error.set()
+        finally:
+            # Close in the reader itself. BufferedReader.close() acquires its
+            # read lock, and calling it from the controller may hang if a
+            # descendant still has this pipe open after the direct child exits.
+            with contextlib.suppress(OSError, ValueError):
+                stream.close()
 
     assert process.stdout is not None and process.stderr is not None
     readers = [
@@ -190,8 +196,8 @@ def _run_validator(command: list[str], input_path: Path) -> str:
             process.wait(timeout=1)
         for reader in readers:
             reader.join(timeout=0.1)
-        process.stdout.close()
-        process.stderr.close()
+        # Readers still blocked on an inherited pipe must own its close;
+        # a controller-side close can wait indefinitely for their read lock.
 
 
 def validate_fhir_with_validator(

@@ -502,6 +502,31 @@ def test_external_validator_output_limit_terminates_live_subprocess(
     assert list(tmp_path.iterdir()) == []
 
 
+def test_external_validator_timeout_does_not_block_on_inherited_output_pipes(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import sys as _sys
+    import time as _time
+
+    from medscale.fhirkit import UnavailableValidatorError, validate_fhir_with_validator
+
+    code = (
+        "import subprocess, sys; "
+        "subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(2.5)'], "
+        "stdin=subprocess.DEVNULL, stdout=sys.stdout, stderr=sys.stderr); "
+        'print(\'{\\"status\\":\\"valid\\",\\"errors\\":[]}\')'
+    )
+    monkeypatch.setattr("medscale.fhirkit.validate.tempfile.tempdir", str(tmp_path))
+    monkeypatch.setattr("medscale.fhirkit.validate._VALIDATOR_TIMEOUT_SECONDS", 0.15)
+    started = _time.monotonic()
+    with pytest.raises(UnavailableValidatorError, match="timed out"):
+        validate_fhir_with_validator(_rule_input(), command=[_sys.executable, "-c", code])
+    elapsed = _time.monotonic() - started
+    assert elapsed < 1.5, f"timed-out validator blocked for {elapsed:.2f}s"
+    assert list(tmp_path.iterdir()) == []
+
+
 def test_external_validator_timeout_is_bounded_and_redacted(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
