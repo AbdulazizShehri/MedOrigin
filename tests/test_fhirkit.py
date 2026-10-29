@@ -527,6 +527,37 @@ def test_external_validator_timeout_does_not_block_on_inherited_output_pipes(
     assert list(tmp_path.iterdir()) == []
 
 
+@pytest.mark.parametrize(
+    "invalid_command",
+    [
+        [],
+        [""],
+        ["fictional-validator", "bad\x00PRIVATE_argument"],
+        ["fictional-validator", None],
+        ["fictional-validator", 7],
+        "fictional-validator",
+    ],
+)
+def test_external_validator_rejects_invalid_argv_before_writing_scratch(
+    invalid_command: object,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from medscale.fhirkit import UnavailableValidatorError, validate_fhir_with_validator
+
+    monkeypatch.setattr("medscale.fhirkit.validate.tempfile.tempdir", str(tmp_path))
+    with pytest.raises(
+        UnavailableValidatorError, match="invalid external validator command"
+    ) as exc:
+        validate_fhir_with_validator(
+            _rule_input(),
+            command=invalid_command,  # type: ignore[arg-type]
+        )
+    assert "PRIVATE_argument" not in str(exc.value)
+    assert str(tmp_path) not in str(exc.value)
+    assert list(tmp_path.iterdir()) == []
+
+
 def test_external_validator_timeout_is_bounded_and_redacted(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
