@@ -5,7 +5,9 @@ param(
   [ValidateRange(1.0, 600.0)]
   [double]$DurationSeconds = 10.0,
   [ValidateRange(50, 5000)]
-  [int]$SampleIntervalMilliseconds = 250
+  [int]$SampleIntervalMilliseconds = 250,
+  [ValidateRange(1, 60)]
+  [int]$ProbeTimeoutSeconds = 10
 )
 
 # A repeated, deliberately narrow socket *observation* gate, not an OS firewall
@@ -20,14 +22,42 @@ if (-not (Test-Path -LiteralPath $probe -PathType Leaf)) {
 $watch = [System.Diagnostics.Stopwatch]::StartNew()
 $samples = 0
 do {
+  # A separate process plus asynchronous pipe reads bounds *each* invocation.
+  # A hung CIM query must not make the diagnostic monitor wait indefinitely.
+  $settings = [System.Diagnostics.ProcessStartInfo]::new()
+  $settings.FileName = 'powershell.exe'
+  $settings.Arguments = '-NoProfile -NonInteractive -ExecutionPolicy Bypass -File "' + $probe + '" -RootPid ' + $RootPid
+  $settings.UseShellExecute = $false
+  $settings.CreateNoWindow = $true
+  $settings.RedirectStandardOutput = $true
+  $settings.RedirectStandardError = $true
+  $child = [System.Diagnostics.Process]::new()
+  $child.StartInfo = $settings
+  $started = $false
   try {
-    $result = & powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File $probe -RootPid $RootPid 2>&1 | Out-String
-    $code = $LASTEXITCODE
+    $started = $child.Start()
+    if (-not $started) { throw 'Snapshot could not be started' }
+    $stdout = $child.StandardOutput.ReadToEndAsync()
+    $stderr = $child.StandardError.ReadToEndAsync()
+    if (-not $child.WaitForExit($ProbeTimeoutSeconds * 1000)) {
+      throw 'Snapshot exceeded per-probe deadline'
+    }
+    if (-not $stdout.Wait(1000) -or -not $stderr.Wait(1000)) {
+      throw 'Snapshot pipe capture incomplete'
+    }
+    $result = $stdout.Result
+    $code = $child.ExitCode
   }
   catch {
-    # Avoid leaking PowerShell exception details or private local file paths.
-    Write-Output 'D1_EGRESS_MONITOR_ERROR: snapshot invocation failed'
+    # Never reproduce untrusted output, arguments, OS paths or exception data.
+    Write-Output 'D1_EGRESS_MONITOR_ERROR: snapshot failed or timed out'
     exit 1
+  }
+  finally {
+    if ($started -and -not $child.HasExited) {
+      try { $child.Kill() } catch { }
+    }
+    $child.Dispose()
   }
   $samples++
   if ($code -eq 2) {
