@@ -123,7 +123,8 @@ def _run_validator(command: list[str], input_path: Path) -> str:
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
         )
-    except OSError:
+    except (OSError, ValueError, TypeError, IndexError):
+        # Never leak untrusted executable/argument content on spawn failures.
         raise UnavailableValidatorError("external FHIR validator could not be started") from None
 
     captured = (bytearray(), bytearray())
@@ -221,6 +222,16 @@ def validate_fhir_with_validator(
     validator_version = FHIR_VALIDATOR_VERSION
 
     if command is not None:
+        # Validate the command before writing even synthetic payloads to disk.
+        # Empty, non-string and NUL-bearing arguments would otherwise bubble
+        # up from Popen as untyped ValueError/TypeError/IndexError exceptions.
+        if (
+            not isinstance(command, list)
+            or not command
+            or not command[0]
+            or any(not isinstance(arg, str) or "\x00" in arg for arg in command)
+        ):
+            raise UnavailableValidatorError("invalid external validator command")
         # The scratch payload lives in a private temporary directory: writing a
         # relative path would clobber (and then delete) a same-named file in the
         # caller's working directory.
