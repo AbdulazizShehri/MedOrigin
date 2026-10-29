@@ -321,6 +321,28 @@ def test_external_validator_spawn_failure_is_redacted_and_cleans_scratch(
     assert not scratch_files[0].parent.exists()
 
 
+def test_external_validator_nonzero_exit_does_not_echo_tool_output(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    import subprocess
+
+    import medscale.fhirkit.validate as validator_mod
+    from medscale.fhirkit import UnavailableValidatorError, validate_fhir_with_validator
+
+    def failed_runner(argv: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+        return subprocess.CompletedProcess(
+            argv, returncode=2, stdout="fictional PRIVATE_STDOUT", stderr="fictional PRIVATE_STDERR"
+        )
+
+    monkeypatch.setattr(validator_mod.subprocess, "run", failed_runner)
+    monkeypatch.setattr(validator_mod.tempfile, "tempdir", str(tmp_path))
+    with pytest.raises(UnavailableValidatorError, match="nonzero exit") as exc:
+        validate_fhir_with_validator(_rule_input(), command=["fictional-secret-validator"])
+    assert "PRIVATE" not in str(exc.value)
+    assert "fictional-secret-validator" not in str(exc.value)
+    assert str(tmp_path) not in str(exc.value)
+
+
 def test_external_validator_never_clobbers_cwd_file(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
