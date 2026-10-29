@@ -1,0 +1,6 @@
+; macOS experimental local process sandbox; NOT a shipping entitlement.
+; Network denial proven only for sandboxed child process socket operations.
+; No filesystem confinement; system daemons and helpers require separate review.
+(version 1)
+(allow default)
+(deny network*)

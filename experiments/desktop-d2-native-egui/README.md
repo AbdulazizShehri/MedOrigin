@@ -72,6 +72,38 @@ An offline pass is dependent on the local advisory database age and is **not**
 a substitute for an online refreshed RustSec scan. This D2 policy does not
 remediate Python optional extras or historical research pins (issue #622).
 
+## macOS experimental OS-level loopback denial (not a release control)
+
+`tests/macos-deny-network.sb` is a **macOS-only, local process test policy**.
+It allows ordinary non-network functions but explicitly `(deny network*)`
+for processes launched under the policy via Apple's existing
+`/usr/bin/sandbox-exec` command. It does **not** restrict file-system access,
+out-of-process OS services, or other host applications. This tool is deprecated
+and is **not** the accepted cross-platform production sandbox.
+
+The source-controlled `tests/macos-deny-network-selftest.sh` is executed
+in the Mac CI matrix **without launching MedOrigin**. It attempts exactly one
+connection to loopback `127.0.0.1:9` inside the sandbox and requires
+`EPERM` from the OS; an allowed connection or `ECONNREFUSED` FAILS the
+test. It never sends external packets, changes the host firewall or grants
+any entitlements. Run manually on a current test Mac with:
+
+```sh
+bash tests/macos-deny-network-selftest.sh
+```
+
+On an authorized Apple Silicon macOS 26.6.2 developer host on 2026-10-29,
+the loopback denial selftest **PASSed**. An existing D2 synthetic-only native
+debug binary also launched under `sandbox-exec -f tests/macos-deny-network.sb`,
+exposed one native top-level window and showed no directly owned TCP or UDP
+sockets during three observations. **This does not prove full zero egress**,
+since app-controlled out-of-sandbox helpers, packet-level observations,
+reproducible signed packaging and production network policy are untested.
+macOS accessibility remains explicitly **NO-GO**: only titlebar elements,
+not four synthetic selectors, were visible to the OS accessibility tree in
+real Mac tests; see [issue #676](https://github.com/AbdulazizShehri/MedOrigin/issues/676).
+Do not publish this test profile as a runtime security guarantee.
+
 ## Build and qualification
 Use Rust 1.97.1 and checked-in Cargo.lock, from this folder:
 
