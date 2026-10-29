@@ -28,10 +28,15 @@ try {
   if ($cfg.ProtectedClient -ne 'Enable') { throw 'Protected Client not enabled' }
   $mappings = @($cfg.MappedFolders.MappedFolder)
   if ($mappings.Count -ne 1) { throw 'Expected exactly one mapped folder' }
-  if ($mappings[0].HostFolder -ne $payload -or
+  # Windows runners can expose the same folder via short (RUNNER~1) and long
+  # (runneradmin) paths. Resolve BOTH sides through the filesystem before
+  # comparing; never allow the XML to map an unrelated physical directory.
+  $expectedHost = (Get-Item -LiteralPath $payload -ErrorAction Stop).FullName
+  $mappedHost = (Get-Item -LiteralPath ([string]$mappings[0].HostFolder) -ErrorAction Stop).FullName
+  if (-not [string]::Equals($mappedHost, $expectedHost, [StringComparison]::OrdinalIgnoreCase) -or
       $mappings[0].SandboxFolder -ne 'C:\MedOriginSyntheticOnly' -or
       $mappings[0].ReadOnly -ne 'true') {
-    throw ('Profile mapped-folder boundary mismatch: host expected=['+$payload+'] actual=['+$mappings[0].HostFolder+'] sandbox=['+$mappings[0].SandboxFolder+'] readonly=['+$mappings[0].ReadOnly+']')
+    throw 'Profile mapped-folder boundary mismatch (canonical host path, sandbox target, or read-only mode)'
   }
   if ($raw -notmatch '&amp;' -or $cfg.LogonCommand) {
     throw 'Expected XML escaping and no autorun command'
