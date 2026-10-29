@@ -33,10 +33,6 @@ def _search_path_command() -> list[str] | None:
     return [c.strip() for c in candidates.split(os.pathsep) if c.strip()]
 
 
-def _command_hint(command: list[str]) -> str:
-    return " ".join(command)
-
-
 def validate_fhir(input_payload: dict[str, Any], created_at: str | None = None) -> ValidationReport:
     """Validate a local FHIR payload deterministically.
 
@@ -75,11 +71,10 @@ def _run_validator(command: list[str], input_path: Path) -> str:
     except OSError:
         raise UnavailableValidatorError("external FHIR validator could not be started") from None
     stdout = completed.stdout.strip()
-    stderr = completed.stderr.strip()
     if completed.returncode != 0:
-        raise UnavailableValidatorError(
-            f"validator command {_command_hint(command)} failed: {stderr or stdout}"
-        )
+        # External tool output and command arguments may contain patient fields,
+        # private paths or credentials. Never expose them in failure messages.
+        raise UnavailableValidatorError("external FHIR validator returned a nonzero exit status")
     return stdout or "{}"
 
 
