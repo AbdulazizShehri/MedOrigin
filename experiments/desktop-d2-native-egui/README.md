@@ -38,6 +38,40 @@ multi-platform lockfile without showing that D2 sent any network traffic. Any
 intentional feature or dependency expansion needs separate review and a new
 audited baseline; never relax this gate silently to enable clinical data.
 
+## Source-bound Rust supply-chain gate (strictly nonpublishing)
+
+`deny.toml` is the explicit `cargo-deny 0.20.2` policy for the native D2
+dependency graph across Windows x86_64, Linux x86_64, and Apple Silicon. It
+**denies known vulnerability advisories**, disallowed/unlicensed SPDX
+expressions and unknown package registries. The license allowlist includes
+font-specific `OFL-1.1` and `Ubuntu-font-1.0`, but this is NOT a waiver
+of font notice/distribution obligations. No advisory IDs are silently ignored.
+
+This source graph currently contains three **transitive Linux accessibility
+maintenance notices**: `RUSTSEC-2026-0370` (`zvariant`),
+`RUSTSEC-2026-0371` (`zbus_names`), and `RUSTSEC-2026-0372`
+(`zvariant_derive`). See [maintenance issue #673](https://github.com/AbdulazizShehri/MedOrigin/issues/673).
+The documented `advisories.unmaintained = "workspace"` policy continues to
+**fail on unmaintained direct dependencies** while these transitive notices
+remain explicit unresolved review risks. A fully strict `unmaintained = "all"`
+scan still FAILS on three records as of 2026-10-29; no release is authorized.
+This policy does not downgrade known security vulnerabilities. Re-evaluate
+and migrate to the maintained zbus/AccessKit chain before any release.
+
+The independent GitHub source-only security job compiles a **version-pinned,
+locked, free `cargo-deny` CLI** and checks advisories, licenses and package
+sources with a refreshed remote advisory database. It never runs patient
+data, exports packages or publishes releases. Offline reproducibility of
+the local policy can be checked using:
+
+```sh
+cargo deny --offline --locked check advisories licenses sources
+```
+
+An offline pass is dependent on the local advisory database age and is **not**
+a substitute for an online refreshed RustSec scan. This D2 policy does not
+remediate Python optional extras or historical research pins (issue #622).
+
 ## Build and qualification
 Use Rust 1.97.1 and checked-in Cargo.lock, from this folder:
 

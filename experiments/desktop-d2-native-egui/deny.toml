@@ -1,0 +1,43 @@
+# Isolated MedOrigin native D2 security baseline (not product release approval).
+# Generated from cargo-deny 0.20.2 template, reduced to explicit policy.
+# Do not suppress or ignore known advisories for an unpublished developer preview.
+[graph]
+targets = [
+  "x86_64-pc-windows-msvc",
+  "x86_64-unknown-linux-gnu",
+  "aarch64-apple-darwin",
+]
+
+# Fail closed for known vulnerabilities and directly selected unmaintained crates.
+# Existing transitive AccessKit Linux zbus-v5 advisories are tracked under
+# #673 follow-up security review; no ignored advisory IDs or silent exemptions.
+[advisories]
+unmaintained = "workspace"
+ignore = []
+
+[licenses]
+confidence-threshold = 0.8
+allow = [
+  "0BSD",
+  "Apache-2.0",
+  "Apache-2.0 WITH LLVM-exception",
+  "BSD-2-Clause",
+  "BSD-3-Clause",
+  "BSL-1.0",
+  "ISC",
+  "MIT",
+  "OFL-1.1",
+  "Ubuntu-font-1.0",
+  "Unicode-3.0",
+  "Unlicense",
+  "Zlib",
+]
+exceptions = []
+
+[licenses.private]
+ignore = false
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
