@@ -21,9 +21,22 @@ $tcp=@(Get-NetTCPConnection -ErrorAction Stop | Where-Object {
 })
 $established=@($tcp | Where-Object {$_.State -eq 'Established'})
 $udp=@(Get-NetUDPEndpoint -ErrorAction Stop | Where-Object {$ids.Contains([int]$_.OwningProcess)})
-# A clean socket query is inconclusive if the root exited or its PID was reused.
-$after=@(Get-CimInstance Win32_Process -Filter "ProcessId = $RootPid" -ErrorAction Stop | Where-Object {$_.ProcessId -eq $RootPid})
+# A clean socket query is inconclusive if the root or any descendant exited,
+# changed parent, or had its PID reused while sockets were enumerated.
+$afterAll=@(Get-CimInstance Win32_Process -ErrorAction Stop)
+$after=@($afterAll | Where-Object {$_.ProcessId -eq $RootPid})
 if($after.Count -ne 1 -or $after[0].CreationDate -ne $root[0].CreationDate){throw 'D1 root process changed during snapshot'}
+foreach($childId in $ids){
+ if($childId -eq $RootPid){continue}
+ $beforeChild=@($all | Where-Object {$_.ProcessId -eq $childId})
+ $afterChild=@($afterAll | Where-Object {$_.ProcessId -eq $childId})
+ if($beforeChild.Count -ne 1 -or $afterChild.Count -ne 1 -or
+    -not $beforeChild[0].CreationDate -or
+    $beforeChild[0].CreationDate -ne $afterChild[0].CreationDate -or
+    $beforeChild[0].ParentProcessId -ne $afterChild[0].ParentProcessId){
+  throw 'D1 child process changed during snapshot'
+ }
+}
 Write-Output ('D1_PROCESS_TREE_COUNT='+$ids.Count)
 Write-Output ('EXTERNAL_ESTABLISHED_TCP='+$established.Count)
 Write-Output ('EXTERNAL_TCP_ALL_STATES='+$tcp.Count)
