@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import "./App.css";
+import { assertHashResult, assertPreviewStatus } from "./nativeContract";
 
 type FixtureId = "patient-minimal" | "patient-invalid-utf8" | "patient-over-limit" | "patient-exact-limit";
 type PreviewStatus = {
@@ -26,6 +27,13 @@ const FIXTURES: readonly { id: FixtureId; title: string; kind: string; size: str
   { id: "patient-exact-limit", title: "Exact limit", kind: "BOUNDARY CASE", size: "32,768 B", description: "A synthetic Patient padded with whitespace to the limit.", sha: "ea711ce560191a81c0722c4a26592e0e2d9abb2186b6fd3af6897cd89d417d4e" },
 ];
 
+const EXPECTED_BYTES: Record<FixtureId, number> = {
+  "patient-minimal": 57,
+  "patient-invalid-utf8": 1,
+  "patient-over-limit": 32769,
+  "patient-exact-limit": 32768,
+};
+
 export default function App() {
   const [status, setStatus] = useState<PreviewStatus | null>(null);
   const [selected, setSelected] = useState<FixtureId>("patient-minimal");
@@ -34,9 +42,9 @@ export default function App() {
   const [error, setError] = useState("");
   useEffect(() => {
     let alive = true;
-    invoke<PreviewStatus>("preview_status")
-      .then((next) => { if (alive) setStatus(next); })
-      .catch(() => { if (alive) setError("Native desktop bridge unavailable. Open this preview in Tauri."); });
+    invoke<unknown>("preview_status")
+      .then((next) => { if (alive) setStatus(assertPreviewStatus(next)); })
+      .catch(() => { if (alive) setError("Native preview safety contract unavailable. Verification blocked."); });
     return () => { alive = false; };
   }, []);
 
@@ -46,13 +54,11 @@ export default function App() {
     setResult(null);
     setBusy(true);
     try {
-      const checked = await invoke<HashResult>("hash_fixture", { fixtureId: selected, maxInputBytes: 65536 });
-      if (checked.fixture_id !== selected || !checked.synthetic_only || checked.release_authorized) {
-        throw new Error("Unexpected native response contract");
-      }
-      setResult(checked);
+      const checked = await invoke<unknown>("hash_fixture", { fixtureId: selected, maxInputBytes: 65536 });
+      const verified = assertHashResult(checked, { id: selected, bytes: EXPECTED_BYTES[selected], sha: chosen.sha });
+      setResult(verified);
     } catch (reason) {
-      setError(typeof reason === "string" ? reason : "The local Rust command refused this request.");
+      setError(typeof reason === "string" ? reason : "Native integrity verification failed or was refused. Verification blocked.");
     } finally {
       setBusy(false);
     }
