@@ -38,10 +38,7 @@ class ValidationReport:
     format_version: str = FORMAT_VERSION
 
     def __post_init__(self) -> None:
-        if self.format_version != FORMAT_VERSION:
-            raise InvalidReportError(
-                f"format_version must be {FORMAT_VERSION!r}, got {self.format_version!r}"
-            )
+        validate_report_schema(self)
 
 
 def validate_report_schema(report: ValidationReport) -> None:
@@ -52,6 +49,17 @@ def validate_report_schema(report: ValidationReport) -> None:
         raise InvalidReportError(
             f"format_version must be {FORMAT_VERSION!r}, got {report.format_version!r}"
         )
+    for key in ("report_id", "input_hash", "validator_name", "validator_version", "created_at"):
+        value = getattr(report, key)
+        if value is not None and not isinstance(value, str):
+            raise InvalidReportError("report metadata must be text or null")
+    if report.status is not None and report.status not in ("valid", "invalid"):
+        raise InvalidReportError("report status must be valid, invalid or null")
+    for diagnostics in (report.errors, report.warnings):
+        if not isinstance(diagnostics, tuple) or not all(
+            isinstance(item, str) for item in diagnostics
+        ):
+            raise InvalidReportError("report diagnostics must be text tuples")
 
 
 def _sorted_report_payload(report: ValidationReport) -> dict[str, Any]:
@@ -66,6 +74,7 @@ def _sorted_report_payload(report: ValidationReport) -> dict[str, Any]:
 
 def report_hash(report: ValidationReport) -> str:
     """Return a stable SHA-256 for the report payload."""
+    validate_report_schema(report)
     payload = _sorted_report_payload(report)
     serialized = canonical_json(payload)
     return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
@@ -73,6 +82,7 @@ def report_hash(report: ValidationReport) -> str:
 
 def report_to_json(report: ValidationReport) -> str:
     """Serialize a report to stable JSON with deterministic field ordering."""
+    validate_report_schema(report)
     payload = _sorted_report_payload(report)
     return canonical_json(payload) + "\n"
 
