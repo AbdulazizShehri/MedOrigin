@@ -8,7 +8,8 @@ on:
     branches: [main]
     paths:
       - '.github/workflows/release.yml'
-  # Read-only artifact round-trip on exact protected main without publishing a tag.
+  # Manually qualify exact branch heads without retargeting stacked Draft PRs.
+  # Branch-only roundtrips never enter tag/publisher jobs.
   workflow_dispatch:
 
 permissions:
@@ -189,7 +190,7 @@ jobs:
 
   pr-artifact-build:
     name: PR-safe build and upload qualification
-    if: github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main')
+    if: github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && startsWith(github.ref, 'refs/heads/'))
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -223,7 +224,7 @@ jobs:
 
   pr-artifact-roundtrip:
     name: PR-safe download and byte-identity qualification
-    if: github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main')
+    if: github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && startsWith(github.ref, 'refs/heads/'))
     needs: pr-artifact-build
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -243,7 +244,7 @@ jobs:
 
   pr-clean-wheel-smoke:
     name: PR-safe clean installed-wheel qualification
-    if: github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main')
+    if: github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && startsWith(github.ref, 'refs/heads/'))
     needs: pr-artifact-build
     runs-on: ubuntu-latest
     timeout-minutes: 10
