@@ -64,6 +64,41 @@ def test_public_fhir_dispatch_rejects_invalid_utf8_without_traceback(
     assert "Traceback" not in captured.err
 
 
+@pytest.mark.parametrize("json_root", ["[]", "null", "42", '"not-a-fhir-object"', "true"])
+@pytest.mark.parametrize("summary_only", [False, True])
+def test_fhir_cli_rejects_non_object_json_roots(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    json_root: str,
+    summary_only: bool,
+) -> None:
+    """A syntactically valid JSON scalar/array is never a FHIR resource."""
+    source = tmp_path / "non-fhir-root.json"
+    source.write_text(json_root, encoding="utf-8")
+    output_dir = tmp_path / "reports"
+    argv = [str(source), "--output-dir", str(output_dir)]
+    if summary_only:
+        argv.append("--summary-only")
+
+    assert fhir_cli.main(argv) == 1
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert "input read error: FHIR resource must be a JSON object" in captured.err
+    assert "Traceback" not in captured.err
+    assert not output_dir.exists()
+
+
+def test_public_fhir_dispatch_rejects_non_object_root(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    source = tmp_path / "array.json"
+    source.write_text("[]", encoding="utf-8")
+    assert public_cli_main(["fhir", "validate", str(source)]) == 1
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert "FHIR resource must be a JSON object" in captured.err
+
+
 def test_bare_legacy_fhir_file_dispatch_remains_supported(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
