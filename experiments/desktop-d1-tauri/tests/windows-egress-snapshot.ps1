@@ -26,6 +26,10 @@ foreach($c in $tcp){
  Write-Output ('EXTERNAL_TCP pid='+$c.OwningProcess+' state='+$c.State+' remote='+$c.RemoteAddress+':'+$c.RemotePort)
 }
 Write-Output ('UDP_ENDPOINT_COUNT='+$udp.Count)
+foreach($endpoint in $udp){
+ Write-Output ('UDP_ENDPOINT pid='+$endpoint.OwningProcess+' local='+$endpoint.LocalAddress+':'+$endpoint.LocalPort)
+}
 Write-Output 'Snapshot only: zero observed sockets is NOT a zero-egress proof; packet capture and OS-level isolation remain required.'
-if($tcp.Count -gt 0){Write-Output 'D1_NETWORK_ISOLATION_NO_GO';exit 2}
+if($tcp.Count -gt 0 -or $udp.Count -gt 0){Write-Output 'D1_NETWORK_ISOLATION_NO_GO';exit 2}
 Write-Output 'D1_SNAPSHOT_NO_EXTERNAL_TCP'
+Write-Output 'D1_SNAPSHOT_NO_UDP_ENDPOINTS'
