@@ -58,6 +58,10 @@ jobs:
         if: runner.os == 'macOS'
         shell: bash
         run: bash tests/macos-deny-network-selftest.sh
+      - name: Compile real macOS AX acceptance probe without launching a GUI
+        if: runner.os == 'macOS'
+        shell: bash
+        run: swiftc -parse tests/macos-native-ax-smoke.swift
       - name: Verify committed deterministic Cargo lock
         shell: bash
         run: |

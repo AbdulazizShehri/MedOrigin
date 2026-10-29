@@ -104,6 +104,33 @@ not four synthetic selectors, were visible to the OS accessibility tree in
 real Mac tests; see [issue #676](https://github.com/AbdulazizShehri/MedOrigin/issues/676).
 Do not publish this test profile as a runtime security guarantee.
 
+## macOS native Accessibility acceptance (strict NO-GO until fixed)
+
+`tests/macos-native-ax-smoke.swift` implements a real macOS NSAccessibility
+end-to-end test for the fictional D2 native window. A trusted interactive
+macOS accessibility session must discover the **four specifically named
+fixture selectors** and the **synthetic SHA-256 verification button**. The
+test uses actual `AXPress` actions and requires four exact visible SHA-256
+results. Missing control names, refused AX actions or unmatched results
+**FAIL with `D2_MAC_NATIVE_AX_NO_GO`**. Titlebar buttons are **not** evidence
+of application accessibility. The macOS CI runner checks Swift probe syntax
+without pretending headless CI performed any interactive Mac UIA.
+
+Manual authorized local-only invocation: build the locked D2 binary, verify
+its SHA-256, start only that approved synthetic debug binary in an interactive
+Mac session and pass its PID to `swift tests/macos-native-ax-smoke.swift <PID>`.
+Stop the child process afterward; never use real patient data.
+
+**Current actual hardware outcome (2026-10-29): NO-GO** — AccessKit-enabled
+eframe D2 on macOS 26.6.2 exposes only five window-decorations in
+System Events and direct Swift AX tree queries. Explicit
+`egui_ctx.enable_accesskit()` and a temporary local unsigned `.app`
+wrapper did not expose the missing content. Details and remediation
+acceptance: [issue #676](https://github.com/AbdulazizShehri/MedOrigin/issues/676).
+The test may be added to interactive macOS qualification only after an
+underlying accessibility adapter fix; **do not disable this acceptance
+criterion to claim macOS readiness**.
+
 ## Build and qualification
 Use Rust 1.97.1 and checked-in Cargo.lock, from this folder:
 
