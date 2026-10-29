@@ -77,8 +77,31 @@ def report_to_json(report: ValidationReport) -> str:
     return canonical_json(payload) + "\n"
 
 
+def _unique_report_properties(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    obj: dict[str, Any] = {}
+    for key, value in pairs:
+        if key in obj:
+            raise ValueError("duplicate report JSON key")
+        obj[key] = value
+    return obj
+
+
+def _reject_nonfinite_report_number(_value: str) -> Any:
+    raise ValueError("non-finite report number")
+
+
 def load_report_from_json(raw: str) -> ValidationReport:
-    data = json.loads(raw)
+    """Read a legacy-compatible report, rejecting ambiguous/untyped JSON."""
+    try:
+        data = json.loads(
+            raw,
+            object_pairs_hook=_unique_report_properties,
+            parse_constant=_reject_nonfinite_report_number,
+        )
+        json.dumps(data, allow_nan=False)
+    except (json.JSONDecodeError, TypeError, ValueError, OverflowError):
+        # Do not reproduce untrusted report contents in exception messages.
+        raise InvalidReportError("report JSON must be strict and unambiguous") from None
     if not isinstance(data, dict):
         raise InvalidReportError("report JSON must decode to an object")
     data.setdefault("format_version", FORMAT_VERSION)
@@ -86,8 +109,12 @@ def load_report_from_json(raw: str) -> ValidationReport:
         value = data.get(key)
         if value is None:
             data[key] = []
+        elif not isinstance(value, list) or not all(isinstance(item, str) for item in value):
+            raise InvalidReportError("report errors and warnings must be text arrays")
     for key in _NULLABLE_STRINGS:
         data.setdefault(key, None)
+        if data[key] is not None and not isinstance(data[key], str):
+            raise InvalidReportError("report metadata must be text or null")
     report = ValidationReport(
         report_id=data["report_id"],
         input_hash=data["input_hash"],
