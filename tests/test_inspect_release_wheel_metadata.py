@@ -59,11 +59,16 @@ def _wheel(
     extras: tuple[str, ...] = (),
     requires: tuple[str, ...] = (),
     metadata_dir: str | None = None,
+    duplicate_identity: str | None = None,
+    omit_identity: str | None = None,
 ) -> Path:
     message = Message()
-    message["Metadata-Version"] = "2.3"
-    message["Name"] = name
-    message["Version"] = version
+    identity = {"Metadata-Version": "2.3", "Name": name, "Version": version}
+    for field, value in identity.items():
+        if field != omit_identity:
+            message[field] = value
+        if field == duplicate_identity:
+            message[field] = value
     for key, url in (EXPECTED_URLS if urls is None else urls).items():
         message["Project-URL"] = f"{key}, {url}"
     if duplicate:
@@ -78,6 +83,22 @@ def _wheel(
             message.as_bytes(),
         )
     return path
+
+
+@pytest.mark.parametrize("field", ["Metadata-Version", "Name", "Version"])
+@pytest.mark.parametrize("mutation", ["duplicate", "missing"])
+def test_wheel_requires_unambiguous_identity_headers(
+    tmp_path: Path, field: str, mutation: str
+) -> None:
+    wheel = _wheel(
+        tmp_path / "synthetic-identity.whl",
+        duplicate_identity=field if mutation == "duplicate" else None,
+        omit_identity=field if mutation == "missing" else None,
+    )
+    result = inspect_wheel(wheel, expected_version="0.3.0", require_core_only=True)
+    assert result["publication_authorized"] is False
+    assert result["status"] == "BLOCKED"
+    assert f"wheel {field} must appear exactly once" in result["issues"]
 
 
 @pytest.mark.parametrize(
