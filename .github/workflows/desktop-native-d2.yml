@@ -54,6 +54,10 @@ jobs:
           $file = (Resolve-Path 'tests/windows-native-uia-smoke.ps1').Path
           [System.Management.Automation.Language.Parser]::ParseFile($file, [ref]$tokens, [ref]$parseErrors) | Out-Null
           if ($parseErrors.Count -gt 0) { throw 'D2 native UIA smoke parse error' }
+      - name: Verify macOS local-loopback network denial policy (no app launched)
+        if: runner.os == 'macOS'
+        shell: bash
+        run: bash tests/macos-deny-network-selftest.sh
       - name: Verify committed deterministic Cargo lock
         shell: bash
         run: |
