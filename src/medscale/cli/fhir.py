@@ -65,7 +65,7 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         payload = json.loads(args.input_file.read_text(encoding="utf-8"))
-    except (json.JSONDecodeError, OSError) as exc:
+    except (json.JSONDecodeError, UnicodeError, OSError) as exc:
         print(f"input read error: {exc}", file=sys.stderr)
         return 1
 
