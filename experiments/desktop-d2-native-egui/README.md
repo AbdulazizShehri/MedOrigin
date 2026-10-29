@@ -13,6 +13,12 @@ D1 source candidate, the Python Research Core or the Workspace.
 - Native application compilation is distinct from proving zero network egress:
   an OS-scoped packet-level observation is still required on each platform.
 - The UI does not persist state or read from an arbitrary path.
+- `eframe`'s `accesskit` feature is enabled explicitly (default features are
+  disabled). Before enabling it, Windows UI Automation exposed **0** descendants
+  of the native window; after enabling it, Windows exposed **10** accessible
+  controls/text nodes, including the four synthetic fixture selectors and
+  the verification button. This added Rust/Windows accessibility dependencies
+  to the locked dependency graph; their licenses and advisories require review.
 
 ## Build and qualification
 Use Rust 1.97.1 and checked-in Cargo.lock, from this folder:
@@ -51,10 +57,18 @@ endpoint logs remain local. The tool does not change firewall, WebView2,
 installers, network or patient data. The Windows CI source-only test checks
 three negative cases without launching any GUI.
 
-First local D2 result (2026-10-29): an actual top-level Windows window
-was observed and three samples reported only two process-tree entries,
-**0 established external TCP, 0 all-state external TCP and 0 UDP**. This
-is an encouraging *snapshot observation*, not a packet-level guarantee.
+After enabling AccessKit (2026-10-29), the native window displayed a
+Windows UI Automation tree with **10 descendants**. The independent
+`tests/windows-native-uia-smoke.ps1` exercised the four actual selector
+buttons and verification button, then matched the rendered digest for every
+fictional fixture: **4/4 PASS on Windows**. The Windows CI parses this script
+but does not run an interactive graphical session. On the rebuilt AccessKit
+executable (author-local SHA-256
+`45D19A06E5E21667A23A858BA50B6D4077C68C27F6CF6133141C61281221DF4E`),
+the host probe again observed a native window and **three samples with 0
+external established/all-state TCP and 0 UDP**. The RustSec audit returned
+**0 known advisories** for the newly regenerated lock at test time. These
+are encouraging limited observations, **not packet-level zero-egress proof**.
 
 **All releases, merging into protected main, distribution, PHI and clinical
 usage remain NO-GO** until separate acceptance, security, provenance,
