@@ -62,7 +62,8 @@ jobs:
         run: |
           foreach ($file in @(
             'experiments/desktop-d1-tauri/tests/windows-uia-smoke.ps1',
-            'experiments/desktop-d1-tauri/tests/windows-egress-snapshot.ps1'
+            'experiments/desktop-d1-tauri/tests/windows-egress-snapshot.ps1',
+            'experiments/desktop-d1-tauri/tests/windows-egress-probe-selftest.ps1'
           )) {
             $tokens = $null
             $parseErrors = $null
@@ -71,3 +72,7 @@ jobs:
             ) | Out-Null
             if ($parseErrors.Count -gt 0) { throw "PowerShell parse error in $file" }
           }
+
+      - name: Fail-closed synthetic egress probe regression
+        shell: pwsh
+        run: powershell.exe -NoProfile -ExecutionPolicy Bypass -File experiments/desktop-d1-tauri/tests/windows-egress-probe-selftest.ps1
