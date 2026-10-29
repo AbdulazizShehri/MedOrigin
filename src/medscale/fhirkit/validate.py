@@ -84,7 +84,7 @@ def _run_validator(command: list[str], input_path: Path) -> str:
         # External tool output and command arguments may contain patient fields,
         # private paths or credentials. Never expose them in failure messages.
         raise UnavailableValidatorError("external FHIR validator returned a nonzero exit status")
-    return stdout or "{}"
+    return stdout
 
 
 def validate_fhir_with_validator(
@@ -100,7 +100,7 @@ def validate_fhir_with_validator(
     if command is None:
         command = _search_path_command()
 
-    raw_stdout = "{}"
+    raw_stdout = ""
     validator_name = FHIR_VALIDATOR_NAME
     validator_version = FHIR_VALIDATOR_VERSION
 
@@ -132,33 +132,38 @@ def validate_fhir_with_validator(
     errors: tuple[str, ...] = ()
     warnings: tuple[str, ...] = ()
     try:
-        parsed = json.loads(raw_stdout) if raw_stdout.strip() else {}
-    except json.JSONDecodeError as exc:
-        raise InvalidReportError(f"validator output was not valid JSON: {exc}") from exc
+        parsed = json.loads(raw_stdout) if raw_stdout.strip() else None
+    except json.JSONDecodeError:
+        # Never echo untrusted validator output into public exceptions.
+        raise InvalidReportError("external validator output was not valid JSON") from None
 
-    if isinstance(parsed, dict):
-        if "validation-report" in parsed or "ValidationReport" in parsed:
-            validator_name = parsed.get("validator_name") or validator_name
-            validator_version = parsed.get("validator_version") or validator_version
-        raw_errors = parsed.get("errors") or parsed.get("issue") or ()
-        raw_warnings = parsed.get("warnings") or ()
-        if not isinstance(raw_errors, (list, tuple)):
-            raw_errors = (str(raw_errors),)
-        if not isinstance(raw_warnings, (list, tuple)):
-            raw_warnings = (str(raw_warnings),)
-        errors = tuple(str(item) for item in raw_errors)
-        warnings = tuple(str(item) for item in raw_warnings)
-        if not errors and validator_name != FHIR_VALIDATOR_NAME:
-            warnings = (*warnings, "validator parsed output without explicit errors")
-    else:
-        warnings = (str(parsed),)
+    # No implicit success from empty stdout, '{}', arrays, scalars, or
+    # OperationOutcome documents whose severities are not yet interpreted.
+    # This adapter accepts only the explicit status-bearing JSON report
+    # protocol; a full HL7 OperationOutcome adapter is a separate gate.
+    if not isinstance(parsed, dict) or parsed.get("status") not in ("valid", "invalid"):
+        raise InvalidReportError("external validator requires explicit valid or invalid status")
+
+    if "validation-report" in parsed or "ValidationReport" in parsed:
+        validator_name = parsed.get("validator_name") or validator_name
+        validator_version = parsed.get("validator_version") or validator_version
+    raw_errors = parsed.get("errors") or parsed.get("issue") or ()
+    raw_warnings = parsed.get("warnings") or ()
+    if not isinstance(raw_errors, (list, tuple)):
+        raw_errors = (str(raw_errors),)
+    if not isinstance(raw_warnings, (list, tuple)):
+        raw_warnings = (str(raw_warnings),)
+    errors = tuple(str(item) for item in raw_errors)
+    warnings = tuple(str(item) for item in raw_warnings)
+    if not errors and validator_name != FHIR_VALIDATOR_NAME:
+        warnings = (*warnings, "validator parsed output without explicit errors")
 
     report = ValidationReport(
         report_id=None,
         input_hash=input_hash,
         validator_name=validator_name,
         validator_version=validator_version,
-        status="valid" if not errors else "invalid",
+        status="invalid" if parsed["status"] == "invalid" or errors else "valid",
         errors=errors,
         warnings=warnings,
         created_at=created_at,
