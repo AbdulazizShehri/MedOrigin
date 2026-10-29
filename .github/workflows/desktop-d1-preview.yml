@@ -32,6 +32,9 @@ jobs:
       - name: Fail-closed host qualification regressions (no app launch)
         shell: pwsh
         run: powershell.exe -NoProfile -ExecutionPolicy Bypass -File experiments/desktop-d1-tauri/tests/windows-host-qualification-selftest.ps1
+      - name: Verify pinned executable staging without launching binary
+        shell: pwsh
+        run: powershell.exe -NoProfile -ExecutionPolicy Bypass -File experiments/desktop-d1-tauri/tests/windows-stage-approved-preview-selftest.ps1
 
   windows-preview-source:
     name: Windows D1 Tauri source only
@@ -85,7 +88,9 @@ jobs:
             'experiments/desktop-d1-tauri/tests/windows-egress-snapshot.ps1',
             'experiments/desktop-d1-tauri/tests/windows-egress-probe-selftest.ps1',
             'experiments/desktop-d1-tauri/tests/windows-host-qualification.ps1',
-            'experiments/desktop-d1-tauri/tests/windows-host-qualification-selftest.ps1'
+            'experiments/desktop-d1-tauri/tests/windows-host-qualification-selftest.ps1',
+            'experiments/desktop-d1-tauri/tests/windows-stage-approved-preview.ps1',
+            'experiments/desktop-d1-tauri/tests/windows-stage-approved-preview-selftest.ps1'
           )) {
             $tokens = $null
             $parseErrors = $null
