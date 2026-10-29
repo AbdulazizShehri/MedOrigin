@@ -51,6 +51,12 @@ def inspect_wheel(
                     message = BytesParser(policy=default).parsebytes(
                         archive.read(metadata_paths[0])
                     )
+                    # Identity fields must be singular. Email-style parsing
+                    # otherwise reads the first value and silently ignores
+                    # duplicated/conflicting Name or Version headers.
+                    for field in ("Metadata-Version", "Name", "Version"):
+                        if len(message.get_all(field, [])) != 1:
+                            issues.append(f"wheel {field} must appear exactly once")
                     version = message.get("Version")
                     if message.get("Name") != distribution:
                         issues.append(f"distribution name must remain {distribution}")
