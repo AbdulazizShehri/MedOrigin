@@ -37,6 +37,24 @@ foreach($childId in $ids){
   throw 'D1 child process changed during snapshot'
  }
 }
+# A newly spawned descendant can appear between the process and socket queries.
+# Rebuild ancestry from the second process sample; a clean result is not trustworthy
+# if the process tree grew while sockets were sampled.
+$afterIds=[System.Collections.Generic.HashSet[int]]::new()
+[void]$afterIds.Add($RootPid)
+do {
+ $changed=$false
+ foreach($p in $afterAll){
+  if($afterIds.Contains([int]$p.ParentProcessId) -and -not $afterIds.Contains([int]$p.ProcessId)){
+   [void]$afterIds.Add([int]$p.ProcessId)
+   $changed=$true
+  }
+ }
+}while($changed)
+if($afterIds.Count -ne $ids.Count){throw 'D1 descendant process set changed during snapshot'}
+foreach($afterId in $afterIds){
+ if(-not $ids.Contains($afterId)){throw 'D1 descendant process set changed during snapshot'}
+}
 Write-Output ('D1_PROCESS_TREE_COUNT='+$ids.Count)
 Write-Output ('EXTERNAL_ESTABLISHED_TCP='+$established.Count)
 Write-Output ('EXTERNAL_TCP_ALL_STATES='+$tcp.Count)
