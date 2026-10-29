@@ -94,6 +94,10 @@ def inspect_wheel(
                     for key, url in EXPECTED_URLS.items():
                         if actual.get(key) != url:
                             issues.append(f"{key}: missing or noncanonical URL")
+                    if require_core_only and actual.keys() - EXPECTED_URLS.keys():
+                        # A candidate with the four approved links plus an
+                        # unreviewed fifth URL must not pass the strict gate.
+                        issues.append("unexpected Project-URL")
     except (OSError, zipfile.BadZipFile, RuntimeError, EOFError, ValueError) as exc:
         issues.append(f"wheel unreadable: {type(exc).__name__}")
 

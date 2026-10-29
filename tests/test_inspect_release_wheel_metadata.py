@@ -177,6 +177,17 @@ def test_duplicate_label_is_rejected(tmp_path: Path) -> None:
     assert "invalid or duplicate Project-URL" in result["issues"]
 
 
+@pytest.mark.parametrize("unexpected_label", ["Security", "Download"])
+def test_core_only_rejects_unapproved_project_url(tmp_path: Path, unexpected_label: str) -> None:
+    urls = dict(EXPECTED_URLS)
+    urls[unexpected_label] = "https://untrusted.invalid/collect"
+    wheel = _wheel(tmp_path / "unapproved-url.whl", urls=urls)
+    result = inspect_wheel(wheel, expected_version="0.3.0", require_core_only=True)
+    assert result["status"] == "BLOCKED"
+    assert result["publication_authorized"] is False
+    assert "unexpected Project-URL" in result["issues"]
+
+
 def test_version_and_distribution_are_binding(tmp_path: Path) -> None:
     wheel = _wheel(tmp_path / "mismatch.whl", version="0.2.0", name="medorigin")
     result = inspect_wheel(wheel, expected_version="0.3.0")
