@@ -126,6 +126,27 @@ def test_report_schema_rechecks_tampered_frozen_instance() -> None:
         validate_report_schema(report)
 
 
+def test_report_never_claims_valid_with_diagnostic_errors() -> None:
+    with pytest.raises(InvalidReportError, match="valid report cannot contain errors"):
+        ValidationReport(status="valid", errors=("fictional fatal error",))
+
+
+def test_serialization_rejects_mutated_false_valid_report() -> None:
+    report = ValidationReport(status="invalid", errors=("fictional fatal error",))
+    object.__setattr__(report, "status", "valid")
+    with pytest.raises(InvalidReportError, match="valid report cannot contain errors"):
+        report_hash(report)
+    with pytest.raises(InvalidReportError, match="valid report cannot contain errors"):
+        report_to_json(report)
+
+
+def test_report_loader_rejects_false_valid_errors_even_with_canonical_shape() -> None:
+    valid = ValidationReport(status="invalid", errors=("fictional fatal error",))
+    raw = report_to_json(valid).replace('"status":"invalid"', '"status":"valid"')
+    with pytest.raises(InvalidReportError, match="valid report cannot contain errors"):
+        load_report_from_json(raw)
+
+
 def test_report_hash_is_deterministic() -> None:
     report = validate_fhir(_rule_input())
     assert report_hash(report) == report_hash(report)
