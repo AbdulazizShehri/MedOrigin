@@ -23,6 +23,18 @@ def _default_root() -> Path:
     return Path("data") / "fhirkit"
 
 
+def _reject_report_directory_symlinks(root: Path, digest: str) -> None:
+    """Reject static symlink redirection below a caller-approved storage root.
+
+    This is a path-layout safeguard, not an OS-enforced guarantee against a
+    hostile process swapping directories between checks and file operations.
+    """
+    reports_dir = fhirkit_reports_dir(root)
+    for directory in (reports_dir.parent, reports_dir, reports_dir / digest):
+        if directory.is_symlink():
+            raise FhirStorageError("refusing a symlinked report directory")
+
+
 def store_report(report: ValidationReport, root: Path | None = None) -> Path:
     """Store a report in deterministic content-addressed storage."""
     root = root or _default_root()
@@ -30,7 +42,9 @@ def store_report(report: ValidationReport, root: Path | None = None) -> Path:
     report_hash_value = report_hash(report)
     target_dir = fhirkit_reports_dir(root) / report_hash_value
     target_path = target_dir / _DEFAULT_FILENAME
+    _reject_report_directory_symlinks(root, report_hash_value)
     target_path.parent.mkdir(parents=True, exist_ok=True)
+    _reject_report_directory_symlinks(root, report_hash_value)
     try:
         # Exclusive creation is atomic: never truncate an existing artifact or
         # follow a pre-existing report.json symlink to an unrelated user file.
@@ -59,6 +73,7 @@ def load_report(report_hash_value: str, root: Path | None = None) -> str:
         raise FhirStorageError("report address must be a canonical SHA-256 digest")
     root = root or _default_root()
     target_path = fhirkit_reports_dir(root) / report_hash_value / _DEFAULT_FILENAME
+    _reject_report_directory_symlinks(root, report_hash_value)
     if target_path.is_symlink():
         raise FhirStorageError("refusing a symlink at the FHIR report path")
     try:
