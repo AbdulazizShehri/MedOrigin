@@ -17,6 +17,9 @@ try {
     @{ name = 'child-pid-reused'; expected = 1; marker = 'D1 child process changed during snapshot' },
     @{ name = 'child-reparented'; expected = 1; marker = 'D1 child process changed during snapshot' },
     @{ name = 'missing-child-creation'; expected = 1; marker = 'D1 child process changed during snapshot' },
+    @{ name = 'new-child-mid-snapshot'; expected = 1; marker = 'D1 descendant process set changed during snapshot' },
+    @{ name = 'new-grandchild-mid-snapshot'; expected = 1; marker = 'D1 descendant process set changed during snapshot' },
+    @{ name = 'new-unrelated-mid-snapshot'; expected = 0; marker = 'D1_SNAPSHOT_NO_EXTERNAL_TCP' },
     @{ name = 'query-error'; expected = 1; marker = 'synthetic socket query failure' },
     @{ name = 'process-error'; expected = 1; marker = 'synthetic process query failure' },
     @{ name = 'udp-error'; expected = 1; marker = 'synthetic UDP query failure' },
@@ -52,8 +55,17 @@ function Get-CimInstance {
       [pscustomobject]@{ ProcessId = 23456; ParentProcessId = $childParent; CreationDate = $childCreation }
     }
   }
-  if ('__SCENARIO__' -eq 'unrelated-external') {
-    [pscustomobject]@{ ProcessId = 45678; ParentProcessId = 0 }
+  if ('__SCENARIO__' -eq 'new-child-mid-snapshot' -and $script:processQueries -gt 1) {
+    [pscustomobject]@{ ProcessId = 23456; ParentProcessId = 12345; CreationDate = '2026-10-29T00:00:01' }
+  }
+  if ('__SCENARIO__' -eq 'new-grandchild-mid-snapshot') {
+    [pscustomobject]@{ ProcessId = 23456; ParentProcessId = 12345; CreationDate = '2026-10-29T00:00:01' }
+    if ($script:processQueries -gt 1) {
+      [pscustomobject]@{ ProcessId = 34567; ParentProcessId = 23456; CreationDate = '2026-10-29T00:00:02' }
+    }
+  }
+  if ('__SCENARIO__' -eq 'unrelated-external' -or ('__SCENARIO__' -eq 'new-unrelated-mid-snapshot' -and $script:processQueries -gt 1)) {
+    [pscustomobject]@{ ProcessId = 45678; ParentProcessId = 0; CreationDate = '2026-10-29T00:00:01' }
   }
 }
 function Get-NetTCPConnection {
@@ -101,4 +113,4 @@ exit $LASTEXITCODE
 finally {
   Remove-Item -LiteralPath $testDir -Recurse -Force -ErrorAction SilentlyContinue
 }
-Write-Output 'D1_EGRESS_PROBE_16_OF_16_PASS (mocked sockets only; NOT zero-egress proof)'
+Write-Output 'D1_EGRESS_PROBE_19_OF_19_PASS (mocked sockets only; NOT zero-egress proof)'
