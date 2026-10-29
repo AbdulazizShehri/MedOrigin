@@ -83,7 +83,18 @@ try {
     Remove-Item -LiteralPath $relativeOutput -Recurse -Force -ErrorAction SilentlyContinue
     throw 'Non-absolute output path was not rejected before staging'
   }
-  Write-Output 'D1_OFFLINE_SANDBOX_PROFILE_SELFTEST_PASS (pinned SHA-256; local paths; source-only; sandbox NOT launched)'
+  # Refuse unmounted drive-letter roots: syntactically local-looking paths are
+  # not sufficient, since an actual drive letter can also map to a network share.
+  $missingDrive = @('Z','Y','X','W','V','U','T','S') | Where-Object {
+    ([IO.DriveInfo]::new(($_ + ':\'))).DriveType -eq [IO.DriveType]::NoRootDirectory
+  } | Select-Object -First 1
+  if (-not $missingDrive) { throw 'No unmounted drive available for fixed-drive refusal regression' }
+  $unmountedOutput = $missingDrive + ':\medorigin-d1-refuse-' + [guid]::NewGuid().ToString('N')
+  $denied = $false
+  try { & $generator -ExePath $source -OutputDirectory $unmountedOutput -ExpectedSha256 $approvedSha | Out-Null }
+  catch { $denied = $true }
+  if (-not $denied) { throw 'Nonfixed output drive was not refused' }
+  Write-Output 'D1_OFFLINE_SANDBOX_PROFILE_SELFTEST_PASS (pinned SHA-256; fixed drives; source-only; sandbox NOT launched)'
 }
 finally {
   Remove-Item -LiteralPath $root -Recurse -Force -ErrorAction SilentlyContinue

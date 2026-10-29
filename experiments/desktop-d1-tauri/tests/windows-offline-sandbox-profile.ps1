@@ -13,6 +13,16 @@ $ErrorActionPreference = 'Stop'
 if ($ExePath -notmatch '^[A-Za-z]:\\' -or $OutputDirectory -notmatch '^[A-Za-z]:\\') {
   throw 'Only absolute local drive paths are allowed'
 }
+# A drive letter alone does not establish local storage: Windows permits
+# mapping a network share to a drive letter. Deny nonfixed drives before
+# opening, hashing or copying any executable from a potentially remote share.
+foreach ($candidate in @($ExePath, $OutputDirectory)) {
+  $driveRoot = [IO.Path]::GetPathRoot([IO.Path]::GetFullPath($candidate))
+  $drive = [IO.DriveInfo]::new($driveRoot)
+  if ($drive.DriveType -ne [IO.DriveType]::Fixed) {
+    throw 'Only fixed local drives may hold the source or Sandbox staging'
+  }
+}
 $source = Get-Item -LiteralPath $ExePath -ErrorAction Stop
 if ($source.PSIsContainer -or $source.Name -cne 'medorigin-desktop-d1-preview.exe') {
   throw 'Only the synthetic MedOrigin D1 preview executable is permitted'
