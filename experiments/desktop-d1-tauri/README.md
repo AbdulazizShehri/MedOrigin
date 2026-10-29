@@ -40,6 +40,18 @@ Stop-Process -Id $p.Id -Force
 
 The UI Automation smoke test verifies all four fictional fixture IDs through **React → Tauri IPC → Rust → React** and checks exact SHA-256 goldens. The invalid-encoding and oversize samples are *expected to hash successfully*; this does **not** mean they pass FHIR validation. The egress audit inspects the root process and descendant WebView2 processes; it exits 2 on any observed non-loopback TCP state (including `SynSent`), and fails closed if process/socket enumeration fails. Its separate `tests/windows-egress-probe-selftest.ps1` runs nine mocked scenarios, including external TCP attempts from nested descendants, unrelated-process exclusion, missing-root fail-closed behavior, socket-enumeration errors, and loopback allowance. It does **not** exercise the actual OS network boundary. A clean snapshot is **not** proof of zero network activity.
 
+For a bounded, multi-sample *negative* observation (no firewall/system changes), monitor a separately launched preview by PID for at least a few seconds:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File tests/windows-egress-window-selftest.ps1
+# Launch the synthetic debug preview separately, record $p.Id, then:
+powershell -NoProfile -ExecutionPolicy Bypass -File tests/windows-egress-window.ps1 -RootPid $p.Id -DurationSeconds 15 -SampleIntervalMilliseconds 250 -ProbeTimeoutSeconds 10
+```
+
+The window harness invokes the independent process-tree snapshot repeatedly. It fails with exit **2** and `D1_NETWORK_ISOLATION_NO_GO` upon any sampled external TCP socket (including `SynSent`), exit **1** on missing root, unavailable snapshot, error, unmarked output or insufficient samples, and exit **0** only if at least two snapshots completed without seeing an external TCP socket. Its six mocked self-test scenarios verify clean, direct external, delayed external, probe error, ambiguous-success and hung-probe timeout cases; the existing snapshot has its own nine mocked negative tests.
+
+**Important:** `DurationSeconds` sets the target sampling window, while `ProbeTimeoutSeconds` separately bounds each snapshot; the total elapsed time may exceed the target window because a sample can consume its timeout. The observation interval may miss short-lived connections and cannot detect every UDP/DNS exchange, WebView2 service-level request, proxy route or network packet. A successful observation is **not** a zero-egress assertion or release gate clearance. Proper application-scoped OS network denial, packet-level evidence and separate IPC/UI qualification are still required. Never install a machine-wide block on the shared `msedgewebview2.exe` runtime.
+
 **Observed security NO-GO on Windows, 2026-10-29:** With the local D1 debug preview running, `msedgewebview2.exe` descendants established **external IPv6 TCP port 443** connections (two to three in repeated snapshots). The same problem persisted with `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS='--disable-background-networking --disable-component-update'`. This is a runtime observation, not proof of what content was sent or whether the app initiated the traffic. Do **not** claim the desktop is zero-egress/offline-isolated, or allow PHI, release, or clinical use. Any future resolution requires a separately reviewed, application-scoped OS isolation policy and packet-level verification; do not disable system-wide WebView2 security updates or firewall other applications.
 
 ## Known blocks

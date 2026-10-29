@@ -63,7 +63,9 @@ jobs:
           foreach ($file in @(
             'experiments/desktop-d1-tauri/tests/windows-uia-smoke.ps1',
             'experiments/desktop-d1-tauri/tests/windows-egress-snapshot.ps1',
-            'experiments/desktop-d1-tauri/tests/windows-egress-probe-selftest.ps1'
+            'experiments/desktop-d1-tauri/tests/windows-egress-probe-selftest.ps1',
+            'experiments/desktop-d1-tauri/tests/windows-egress-window.ps1',
+            'experiments/desktop-d1-tauri/tests/windows-egress-window-selftest.ps1'
           )) {
             $tokens = $null
             $parseErrors = $null
@@ -76,3 +78,7 @@ jobs:
       - name: Fail-closed synthetic egress probe regression
         shell: pwsh
         run: powershell.exe -NoProfile -ExecutionPolicy Bypass -File experiments/desktop-d1-tauri/tests/windows-egress-probe-selftest.ps1
+
+      - name: Fail-closed synthetic repeated egress window regression
+        shell: pwsh
+        run: powershell.exe -NoProfile -ExecutionPolicy Bypass -File experiments/desktop-d1-tauri/tests/windows-egress-window-selftest.ps1
