@@ -2,7 +2,7 @@ name: Experimental Native Rust D2 (no publish)
 
 on:
   pull_request:
-    branches: [main]
+    branches: [main, "test/medorigin-d2-*", "experiment/medorigin-native-egui-d2-20261029"]
     paths:
       - "experiments/desktop-d2-native-egui/**"
       - ".github/workflows/desktop-native-d2.yml"
