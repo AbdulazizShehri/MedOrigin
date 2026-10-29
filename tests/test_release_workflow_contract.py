@@ -71,16 +71,19 @@ def test_testpypi_publish_job_reuses_exact_artifact_without_rebuild_or_secret() 
         assert forbidden not in block
 
 
-def test_manual_main_qualification_never_opens_tag_or_publish_jobs() -> None:
+def test_manual_branch_qualification_never_opens_tag_or_publish_jobs() -> None:
     text = _workflow_text()
     triggers = text.split("permissions:", maxsplit=1)[0]
     assert "  workflow_dispatch:" in triggers
     assert "  push:\n    tags:" in triggers
     assert "permissions:\n  contents: read" in text.split("jobs:", maxsplit=1)[0]
 
+    # Authorized manual qualification must work on an exact reviewed branch
+    # without retargeting a stacked Draft PR to protected main. Never on tags.
     allowed = (
         "github.event_name == 'pull_request' || "
-        "(github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main')"
+        "(github.event_name == 'workflow_dispatch' && "
+        "startsWith(github.ref, 'refs/heads/'))"
     )
     for job_id in ("pr-artifact-build", "pr-artifact-roundtrip", "pr-clean-wheel-smoke"):
         block = _job_block(text, job_id)
