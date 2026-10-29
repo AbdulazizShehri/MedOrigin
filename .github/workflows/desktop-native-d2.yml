@@ -61,7 +61,9 @@ jobs:
       - name: Typecheck real macOS AX acceptance probe without launching a GUI
         if: runner.os == 'macOS'
         shell: bash
-        run: swiftc -typecheck tests/macos-native-ax-smoke.swift
+        run: |
+          swiftc -typecheck tests/macos-native-ax-smoke.swift
+          bash -n tests/macos-native-ax-local-qualification.sh
       - name: Verify committed deterministic Cargo lock
         shell: bash
         run: |
