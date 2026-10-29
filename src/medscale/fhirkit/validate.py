@@ -61,12 +61,19 @@ def validate_fhir(input_payload: dict[str, Any], created_at: str | None = None) 
 
 
 def _run_validator(command: list[str], input_path: Path) -> str:
-    completed = subprocess.run(
-        [*command, str(input_path)],
-        check=False,
-        capture_output=True,
-        text=True,
-    )
+    try:
+        completed = subprocess.run(
+            [*command, str(input_path)],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=120,
+        )
+    except subprocess.TimeoutExpired:
+        # Avoid leaking the private scratch pathname in command/exception reprs.
+        raise UnavailableValidatorError("external FHIR validator timed out") from None
+    except OSError:
+        raise UnavailableValidatorError("external FHIR validator could not be started") from None
     stdout = completed.stdout.strip()
     stderr = completed.stderr.strip()
     if completed.returncode != 0:
