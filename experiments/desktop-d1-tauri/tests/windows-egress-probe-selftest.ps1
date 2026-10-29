@@ -10,6 +10,8 @@ try {
     @{ name = 'query-error'; expected = 1; marker = 'synthetic socket query failure' },
     @{ name = 'process-error'; expected = 1; marker = 'synthetic process query failure' },
     @{ name = 'udp-error'; expected = 1; marker = 'synthetic UDP query failure' },
+    @{ name = 'udp-bound'; expected = 2; marker = 'D1_NETWORK_ISOLATION_NO_GO' },
+    @{ name = 'child-udp'; expected = 2; marker = 'D1_NETWORK_ISOLATION_NO_GO' },
     @{ name = 'loopback'; expected = 0; marker = 'D1_SNAPSHOT_NO_EXTERNAL_TCP' }
   )
   foreach ($case in $cases) {
@@ -19,6 +21,9 @@ function Get-CimInstance {
   [CmdletBinding()] param([string]$ClassName)
   if ('__SCENARIO__' -eq 'process-error') { throw 'synthetic process query failure' }
   [pscustomobject]@{ ProcessId = 12345; ParentProcessId = 0 }
+  if ('__SCENARIO__' -eq 'child-udp') {
+    [pscustomobject]@{ ProcessId = 12346; ParentProcessId = 12345 }
+  }
 }
 function Get-NetTCPConnection {
   [CmdletBinding()] param()
@@ -36,6 +41,10 @@ function Get-NetTCPConnection {
 function Get-NetUDPEndpoint {
   [CmdletBinding()] param()
   if ('__SCENARIO__' -eq 'udp-error') { throw 'synthetic UDP query failure' }
+  if ('__SCENARIO__' -eq 'udp-bound' -or '__SCENARIO__' -eq 'child-udp') {
+    $pid = if ('__SCENARIO__' -eq 'child-udp') { 12346 } else { 12345 }
+    [pscustomobject]@{ OwningProcess = $pid; LocalAddress = '0.0.0.0'; LocalPort = 5353 }
+  }
 }
 & '__PROBE__' -RootPid 12345
 exit $LASTEXITCODE
@@ -58,4 +67,4 @@ exit $LASTEXITCODE
 finally {
   Remove-Item -LiteralPath $testDir -Recurse -Force -ErrorAction SilentlyContinue
 }
-Write-Output 'D1_EGRESS_PROBE_6_OF_6_PASS (mocked sockets only; NOT zero-egress proof)'
+Write-Output 'D1_EGRESS_PROBE_8_OF_8_PASS (mocked sockets only; NOT zero-egress proof)'
