@@ -29,6 +29,7 @@ def inspect_wheel(
     *,
     expected_version: str | None = None,
     distribution: str = "medscale",
+    require_core_only: bool = False,
 ) -> dict[str, object]:
     """Inspect the bytes to be installed, never source pyproject or inferred URLs."""
     issues: list[str] = []
@@ -53,6 +54,16 @@ def inspect_wheel(
                     version = message.get("Version")
                     if message.get("Name") != distribution:
                         issues.append(f"distribution name must remain {distribution}")
+                    if require_core_only:
+                        # Candidate Core-only release must not advertise *any*
+                        # installable extras (even if the default install has
+                        # zero dependencies). Existing frozen research extras
+                        # remain blocked under #622 until a separately governed
+                        # new package lineage is qualified.
+                        if message.get_all("Provides-Extra"):
+                            issues.append("core-only wheel advertises optional extras")
+                        if message.get_all("Requires-Dist"):
+                            issues.append("core-only wheel declares dependencies")
                     if not version:
                         issues.append("wheel version missing")
                     elif expected_version is not None and version != expected_version:
@@ -77,6 +88,7 @@ def inspect_wheel(
         "version": version,
         "status": "METADATA_QUALIFIED_ONLY" if not issues else "BLOCKED",
         "publication_authorized": False,
+        "core_only_required": require_core_only,
         "issues": issues,
     }
 
@@ -85,6 +97,11 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--wheel", required=True, type=Path)
     parser.add_argument("--expected-version", default=None)
+    parser.add_argument(
+        "--require-core-only",
+        action="store_true",
+        help="Fail closed if the built wheel advertises any extras or Requires-Dist",
+    )
     parser.add_argument(
         "--distribution", choices=("medscale", "medscale-workspace"), default="medscale"
     )
@@ -96,6 +113,7 @@ def main(argv: list[str] | None = None) -> int:
         args.wheel,
         expected_version=args.expected_version,
         distribution=args.distribution,
+        require_core_only=args.require_core_only,
     )
     encoded = json.dumps(result, sort_keys=True, indent=2) + "\n"
     if args.json_out is not None:
