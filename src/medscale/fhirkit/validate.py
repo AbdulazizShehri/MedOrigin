@@ -97,6 +97,20 @@ def validate_fhir(input_payload: dict[str, Any], created_at: str | None = None) 
     )
 
 
+def _strict_validator_members(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    """Reject duplicate JSON object properties at any nesting depth."""
+    parsed: dict[str, Any] = {}
+    for key, value in pairs:
+        if key in parsed:
+            raise ValueError("duplicate validator JSON member")
+        parsed[key] = value
+    return parsed
+
+
+def _reject_validator_nonfinite_constant(_value: str) -> Any:
+    raise ValueError("non-finite validator JSON constant")
+
+
 def _run_validator(command: list[str], input_path: Path) -> str:
     try:
         completed = subprocess.run(
@@ -167,10 +181,20 @@ def validate_fhir_with_validator(
     errors: tuple[str, ...] = ()
     warnings: tuple[str, ...] = ()
     try:
-        parsed = json.loads(raw_stdout) if raw_stdout.strip() else None
-    except json.JSONDecodeError:
-        # Never echo untrusted validator output into public exceptions.
-        raise InvalidReportError("external validator output was not valid JSON") from None
+        parsed = (
+            json.loads(
+                raw_stdout,
+                object_pairs_hook=_strict_validator_members,
+                parse_constant=_reject_validator_nonfinite_constant,
+            )
+            if raw_stdout.strip()
+            else None
+        )
+        # Python's JSON parser also permits overflow from e.g. 1e999.
+        # Reject it without reproducing sensitive validator output.
+        json.dumps(parsed, allow_nan=False)
+    except (json.JSONDecodeError, ValueError):
+        raise InvalidReportError("external validator output was not strict JSON") from None
 
     # No implicit success from empty stdout, '{}', arrays, scalars, or
     # OperationOutcome documents whose severities are not yet interpreted.

@@ -431,6 +431,31 @@ def test_external_validator_honors_invalid_status_without_errors() -> None:
     assert report.errors == ()
 
 
+@pytest.mark.parametrize(
+    "invalid_validator_output",
+    [
+        '{"status":"invalid","status":"valid","errors":[]}',
+        '{"status":"valid","errors":[],"errors":[]}',
+        '{"status":"valid","meta":{"marker":1,"marker":2}}',
+        '{"status":"valid","warnings":[NaN]}',
+        '{"status":"valid","warnings":[Infinity]}',
+        '{"status":"valid","warnings":[-Infinity]}',
+        '{"status":"valid","meta":{"overflow":1e999}}',
+    ],
+)
+def test_external_validator_rejects_ambiguous_or_nonfinite_json_output(
+    invalid_validator_output: str,
+) -> None:
+    import sys as _sys
+
+    from medscale.fhirkit import InvalidReportError, validate_fhir_with_validator
+
+    command = [_sys.executable, "-c", f"print({invalid_validator_output!r})"]
+    with pytest.raises(InvalidReportError, match="external validator output") as exc:
+        validate_fhir_with_validator(_rule_input(), command=command)
+    assert invalid_validator_output not in str(exc.value)
+
+
 def test_external_validator_never_clobbers_cwd_file(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
