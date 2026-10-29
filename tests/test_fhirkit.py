@@ -437,6 +437,29 @@ def _echo_input_path_command() -> list[str]:
     ]
 
 
+@pytest.mark.parametrize(
+    ("stream", "exit_code"),
+    [("stdout", 0), ("stdout", 2), ("stderr", 0), ("stderr", 2)],
+)
+def test_external_validator_rejects_undecodable_output_without_leaking_bytes(
+    stream: str,
+    exit_code: int,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import sys as _sys
+
+    from medscale.fhirkit import UnavailableValidatorError, validate_fhir_with_validator
+
+    code = f"import sys; sys.{stream}.buffer.write(bytes([255])); sys.exit({exit_code})"
+    monkeypatch.setattr("medscale.fhirkit.validate.tempfile.tempdir", str(tmp_path))
+    with pytest.raises(UnavailableValidatorError, match="undecodable output") as exc:
+        validate_fhir_with_validator(_rule_input(), command=[_sys.executable, "-c", code])
+    assert str(tmp_path) not in str(exc.value)
+    assert "255" not in str(exc.value)
+    assert list(tmp_path.iterdir()) == []
+
+
 def test_external_validator_timeout_is_bounded_and_redacted(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:

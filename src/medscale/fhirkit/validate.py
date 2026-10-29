@@ -123,6 +123,12 @@ def _run_validator(command: list[str], input_path: Path) -> str:
     except subprocess.TimeoutExpired:
         # Avoid leaking the private scratch pathname in command/exception reprs.
         raise UnavailableValidatorError("external FHIR validator timed out") from None
+    except UnicodeError:
+        # subprocess.run(text=True) decodes both stdout and stderr, even on a
+        # nonzero exit. Do not expose the decoder's untrusted input bytes.
+        raise UnavailableValidatorError(
+            "external FHIR validator produced undecodable output"
+        ) from None
     except OSError:
         raise UnavailableValidatorError("external FHIR validator could not be started") from None
     stdout = completed.stdout.strip()
