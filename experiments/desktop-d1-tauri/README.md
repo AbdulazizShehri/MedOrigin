@@ -44,6 +44,28 @@ The UI Automation smoke test verifies all four fictional fixture IDs through **R
 
 **Observed security NO-GO on Windows, 2026-10-29:** With the local D1 debug preview running, `msedgewebview2.exe` descendants established **external IPv6 TCP port 443** connections (two to three in repeated snapshots). The same problem persisted with `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS='--disable-background-networking --disable-component-update'`. This is a runtime observation, not proof of what content was sent or whether the app initiated the traffic. Do **not** claim the desktop is zero-egress/offline-isolated, or allow PHI, release, or clinical use. Any future resolution requires a separately reviewed, application-scoped OS isolation policy and packet-level verification; do not disable system-wide WebView2 security updates or firewall other applications.
 
+## Optional disconnected Windows Sandbox rehearsal (NOT app-level zero-egress qualification)
+
+Windows Sandbox is an optional, disposable **test environment**, not the application isolation mechanism for an installed MedOrigin desktop. Its availability depends on Windows edition, virtualization, and enabled Windows Sandbox prerequisites; do not silently enable OS features.
+
+After building the **synthetic-only local debug executable** (no installer), generate a profile from an approved local executable on a Windows host:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File tests/windows-offline-sandbox-profile.ps1 `
+  -ExePath 'D:\MedOrigin-D1-target\debug\medorigin-desktop-d1-preview.exe' `
+  -OutputDirectory "$env:TEMP\medorigin-d1-sandbox-rehearsal"
+```
+
+The output directory must **not** already exist, and its parent must exist. Inspect `medorigin-synthetic-offline.wsb` before manually opening it with Windows Sandbox. The generated profile disables Sandbox networking, clipboard, redirection, microphone, vGPU, and printer; enables Protected Client; maps **only a SHA-256-verified copy of the one synthetic preview executable** read-only. It never automatically starts the executable or changes host firewall rules. Inside Sandbox, open `C:\MedOriginSyntheticOnly\medorigin-desktop-d1-preview.exe` manually, and run only fictional fixture checks. A separate WebView2 runtime may be unavailable in the clean Sandbox, which must be recorded as a failed/inconclusive rehearsal rather than bypassed.
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File tests/windows-offline-sandbox-profile-selftest.ps1
+```
+
+This source-only regression **does not launch Windows Sandbox** and cannot attest host runtime isolation. When finished, close Sandbox and remove the generated output directory **only after closing the mapped session**. Do not place sensitive files in the mapped directory. Windows Sandbox isolation does not prove that a normally installed MedOrigin app can prevent WebView2 background traffic; normal-host egress remains **NO-GO**, with no patient data, clinical use, publishing, release or installer authorization.
+
+Reference: [Microsoft — Windows Sandbox configuration](https://learn.microsoft.com/en-us/windows/security/threat-protection/windows-sandbox/windows-sandbox-configure-using-wsb-file).
+
 ## Known blocks
 
 This independent D1 experiment must remain a **Draft** until a separately accepted topology/language decision (ADR-0003 + proposed ADR-0013), reviewed dependency locks/licenses/advisories, Windows/macOS/Linux app-level tests, verified zero network calls, IPC negative tests, WebView2 behavior, accessibility, process resource budgets and signed installer/uninstall lifecycle receipts. No release, tag, protected-main merge, PHI authorization or clinical-performance claim may be inferred from successful builds.
