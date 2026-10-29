@@ -129,6 +129,10 @@ def load_report_from_json(raw: str) -> ValidationReport:
         data.setdefault(key, None)
         if data[key] is not None and not isinstance(data[key], str):
             raise InvalidReportError("report metadata must be text or null")
+    # v1 canonical serialization represents a nullable status as an empty
+    # string. Restore its in-memory None form without changing stored bytes.
+    if data["status"] == "":
+        data["status"] = None
     report = ValidationReport(
         report_id=data["report_id"],
         input_hash=data["input_hash"],
