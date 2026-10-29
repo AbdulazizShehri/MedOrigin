@@ -78,7 +78,7 @@ export default function App() {
             <p className="section-help">Each sample is constructed in memory. Paths and uploaded files are not supported.</p>
             <div className="fixture-list">
               {FIXTURES.map((fixture) => (
-                <button className={"fixture" + (selected === fixture.id ? " fixture-selected" : "")} type="button" onClick={() => { setSelected(fixture.id); setResult(null); setError(""); }} aria-pressed={selected === fixture.id} key={fixture.id}>
+                <button className={"fixture" + (selected === fixture.id ? " fixture-selected" : "")} type="button" disabled={busy} onClick={() => { setSelected(fixture.id); setResult(null); setError(""); }} aria-pressed={selected === fixture.id} key={fixture.id}>
                   <span className="fixture-radio" aria-hidden="true" />
                   <span className="fixture-body"><strong>{fixture.title}</strong><small>{fixture.kind}</small></span>
                   <span className="fixture-size">{fixture.size}</span>
