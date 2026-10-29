@@ -79,3 +79,6 @@ jobs:
       - name: Fail-closed synthetic egress probe regression
         shell: pwsh
         run: powershell.exe -NoProfile -ExecutionPolicy Bypass -File experiments/desktop-d1-tauri/tests/windows-egress-probe-selftest.ps1
+      - name: Validate disposable no-network Windows Sandbox profile without launching
+        shell: pwsh
+        run: powershell.exe -NoProfile -ExecutionPolicy Bypass -File experiments/desktop-d1-tauri/tests/windows-offline-sandbox-profile-selftest.ps1
