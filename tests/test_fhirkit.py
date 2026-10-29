@@ -138,6 +138,54 @@ def test_load_report_rejects_symlinked_report(tmp_path: Path) -> None:
         load_report(digest, root=tmp_path)
 
 
+def _redirect_report_parent(root: Path, digest: str, outside: Path, layer: str) -> Path:
+    """Create only fictional symlinked report ancestors in a temporary root."""
+    base = fhirkit_reports_dir(root)
+    ancestor = {
+        "fhirkit": root / "fhirkit",
+        "reports": base,
+        "digest": base / digest,
+    }[layer]
+    ancestor.parent.mkdir(parents=True, exist_ok=True)
+    outside.mkdir()
+    try:
+        ancestor.symlink_to(outside, target_is_directory=True)
+    except (OSError, NotImplementedError) as exc:
+        pytest.skip(f"directory symlinks unavailable: {exc}")
+    if layer == "fhirkit":
+        return outside / "reports" / digest / "report.json"
+    if layer == "reports":
+        return outside / digest / "report.json"
+    return outside / "report.json"
+
+
+@pytest.mark.parametrize("layer", ["fhirkit", "reports", "digest"])
+def test_store_rejects_symlinked_report_ancestors(tmp_path: Path, layer: str) -> None:
+    report = validate_fhir(_rule_input())
+    root = tmp_path / "root"
+    outside = tmp_path / "outside"
+    target = _redirect_report_parent(root, report_hash(report), outside, layer)
+
+    with pytest.raises(FhirStorageError, match="symlinked report directory"):
+        store_report(report, root=root)
+    assert not target.exists(), "store must not write outside the report root"
+
+
+@pytest.mark.parametrize("layer", ["fhirkit", "reports", "digest"])
+def test_load_rejects_symlinked_report_ancestors(tmp_path: Path, layer: str) -> None:
+    report = validate_fhir(_rule_input())
+    root = tmp_path / "root"
+    outside = tmp_path / "outside"
+    digest = report_hash(report)
+    target = _redirect_report_parent(root, digest, outside, layer)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(report_to_json(report), encoding="utf-8")
+
+    with pytest.raises(FhirStorageError, match="symlinked report directory"):
+        load_report(digest, root=root)
+    assert target.read_text(encoding="utf-8") == report_to_json(report)
+
+
 def test_validate_report_schema_rejects_invalid_shape() -> None:
     with pytest.raises(InvalidReportError):
         validate_report_schema(ValidationReport(format_version="wrong"))
