@@ -16,6 +16,20 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  sandbox-profile-contract:
+    name: Windows Sandbox profile safety (source only)
+    runs-on: windows-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout immutable pull-request head
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha }}
+      - name: Verify profile syntax and safety assertions without starting Windows Sandbox
+        shell: pwsh
+        run: powershell.exe -NoProfile -ExecutionPolicy Bypass -File experiments/desktop-d1-tauri/tests/windows-offline-sandbox-profile-selftest.ps1
+
   windows-preview-source:
     name: Windows D1 Tauri source only
     runs-on: windows-latest
