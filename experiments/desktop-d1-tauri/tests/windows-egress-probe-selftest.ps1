@@ -10,6 +10,9 @@ try {
     @{ name = 'grandchild-external'; expected = 2; marker = 'D1_NETWORK_ISOLATION_NO_GO' },
     @{ name = 'unrelated-external'; expected = 0; marker = 'D1_SNAPSHOT_NO_EXTERNAL_TCP' },
     @{ name = 'missing-root'; expected = 1; marker = 'D1 root process absent' },
+    @{ name = 'missing-creation'; expected = 1; marker = 'D1 root creation timestamp unavailable' },
+    @{ name = 'root-exit-mid-snapshot'; expected = 1; marker = 'D1 root process changed during snapshot' },
+    @{ name = 'pid-reused'; expected = 1; marker = 'D1 root process changed during snapshot' },
     @{ name = 'query-error'; expected = 1; marker = 'synthetic socket query failure' },
     @{ name = 'process-error'; expected = 1; marker = 'synthetic process query failure' },
     @{ name = 'udp-error'; expected = 1; marker = 'synthetic UDP query failure' },
@@ -19,13 +22,18 @@ try {
     $launcher = Join-Path $testDir ($case.name + '.ps1')
     $script = @'
 function Get-CimInstance {
-  [CmdletBinding()] param([string]$ClassName)
+  [CmdletBinding()] param([string]$ClassName, [string]$Filter)
+  $script:processQueries++
   if ('__SCENARIO__' -eq 'process-error') { throw 'synthetic process query failure' }
   if ('__SCENARIO__' -eq 'missing-root') {
-    [pscustomobject]@{ ProcessId = 45678; ParentProcessId = 0 }
+    [pscustomobject]@{ ProcessId = 45678; ParentProcessId = 0; CreationDate = '2026-10-29T00:00:00' }
     return
   }
-  [pscustomobject]@{ ProcessId = 12345; ParentProcessId = 0 }
+  if ('__SCENARIO__' -eq 'root-exit-mid-snapshot' -and $script:processQueries -gt 1) { return }
+  $creation = '2026-10-29T00:00:00'
+  if ('__SCENARIO__' -eq 'pid-reused' -and $script:processQueries -gt 1) { $creation = '2026-10-29T00:00:01' }
+  if ('__SCENARIO__' -eq 'missing-creation') { $creation = $null }
+  [pscustomobject]@{ ProcessId = 12345; ParentProcessId = 0; CreationDate = $creation }
   if ('__SCENARIO__' -eq 'grandchild-external') {
     [pscustomobject]@{ ProcessId = 23456; ParentProcessId = 12345 }
     [pscustomobject]@{ ProcessId = 34567; ParentProcessId = 23456 }
@@ -57,6 +65,7 @@ function Get-NetUDPEndpoint {
   [CmdletBinding()] param()
   if ('__SCENARIO__' -eq 'udp-error') { throw 'synthetic UDP query failure' }
 }
+$script:processQueries = 0
 & '__PROBE__' -RootPid 12345
 exit $LASTEXITCODE
 '@
@@ -78,4 +87,4 @@ exit $LASTEXITCODE
 finally {
   Remove-Item -LiteralPath $testDir -Recurse -Force -ErrorAction SilentlyContinue
 }
-Write-Output 'D1_EGRESS_PROBE_9_OF_9_PASS (mocked sockets only; NOT zero-egress proof)'
+Write-Output 'D1_EGRESS_PROBE_12_OF_12_PASS (mocked sockets only; NOT zero-egress proof)'
