@@ -144,22 +144,19 @@ def validate_fhir_with_validator(
     if not isinstance(parsed, dict) or parsed.get("status") not in ("valid", "invalid"):
         raise InvalidReportError("external validator requires explicit valid or invalid status")
 
-    if isinstance(parsed, dict):
-        if "validation-report" in parsed or "ValidationReport" in parsed:
-            validator_name = parsed.get("validator_name") or validator_name
-            validator_version = parsed.get("validator_version") or validator_version
-        raw_errors = parsed.get("errors") or parsed.get("issue") or ()
-        raw_warnings = parsed.get("warnings") or ()
-        if not isinstance(raw_errors, (list, tuple)):
-            raw_errors = (str(raw_errors),)
-        if not isinstance(raw_warnings, (list, tuple)):
-            raw_warnings = (str(raw_warnings),)
-        errors = tuple(str(item) for item in raw_errors)
-        warnings = tuple(str(item) for item in raw_warnings)
-        if not errors and validator_name != FHIR_VALIDATOR_NAME:
-            warnings = (*warnings, "validator parsed output without explicit errors")
-    else:
-        warnings = (str(parsed),)
+    if "validation-report" in parsed or "ValidationReport" in parsed:
+        validator_name = parsed.get("validator_name") or validator_name
+        validator_version = parsed.get("validator_version") or validator_version
+    raw_errors = parsed.get("errors") or parsed.get("issue") or ()
+    raw_warnings = parsed.get("warnings") or ()
+    if not isinstance(raw_errors, (list, tuple)):
+        raw_errors = (str(raw_errors),)
+    if not isinstance(raw_warnings, (list, tuple)):
+        raw_warnings = (str(raw_warnings),)
+    errors = tuple(str(item) for item in raw_errors)
+    warnings = tuple(str(item) for item in raw_warnings)
+    if not errors and validator_name != FHIR_VALIDATOR_NAME:
+        warnings = (*warnings, "validator parsed output without explicit errors")
 
     report = ValidationReport(
         report_id=None,
