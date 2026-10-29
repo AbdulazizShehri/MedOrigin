@@ -2,7 +2,7 @@ name: Experimental Native Rust D2 (no publish)
 
 on:
   pull_request:
-    branches: [main]
+    branches: [main, "test/medorigin-d2-*", "experiment/medorigin-native-egui-d2-20261029"]
     paths:
       - "experiments/desktop-d2-native-egui/**"
       - ".github/workflows/desktop-native-d2.yml"
@@ -58,6 +58,12 @@ jobs:
         if: runner.os == 'macOS'
         shell: bash
         run: bash tests/macos-deny-network-selftest.sh
+      - name: Typecheck real macOS AX acceptance probe without launching a GUI
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          swiftc -typecheck tests/macos-native-ax-smoke.swift
+          bash -n tests/macos-native-ax-local-qualification.sh
       - name: Verify committed deterministic Cargo lock
         shell: bash
         run: |
