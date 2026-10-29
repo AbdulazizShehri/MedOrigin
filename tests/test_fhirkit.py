@@ -19,7 +19,7 @@ from medscale.fhirkit import (
     validate_fhir,
     validate_report_schema,
 )
-from medscale.fhirkit.storage import fhirkit_reports_dir
+from medscale.fhirkit.storage import fhirkit_reports_dir, load_report
 from medscale.reproducibility import content_hash
 
 _SRC = Path(__file__).resolve().parents[1] / "src" / "medscale"
@@ -93,6 +93,49 @@ def test_existing_symlink_artifact_cannot_overwrite_target(tmp_path: Path) -> No
         store_report(report, root=tmp_path)
     assert target.is_symlink()
     assert victim.read_text(encoding="utf-8") == "preserve unrelated data"
+
+
+def test_load_report_blocks_absolute_directory_escape(tmp_path: Path) -> None:
+    unrelated = tmp_path / "unrelated"
+    unrelated.mkdir()
+    private = unrelated / "report.json"
+    private.write_text("fictional unrelated bytes", encoding="utf-8")
+
+    with pytest.raises(FhirStorageError, match="canonical SHA-256"):
+        load_report(str(unrelated), root=tmp_path / "safe")
+    assert private.read_text(encoding="utf-8") == "fictional unrelated bytes"
+
+
+@pytest.mark.parametrize("invalid_hash", ["../private", "f" * 63, "Z" * 64, "0" * 65, ""])
+def test_load_report_rejects_noncanonical_hash_input(tmp_path: Path, invalid_hash: str) -> None:
+    with pytest.raises(FhirStorageError, match="canonical SHA-256"):
+        load_report(invalid_hash, root=tmp_path)
+
+
+def test_load_report_verifies_canonical_content(tmp_path: Path) -> None:
+    report = validate_fhir(_rule_input())
+    target = store_report(report, root=tmp_path)
+    digest = report_hash(report)
+    assert load_report(digest, root=tmp_path) == report_to_json(report)
+
+    target.write_text("fictional corrupted bytes", encoding="utf-8")
+    with pytest.raises(FhirStorageError, match="invalid or noncanonical"):
+        load_report(digest, root=tmp_path)
+
+
+def test_load_report_rejects_symlinked_report(tmp_path: Path) -> None:
+    report = validate_fhir(_rule_input())
+    digest = report_hash(report)
+    target = fhirkit_reports_dir(tmp_path) / digest / "report.json"
+    target.parent.mkdir(parents=True)
+    unrelated = tmp_path / "external-report.json"
+    unrelated.write_text(report_to_json(report), encoding="utf-8")
+    try:
+        target.symlink_to(unrelated)
+    except (OSError, NotImplementedError) as exc:
+        pytest.skip(f"symlink creation not supported by this host: {exc}")
+    with pytest.raises(FhirStorageError, match="symlink"):
+        load_report(digest, root=tmp_path)
 
 
 def test_validate_report_schema_rejects_invalid_shape() -> None:
