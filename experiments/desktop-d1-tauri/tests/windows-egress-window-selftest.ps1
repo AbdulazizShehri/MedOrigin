@@ -12,6 +12,7 @@ switch ($env:MEDORIGIN_WINDOW_SELFTEST) {
   'external' { Write-Output 'D1_NETWORK_ISOLATION_NO_GO'; exit 2 }
   'error' { Write-Output 'synthetic probe failure'; exit 1 }
   'unmarked' { Write-Output 'ambiguous success'; exit 0 }
+  'hung' { Start-Sleep -Seconds 4; Write-Output 'D1_SNAPSHOT_NO_EXTERNAL_TCP'; exit 0 }
   'transient' {
     $count = 0
     if (Test-Path -LiteralPath $env:MEDORIGIN_WINDOW_TEST_COUNTER) {
@@ -32,7 +33,8 @@ switch ($env:MEDORIGIN_WINDOW_SELFTEST) {
     @{ name = 'external'; code = 2; marker = 'D1_NETWORK_ISOLATION_NO_GO sample=1' },
     @{ name = 'error'; code = 1; marker = 'D1_EGRESS_MONITOR_ERROR:' },
     @{ name = 'unmarked'; code = 1; marker = 'D1_EGRESS_MONITOR_ERROR:' },
-    @{ name = 'transient'; code = 2; marker = 'D1_NETWORK_ISOLATION_NO_GO sample=2' }
+    @{ name = 'transient'; code = 2; marker = 'D1_NETWORK_ISOLATION_NO_GO sample=2' },
+    @{ name = 'hung'; code = 1; marker = 'D1_EGRESS_MONITOR_ERROR: snapshot failed or timed out' }
   )
   foreach ($case in $cases) {
     $env:MEDORIGIN_WINDOW_SELFTEST = $case.name
@@ -40,7 +42,8 @@ switch ($env:MEDORIGIN_WINDOW_SELFTEST) {
     if (Test-Path -LiteralPath $env:MEDORIGIN_WINDOW_TEST_COUNTER) {
       Remove-Item -LiteralPath $env:MEDORIGIN_WINDOW_TEST_COUNTER
     }
-    $result = & powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File (Join-Path $testDir 'windows-egress-window.ps1') -RootPid 12345 -DurationSeconds 1.0 -SampleIntervalMilliseconds 100 2>&1 | Out-String
+    $timeout = if ($case.name -eq 'hung') { 1 } else { 10 }
+    $result = & powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File (Join-Path $testDir 'windows-egress-window.ps1') -RootPid 12345 -DurationSeconds 1.0 -SampleIntervalMilliseconds 100 -ProbeTimeoutSeconds $timeout 2>&1 | Out-String
     $exitCode = $LASTEXITCODE
     if ($exitCode -ne $case.code -or -not $result.Contains($case.marker)) {
       throw ('Monitor selftest failed: ' + $case.name + '; exit=' + $exitCode + '; text=' + $result)
@@ -53,4 +56,4 @@ finally {
   Remove-Item Env:MEDORIGIN_WINDOW_SELFTEST -ErrorAction SilentlyContinue
   Remove-Item Env:MEDORIGIN_WINDOW_TEST_COUNTER -ErrorAction SilentlyContinue
 }
-Write-Output 'D1_EGRESS_WINDOW_5_OF_5_PASS (mocked snapshots; NOT zero-egress proof)'
+Write-Output 'D1_EGRESS_WINDOW_6_OF_6_PASS (mocked snapshots; NOT zero-egress proof)'
