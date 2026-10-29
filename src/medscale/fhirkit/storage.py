@@ -6,7 +6,7 @@ import re
 from pathlib import Path
 
 from medscale._layout import fhirkit_reports_dir
-from medscale.fhirkit.errors import FhirStorageError
+from medscale.fhirkit.errors import FhirStorageError, InvalidReportError
 from medscale.fhirkit.report import (
     ValidationReport,
     load_report_from_json,
@@ -84,6 +84,6 @@ def load_report(report_hash_value: str, root: Path | None = None) -> str:
         report = load_report_from_json(raw)
         if report_hash(report) != report_hash_value or report_to_json(report) != raw:
             raise FhirStorageError("invalid or noncanonical FHIR report artifact")
-    except (KeyError, TypeError, ValueError) as exc:
+    except (InvalidReportError, KeyError, TypeError, ValueError) as exc:
         raise FhirStorageError("invalid or noncanonical FHIR report artifact") from exc
     return raw
