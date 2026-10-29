@@ -129,10 +129,16 @@ def test_tag_release_rejects_stale_or_missing_wheel_metadata_urls() -> None:
     assert "from importlib.metadata import metadata" in script
     assert 'metadata("medscale")' in script
 
-    def run_guard(values: dict[str, str]) -> None:
+    def run_guard(
+        values: dict[str, str],
+        *,
+        extra_headers: tuple[tuple[str, str], ...] = (),
+    ) -> None:
         msg = Message()
         for key, value in values.items():
             msg["Project-URL"] = f"{key}, {value}"
+        for header, value in extra_headers:
+            msg[header] = value
         with patch("importlib.metadata.metadata", return_value=msg) as read_metadata:
             exec(compile(script, "release.yml:tag-wheel-metadata-guard", "exec"), {})
         read_metadata.assert_called_once_with("medscale")
@@ -151,6 +157,15 @@ def test_tag_release_rejects_stale_or_missing_wheel_metadata_urls() -> None:
         missing = {key: url for key, url in labels.items() if key != broken_key}
         with pytest.raises(SystemExit, match=broken_key):
             run_guard(missing)
+
+    # Core-only release candidate must not promote installable research
+    # extras, even if their dependencies are conditional on an extra.
+    for extra_headers in (
+        (("Provides-Extra", "rq1-runtime-feasibility"),),
+        (("Requires-Dist", "pillow==12.3.0; extra == 'rq1-runtime-feasibility'"),),
+    ):
+        with pytest.raises(SystemExit, match="core-only"):
+            run_guard(labels, extra_headers=extra_headers)
 
     # Duplicate metadata must not be accepted through last-write-wins.
     duplicate = Message()
