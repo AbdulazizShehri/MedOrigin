@@ -48,14 +48,26 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File tests/windows-native-hos
   -AuditDirectory 'D:\MedOrigin-D2-new-audit-dir'
 ```
 
-The audit checks approved executable name/digest, actual window presence,
-three TCP/UDP process-tree snapshots, and writes `qualification.json` with
+The single host runner now verifies the caller-pinned SHA-256, copies the
+approved native executable to a **new fixed-drive staging folder** under the
+fresh audit directory, and verifies the copied bytes a second time. It runs
+the real Windows UI Automation smoke **4/4** on that copy, verifies the same
+staged digest after UIA, then relaunches that **same staged copy** for three
+TCP/UDP process-tree snapshots. It refuses an absent window or mismatched
+fixture result. The audit receipt `qualification.json` records
+`staged_executable_sha256`, `executing_verified_copy=true`,
+`interactive_uia_4_of_4_pass=true` and always
 `network_isolation_qualified=false`, `clinical_qualified=false` and
-`release_qualified=false` **even if every snapshot is clean**. A successful
-*observation* exits nonzero (2); enumeration/identity failure exits 1. Full
-endpoint logs remain local. The tool does not change firewall, WebView2,
-installers, network or patient data. The Windows CI source-only test checks
-three negative cases without launching any GUI.
+`release_qualified=false` **even when all socket snapshots are clean**.
+
+A successful *observation* exits nonzero (2); enumeration or identity failure
+exits 1. Full endpoint logs remain local. The tool does not change firewall,
+WebView2, installers, network or patient data. Windows CI runs five *source-only*
+negative cases (wrong digest/name, relative output, UNC source and pre-existing
+audit folder preservation) without launching any fixture executable.
+This is a better **test-consistency boundary**, not a complete solution to
+symlinks/races in a hostile filesystem or a guarantee of OS-enforced offline
+runtime.
 
 After enabling AccessKit (2026-10-29), the native window displayed a
 Windows UI Automation tree with **10 descendants**. The independent

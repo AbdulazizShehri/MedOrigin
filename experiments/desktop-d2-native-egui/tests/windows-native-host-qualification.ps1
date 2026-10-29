@@ -42,12 +42,37 @@ try {
   $parentDir=Split-Path -Parent ([IO.Path]::GetFullPath($AuditDirectory))
   if(-not (Test-Path -LiteralPath $parentDir -PathType Container)){throw 'Missing audit parent'}
   New-Item -ItemType Directory -Path $AuditDirectory -ErrorAction Stop | Out-Null
-  $proc=Start-Process -FilePath $source.FullName -PassThru -ErrorAction Stop
+  # Copy the caller-approved bytes into a fresh private test directory. Do not
+  # execute the mutable original path after the hash decision.
+  $stage=Join-Path $AuditDirectory 'approved-binary'
+  New-Item -ItemType Directory -Path $stage -ErrorAction Stop | Out-Null
+  $stagedExe=Join-Path $stage 'medorigin-desktop-d2-native-egui.exe'
+  Copy-Item -LiteralPath $source.FullName -Destination $stagedExe -ErrorAction Stop
+  $stagedSha=(Get-FileHash -LiteralPath $stagedExe -Algorithm SHA256 -ErrorAction Stop).Hash
+  if(-not [string]::Equals($stagedSha,$ExpectedSha256,[StringComparison]::OrdinalIgnoreCase)){
+    throw 'Staged native binary differs from approved SHA-256'
+  }
+  if(@(Get-ChildItem -LiteralPath $stage -Force).Count -ne 1){throw 'Unexpected staged binary content'}
+  $uia=Join-Path $PSScriptRoot 'windows-native-uia-smoke.ps1'
+  if(-not (Test-Path -LiteralPath $uia -PathType Leaf)){throw 'Source-controlled UI Automation test absent'}
+  $uiaLog=Join-Path $AuditDirectory 'synthetic-native-uia.txt'
+  & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $uia -ExePath $stagedExe *> $uiaLog
+  $uiaExit=$LASTEXITCODE
+  $uiaMarkers=@(Get-Content -LiteralPath $uiaLog -ErrorAction Stop |
+    Where-Object {$_ -eq 'D2_NATIVE_UIA_4_OF_4_PASS (native window, fictional SHA only; no network proof)'})
+  if($uiaExit -ne 0 -or $uiaMarkers.Count -ne 1){throw 'Native D2 synthetic UIA 4/4 failed'}
+  # Revalidate staged bytes after UIA and before the network-observation launch.
+  $afterUiaSha=(Get-FileHash -LiteralPath $stagedExe -Algorithm SHA256).Hash
+  if(-not [string]::Equals($afterUiaSha,$ExpectedSha256,[StringComparison]::OrdinalIgnoreCase)){
+    throw 'Native staged executable changed during UIA qualification'
+  }
+  $proc=Start-Process -FilePath $stagedExe -PassThru -ErrorAction Stop
   Start-Sleep -Seconds 3
   if($proc.HasExited){throw 'Native preview exited before smoke'}
   $hostProc=Get-Process -Id $proc.Id -ErrorAction Stop
   $windowPresent=($hostProc.MainWindowHandle -ne 0 -and
     $hostProc.MainWindowTitle -like 'MedOrigin Native Rust*')
+  if(-not $windowPresent){throw 'Native top-level window missing after UIA'}
   $maxTcp=0;$maxTcpAny=0;$maxUdp=0;$maxTree=0;$observed=0
   $probeExit=0
   for($sample=1;$sample -le 3;$sample++){
@@ -72,8 +97,11 @@ try {
     $observed++
   }
   $receipt=[ordered]@{
-    schema='medorigin-native-d2-host-smoke-v1'
+    schema='medorigin-native-d2-host-smoke-v2'
     source_sha256=$digest
+    staged_executable_sha256=$stagedSha
+    executing_verified_copy=$true
+    interactive_uia_4_of_4_pass=$true
     synthetic_only=$true
     native_window_present=[bool]$windowPresent
     sample_count=$observed
@@ -88,6 +116,8 @@ try {
     note='Three socket snapshots cannot prove zero outbound packets; independent OS isolation and packet capture absent.'
   }
   $receipt|ConvertTo-Json -Depth 3|Set-Content -LiteralPath (Join-Path $AuditDirectory 'qualification.json') -Encoding UTF8
+  Write-Output 'D2_NATIVE_STAGED_SHA256_APPROVED=True'
+  Write-Output 'D2_NATIVE_UIA_4_OF_4_PASS=True'
   Write-Output ('D2_NATIVE_WINDOW_PRESENT='+$windowPresent)
   Write-Output ('D2_SAMPLES='+$observed)
   Write-Output ('D2_EXTERNAL_TCP_MAX='+$maxTcp)
