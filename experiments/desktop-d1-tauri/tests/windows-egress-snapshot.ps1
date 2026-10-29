@@ -1,7 +1,9 @@
 param([Parameter(Mandatory=$true)][int]$RootPid)
 $ErrorActionPreference='Stop'
 $all=Get-CimInstance Win32_Process -ErrorAction Stop
-if(-not ($all | Where-Object {$_.ProcessId -eq $RootPid})){throw 'D1 root process absent'}
+$root=@($all | Where-Object {$_.ProcessId -eq $RootPid})
+if($root.Count -ne 1){throw 'D1 root process absent'}
+if(-not $root[0].CreationDate){throw 'D1 root creation timestamp unavailable'}
 $ids=[System.Collections.Generic.HashSet[int]]::new()
 [void]$ids.Add($RootPid)
 do {
@@ -19,6 +21,9 @@ $tcp=@(Get-NetTCPConnection -ErrorAction Stop | Where-Object {
 })
 $established=@($tcp | Where-Object {$_.State -eq 'Established'})
 $udp=@(Get-NetUDPEndpoint -ErrorAction Stop | Where-Object {$ids.Contains([int]$_.OwningProcess)})
+# A clean socket query is inconclusive if the root exited or its PID was reused.
+$after=@(Get-CimInstance Win32_Process -Filter "ProcessId = $RootPid" -ErrorAction Stop | Where-Object {$_.ProcessId -eq $RootPid})
+if($after.Count -ne 1 -or $after[0].CreationDate -ne $root[0].CreationDate){throw 'D1 root process changed during snapshot'}
 Write-Output ('D1_PROCESS_TREE_COUNT='+$ids.Count)
 Write-Output ('EXTERNAL_ESTABLISHED_TCP='+$established.Count)
 Write-Output ('EXTERNAL_TCP_ALL_STATES='+$tcp.Count)
