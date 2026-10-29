@@ -7,6 +7,9 @@ try {
   $cases = @(
     @{ name = 'synsent'; expected = 2; marker = 'D1_NETWORK_ISOLATION_NO_GO' },
     @{ name = 'established'; expected = 2; marker = 'D1_NETWORK_ISOLATION_NO_GO' },
+    @{ name = 'grandchild-external'; expected = 2; marker = 'D1_NETWORK_ISOLATION_NO_GO' },
+    @{ name = 'unrelated-external'; expected = 0; marker = 'D1_SNAPSHOT_NO_EXTERNAL_TCP' },
+    @{ name = 'missing-root'; expected = 1; marker = 'D1 root process absent' },
     @{ name = 'query-error'; expected = 1; marker = 'synthetic socket query failure' },
     @{ name = 'process-error'; expected = 1; marker = 'synthetic process query failure' },
     @{ name = 'udp-error'; expected = 1; marker = 'synthetic UDP query failure' },
@@ -18,7 +21,18 @@ try {
 function Get-CimInstance {
   [CmdletBinding()] param([string]$ClassName)
   if ('__SCENARIO__' -eq 'process-error') { throw 'synthetic process query failure' }
+  if ('__SCENARIO__' -eq 'missing-root') {
+    [pscustomobject]@{ ProcessId = 45678; ParentProcessId = 0 }
+    return
+  }
   [pscustomobject]@{ ProcessId = 12345; ParentProcessId = 0 }
+  if ('__SCENARIO__' -eq 'grandchild-external') {
+    [pscustomobject]@{ ProcessId = 23456; ParentProcessId = 12345 }
+    [pscustomobject]@{ ProcessId = 34567; ParentProcessId = 23456 }
+  }
+  if ('__SCENARIO__' -eq 'unrelated-external') {
+    [pscustomobject]@{ ProcessId = 45678; ParentProcessId = 0 }
+  }
 }
 function Get-NetTCPConnection {
   [CmdletBinding()] param()
@@ -28,6 +42,12 @@ function Get-NetTCPConnection {
   }
   if ('__SCENARIO__' -eq 'established') {
     [pscustomobject]@{ OwningProcess = 12345; RemoteAddress = '2001:db8::2'; RemotePort = 443; State = 'Established' }
+  }
+  if ('__SCENARIO__' -eq 'grandchild-external') {
+    [pscustomobject]@{ OwningProcess = 34567; RemoteAddress = '2001:db8::3'; RemotePort = 443; State = 'SynSent' }
+  }
+  if ('__SCENARIO__' -eq 'unrelated-external') {
+    [pscustomobject]@{ OwningProcess = 45678; RemoteAddress = '2001:db8::4'; RemotePort = 443; State = 'Established' }
   }
   if ('__SCENARIO__' -eq 'loopback') {
     [pscustomobject]@{ OwningProcess = 12345; RemoteAddress = '127.0.0.1'; RemotePort = 80; State = 'Established' }
@@ -58,4 +78,4 @@ exit $LASTEXITCODE
 finally {
   Remove-Item -LiteralPath $testDir -Recurse -Force -ErrorAction SilentlyContinue
 }
-Write-Output 'D1_EGRESS_PROBE_6_OF_6_PASS (mocked sockets only; NOT zero-egress proof)'
+Write-Output 'D1_EGRESS_PROBE_9_OF_9_PASS (mocked sockets only; NOT zero-egress proof)'
