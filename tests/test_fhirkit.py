@@ -71,6 +71,31 @@ def test_local_fhir_validator_rejects_non_object_python_input() -> None:
         validate_fhir([])  # type: ignore[arg-type]
 
 
+@pytest.mark.parametrize(
+    "invalid_value",
+    [
+        float("nan"),
+        float("inf"),
+        -float("inf"),
+        {"nested": float("nan")},
+        {7: "non-string key"},
+        ["valid", object()],
+        ("tuples", "are not JSON arrays"),
+    ],
+)
+def test_public_fhir_apis_reject_non_json_values_before_reporting_or_execution(
+    invalid_value: object,
+) -> None:
+    from medscale.fhirkit import FhirValidationError, validate_fhir_with_validator
+
+    payload = {"resourceType": "Patient", "extension": invalid_value}
+    with pytest.raises(FhirValidationError, match="JSON"):
+        validate_fhir(payload)
+    # A fictional executable must not even be invoked after rejecting input.
+    with pytest.raises(FhirValidationError, match="JSON"):
+        validate_fhir_with_validator(payload, command=["fictional-never-launch"])
+
+
 def test_report_hash_is_deterministic() -> None:
     report = validate_fhir(_rule_input())
     assert report_hash(report) == report_hash(report)

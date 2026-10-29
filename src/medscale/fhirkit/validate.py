@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import contextlib
 import json
+import math
 import os
 import re
 import subprocess
@@ -35,6 +36,36 @@ def _search_path_command() -> list[str] | None:
     return [c.strip() for c in candidates.split(os.pathsep) if c.strip()]
 
 
+def _require_strict_json_values(payload: dict[str, Any]) -> None:
+    """Fail before hashing or launching a validator on non-JSON Python input.
+
+    This is an RFC 8259 value/key check, not FHIR schema conformance.
+    """
+
+    def visit(value: Any) -> None:
+        if isinstance(value, dict):
+            for key, child in value.items():
+                if not isinstance(key, str):
+                    raise FhirValidationError("FHIR JSON object keys must be strings")
+                visit(child)
+        elif isinstance(value, list):
+            for child in value:
+                visit(child)
+        elif value is None or isinstance(value, (str, int, bool)):
+            return
+        elif isinstance(value, float):
+            if not math.isfinite(value):
+                raise FhirValidationError("FHIR input contains non-finite JSON values")
+        else:
+            raise FhirValidationError("FHIR input contains unsupported JSON values")
+
+    try:
+        visit(payload)
+        json.dumps(payload, sort_keys=True, allow_nan=False)
+    except (RecursionError, TypeError, ValueError, OverflowError):
+        raise FhirValidationError("FHIR input contains invalid JSON values") from None
+
+
 def validate_fhir(input_payload: dict[str, Any], created_at: str | None = None) -> ValidationReport:
     """Check the minimum FHIR resource envelope without network access.
 
@@ -46,6 +77,7 @@ def validate_fhir(input_payload: dict[str, Any], created_at: str | None = None) 
 
     if not isinstance(input_payload, dict):
         raise FhirValidationError("FHIR resource must be a JSON object")
+    _require_strict_json_values(input_payload)
 
     resource_type = input_payload.get("resourceType")
     valid_envelope = (
@@ -96,6 +128,9 @@ def validate_fhir_with_validator(
     from medscale.fhirkit.report import report_hash as _stable_report_hash
     from medscale.reproducibility import content_hash
 
+    if not isinstance(input_payload, dict):
+        raise FhirValidationError("FHIR resource must be a JSON object")
+    _require_strict_json_values(input_payload)
     input_hash = content_hash(input_payload)
     if command is None:
         command = _search_path_command()
