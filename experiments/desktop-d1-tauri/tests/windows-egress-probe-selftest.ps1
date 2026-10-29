@@ -6,7 +6,10 @@ New-Item -ItemType Directory -Path $testDir | Out-Null
 try {
   $cases = @(
     @{ name = 'synsent'; expected = 2; marker = 'D1_NETWORK_ISOLATION_NO_GO' },
+    @{ name = 'established'; expected = 2; marker = 'D1_NETWORK_ISOLATION_NO_GO' },
     @{ name = 'query-error'; expected = 1; marker = 'synthetic socket query failure' },
+    @{ name = 'process-error'; expected = 1; marker = 'synthetic process query failure' },
+    @{ name = 'udp-error'; expected = 1; marker = 'synthetic UDP query failure' },
     @{ name = 'loopback'; expected = 0; marker = 'D1_SNAPSHOT_NO_EXTERNAL_TCP' }
   )
   foreach ($case in $cases) {
@@ -14,6 +17,7 @@ try {
     $script = @'
 function Get-CimInstance {
   [CmdletBinding()] param([string]$ClassName)
+  if ('__SCENARIO__' -eq 'process-error') { throw 'synthetic process query failure' }
   [pscustomobject]@{ ProcessId = 12345; ParentProcessId = 0 }
 }
 function Get-NetTCPConnection {
@@ -22,11 +26,17 @@ function Get-NetTCPConnection {
   if ('__SCENARIO__' -eq 'synsent') {
     [pscustomobject]@{ OwningProcess = 12345; RemoteAddress = '2001:db8::1'; RemotePort = 443; State = 'SynSent' }
   }
+  if ('__SCENARIO__' -eq 'established') {
+    [pscustomobject]@{ OwningProcess = 12345; RemoteAddress = '2001:db8::2'; RemotePort = 443; State = 'Established' }
+  }
   if ('__SCENARIO__' -eq 'loopback') {
     [pscustomobject]@{ OwningProcess = 12345; RemoteAddress = '127.0.0.1'; RemotePort = 80; State = 'Established' }
   }
 }
-function Get-NetUDPEndpoint { [CmdletBinding()] param() }
+function Get-NetUDPEndpoint {
+  [CmdletBinding()] param()
+  if ('__SCENARIO__' -eq 'udp-error') { throw 'synthetic UDP query failure' }
+}
 & '__PROBE__' -RootPid 12345
 exit $LASTEXITCODE
 '@
@@ -48,4 +58,4 @@ exit $LASTEXITCODE
 finally {
   Remove-Item -LiteralPath $testDir -Recurse -Force -ErrorAction SilentlyContinue
 }
-Write-Output 'D1_EGRESS_PROBE_3_OF_3_PASS (mocked sockets only; NOT zero-egress proof)'
+Write-Output 'D1_EGRESS_PROBE_6_OF_6_PASS (mocked sockets only; NOT zero-egress proof)'
