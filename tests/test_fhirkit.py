@@ -96,6 +96,36 @@ def test_public_fhir_apis_reject_non_json_values_before_reporting_or_execution(
         validate_fhir_with_validator(payload, command=["fictional-never-launch"])
 
 
+@pytest.mark.parametrize(
+    "invalid_fields",
+    [
+        {"status": "approved"},
+        {"status": 1},
+        {"report_id": 123},
+        {"input_hash": 9},
+        {"validator_name": 7},
+        {"validator_version": []},
+        {"created_at": 22},
+        {"errors": ("valid", 7)},
+        {"warnings": ("valid", False)},
+        {"errors": "text-is-not-an-array"},
+        {"warnings": ["not-a-tuple"]},
+    ],
+)
+def test_report_contract_rejects_invalid_python_fields(
+    invalid_fields: dict[str, object],
+) -> None:
+    with pytest.raises(InvalidReportError):
+        ValidationReport(**invalid_fields)  # type: ignore[arg-type]
+
+
+def test_report_schema_rechecks_tampered_frozen_instance() -> None:
+    report = ValidationReport(status="valid")
+    object.__setattr__(report, "status", "fictional-drift")
+    with pytest.raises(InvalidReportError):
+        validate_report_schema(report)
+
+
 def test_report_hash_is_deterministic() -> None:
     report = validate_fhir(_rule_input())
     assert report_hash(report) == report_hash(report)
