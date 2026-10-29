@@ -68,6 +68,16 @@ def inspect_wheel(
                         issues.append("wheel version missing")
                     elif expected_version is not None and version != expected_version:
                         issues.append("wheel version disagrees with expected candidate")
+                    if version:
+                        # Bind the inspected METADATA to the actual top-level
+                        # wheel distribution/version directory, not an unrelated
+                        # or nested .dist-info entry with plausible headers.
+                        directory_names = {distribution, distribution.replace("-", "_")}
+                        expected_paths = {
+                            f"{name}-{version}.dist-info/METADATA" for name in directory_names
+                        }
+                        if metadata_paths[0] not in expected_paths:
+                            issues.append("wheel METADATA path does not match distribution/version")
                     for item in message.get_all("Project-URL", []):
                         key, sep, value = str(item).partition(",")
                         key, value = key.strip(), value.strip()
