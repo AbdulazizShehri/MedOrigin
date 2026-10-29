@@ -9,12 +9,28 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 from pathlib import Path
 
 from medscale.fhirkit.report import load_report_from_json, report_to_json
 from medscale.fhirkit.storage import store_report
 from medscale.fhirkit.validate import validate_fhir
+
+
+def _unique_json_members(pairs: list[tuple[str, object]]) -> dict[str, object]:
+    """Reject repeated property names at any depth of a FHIR JSON document."""
+    unique: dict[str, object] = {}
+    for key, value in pairs:
+        if key in unique:
+            raise ValueError("duplicate FHIR JSON property")
+        unique[key] = value
+    return unique
+
+
+def _reject_non_json_constant(_constant: str) -> object:
+    """Python's JSON decoder otherwise accepts NaN and infinities."""
+    raise ValueError("non-finite number is not valid JSON")
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -64,8 +80,12 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
     try:
-        payload = json.loads(args.input_file.read_text(encoding="utf-8"))
-    except (json.JSONDecodeError, UnicodeError, OSError) as exc:
+        payload = json.loads(
+            args.input_file.read_text(encoding="utf-8"),
+            object_pairs_hook=_unique_json_members,
+            parse_constant=_reject_non_json_constant,
+        )
+    except (ValueError, UnicodeError, OSError) as exc:
         print(f"input read error: {exc}", file=sys.stderr)
         return 1
 
@@ -73,6 +93,15 @@ def main(argv: list[str] | None = None) -> int:
     # before the summary-only shortcut or any content-addressed report writes.
     if not isinstance(payload, dict):
         print("input read error: FHIR resource must be a JSON object", file=sys.stderr)
+        return 1
+    # This is only an essential FHIR resource envelope check. It does not
+    # claim that the other elements conform to a FHIR resource/profile schema.
+    resource_type = payload.get("resourceType")
+    if (
+        not isinstance(resource_type, str)
+        or re.fullmatch(r"[A-Z][A-Za-z0-9]*", resource_type) is None
+    ):
+        print("input read error: FHIR resourceType must be a nonempty type name", file=sys.stderr)
         return 1
 
     if args.summary_only:
