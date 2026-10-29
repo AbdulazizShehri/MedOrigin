@@ -77,4 +77,45 @@ jobs:
           if-no-files-found: warn
           retention-days: 7
 
+  native-d2-supply-chain:
+    name: Rust D2 advisory, license and registry policy
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    defaults:
+      run:
+        working-directory: experiments/desktop-d2-native-egui
+    steps:
+      - name: Checkout exact PR head without persistent credentials
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - name: Install pinned Rust toolchain
+        shell: bash
+        run: rustup toolchain install 1.97.1 --profile minimal
+      - name: Compile pinned free source-audit CLI with locked dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo +1.97.1 install --version 0.20.2 --locked cargo-deny \
+            --root "$RUNNER_TEMP/medorigin-cargo-deny" --jobs 2
+          echo "$RUNNER_TEMP/medorigin-cargo-deny/bin" >> "$GITHUB_PATH"
+      - name: Deny security advisories, disallowed SPDX licenses and registries
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f deny.toml
+          cargo +1.97.1 metadata --locked --no-deps --format-version 1 > /dev/null
+          cargo-deny --locked -L info check advisories licenses sources
+      - name: Preserve the auditable source-bound policy
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: medorigin-native-d2-audit-policy
+          path: |
+            experiments/desktop-d2-native-egui/deny.toml
+            experiments/desktop-d2-native-egui/Cargo.lock
+          if-no-files-found: error
+          retention-days: 7
+
 # No GUI execution, installer, tag, package upload, release, PHI, or model training.
