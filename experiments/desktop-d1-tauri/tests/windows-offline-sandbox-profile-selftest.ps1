@@ -31,7 +31,7 @@ try {
   if ($mappings[0].HostFolder -ne $payload -or
       $mappings[0].SandboxFolder -ne 'C:\MedOriginSyntheticOnly' -or
       $mappings[0].ReadOnly -ne 'true') {
-    throw 'Profile mapped-folder boundary mismatch'
+    throw ('Profile mapped-folder boundary mismatch: host expected=['+$payload+'] actual=['+$mappings[0].HostFolder+'] sandbox=['+$mappings[0].SandboxFolder+'] readonly=['+$mappings[0].ReadOnly+']')
   }
   if ($raw -notmatch '&amp;' -or $cfg.LogonCommand) {
     throw 'Expected XML escaping and no autorun command'
