@@ -81,6 +81,8 @@ def test_local_fhir_validator_rejects_non_object_python_input() -> None:
         {7: "non-string key"},
         ["valid", object()],
         ("tuples", "are not JSON arrays"),
+        "\ud800",  # Unpaired UTF-16 high surrogate cannot encode in UTF-8.
+        {"\udfff": "unpaired surrogate object member"},
     ],
 )
 def test_public_fhir_apis_reject_non_json_values_before_reporting_or_execution(

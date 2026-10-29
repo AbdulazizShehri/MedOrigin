@@ -51,11 +51,17 @@ def _require_strict_json_values(payload: dict[str, Any]) -> None:
             for key, child in value.items():
                 if not isinstance(key, str):
                     raise FhirValidationError("FHIR JSON object keys must be strings")
+                visit(key)
                 visit(child)
         elif isinstance(value, list):
             for child in value:
                 visit(child)
-        elif value is None or isinstance(value, (str, int, bool)):
+        elif isinstance(value, str):
+            # json.dumps defaults to ensure_ascii=True, which can hide lone
+            # surrogates until UTF-8 encoding fails during report hashing.
+            if any("\ud800" <= char <= "\udfff" for char in value):
+                raise FhirValidationError("FHIR input contains invalid Unicode JSON text")
+        elif value is None or isinstance(value, (int, bool)):
             return
         elif isinstance(value, float):
             if not math.isfinite(value):
