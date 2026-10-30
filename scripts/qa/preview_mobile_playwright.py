@@ -7,8 +7,8 @@ Requires a separately installed Playwright Chromium test browser.
 
 from __future__ import annotations
 
-import runpy
 from pathlib import Path
+import runpy
 
 from playwright.sync_api import sync_playwright
 
@@ -66,8 +66,8 @@ def main() -> None:
                     )
                     requests: list[str] = []
                     errors: list[str] = []
-                    page.on("request", lambda request: requests.append(request.url))
-                    page.on("pageerror", lambda error: errors.append(str(error)))
+                    page.on("request", lambda request, requests=requests: requests.append(request.url))
+                    page.on("pageerror", lambda error, errors=errors: errors.append(str(error)))
                     try:
                         page.set_content(html, wait_until="load")
                         assert page.locator("article.result").count() == 2
