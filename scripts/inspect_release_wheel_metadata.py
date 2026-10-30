@@ -7,13 +7,17 @@ changes source files, creates tags, invokes publishers, or accesses the network.
 from __future__ import annotations
 
 import argparse
+import base64
+import csv
 import hashlib
+import io
 import json
 import re
 import stat
 import sys
 import unicodedata
 import zipfile
+import zlib
 from contextlib import ExitStack
 from email.parser import BytesParser
 from email.policy import default
@@ -123,6 +127,69 @@ def _wheel_archive_member_issues(archive: zipfile.ZipFile) -> list[str]:
     return issues
 
 
+def _wheel_record_issues(archive: zipfile.ZipFile, metadata_path: str) -> list[str]:
+    """Verify the bounded, installable bytes against PEP 376 RECORD.
+
+    Read each member through zipfile in streaming chunks; never extract files
+    into the filesystem. This is an integrity test, not publisher provenance.
+    """
+    dist_info = metadata_path.rsplit("/", 1)[0]
+    record_name = f"{dist_info}/RECORD"
+    wheel_name = f"{dist_info}/WHEEL"
+    files = {info.filename: info for info in archive.infolist() if not info.is_dir()}
+    if record_name not in files or wheel_name not in files:
+        return ["wheel RECORD or WHEEL missing"]
+    record_info = files[record_name]
+    if record_info.file_size > 4 * 1024 * 1024:
+        return ["wheel RECORD exceeds safety limit"]
+
+    try:
+        text = archive.read(record_name).decode("utf-8")
+        rows = list(csv.reader(io.StringIO(text, newline=""), strict=True))
+    except (csv.Error, UnicodeError):
+        return ["wheel RECORD is malformed"]
+    declared: dict[str, tuple[str, str]] = {}
+    for row in rows:
+        if len(row) != 3:
+            return ["wheel RECORD is malformed"]
+        path, recorded_hash, recorded_size = row
+        if path in declared:
+            return ["wheel RECORD contains duplicate path"]
+        declared[path] = (recorded_hash, recorded_size)
+    if declared.keys() != files.keys():
+        return ["wheel RECORD does not cover archive files"]
+    if declared[record_name] != ("", ""):
+        return ["wheel RECORD self-entry must have empty hash and size"]
+
+    total_read = 0
+    for name, (entry_hash, entry_size) in declared.items():
+        if name == record_name:
+            continue
+        kind, sep, encoded = entry_hash.partition("=")
+        if not sep or kind not in {"sha256", "sha384", "sha512"} or not encoded:
+            return ["wheel RECORD uses unsupported or missing hash"]
+        if not entry_size.isascii() or not entry_size.isdecimal():
+            return ["wheel RECORD member size mismatch"]
+        claimed_size = int(entry_size)
+        if claimed_size != files[name].file_size:
+            return ["wheel RECORD member size mismatch"]
+        digest = hashlib.new(kind)
+        size = 0
+        with archive.open(files[name], "r") as source:
+            while chunk := source.read(64 * 1024):
+                size += len(chunk)
+                total_read += len(chunk)
+                if size > 64 * 1024 * 1024 or total_read > 256 * 1024 * 1024:
+                    return ["wheel RECORD member exceeds actual read safety limit"]
+                digest.update(chunk)
+        if size != claimed_size:
+            return ["wheel RECORD member size mismatch"]
+        actual = base64.urlsafe_b64encode(digest.digest()).decode("ascii").rstrip("=")
+        if encoded != actual:
+            return ["wheel RECORD member hash mismatch"]
+    return []
+
+
 def inspect_wheel(
     path: Path,
     *,
@@ -212,6 +279,8 @@ def inspect_wheel(
                         # A candidate with the four approved links plus an
                         # unreviewed fifth URL must not pass the strict gate.
                         issues.append("unexpected Project-URL")
+            if require_core_only and not issues and len(metadata_paths) == 1:
+                issues.extend(_wheel_record_issues(archive, metadata_paths[0]))
             # Rehash after ZIP inspection: keeping one open handle prevents a
             # path-swap race, but does not prevent an in-place write to that
             # handle between the first digest and metadata parsing.
@@ -219,7 +288,15 @@ def inspect_wheel(
             if hashlib.file_digest(stream, "sha256").hexdigest() != digest:
                 issues.append("wheel changed during inspection")
                 digest = None
-    except (OSError, zipfile.BadZipFile, RuntimeError, EOFError, ValueError) as exc:
+    except (
+        OSError,
+        zipfile.BadZipFile,
+        RuntimeError,
+        EOFError,
+        ValueError,
+        NotImplementedError,
+        zlib.error,
+    ) as exc:
         issues.append(f"wheel unreadable: {type(exc).__name__}")
 
     return {
