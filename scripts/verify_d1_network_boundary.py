@@ -54,9 +54,7 @@ def audit_source(root: Path, policy: dict[str, Any]) -> list[str]:
 
     try:
         config = json.loads((root / D1 / "src-tauri/tauri.conf.json").read_text())
-        capabilities = json.loads(
-            (root / D1 / "src-tauri/capabilities/default.json").read_text()
-        )
+        capabilities = json.loads((root / D1 / "src-tauri/capabilities/default.json").read_text())
         native_source = (root / D1 / "src-tauri/src/lib.rs").read_text()
         ui_source = (root / D1 / "src/App.tsx").read_text()
     except (OSError, UnicodeError, ValueError, TypeError):
