@@ -5,6 +5,9 @@ on:
   push:
     branches:
       - test/medorigin-d1-offline-policy-gate-20261030
+  pull_request:
+    branches:
+      - fix/medorigin-d1-mxc-orphan-failclosed-20261030
 
 permissions:
   contents: read
