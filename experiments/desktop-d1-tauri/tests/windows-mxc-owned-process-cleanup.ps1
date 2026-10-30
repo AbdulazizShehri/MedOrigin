@@ -8,7 +8,17 @@ function Stop-MxcOwnedProcessTree {
     )
     if ($RootPid -le 0) { throw 'Invalid owned process PID' }
     $root = Get-CimInstance Win32_Process -Filter "ProcessId=$RootPid" -ErrorAction Stop
-    if (-not $root) { return }
+    if (-not $root) {
+        # Windows may leave native descendants alive after their parent exits.
+        # A missing root alone is not proof that its process tree was cleaned.
+        # Do not kill by an unverified, potentially recycled parent PID.
+        $possibleOrphans = @(Get-CimInstance Win32_Process -Filter "ParentProcessId=$RootPid" -ErrorAction Stop |
+            Where-Object { [datetime]$_.CreationDate -ge $ExpectedCreationDate })
+        if ($possibleOrphans.Count -gt 0) {
+            throw 'MXC cleanup root exited with possible surviving descendants; refusing unverified termination'
+        }
+        return
+    }
     if ($root.ExecutablePath -ine $ExePath -or
         [datetime]$root.CreationDate -ne $ExpectedCreationDate) {
         throw 'MXC cleanup process identity changed; refusing unrelated termination'

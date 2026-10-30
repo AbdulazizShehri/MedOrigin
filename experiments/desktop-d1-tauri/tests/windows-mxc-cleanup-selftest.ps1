@@ -7,6 +7,8 @@ $exe = (Get-Command powershell.exe -ErrorAction Stop).Source
 $fixture = Join-Path $env:TEMP ('medorigin-mxc-cleanup-' + [guid]::NewGuid().ToString('N') + '.ps1')
 $root = $null
 $childId = $null
+$orphanRoot = $null
+$orphanChildId = $null
 try {
     Set-Content -LiteralPath $fixture -Encoding UTF8 -Value @'
 Start-Process -FilePath powershell.exe -ArgumentList @('-NoProfile', '-Command', 'Start-Sleep -Seconds 40') | Out-Null
@@ -35,8 +37,43 @@ Start-Sleep -Seconds 40
     Start-Sleep -Milliseconds 700
     if (Get-Process -Id $root.Id -ErrorAction SilentlyContinue) { throw 'Synthetic root survived cleanup' }
     if (Get-Process -Id $childId -ErrorAction SilentlyContinue) { throw 'Synthetic descendant survived cleanup' }
-    Write-Output 'MXC_CLEANUP_SELFTEST_2_OF_2_PASS'
+
+    # Reproduce the real Start-Job failure mode: the verified parent exits,
+    # but a native child survives. Cleanup must not silently report success.
+    $orphanRoot = Start-Process -FilePath $exe -ArgumentList @('-NoProfile', '-File', ('"' + $fixture + '"')) -PassThru
+    $orphanRecord = $null
+    for ($i = 0; $i -lt 30; $i++) {
+        $orphanRecord = Get-CimInstance Win32_Process -Filter "ProcessId=$($orphanRoot.Id)" -ErrorAction Stop
+        $children = @(Get-CimInstance Win32_Process -Filter "ParentProcessId=$($orphanRoot.Id)" -ErrorAction Stop |
+            Where-Object { $_.Name -eq 'powershell.exe' })
+        if ($orphanRecord -and $children.Count -eq 1) {
+            $orphanChildId = [int]$children[0].ProcessId
+            break
+        }
+        Start-Sleep -Milliseconds 100
+    }
+    if (-not $orphanChildId) { throw 'Orphan regression child not created' }
+    Stop-Process -Id $orphanRoot.Id -Force -ErrorAction Stop
+    for ($i = 0; $i -lt 20; $i++) {
+        if (-not (Get-Process -Id $orphanRoot.Id -ErrorAction SilentlyContinue)) { break }
+        Start-Sleep -Milliseconds 100
+    }
+    if (Get-Process -Id $orphanRoot.Id -ErrorAction SilentlyContinue) { throw 'Orphan regression root still alive' }
+    $rejectedOrphan = $false
+    try {
+        Stop-MxcOwnedProcessTree -RootPid $orphanRoot.Id -ExePath $exe -ExpectedCreationDate $orphanRecord.CreationDate
+    } catch {
+        if ($_.Exception.Message -notlike '*possible surviving descendants*') { throw }
+        $rejectedOrphan = $true
+    }
+    if (-not $rejectedOrphan) { throw 'Orphaned native descendant silently accepted as clean' }
+    if (-not (Get-Process -Id $orphanChildId -ErrorAction SilentlyContinue)) {
+        throw 'Orphan regression child unexpectedly terminated'
+    }
+    Write-Output 'MXC_CLEANUP_SELFTEST_3_OF_3_PASS'
 } finally {
+    if ($orphanChildId) { Stop-Process -Id $orphanChildId -Force -ErrorAction SilentlyContinue }
+    if ($orphanRoot) { Stop-Process -Id $orphanRoot.Id -Force -ErrorAction SilentlyContinue }
     if ($childId) { Stop-Process -Id $childId -Force -ErrorAction SilentlyContinue }
     if ($root) { Stop-Process -Id $root.Id -Force -ErrorAction SilentlyContinue }
     Remove-Item -LiteralPath $fixture -Force -ErrorAction SilentlyContinue
