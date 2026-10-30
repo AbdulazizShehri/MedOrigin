@@ -213,11 +213,7 @@ def _wheel_record_issues(archive: zipfile.ZipFile, metadata_path: str) -> list[s
             return ["wheel RECORD member hash mismatch"]
     return []
 
-
-
-def _wheel_header_issues(
-    archive: zipfile.ZipFile, metadata_path: str, filename: str
-) -> list[str]:
+def _wheel_header_issues(archive: zipfile.ZipFile, metadata_path: str, filename: str) -> list[str]:
     """Bind WHEEL compatibility tags to the actual archive filename.
 
     A valid RECORD hash proves internal consistency, not that a Wheel has
@@ -229,10 +225,7 @@ def _wheel_header_issues(
         return ["wheel WHEEL exceeds safety limit"]
 
     message = BytesParser(policy=default).parsebytes(archive.read(wheel_name))
-    if any(
-        len(message.get_all(field, [])) != 1
-        for field in ("Wheel-Version", "Root-Is-Purelib")
-    ):
+    if any(len(message.get_all(field, [])) != 1 for field in ("Wheel-Version", "Root-Is-Purelib")):
         return ["wheel WHEEL identity headers invalid"]
     if message.get("Wheel-Version") != "1.0":
         return ["wheel WHEEL version unsupported"]
@@ -351,9 +344,7 @@ def inspect_wheel(
             if require_core_only and not issues and len(metadata_paths) == 1:
                 issues.extend(_wheel_record_issues(archive, metadata_paths[0]))
                 if not issues:
-                    issues.extend(
-                        _wheel_header_issues(archive, metadata_paths[0], path.name)
-                    )
+                    issues.extend(_wheel_header_issues(archive, metadata_paths[0], path.name))
             # Rehash after ZIP inspection: keeping one open handle prevents a
             # path-swap race, but does not prevent an in-place write to that
             # handle between the first digest and metadata parsing.
