@@ -1,0 +1,63 @@
+# Synthetic-only developer-Beta report artifact qualification. Never publishes.
+name: FHIR bounded report artifact Draft (3OS)
+
+on:
+  push:
+    branches: [fix/medorigin-fhir-bounded-report-artifacts-20261031]
+  pull_request:
+    branches: [test/medorigin-fhir-installed-byte-bound-20261031]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: fhir-report-bounded-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  report-storage:
+    name: Report storage (${{ matrix.os }}, py${{ matrix.python }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        python: ["3.11", "3.12"]
+    steps:
+      - name: Checkout exact unapproved source without credentials
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+          fetch-depth: 1
+          fetch-tags: false
+
+      - name: Install pinned uv
+        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        with:
+          enable-cache: false
+
+      - name: Install Python ${{ matrix.python }}
+        run: uv python install ${{ matrix.python }}
+
+      - name: Ruff lint
+        run: >-
+          uvx --python ${{ matrix.python }} ruff==0.14.4 check
+          src/medscale/fhirkit/storage.py tests/test_fhir_storage_bounded.py
+
+      - name: Ruff format check
+        run: >-
+          uvx --python ${{ matrix.python }} ruff==0.14.4 format --check
+          src/medscale/fhirkit/storage.py tests/test_fhir_storage_bounded.py
+
+      - name: Focused synthetic FHIR storage regression suite
+        env:
+          PYTHONPATH: src
+        run: >-
+          uv run --no-project --python ${{ matrix.python }} --with pytest
+          python -m pytest -q
+          tests/test_fhir_storage_bounded.py tests/test_fhirkit.py
+
+      - name: Explicit nonpublication marker
+        run: echo "FHIR_REPORT_ARTIFACT_BETA_DRAFT_NOT_RELEASE_APPROVED"
