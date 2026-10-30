@@ -191,3 +191,24 @@ def test_tag_release_requires_qualified_wheel_url_gate_before_github_release() -
     assert "uv pip install --python .venv/bin/python --no-deps" in smoke
     assert "needs: [quality, build, install-smoke]" in release
     assert "vars.GITHUB_RELEASE_PUBLISH_ENABLED == 'true'" in release
+
+
+def test_tag_path_inspects_exact_wheel_archive_before_publisher() -> None:
+    """The installed-metadata check alone must not bypass the strict ZIP gate."""
+    text = _workflow_text()
+    smoke = _job_block(text, "install-smoke")
+    release = _job_block(text, "github-release")
+    assert "if: github.event_name == 'push'" in smoke
+    assert "needs: build" in smoke
+    assert "persist-credentials: false" in smoke
+    assert "ref: ${{ github.sha }}" in smoke
+    assert "Verify strict Core-only wheel archive metadata" in smoke
+    assert "scripts/inspect_release_wheel_metadata.py" in smoke
+    assert "--require-core-only" in smoke
+    assert "--expected-version" in smoke
+    assert smoke.index("Verify strict Core-only wheel archive metadata") < smoke.index(
+        "Verify installed wheel canonical MedOrigin URLs"
+    )
+    assert "test \"$(find dist -maxdepth 1 -type f -name '*.whl' | wc -l)\" -eq 1" in smoke
+    assert "needs: [quality, build, install-smoke]" in release
+    assert "vars.GITHUB_RELEASE_PUBLISH_ENABLED == 'true'" in release
