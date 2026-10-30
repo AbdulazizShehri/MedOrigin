@@ -51,11 +51,6 @@ jobs:
           python -m unittest discover -s tests
           -p test_d1_network_boundary_contract.py -v
 
-      - name: Print isolated Ruff differences for review
-        run: |
-          uvx --python ${{ matrix.python-version }} ruff==0.14.4 check --select I --diff scripts/verify_d1_network_boundary.py tests/test_d1_network_boundary_contract.py || true
-          uvx --python ${{ matrix.python-version }} ruff==0.14.4 format --diff scripts/verify_d1_network_boundary.py tests/test_d1_network_boundary_contract.py || true
-
       - name: Ruff lint for the small source contract
         run: >-
           uvx --python ${{ matrix.python-version }} ruff==0.14.4 check
