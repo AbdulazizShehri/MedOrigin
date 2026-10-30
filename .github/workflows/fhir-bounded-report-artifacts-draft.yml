@@ -46,6 +46,11 @@ jobs:
           uvx --python ${{ matrix.python }} ruff==0.14.4 check
           src/medscale/fhirkit/storage.py src/medscale/fhirkit/report.py tests/test_fhir_storage_bounded.py
 
+      - name: Show pinned formatter diff (diagnostic, never a waiver)
+        run: >-
+          uvx --python ${{ matrix.python }} ruff==0.14.4 format --diff
+          src/medscale/fhirkit/storage.py src/medscale/fhirkit/report.py tests/test_fhir_storage_bounded.py
+
       - name: Ruff format check
         run: >-
           uvx --python ${{ matrix.python }} ruff==0.14.4 format --check
