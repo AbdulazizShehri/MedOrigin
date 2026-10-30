@@ -523,9 +523,7 @@ def test_strict_core_rejects_file_directory_zip_member_collisions(
     _append_synthetic_integrity_record(wheel)
     result = inspect_wheel(wheel, expected_version="0.3.0", require_core_only=True)
     assert result["status"] == "BLOCKED"
-    assert (
-        "wheel archive contains file/directory ZIP member collision" in result["issues"]
-    )
+    assert "wheel archive contains file/directory ZIP member collision" in result["issues"]
     assert result["publication_authorized"] is False
 
 
@@ -737,8 +735,7 @@ def test_strict_wheel_rejects_unlisted_zip_payload(tmp_path: Path) -> None:
             "wheel WHEEL tags disagree with archive filename",
         ),
         (
-            "Wheel-Version: 1.0\nRoot-Is-Purelib: true\n"
-            "Tag: py3-none-any\nTag: py3-none-any\n",
+            "Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\nTag: py3-none-any\n",
             "wheel WHEEL tags disagree with archive filename",
         ),
     ],
@@ -771,8 +768,7 @@ def test_strict_wheel_matches_compressed_filename_tag_set(tmp_path: Path) -> Non
     _append_synthetic_integrity_record(
         wheel,
         wheel_headers=(
-            "Wheel-Version: 1.0\nRoot-Is-Purelib: true\n"
-            "Tag: py3-none-any\nTag: py2-none-any\n"
+            "Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\nTag: py2-none-any\n"
         ),
     )
     result = inspect_wheel(wheel, expected_version="0.3.0", require_core_only=True)
