@@ -1,0 +1,54 @@
+name: D2 Linux rootless netns source qualification (nonpublishing)
+
+on:
+  push:
+    branches:
+      - test/medorigin-d2-linux-netns-20261030
+  pull_request:
+    branches:
+      - test/medorigin-d2-macos-self-egress-example-20261030
+    paths:
+      - '.github/workflows/desktop-d2-linux-netns-source.yml'
+      - 'experiments/desktop-d2-native-egui/**'
+
+permissions:
+  contents: read
+
+jobs:
+  linux-native-source:
+    name: Native Linux tests and no-network product boundary (not runtime netns)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    env:
+      CARGO_INCREMENTAL: 0
+    steps:
+      - name: Read-only exact-commit checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+          fetch-tags: false
+      - name: Prepare pinned Rust toolchain and quality components
+        run: rustup toolchain install 1.97.1 --profile minimal --component rustfmt --component clippy
+      - name: Native Linux headers for existing eframe graph
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq libxkbcommon-dev libwayland-dev libx11-dev libxcursor-dev libxrandr-dev libxi-dev libgl1-mesa-dev
+      - name: Rust format
+        run: cargo +1.97.1 fmt --all -- --check
+        working-directory: experiments/desktop-d2-native-egui
+      - name: Full Rust unit and production no-network source tests
+        run: cargo +1.97.1 test --locked --all-targets
+        working-directory: experiments/desktop-d2-native-egui
+      - name: Clippy warnings are failures
+        run: cargo +1.97.1 clippy --locked --all-targets -- -D warnings
+        working-directory: experiments/desktop-d2-native-egui
+      - name: Build isolated test-only native GUI wrapper
+        run: cargo +1.97.1 build --locked --example medorigin_d2_self_sandbox_probe
+        working-directory: experiments/desktop-d2-native-egui
+      - name: Validate rootless network test harness syntax
+        run: bash -n experiments/desktop-d2-native-egui/tests/linux-d2-rootless-netns-negative.sh
+      - name: Explicit source-only CI gate
+        run: |
+          echo "LINUX_D2_SOURCE_ONLY_PASS_NOT_ROOTLESS_NETNS_RUNTIME_OR_RELEASE"
+          echo "Interactive namespace/Xvfb E2E requires an authorized Linux host where unprivileged user and network namespaces are enabled."
