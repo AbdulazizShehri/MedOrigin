@@ -8,6 +8,7 @@ on:
       - test/medorigin-fhir-core-installed-3os-20261030
       - fix/medorigin-fhir-json-float-overflow-20261030
       - fix/medorigin-fhir-bounded-json-depth-20261030
+      - candidate/medorigin-fhir-wheel-unpublished-20261030
   pull_request:
     branches:
       - ci/medorigin-fhir-48commit-full-qualification-20261030

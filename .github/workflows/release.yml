@@ -23,6 +23,8 @@ on:
       - 'tests/test_core_wheel_source_identity.py'
       - 'tests/test_core_release_projection_identity.py'
   # Read-only artifact round-trip on exact protected main without publishing a tag.
+  # Manually qualify exact branch heads without retargeting stacked Draft PRs.
+  # Branch-only roundtrips never enter tag/publisher jobs.
   workflow_dispatch:
 
 permissions:
@@ -146,6 +148,11 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
+      # The inspector is read from this exact tag's source, not another branch.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          ref: ${{ github.sha }}
       - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
         with:
           enable-cache: false
@@ -167,6 +174,21 @@ jobs:
           test -n "$installed_version"
           test "$(.venv/bin/medscale --version)" = "medscale ${installed_version}"
           test "$GITHUB_REF_NAME" = "v${installed_version}"
+      - name: Verify strict Core-only wheel archive metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+          # The exact archive from the protected build must satisfy the same
+          # strict policy as author-side prepublication inspection. Do not
+          # treat a clean install as evidence that its extras are safe.
+          test "$(find dist -maxdepth 1 -type f -name '*.whl' | wc -l)" -eq 1
+          wheel="$(find dist -maxdepth 1 -type f -name '*.whl' -print -quit)"
+          installed_version="$(.venv/bin/python -c 'from importlib.metadata import version; print(version("medscale"))')"
+          .venv/bin/python scripts/inspect_release_wheel_metadata.py \
+            --wheel "$wheel" \
+            --distribution medscale \
+            --expected-version "$installed_version" \
+            --require-core-only
       - name: Verify installed wheel canonical MedOrigin URLs before publication
         shell: bash
         run: |
@@ -181,8 +203,9 @@ jobs:
               "Documentation": "https://github.com/AbdulazizShehri/MedOrigin/tree/main/docs",
               "Issues": "https://github.com/AbdulazizShehri/MedOrigin/issues",
           }
+          info = metadata("medscale")
           actual = {}
-          for entry in metadata("medscale").get_all("Project-URL") or []:
+          for entry in info.get_all("Project-URL") or []:
               key, separator, url = entry.partition(", ")
               if not separator or key in actual:
                   raise SystemExit("Invalid or duplicate wheel Project-URL entry")
@@ -192,7 +215,16 @@ jobs:
                   raise SystemExit(
                       f"Release blocked: {key} Project-URL is not canonical MedOrigin"
                   )
-          print("Installed wheel public project URLs: canonical MedOrigin")
+          # The approved Developer Beta release target is Core-only.
+          # Frozen MRL research/training extras remain unsafe under #622.
+          # Reading installed METADATA here catches the exact built wheel;
+          # it does not rewrite source, locks, wheels or historical evidence.
+          if info.get_all("Provides-Extra") or info.get_all("Requires-Dist"):
+              raise SystemExit(
+                  "Release blocked: core-only scope forbids advertised extras "
+                  "or dependencies (#622)"
+              )
+          print("Installed wheel Core-only METADATA: canonical MedOrigin")
           PY
 
   github-release:
@@ -258,7 +290,7 @@ jobs:
 
   pr-artifact-build:
     name: PR-safe build and upload qualification
-    if: github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main')
+    if: github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && startsWith(github.ref, 'refs/heads/'))
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -307,7 +339,7 @@ jobs:
 
   pr-artifact-roundtrip:
     name: PR-safe download and byte-identity qualification
-    if: github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main')
+    if: github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && startsWith(github.ref, 'refs/heads/'))
     needs: pr-artifact-build
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -327,7 +359,7 @@ jobs:
 
   pr-clean-wheel-smoke:
     name: PR-safe clean installed-wheel qualification
-    if: github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main')
+    if: github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && startsWith(github.ref, 'refs/heads/'))
     needs: pr-artifact-build
     runs-on: ubuntu-latest
     timeout-minutes: 10

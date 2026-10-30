@@ -158,16 +158,19 @@ def test_testpypi_publish_job_reuses_exact_artifact_without_rebuild_or_secret() 
         assert forbidden not in block
 
 
-def test_manual_main_qualification_never_opens_tag_or_publish_jobs() -> None:
+def test_manual_branch_qualification_never_opens_tag_or_publish_jobs() -> None:
     text = _workflow_text()
     triggers = text.split("permissions:", maxsplit=1)[0]
     assert "  workflow_dispatch:" in triggers
     assert "  push:\n    tags:" in triggers
     assert "permissions:\n  contents: read" in text.split("jobs:", maxsplit=1)[0]
 
+    # Authorized manual qualification must work on an exact reviewed branch
+    # without retargeting a stacked Draft PR to protected main. Never on tags.
     allowed = (
         "github.event_name == 'pull_request' || "
-        "(github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main')"
+        "(github.event_name == 'workflow_dispatch' && "
+        "startsWith(github.ref, 'refs/heads/'))"
     )
     for job_id in ("pr-artifact-build", "pr-artifact-roundtrip", "pr-clean-wheel-smoke"):
         block = _job_block(text, job_id)
@@ -216,10 +219,16 @@ def test_tag_release_rejects_stale_or_missing_wheel_metadata_urls() -> None:
     assert "from importlib.metadata import metadata" in script
     assert 'metadata("medscale")' in script
 
-    def run_guard(values: dict[str, str]) -> None:
+    def run_guard(
+        values: dict[str, str],
+        *,
+        extra_headers: tuple[tuple[str, str], ...] = (),
+    ) -> None:
         msg = Message()
         for key, value in values.items():
             msg["Project-URL"] = f"{key}, {value}"
+        for header, value in extra_headers:
+            msg[header] = value
         with patch("importlib.metadata.metadata", return_value=msg) as read_metadata:
             exec(compile(script, "release.yml:tag-wheel-metadata-guard", "exec"), {})
         read_metadata.assert_called_once_with("medscale")
@@ -238,6 +247,15 @@ def test_tag_release_rejects_stale_or_missing_wheel_metadata_urls() -> None:
         missing = {key: url for key, url in labels.items() if key != broken_key}
         with pytest.raises(SystemExit, match=broken_key):
             run_guard(missing)
+
+    # Core-only release candidate must not promote installable research
+    # extras, even if their dependencies are conditional on an extra.
+    for extra_headers in (
+        (("Provides-Extra", "rq1-runtime-feasibility"),),
+        (("Requires-Dist", "pillow==12.3.0; extra == 'rq1-runtime-feasibility'"),),
+    ):
+        with pytest.raises(SystemExit, match="core-only"):
+            run_guard(labels, extra_headers=extra_headers)
 
     # Duplicate metadata must not be accepted through last-write-wins.
     duplicate = Message()
@@ -320,3 +338,24 @@ def test_full_ci_shards_have_bounded_verbose_test_diagnostics() -> None:
     assert "--cov --cov-report= --cov-fail-under=0" in shard
     assert '"${test_nodes[@]}"' in shard
     assert 'test -s "${COVERAGE_FILE}"' in shard
+
+
+def test_tag_path_inspects_exact_wheel_archive_before_publisher() -> None:
+    """The installed-metadata check alone must not bypass the strict ZIP gate."""
+    text = _workflow_text()
+    smoke = _job_block(text, "install-smoke")
+    release = _job_block(text, "github-release")
+    assert "if: github.event_name == 'push'" in smoke
+    assert "needs: build" in smoke
+    assert "persist-credentials: false" in smoke
+    assert "ref: ${{ github.sha }}" in smoke
+    assert "Verify strict Core-only wheel archive metadata" in smoke
+    assert "scripts/inspect_release_wheel_metadata.py" in smoke
+    assert "--require-core-only" in smoke
+    assert "--expected-version" in smoke
+    assert smoke.index("Verify strict Core-only wheel archive metadata") < smoke.index(
+        "Verify installed wheel canonical MedOrigin URLs"
+    )
+    assert "test \"$(find dist -maxdepth 1 -type f -name '*.whl' | wc -l)\" -eq 1" in smoke
+    assert "needs: [quality, build, install-smoke]" in release
+    assert "vars.GITHUB_RELEASE_PUBLISH_ENABLED == 'true'" in release
