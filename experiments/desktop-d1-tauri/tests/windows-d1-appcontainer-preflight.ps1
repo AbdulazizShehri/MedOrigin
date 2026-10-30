@@ -5,7 +5,8 @@
 param(
     [ValidateRange(1, 2147483647)][int]$RootPid = 1,
     [string]$ExpectedExePath = '',
-    [switch]$SelfTest
+    [switch]$SelfTest,
+    [switch]$NativeSelfTest
 )
 $ErrorActionPreference = 'Stop'
 
@@ -55,7 +56,7 @@ if ($SelfTest) {
     Write-Output 'D1_NETWORK_ISOLATION_NO_GO'
     exit 0
 }
-if ([string]::IsNullOrWhiteSpace($ExpectedExePath)) {
+if (-not $NativeSelfTest -and [string]::IsNullOrWhiteSpace($ExpectedExePath)) {
     Write-Output 'D1_TOKEN_AUDIT_INCONCLUSIVE: expected executable path required'
     exit 1
 }
@@ -97,6 +98,13 @@ public static class MedOriginD1AppContainerToken {
 try {
     if (-not ([System.Management.Automation.PSTypeName]'MedOriginD1AppContainerToken').Type) {
         Add-Type -TypeDefinition $native -ErrorAction Stop
+    }
+    if ($NativeSelfTest) {
+        $flag = [MedOriginD1AppContainerToken]::IsAppContainer($PID)
+        if ($flag -notin @(0, 1)) { throw 'Read-only Win32 token API returned unknown status' }
+        Write-Output 'D1_NATIVE_TOKEN_API_READ_PASS_NOT_ISOLATION_PROOF'
+        Write-Output 'D1_NETWORK_ISOLATION_NO_GO'
+        exit 0
     }
     $os = Get-CimInstance Win32_OperatingSystem -ErrorAction Stop
     $build = [int]$os.BuildNumber
