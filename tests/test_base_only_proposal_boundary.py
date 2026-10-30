@@ -39,7 +39,10 @@ class BaseOnlyProposalBoundaryTests(unittest.TestCase):
         self.assertEqual(after["project"]["dependencies"], [])
         self.assertEqual(after["dependency-groups"], before["dependency-groups"])
         self.assertEqual(after["project"]["name"], before["project"]["name"])
-        self.assertEqual(removed_sha, "8c0db866843e15ec75b764dfff4b4d983856d1e2c6f95f4427f576427e54378a")
+        self.assertEqual(
+            removed_sha,
+            "8c0db866843e15ec75b764dfff4b4d983856d1e2c6f95f4427f576427e54378a",
+        )
         self.assertEqual(SOURCE.read_bytes(), frozen)
 
     def test_reject_replaced_pillow_pin(self) -> None:
@@ -55,7 +58,9 @@ class BaseOnlyProposalBoundaryTests(unittest.TestCase):
                 old.replace(b"[project.optional-dependencies]", b"[project.unverified-extras]")
             )
         with self.assertRaises(BaseOnlyProposalError):
-            strip_exact_optional_section(old.replace(b"[dependency-groups]", b"[dependency-groups-old]"))
+            strip_exact_optional_section(
+                old.replace(b"[dependency-groups]", b"[dependency-groups-old]")
+            )
 
     def test_refuse_overwriting_existing_output(self) -> None:
         with tempfile.TemporaryDirectory(prefix="medorigin-proposal-tests-") as scratch:
@@ -85,7 +90,10 @@ class BaseOnlyProposalBoundaryTests(unittest.TestCase):
             receipt = json.loads((target / "MEDORIGIN_SOURCE_PROVENANCE.json").read_text())
             self.assertEqual(receipt["schema"], "MEDORIGIN-CORE-BASE-ONLY-PROPOSAL-1")
             self.assertEqual(receipt["projected_pyproject_sha256"], sha(config))
-            self.assertNotEqual(receipt["parent_projected_pyproject_sha256"], receipt["projected_pyproject_sha256"])
+            self.assertNotEqual(
+                receipt["parent_projected_pyproject_sha256"],
+                receipt["projected_pyproject_sha256"],
+            )
             self.assertIs(receipt["adr_0044_amendment_accepted"], False)
             self.assertIs(receipt["independent_security_review_completed"], False)
             self.assertIs(receipt["publication_authorized"], False)
