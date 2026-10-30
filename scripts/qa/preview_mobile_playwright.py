@@ -66,7 +66,10 @@ def main() -> None:
                     )
                     requests: list[str] = []
                     errors: list[str] = []
-                    page.on("request", lambda request, requests=requests: requests.append(request.url))
+                    page.on(
+                        "request",
+                        lambda request, captured=requests: captured.append(request.url),
+                    )
                     page.on("pageerror", lambda error, errors=errors: errors.append(str(error)))
                     try:
                         page.set_content(html, wait_until="load")
