@@ -113,7 +113,7 @@ def load_report_from_json(raw: str) -> ValidationReport:
             parse_constant=_reject_nonfinite_report_number,
         )
         json.dumps(data, allow_nan=False)
-    except (json.JSONDecodeError, TypeError, ValueError, OverflowError):
+    except (json.JSONDecodeError, TypeError, ValueError, OverflowError, RecursionError):
         # Do not reproduce untrusted report contents in exception messages.
         raise InvalidReportError("report JSON must be strict and unambiguous") from None
     if not isinstance(data, dict):
