@@ -7,6 +7,7 @@ on:
     branches:
       - test/medorigin-fhir-core-installed-3os-20261030
       - fix/medorigin-fhir-json-float-overflow-20261030
+      - fix/medorigin-fhir-bounded-json-depth-20261030
   pull_request:
     branches:
       - ci/medorigin-fhir-48commit-full-qualification-20261030
@@ -49,12 +50,17 @@ jobs:
       - name: Lint source-only installed-package test
         run: >-
           uvx --python ${{ matrix.python }} ruff==0.14.4 check
-          scripts/qa/fhir_installed_base_core_smoke.py
+          scripts/qa/fhir_installed_base_core_smoke.py scripts/qa/fhir_json_depth_smoke.py
 
       - name: Format-check source-only installed-package test
         run: >-
           uvx --python ${{ matrix.python }} ruff==0.14.4 format --check
-          scripts/qa/fhir_installed_base_core_smoke.py
+          scripts/qa/fhir_installed_base_core_smoke.py scripts/qa/fhir_json_depth_smoke.py
+
+      - name: Fail closed on deep synthetic FHIR JSON before any package installation
+        run: >-
+          uv run --no-project --python ${{ matrix.python }}
+          python scripts/qa/fhir_json_depth_smoke.py
 
       - name: Build, install and exercise synthetic-only CLI in disposable isolated venv
         run: >-

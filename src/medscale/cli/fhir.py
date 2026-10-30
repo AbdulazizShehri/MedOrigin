@@ -34,6 +34,37 @@ def _reject_non_json_constant(_constant: str) -> object:
     raise ValueError("non-finite number is not valid JSON")
 
 
+MAX_FHIR_JSON_DEPTH = 256
+
+
+def _reject_excessive_json_nesting(raw: str) -> None:
+    """Bound nesting consistently across Python JSON parser implementations.
+
+    JSON quotes and escapes must not make literal brackets count as structure.
+    This cheap scan precedes recursive parsing and performs no file writes.
+    The JSON parser remains authoritative for syntax validation.
+    """
+    depth = 0
+    quoted = False
+    escaped = False
+    for character in raw:
+        if quoted:
+            if escaped:
+                escaped = False
+            elif character == "\\":
+                escaped = True
+            elif character == '"':
+                quoted = False
+        elif character == '"':
+            quoted = True
+        elif character in "[{":
+            depth += 1
+            if depth > MAX_FHIR_JSON_DEPTH:
+                raise ValueError("FHIR JSON nesting limit exceeded")
+        elif character in "]}":
+            depth -= 1
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="medscale fhir validate",
@@ -81,8 +112,10 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
     try:
+        raw_json = args.input_file.read_text(encoding="utf-8")
+        _reject_excessive_json_nesting(raw_json)
         payload = json.loads(
-            args.input_file.read_text(encoding="utf-8"),
+            raw_json,
             object_pairs_hook=_unique_json_members,
             parse_constant=_reject_non_json_constant,
         )
@@ -90,7 +123,7 @@ def main(argv: list[str] | None = None) -> int:
         # surrogates as Python strings. Reject both before summary-only can
         # emit invalid JSON or validation can raise an uncaught exception.
         json.dumps(payload, ensure_ascii=False, allow_nan=False).encode("utf-8")
-    except (ValueError, UnicodeError, OSError) as exc:
+    except (ValueError, UnicodeError, OSError, RecursionError) as exc:
         print(f"input read error: {exc}", file=sys.stderr)
         return 1
 

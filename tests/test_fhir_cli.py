@@ -167,6 +167,39 @@ def test_fhir_cli_rejects_duplicate_keys_and_nonfinite_numbers(
     assert not output_dir.exists()
 
 
+@pytest.mark.parametrize("summary_only", [False, True])
+def test_fhir_cli_rejects_excessively_nested_json_without_traceback(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], summary_only: bool
+) -> None:
+    # A tiny synthetic document can exceed supported Python JSON recursion.
+    source = tmp_path / "deep-fictional.json"
+    source.write_text(
+        '{"resourceType":"Patient","extension":' + "[" * 300 + "0" + "]" * 300 + "}",
+        encoding="utf-8",
+    )
+    output_dir = tmp_path / "reports"
+    argv = [str(source), "--output-dir", str(output_dir)]
+    if summary_only:
+        argv.append("--summary-only")
+    assert fhir_cli.main(argv) == 1
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert "input read error: FHIR JSON nesting limit exceeded" in captured.err
+    assert "Traceback" not in captured.err
+    assert not output_dir.exists()
+
+
+def test_fhir_cli_nesting_guard_ignores_quoted_brackets(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # Quotes, backslashes and thousands of literal brackets are data, not nesting.
+    payload = {"resourceType": "Patient", "id": "[" * 300 + '\\\\"[]' + "]" * 300}
+    source = tmp_path / "fictional-quoted-brackets.json"
+    source.write_text(json.dumps(payload), encoding="utf-8")
+    assert fhir_cli.main([str(source), "--summary-only"]) == 0
+    assert json.loads(capsys.readouterr().out) == payload
+
+
 def test_fhir_dispatch_rejects_missing_resource_type(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
