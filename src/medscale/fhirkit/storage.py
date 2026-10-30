@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import os
 import re
+import stat
 from pathlib import Path
 
 from medscale._layout import fhirkit_reports_dir
@@ -17,6 +19,29 @@ from medscale.fhirkit.report import (
 __all__ = ["fhirkit_reports_dir", "load_report", "store_report"]
 
 _DEFAULT_FILENAME = "report.json"
+# Reversible developer-Beta admission bound; not an approved release policy.
+_MAX_REPORT_ARTIFACT_BYTES = 8 * 1024 * 1024
+
+
+def _read_bounded_regular_report(target_path: Path) -> str:
+    """Read only a bounded regular artifact; never wait on a FIFO or device.
+
+    O_NONBLOCK prevents POSIX FIFO opens from waiting for a writer, and
+    O_NOFOLLOW refuses a final-component symlink where supported. Parent
+    directory races and Windows reparse-point races are not fully solved by
+    these portable checks; this is not a hostile-filesystem isolation claim.
+    """
+    flags = os.O_RDONLY | getattr(os, "O_NONBLOCK", 0) | getattr(os, "O_NOFOLLOW", 0)
+    with os.fdopen(os.open(target_path, flags), "rb") as source:
+        metadata = os.fstat(source.fileno())
+        if not stat.S_ISREG(metadata.st_mode):
+            raise FhirStorageError("FHIR report artifact is not a regular file")
+        if metadata.st_size > _MAX_REPORT_ARTIFACT_BYTES:
+            raise FhirStorageError("FHIR report artifact exceeds size limit")
+        raw = source.read(_MAX_REPORT_ARTIFACT_BYTES + 1)
+    if len(raw) > _MAX_REPORT_ARTIFACT_BYTES:
+        raise FhirStorageError("FHIR report artifact exceeds size limit")
+    return raw.decode("utf-8")
 
 
 def _default_root() -> Path:
@@ -39,6 +64,8 @@ def store_report(report: ValidationReport, root: Path | None = None) -> Path:
     """Store a report in deterministic content-addressed storage."""
     root = root or _default_root()
     report_json = report_to_json(report)
+    if len(report_json.encode("utf-8")) > _MAX_REPORT_ARTIFACT_BYTES:
+        raise FhirStorageError("FHIR report artifact exceeds size limit")
     report_hash_value = report_hash(report)
     target_dir = fhirkit_reports_dir(root) / report_hash_value
     target_path = target_dir / _DEFAULT_FILENAME
@@ -54,7 +81,7 @@ def store_report(report: ValidationReport, root: Path | None = None) -> Path:
         if target_path.is_symlink():
             raise FhirStorageError("refusing a symlink at the FHIR report path") from exc
         try:
-            existing = target_path.read_text(encoding="utf-8")
+            existing = _read_bounded_regular_report(target_path)
         except (OSError, UnicodeError) as read_exc:
             raise FhirStorageError("existing FHIR report is unreadable") from read_exc
         if existing != report_json:
@@ -77,7 +104,7 @@ def load_report(report_hash_value: str, root: Path | None = None) -> str:
     if target_path.is_symlink():
         raise FhirStorageError("refusing a symlink at the FHIR report path")
     try:
-        raw = target_path.read_text(encoding="utf-8")
+        raw = _read_bounded_regular_report(target_path)
     except (OSError, UnicodeError) as exc:
         raise FhirStorageError("missing or unreadable FHIR report artifact") from exc
     try:

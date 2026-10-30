@@ -10,6 +10,7 @@ on:
       - fix/medorigin-fhir-bounded-json-depth-20261030
       - candidate/medorigin-fhir-wheel-unpublished-20261030
       - fix/medorigin-fhir-bounded-input-bytes-20261030
+      - fix/medorigin-fhir-bounded-report-artifacts-20261031
   pull_request:
     branches: [test/medorigin-beta-fhir-strict-unicode-input-20261029]
 
