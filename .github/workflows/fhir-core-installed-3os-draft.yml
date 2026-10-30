@@ -6,6 +6,7 @@ on:
   push:
     branches:
       - test/medorigin-fhir-core-installed-3os-20261030
+      - fix/medorigin-fhir-json-float-overflow-20261030
   pull_request:
     branches:
       - ci/medorigin-fhir-48commit-full-qualification-20261030
