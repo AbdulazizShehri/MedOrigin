@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
+import runpy
 import subprocess
 import sys
 import zipfile
@@ -23,7 +25,11 @@ SCRIPT = Path(__file__).resolve().parents[1] / "scripts" / "inspect_release_whee
 
 
 def inspect_wheel(
-    wheel: Path, *, expected_version: str | None = None, distribution: str = "medscale"
+    wheel: Path,
+    *,
+    expected_version: str | None = None,
+    distribution: str = "medscale",
+    require_core_only: bool = False,
 ) -> dict[str, Any]:
     """Exercise the operator CLI instead of importing scripts under an alias."""
     command = [
@@ -36,6 +42,8 @@ def inspect_wheel(
     ]
     if expected_version is not None:
         command.extend(["--expected-version", expected_version])
+    if require_core_only:
+        command.append("--require-core-only")
     completed = subprocess.run(command, check=False, text=True, capture_output=True)
     assert completed.returncode in (0, 2), completed.stderr
     data = json.loads(completed.stdout)
@@ -50,18 +58,157 @@ def _wheel(
     name: str = "medscale",
     version: str = "0.3.0",
     duplicate: bool = False,
+    extras: tuple[str, ...] = (),
+    requires: tuple[str, ...] = (),
+    metadata_dir: str | None = None,
+    duplicate_identity: str | None = None,
+    omit_identity: str | None = None,
 ) -> Path:
     message = Message()
-    message["Metadata-Version"] = "2.3"
-    message["Name"] = name
-    message["Version"] = version
+    identity = {"Metadata-Version": "2.3", "Name": name, "Version": version}
+    for field, value in identity.items():
+        if field != omit_identity:
+            message[field] = value
+        if field == duplicate_identity:
+            message[field] = value
     for key, url in (EXPECTED_URLS if urls is None else urls).items():
         message["Project-URL"] = f"{key}, {url}"
     if duplicate:
         message["Project-URL"] = f"Homepage, {EXPECTED_URLS['Homepage']}"
+    for extra in extras:
+        message["Provides-Extra"] = extra
+    for requirement in requires:
+        message["Requires-Dist"] = requirement
     with zipfile.ZipFile(path, "w") as archive:
-        archive.writestr(f"{name}-{version}.dist-info/METADATA", message.as_bytes())
+        archive.writestr(
+            f"{metadata_dir or f'{name}-{version}.dist-info'}/METADATA",
+            message.as_bytes(),
+        )
     return path
+
+
+@pytest.mark.parametrize("field", ["Metadata-Version", "Name", "Version"])
+@pytest.mark.parametrize("mutation", ["duplicate", "missing"])
+def test_wheel_requires_unambiguous_identity_headers(
+    tmp_path: Path, field: str, mutation: str
+) -> None:
+    wheel = _wheel(
+        tmp_path / "synthetic-identity.whl",
+        duplicate_identity=field if mutation == "duplicate" else None,
+        omit_identity=field if mutation == "missing" else None,
+    )
+    result = inspect_wheel(wheel, expected_version="0.3.0", require_core_only=True)
+    assert result["publication_authorized"] is False
+    assert result["status"] == "BLOCKED"
+    assert f"wheel {field} must appear exactly once" in result["issues"]
+
+
+@pytest.mark.parametrize(
+    "metadata_dir",
+    [
+        "nested/medscale-0.3.0.dist-info",
+        "unrelated-0.3.0.dist-info",
+        "medscale-9.9.9.dist-info",
+    ],
+)
+def test_core_wheel_rejects_unbound_metadata_location(tmp_path: Path, metadata_dir: str) -> None:
+    wheel = _wheel(tmp_path / "synthetic-candidate.whl", metadata_dir=metadata_dir)
+    result = inspect_wheel(wheel, expected_version="0.3.0", require_core_only=True)
+    assert result["status"] == "BLOCKED"
+    assert result["publication_authorized"] is False
+    assert any("METADATA path" in issue for issue in result["issues"])
+
+
+@pytest.mark.parametrize(
+    ("extras", "requires", "should_block"),
+    [
+        ((), (), False),
+        (("training-hf-sft",), (), True),
+        ((), ("pillow==12.3.0; extra == 'rq1-runtime-feasibility'",), True),
+        (
+            ("rq1-runtime-feasibility",),
+            ("accelerate==1.14.0; extra == 'rq1-runtime-feasibility'",),
+            True,
+        ),
+    ],
+)
+def test_strict_core_only_wheel_policy_is_fail_closed(
+    tmp_path: Path,
+    extras: tuple[str, ...],
+    requires: tuple[str, ...],
+    should_block: bool,
+) -> None:
+    wheel = _wheel(tmp_path / "medscale-0.3.0-py3-none-any.whl", extras=extras, requires=requires)
+    _append_synthetic_integrity_record(wheel)
+    result = inspect_wheel(wheel, expected_version="0.3.0", require_core_only=True)
+    assert result["publication_authorized"] is False
+    if should_block:
+        assert result["status"] == "BLOCKED"
+        assert any("core-only" in issue for issue in result["issues"])
+    else:
+        assert result["status"] == "METADATA_QUALIFIED_ONLY"
+        assert result["issues"] == []
+
+
+def test_inspector_streams_digest_without_loading_entire_wheel(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    wheel = _wheel(tmp_path / "medscale-0.3.0-py3-none-any.whl")
+    _append_synthetic_integrity_record(wheel)
+    expected_sha256 = hashlib.sha256(wheel.read_bytes()).hexdigest()
+
+    def refuse_whole_file_read(_path: Path) -> bytes:
+        raise AssertionError("unbounded Path.read_bytes is prohibited")
+
+    monkeypatch.setattr(Path, "read_bytes", refuse_whole_file_read)
+    inspect = runpy.run_path(str(SCRIPT))["inspect_wheel"]
+    result = inspect(wheel, expected_version="0.3.0", require_core_only=True)
+    assert result["sha256"] == expected_sha256
+    assert result["status"] == "METADATA_QUALIFIED_ONLY"
+    assert result["publication_authorized"] is False
+
+
+def test_inspector_rejects_inplace_mutation_between_digest_and_metadata(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    wheel = _wheel(tmp_path / "candidate.whl")
+    alternate = _wheel(tmp_path / "alternate.whl")
+    with zipfile.ZipFile(wheel, "a") as archive:
+        archive.writestr("synthetic.txt", b"AAAAAAAA")
+    with zipfile.ZipFile(alternate, "a") as archive:
+        archive.writestr("synthetic.txt", b"BBBBBBBB")
+    replacement = alternate.read_bytes()
+    assert len(wheel.read_bytes()) == len(replacement)
+
+    original_digest = hashlib.file_digest
+    calls = 0
+
+    def mutate_after_first_digest(stream: Any, algorithm: str) -> Any:
+        nonlocal calls
+        result = original_digest(stream, algorithm)
+        calls += 1
+        if calls == 1:
+            with wheel.open("r+b") as output:
+                output.write(replacement)
+                output.truncate()
+        return result
+
+    monkeypatch.setattr(hashlib, "file_digest", mutate_after_first_digest)
+    inspect = runpy.run_path(str(SCRIPT))["inspect_wheel"]
+    result = inspect(wheel, expected_version="0.3.0", require_core_only=True)
+    assert result["status"] == "BLOCKED"
+    assert "wheel changed during inspection" in result["issues"]
+    assert result["sha256"] is None
+    assert result["publication_authorized"] is False
+
+
+def test_inspector_unreadable_artifact_fails_closed(tmp_path: Path) -> None:
+    inspect = runpy.run_path(str(SCRIPT))["inspect_wheel"]
+    result = inspect(tmp_path / "missing.whl", require_core_only=True)
+    assert result["status"] == "BLOCKED"
+    assert result["publication_authorized"] is False
+    assert result["sha256"] is None
+    assert "wheel unreadable: FileNotFoundError" in result["issues"]
 
 
 def test_valid_metadata_is_not_publication_authorization(tmp_path: Path) -> None:
@@ -92,6 +239,17 @@ def test_missing_url_is_rejected(tmp_path: Path, label: str) -> None:
 def test_duplicate_label_is_rejected(tmp_path: Path) -> None:
     result = inspect_wheel(_wheel(tmp_path / "duplicate.whl", duplicate=True))
     assert "invalid or duplicate Project-URL" in result["issues"]
+
+
+@pytest.mark.parametrize("unexpected_label", ["Security", "Download"])
+def test_core_only_rejects_unapproved_project_url(tmp_path: Path, unexpected_label: str) -> None:
+    urls = dict(EXPECTED_URLS)
+    urls[unexpected_label] = "https://untrusted.invalid/collect"
+    wheel = _wheel(tmp_path / "unapproved-url.whl", urls=urls)
+    result = inspect_wheel(wheel, expected_version="0.3.0", require_core_only=True)
+    assert result["status"] == "BLOCKED"
+    assert result["publication_authorized"] is False
+    assert "unexpected Project-URL" in result["issues"]
 
 
 def test_version_and_distribution_are_binding(tmp_path: Path) -> None:
@@ -170,3 +328,449 @@ def test_workspace_refuses_core_distribution_name(tmp_path: Path) -> None:
     core = _wheel(tmp_path / "core.whl")
     result = inspect_wheel(core, distribution="medscale-workspace")
     assert "distribution name must remain medscale-workspace" in result["issues"]
+
+
+@pytest.mark.parametrize(
+    "filename",
+    [
+        "other-0.3.0-py3-none-any.whl",
+        "medscale-9.9.9-py3-none-any.whl",
+        "medscale-0.3.0.whl",
+        "medscale-0.3.0--none-any.whl",
+        "medscale-0.3.0-py3-none-any..whl",
+    ],
+)
+def test_strict_core_rejects_wheel_filename_identity_mismatch(
+    tmp_path: Path, filename: str
+) -> None:
+    wheel = _wheel(tmp_path / filename)
+    result = inspect_wheel(wheel, expected_version="0.3.0", require_core_only=True)
+    assert result["status"] == "BLOCKED"
+    assert result["publication_authorized"] is False
+    assert "wheel filename does not match distribution/version and wheel tags" in result["issues"]
+
+
+@pytest.mark.parametrize(
+    "filename",
+    [
+        "medscale-0.3.0-py3-none-any.whl",
+        "medscale-0.3.0-1-py3-none-any.whl",
+    ],
+)
+def test_strict_core_accepts_wheel_filename_with_matching_identity(
+    tmp_path: Path, filename: str
+) -> None:
+    wheel = _wheel(tmp_path / filename)
+    _append_synthetic_integrity_record(wheel)
+    result = inspect_wheel(wheel, expected_version="0.3.0", require_core_only=True)
+    assert result["status"] == "METADATA_QUALIFIED_ONLY"
+    assert result["publication_authorized"] is False
+
+
+def test_workspace_strict_filename_uses_normalized_distribution(tmp_path: Path) -> None:
+    wheel = _wheel(
+        tmp_path / "medscale_workspace-0.1.0.dev1-py3-none-any.whl",
+        name="medscale-workspace",
+        version="0.1.0.dev1",
+    )
+    _append_synthetic_integrity_record(wheel)
+    result = inspect_wheel(
+        wheel,
+        expected_version="0.1.0.dev1",
+        distribution="medscale-workspace",
+        require_core_only=True,
+    )
+    assert result["status"] == "METADATA_QUALIFIED_ONLY"
+
+
+@pytest.mark.parametrize(
+    "dangerous_member",
+    [
+        "../escaped.txt",
+        "/absolute.txt",
+        "safe/../../escaped.txt",
+        r"safe\windows-path.txt",
+        "C:/drive.txt",
+        "safe//empty-component.txt",
+        "safe/./dot-component.txt",
+        "safe/file:ads",
+        "safe/\x01control.txt",
+    ],
+)
+def test_strict_core_rejects_unsafe_zip_member_paths(tmp_path: Path, dangerous_member: str) -> None:
+    wheel = _wheel(tmp_path / "medscale-0.3.0-py3-none-any.whl")
+    with zipfile.ZipFile(wheel, "a") as archive:
+        member = zipfile.ZipInfo(dangerous_member)
+        # ZipInfo normalizes backslashes on Windows; preserve the raw ZIP name.
+        member.filename = dangerous_member
+        archive.writestr(member, b"synthetic")
+    result = inspect_wheel(wheel, expected_version="0.3.0", require_core_only=True)
+    assert result["status"] == "BLOCKED"
+    assert result["publication_authorized"] is False
+    assert "wheel archive contains unsafe ZIP member path" in result["issues"]
+
+
+@pytest.mark.parametrize(
+    ("first_member", "second_member"),
+    [
+        ("asset.txt", "asset.txt"),
+        ("asset.txt", "ASSET.TXT"),
+        ("a/\u00e9.txt", "a/e\u0301.txt"),
+    ],
+)
+def test_strict_core_rejects_duplicate_zip_member_names(
+    tmp_path: Path, first_member: str, second_member: str
+) -> None:
+    wheel = _wheel(tmp_path / "medscale-0.3.0-py3-none-any.whl")
+    with zipfile.ZipFile(wheel, "a") as archive:
+        archive.writestr(first_member, b"one")
+        if first_member == second_member:
+            with pytest.warns(UserWarning, match="Duplicate name"):
+                archive.writestr(second_member, b"two")
+        else:
+            archive.writestr(second_member, b"two")
+    result = inspect_wheel(wheel, expected_version="0.3.0", require_core_only=True)
+    assert result["status"] == "BLOCKED"
+    assert "wheel archive contains duplicate ZIP member name" in result["issues"]
+
+
+def test_strict_core_rejects_zip_symlinks_without_extracting(
+    tmp_path: Path,
+) -> None:
+    import stat
+
+    wheel = _wheel(tmp_path / "medscale-0.3.0-py3-none-any.whl")
+    link = zipfile.ZipInfo("link-to-outside")
+    link.create_system = 3
+    link.external_attr = (stat.S_IFLNK | 0o777) << 16
+    with zipfile.ZipFile(wheel, "a") as archive:
+        archive.writestr(link, "../../outside.txt")
+    result = inspect_wheel(wheel, expected_version="0.3.0", require_core_only=True)
+    assert result["status"] == "BLOCKED"
+    assert "wheel archive contains symlink ZIP member" in result["issues"]
+
+
+@pytest.mark.parametrize(
+    "unsafe_member",
+    [
+        "CON",
+        "safe/CON.txt",
+        "safe/prn",
+        "safe/AUX.log",
+        "safe/NUL",
+        "safe/CONIN$",
+        "safe/conin$.txt",
+        "safe/CONOUT$",
+        "safe/ConOut$.log",
+        "safe/com1.dat",
+        "safe/LPT9",
+        "safe/COM¹.txt",
+        "safe/LPT²",
+        "safe/angle<bad>.txt",
+        "safe/angle>bad.txt",
+        'safe/quote".txt',
+        "safe/pipe|bad.txt",
+        "safe/question?.txt",
+        "safe/star*.txt",
+        "safe/trailing.",
+        "safe/trailing ",
+        "safe/directory. /file.txt",
+    ],
+)
+def test_strict_core_rejects_windows_ambiguous_zip_members(
+    tmp_path: Path, unsafe_member: str
+) -> None:
+    wheel = _wheel(tmp_path / "medscale-0.3.0-py3-none-any.whl")
+    with zipfile.ZipFile(wheel, "a") as archive:
+        archive.writestr(unsafe_member, b"synthetic")
+    result = inspect_wheel(wheel, expected_version="0.3.0", require_core_only=True)
+    assert result["status"] == "BLOCKED"
+    assert result["publication_authorized"] is False
+    assert "wheel archive contains unsafe ZIP member path" in result["issues"]
+
+
+@pytest.mark.parametrize("variant", ["safe/file.", "safe/file "])
+def test_strict_core_rejects_windows_normalized_name_collisions(
+    tmp_path: Path, variant: str
+) -> None:
+    wheel = _wheel(tmp_path / "medscale-0.3.0-py3-none-any.whl")
+    with zipfile.ZipFile(wheel, "a") as archive:
+        archive.writestr("safe/file", b"one")
+        archive.writestr(variant, b"two")
+    result = inspect_wheel(wheel, expected_version="0.3.0", require_core_only=True)
+    assert result["status"] == "BLOCKED"
+    assert "wheel archive contains duplicate ZIP member name" in result["issues"]
+
+
+@pytest.mark.parametrize(
+    "members",
+    [
+        ("safe", "safe/child.txt"),
+        ("safe/child.txt", "safe"),
+        ("Safe", "safe/child.txt"),
+        ("safe/branch", "safe/branch/child.txt"),
+        ("safe/e\u0301", "safe/\u00e9/child.txt"),
+    ],
+)
+def test_strict_core_rejects_file_directory_zip_member_collisions(
+    tmp_path: Path, members: tuple[str, str]
+) -> None:
+    wheel = _wheel(tmp_path / "medscale-0.3.0-py3-none-any.whl")
+    with zipfile.ZipFile(wheel, "a") as archive:
+        for member in members:
+            archive.writestr(member, b"synthetic")
+    # Complete, internally consistent RECORD must not hide path collisions.
+    _append_synthetic_integrity_record(wheel)
+    result = inspect_wheel(wheel, expected_version="0.3.0", require_core_only=True)
+    assert result["status"] == "BLOCKED"
+    assert "wheel archive contains file/directory ZIP member collision" in result["issues"]
+    assert result["publication_authorized"] is False
+
+
+def test_strict_core_allows_explicit_directory_with_children(tmp_path: Path) -> None:
+    wheel = _wheel(tmp_path / "medscale-0.3.0-py3-none-any.whl")
+    with zipfile.ZipFile(wheel, "a") as archive:
+        archive.writestr("safe/", b"")
+        archive.writestr("safe/child.txt", b"synthetic")
+        archive.writestr("safe/sibling.txt", b"synthetic")
+    _append_synthetic_integrity_record(wheel)
+    result = inspect_wheel(wheel, expected_version="0.3.0", require_core_only=True)
+    assert result["status"] == "METADATA_QUALIFIED_ONLY"
+    assert result["publication_authorized"] is False
+
+
+def test_strict_core_allows_distinct_safe_zip_members(tmp_path: Path) -> None:
+    wheel = _wheel(tmp_path / "medscale-0.3.0-py3-none-any.whl")
+    with zipfile.ZipFile(wheel, "a") as archive:
+        archive.writestr("medscale/data/synthetic.json", b"{}")
+        archive.writestr("medscale/data/assets/picture.txt", b"offline")
+        archive.writestr("medscale/data/CONnected.txt", b"safe")
+        archive.writestr("medscale/data/name.with.dots.txt", b"safe")
+    _append_synthetic_integrity_record(wheel)
+    result = inspect_wheel(wheel, expected_version="0.3.0", require_core_only=True)
+    assert result["status"] == "METADATA_QUALIFIED_ONLY"
+    assert result["publication_authorized"] is False
+
+
+def _set_last_zip_member_declared_size(wheel: Path, uncompressed_bytes: int) -> None:
+    """Change only the central-directory claim; do not allocate a giant payload."""
+    import struct
+
+    archive = bytearray(wheel.read_bytes())
+    offset = archive.rfind(b"PK\x01\x02")
+    assert offset >= 0
+    struct.pack_into("<I", archive, offset + 24, uncompressed_bytes)
+    wheel.write_bytes(archive)
+
+
+def test_strict_core_rejects_extreme_member_declared_size(tmp_path: Path) -> None:
+    wheel = _wheel(tmp_path / "medscale-0.3.0-py3-none-any.whl")
+    with zipfile.ZipFile(wheel, "a") as archive:
+        archive.writestr("synthetic.bin", b"x")
+    _set_last_zip_member_declared_size(wheel, 65 * 1024 * 1024)
+    result = inspect_wheel(wheel, expected_version="0.3.0", require_core_only=True)
+    assert result["status"] == "BLOCKED"
+    assert "wheel archive uncompressed member exceeds safety limit" in result["issues"]
+    assert result["publication_authorized"] is False
+
+
+def test_strict_core_rejects_extreme_total_declared_size(tmp_path: Path) -> None:
+    wheel = _wheel(tmp_path / "medscale-0.3.0-py3-none-any.whl")
+    for number in range(5):
+        with zipfile.ZipFile(wheel, "a") as archive:
+            archive.writestr(f"synthetic-{number}.bin", b"x")
+        _set_last_zip_member_declared_size(wheel, 60 * 1024 * 1024)
+    result = inspect_wheel(wheel, expected_version="0.3.0", require_core_only=True)
+    assert result["status"] == "BLOCKED"
+    assert "wheel archive uncompressed total exceeds safety limit" in result["issues"]
+
+
+def test_strict_core_rejects_extreme_compression_ratio(tmp_path: Path) -> None:
+    wheel = _wheel(tmp_path / "medscale-0.3.0-py3-none-any.whl")
+    with zipfile.ZipFile(wheel, "a", compression=zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr("synthetic-zeros.bin", b"\0" * (4 * 1024 * 1024))
+    result = inspect_wheel(wheel, expected_version="0.3.0", require_core_only=True)
+    assert result["status"] == "BLOCKED"
+    assert "wheel archive member compression ratio exceeds safety limit" in result["issues"]
+
+
+def test_strict_core_rejects_excessive_member_count(tmp_path: Path) -> None:
+    wheel = _wheel(tmp_path / "medscale-0.3.0-py3-none-any.whl")
+    with zipfile.ZipFile(wheel, "a") as archive:
+        for i in range(10_001):
+            archive.writestr(f"data/{i}.bin", b"")
+    result = inspect_wheel(wheel, expected_version="0.3.0", require_core_only=True)
+    assert result["status"] == "BLOCKED"
+    assert "wheel archive contains too many ZIP members" in result["issues"]
+
+
+def test_strict_core_accepts_bounded_compressed_entries(tmp_path: Path) -> None:
+    wheel = _wheel(tmp_path / "medscale-0.3.0-py3-none-any.whl")
+    with zipfile.ZipFile(wheel, "a", compression=zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr("data/example.txt", b"fictional data" * 20)
+    _append_synthetic_integrity_record(wheel)
+    result = inspect_wheel(wheel, expected_version="0.3.0", require_core_only=True)
+    assert result["status"] == "METADATA_QUALIFIED_ONLY"
+
+
+def _append_synthetic_integrity_record(
+    wheel: Path,
+    *,
+    row_mutator: Any | None = None,
+    wheel_headers: str | None = None,
+) -> None:
+    """Append a test-only PEP 376 RECORD and WHEEL using real SHA-256 digests."""
+    import base64
+    import csv
+    import io
+
+    with zipfile.ZipFile(wheel, "a") as archive:
+        metadata = next(name for name in archive.namelist() if name.endswith(".dist-info/METADATA"))
+        dist_info = metadata.rsplit("/", 1)[0]
+        wheel_meta = f"{dist_info}/WHEEL"
+        archive.writestr(
+            wheel_meta,
+            wheel_headers
+            if wheel_headers is not None
+            else (
+                "Wheel-Version: 1.0\nGenerator: synthetic-tests\nRoot-Is-Purelib: true\n"
+                "Tag: py3-none-any\n"
+            ),
+        )
+        rows = []
+        for member in archive.infolist():
+            if member.is_dir():
+                continue
+            content = archive.read(member.filename)
+            digest = base64.urlsafe_b64encode(hashlib.sha256(content).digest()).decode().rstrip("=")
+            rows.append([member.filename, f"sha256={digest}", str(len(content))])
+        record = f"{dist_info}/RECORD"
+        rows.append([record, "", ""])
+        if row_mutator is not None:
+            rows = row_mutator(rows)
+        output = io.StringIO(newline="")
+        csv.writer(output, lineterminator="\n").writerows(rows)
+        archive.writestr(record, output.getvalue())
+
+
+def test_strict_wheel_rejects_missing_record_and_wheel(tmp_path: Path) -> None:
+    wheel = _wheel(tmp_path / "medscale-0.3.0-py3-none-any.whl")
+    result = inspect_wheel(wheel, expected_version="0.3.0", require_core_only=True)
+    assert result["status"] == "BLOCKED"
+    assert "wheel RECORD or WHEEL missing" in result["issues"]
+
+
+def test_strict_wheel_accepts_valid_complete_record(tmp_path: Path) -> None:
+    wheel = _wheel(tmp_path / "medscale-0.3.0-py3-none-any.whl")
+    _append_synthetic_integrity_record(wheel)
+    result = inspect_wheel(wheel, expected_version="0.3.0", require_core_only=True)
+    assert result["status"] == "METADATA_QUALIFIED_ONLY"
+    assert result["publication_authorized"] is False
+
+
+@pytest.mark.parametrize(
+    ("mutation", "expected_issue"),
+    [
+        ("missing-metadata-row", "wheel RECORD does not cover archive files"),
+        ("tampered-hash", "wheel RECORD member hash mismatch"),
+        ("tampered-size", "wheel RECORD member size mismatch"),
+        ("weak-hash", "wheel RECORD uses unsupported or missing hash"),
+        ("self-hash", "wheel RECORD self-entry must have empty hash and size"),
+        ("duplicate-row", "wheel RECORD contains duplicate path"),
+    ],
+)
+def test_strict_wheel_rejects_unsafe_record_rows(
+    tmp_path: Path, mutation: str, expected_issue: str
+) -> None:
+    wheel = _wheel(tmp_path / "medscale-0.3.0-py3-none-any.whl")
+
+    def change_rows(rows: list[list[str]]) -> list[list[str]]:
+        if mutation == "missing-metadata-row":
+            return [row for row in rows if not row[0].endswith("/METADATA")]
+        if mutation == "tampered-hash":
+            rows[0][1] = "sha256=" + "A" * 43
+        if mutation == "tampered-size":
+            rows[0][2] = "999999"
+        if mutation == "weak-hash":
+            rows[0][1] = "sha1=abcd"
+        if mutation == "self-hash":
+            rows[-1][1] = "sha256=bogus"
+        if mutation == "duplicate-row":
+            rows.append(list(rows[0]))
+        return rows
+
+    _append_synthetic_integrity_record(wheel, row_mutator=change_rows)
+    result = inspect_wheel(wheel, expected_version="0.3.0", require_core_only=True)
+    assert result["status"] == "BLOCKED"
+    assert expected_issue in result["issues"]
+
+
+def test_strict_wheel_rejects_unlisted_zip_payload(tmp_path: Path) -> None:
+    wheel = _wheel(tmp_path / "medscale-0.3.0-py3-none-any.whl")
+    _append_synthetic_integrity_record(wheel)
+    with zipfile.ZipFile(wheel, "a") as archive:
+        archive.writestr("medscale/unlisted.txt", b"surprise")
+    result = inspect_wheel(wheel, expected_version="0.3.0", require_core_only=True)
+    assert result["status"] == "BLOCKED"
+    assert "wheel RECORD does not cover archive files" in result["issues"]
+
+
+@pytest.mark.parametrize(
+    ("wheel_headers", "expected_issue"),
+    [
+        (
+            "Generator: synthetic-tests\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
+            "wheel WHEEL identity headers invalid",
+        ),
+        (
+            "Wheel-Version: 2.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
+            "wheel WHEEL version unsupported",
+        ),
+        (
+            "Wheel-Version: 1.0\nRoot-Is-Purelib: unknown\nTag: py3-none-any\n",
+            "wheel WHEEL Root-Is-Purelib invalid",
+        ),
+        (
+            "Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: cp311-none-any\n",
+            "wheel WHEEL tags disagree with archive filename",
+        ),
+        (
+            "Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\nTag: py3-none-any\n",
+            "wheel WHEEL tags disagree with archive filename",
+        ),
+    ],
+)
+def test_strict_wheel_rejects_invalid_wheel_identity(
+    tmp_path: Path, wheel_headers: str, expected_issue: str
+) -> None:
+    wheel = _wheel(tmp_path / "medscale-0.3.0-py3-none-any.whl")
+    _append_synthetic_integrity_record(wheel, wheel_headers=wheel_headers)
+    result = inspect_wheel(wheel, expected_version="0.3.0", require_core_only=True)
+    assert result["status"] == "BLOCKED"
+    assert result["publication_authorized"] is False
+    assert expected_issue in result["issues"]
+
+
+def test_strict_wheel_rejects_oversized_wheel_headers(tmp_path: Path) -> None:
+    wheel = _wheel(tmp_path / "medscale-0.3.0-py3-none-any.whl")
+    wheel_headers = (
+        "Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n"
+        "Generator: " + "x" * (64 * 1024) + "\n"
+    )
+    _append_synthetic_integrity_record(wheel, wheel_headers=wheel_headers)
+    result = inspect_wheel(wheel, expected_version="0.3.0", require_core_only=True)
+    assert result["status"] == "BLOCKED"
+    assert "wheel WHEEL exceeds safety limit" in result["issues"]
+
+
+def test_strict_wheel_matches_compressed_filename_tag_set(tmp_path: Path) -> None:
+    wheel = _wheel(tmp_path / "medscale-0.3.0-py3.py2-none-any.whl")
+    _append_synthetic_integrity_record(
+        wheel,
+        wheel_headers=(
+            "Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\nTag: py2-none-any\n"
+        ),
+    )
+    result = inspect_wheel(wheel, expected_version="0.3.0", require_core_only=True)
+    assert result["status"] == "METADATA_QUALIFIED_ONLY"
+    assert result["publication_authorized"] is False
