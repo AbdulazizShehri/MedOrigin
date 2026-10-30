@@ -47,7 +47,9 @@ def test_existing_oversized_report_is_rejected_before_full_read(
     assert target.stat().st_size == _REPORT_LIMIT + 1
 
 
-def test_new_oversized_report_is_rejected_before_creating_artifact(tmp_path: Path) -> None:
+def test_new_oversized_report_is_rejected_before_creating_artifact(
+    tmp_path: Path,
+) -> None:
     report = ValidationReport(status="invalid", errors=("X" * _REPORT_LIMIT,))
     target = fhirkit_reports_dir(tmp_path) / report_hash(report) / "report.json"
 
