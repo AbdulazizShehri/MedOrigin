@@ -44,12 +44,12 @@ jobs:
       - name: Ruff lint
         run: >-
           uvx --python ${{ matrix.python }} ruff==0.14.4 check
-          src/medscale/fhirkit/storage.py tests/test_fhir_storage_bounded.py
+          src/medscale/fhirkit/storage.py src/medscale/fhirkit/report.py tests/test_fhir_storage_bounded.py
 
       - name: Ruff format check
         run: >-
           uvx --python ${{ matrix.python }} ruff==0.14.4 format --check
-          src/medscale/fhirkit/storage.py tests/test_fhir_storage_bounded.py
+          src/medscale/fhirkit/storage.py src/medscale/fhirkit/report.py tests/test_fhir_storage_bounded.py
 
       - name: Focused synthetic FHIR storage regression suite
         env:
