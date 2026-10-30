@@ -191,3 +191,49 @@ reader announcements, independent assistive-technology validation, platform
 packet-level zero egress, Linux transitive RustSec notices (#673), third-party
 licensing, release signing and artifact provenance. No new D2 release,
 installer, protected-main merge, public tag, PHI or clinical claim.
+
+## Real macOS keyboard-only focus and verification acceptance
+
+The source-controlled `tests/macos-native-keyboard-qualification.swift` is a
+**separate** real native Mac test from the AXPress-based
+`tests/macos-native-ax-qualification.swift`. It uses Apple `CGEvent` virtual
+key codes and NSAccessibility *inspection only*: **Tab/Shift+Tab** must move
+focus through the four fictional fixture selectors and the Verify control in
+both directions, **Space** must select each fictional fixture and activate
+the Verify button, and the exact expected SHA-256 must then be readable in the
+real app's Accessibility text tree. Direct Rust hashing or accessibility
+`AXPress` calls are **not** used by this test.
+
+Run against an **already built, running, unpublished synthetic-only D2
+native GUI**, on an authorized interactive Mac with Accessibility permission:
+
+```sh
+swift format lint --strict tests/macos-native-keyboard-qualification.swift
+swift tests/macos-native-keyboard-qualification.swift "$D2_APP_PID"
+```
+
+The script rejects an absent process, missing AX window/controls, incorrect
+Tab order or reverse order, nonresponding Space selection, missing Verify
+button or digest. It checks for AccessKit's async initialization placeholder
+before testing focus; the test sends genuine CGEvent key events to the current
+Mac foreground app, so only run in an approved interactive developer session.
+It never changes macOS system settings or creates global firewall rules.
+
+**Observed actual Mac evidence (2026-10-30):** Apple Silicon macOS 26.6.2,
+pinned eframe 0.36.0, `cargo +1.97.1 build --locked`; all 5 forward Tab
+targets, 4 reverse Shift+Tab targets, and **all 4 fictional fixtures
+selected/verified using keyboard events only** passed with exact AX-displayed
+hashes. Repeated against a **fresh cold launch** with the same
+`MACOS_KEYBOARD_4_OF_4_PASS_NONPUBLISHING` and exit 0. A deliberately
+incorrect PID returned `MACOS_KEYBOARD_NO_GO`, exit 1.
+`swift format lint --strict` also passed. Initial isolated test runs exposed
+a synthetic key modifier flags issue, repaired **only in the test harness**
+by explicitly clearing modifier flags on key-up. No production Rust/egui
+source or lockfile was changed, and no unsupported upgrade is proposed.
+
+This **qualifies synthetic-only keyboard traversal and action delivery on
+one real Mac**. It does **not** test actual VoiceOver spoken announcements,
+full focus behavior across all OS settings, screen-reader usability on a
+second Mac, independent security audit, Linux zbus RustSec maintenance
+(#673), OS-enforced network isolation or release authorization. Issue #676
+remains OPEN and publication remains NO-GO.
