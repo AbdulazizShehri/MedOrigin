@@ -60,7 +60,7 @@ def audit_source(root: Path, policy: dict[str, Any]) -> list[str]:
         native_source = (root / D1 / "src-tauri/src/lib.rs").read_text()
         ui_source = (root / D1 / "src/App.tsx").read_text()
     except (OSError, UnicodeError, ValueError, TypeError):
-        return issues + ["D1_SOURCE_UNAVAILABLE_OR_INVALID"]
+        return [*issues, "D1_SOURCE_UNAVAILABLE_OR_INVALID"]
 
     if config.get("bundle", {}).get("active") is not False:
         issues.append("D1_UNAUTHORIZED_BUNDLE")
