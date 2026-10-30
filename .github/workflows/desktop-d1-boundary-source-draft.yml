@@ -106,3 +106,5 @@ jobs:
             throw 'Unisolated test runner incorrectly qualified or produced no NO-GO marker'
           }
           Write-Output 'D1_TEST_RUNNER_REJECTED_NO_NETWORK_ISOLATION_PROOF'
+          # The deliberately refused child exits nonzero; clear its inherited status.
+          exit 0
