@@ -190,6 +190,51 @@ def _wheel_record_issues(archive: zipfile.ZipFile, metadata_path: str) -> list[s
     return []
 
 
+
+def _wheel_header_issues(
+    archive: zipfile.ZipFile, metadata_path: str, filename: str
+) -> list[str]:
+    """Bind WHEEL compatibility tags to the actual archive filename.
+
+    A valid RECORD hash proves internal consistency, not that a Wheel has
+    installable identity headers or that its tag declarations agree.
+    """
+    wheel_name = f"{metadata_path.rsplit('/', 1)[0]}/WHEEL"
+    info = archive.getinfo(wheel_name)
+    if info.file_size > 64 * 1024:
+        return ["wheel WHEEL exceeds safety limit"]
+
+    message = BytesParser(policy=default).parsebytes(archive.read(wheel_name))
+    if any(
+        len(message.get_all(field, [])) != 1
+        for field in ("Wheel-Version", "Root-Is-Purelib")
+    ):
+        return ["wheel WHEEL identity headers invalid"]
+    if message.get("Wheel-Version") != "1.0":
+        return ["wheel WHEEL version unsupported"]
+    if message.get("Root-Is-Purelib") not in ("true", "false"):
+        return ["wheel WHEEL Root-Is-Purelib invalid"]
+
+    declared_tags = message.get_all("Tag", [])
+    if not declared_tags or len(declared_tags) > 256:
+        return ["wheel WHEEL tags disagree with archive filename"]
+    python_tags, abi_tags, platform_tags = [
+        field.split(".") for field in filename[:-4].split("-")[-3:]
+    ]
+    # Bound expansion of compressed wheel tags before computing the product.
+    if len(python_tags) * len(abi_tags) * len(platform_tags) > 256:
+        return ["wheel WHEEL tags disagree with archive filename"]
+    expected_tags = {
+        f"{python_tag}-{abi_tag}-{platform_tag}"
+        for python_tag in python_tags
+        for abi_tag in abi_tags
+        for platform_tag in platform_tags
+    }
+    if len(set(declared_tags)) != len(declared_tags) or set(declared_tags) != expected_tags:
+        return ["wheel WHEEL tags disagree with archive filename"]
+    return []
+
+
 def inspect_wheel(
     path: Path,
     *,
@@ -281,6 +326,10 @@ def inspect_wheel(
                         issues.append("unexpected Project-URL")
             if require_core_only and not issues and len(metadata_paths) == 1:
                 issues.extend(_wheel_record_issues(archive, metadata_paths[0]))
+                if not issues:
+                    issues.extend(
+                        _wheel_header_issues(archive, metadata_paths[0], path.name)
+                    )
             # Rehash after ZIP inspection: keeping one open handle prevents a
             # path-swap race, but does not prevent an in-place write to that
             # handle between the first digest and metadata parsing.
