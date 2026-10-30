@@ -13,7 +13,6 @@ import tempfile
 import unittest
 from pathlib import Path
 
-
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "scripts/verify_d1_network_boundary.py"
 SPEC = importlib.util.spec_from_file_location("d1_boundary_checker", SCRIPT)
