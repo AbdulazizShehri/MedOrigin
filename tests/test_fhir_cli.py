@@ -140,6 +140,10 @@ def test_fhir_cli_rejects_missing_or_invalid_resource_type(
         '{"resourceType":"Patient","value":NaN}',
         '{"resourceType":"Patient","value":Infinity}',
         '{"resourceType":"Patient","value":-Infinity}',
+        '{"resourceType":"Patient","value":1e999}',
+        '{"resourceType":"Patient","value":-1e999}',
+        '{"resourceType":"Patient","meta":{"value":1e999}}',
+        r'{"resourceType":"Patient","id":"\ud800"}',
     ],
 )
 @pytest.mark.parametrize("summary_only", [False, True])
