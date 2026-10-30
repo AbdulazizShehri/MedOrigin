@@ -106,6 +106,13 @@ def inspect_wheel(
                         # A candidate with the four approved links plus an
                         # unreviewed fifth URL must not pass the strict gate.
                         issues.append("unexpected Project-URL")
+            # Rehash after ZIP inspection: keeping one open handle prevents a
+            # path-swap race, but does not prevent an in-place write to that
+            # handle between the first digest and metadata parsing.
+            stream.seek(0)
+            if hashlib.file_digest(stream, "sha256").hexdigest() != digest:
+                issues.append("wheel changed during inspection")
+                digest = None
     except (OSError, zipfile.BadZipFile, RuntimeError, EOFError, ValueError) as exc:
         issues.append(f"wheel unreadable: {type(exc).__name__}")
 

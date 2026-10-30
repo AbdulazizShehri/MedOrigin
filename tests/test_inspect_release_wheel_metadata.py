@@ -166,6 +166,40 @@ def test_inspector_streams_digest_without_loading_entire_wheel(
     assert result["publication_authorized"] is False
 
 
+def test_inspector_rejects_inplace_mutation_between_digest_and_metadata(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    wheel = _wheel(tmp_path / "candidate.whl")
+    alternate = _wheel(tmp_path / "alternate.whl")
+    with zipfile.ZipFile(wheel, "a") as archive:
+        archive.writestr("synthetic.txt", b"AAAAAAAA")
+    with zipfile.ZipFile(alternate, "a") as archive:
+        archive.writestr("synthetic.txt", b"BBBBBBBB")
+    replacement = alternate.read_bytes()
+    assert len(wheel.read_bytes()) == len(replacement)
+
+    original_digest = hashlib.file_digest
+    calls = 0
+
+    def mutate_after_first_digest(stream: Any, algorithm: str) -> Any:
+        nonlocal calls
+        result = original_digest(stream, algorithm)
+        calls += 1
+        if calls == 1:
+            with wheel.open("r+b") as output:
+                output.write(replacement)
+                output.truncate()
+        return result
+
+    monkeypatch.setattr(hashlib, "file_digest", mutate_after_first_digest)
+    inspect = runpy.run_path(str(SCRIPT))["inspect_wheel"]
+    result = inspect(wheel, expected_version="0.3.0", require_core_only=True)
+    assert result["status"] == "BLOCKED"
+    assert "wheel changed during inspection" in result["issues"]
+    assert result["sha256"] is None
+    assert result["publication_authorized"] is False
+
+
 def test_inspector_unreadable_artifact_fails_closed(tmp_path: Path) -> None:
     inspect = runpy.run_path(str(SCRIPT))["inspect_wheel"]
     result = inspect(tmp_path / "missing.whl", require_core_only=True)
