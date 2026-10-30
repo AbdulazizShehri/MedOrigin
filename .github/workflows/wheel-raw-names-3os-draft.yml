@@ -28,7 +28,7 @@ jobs:
       - name: Check out immutable PR 734 source without credentials
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: 361d9ae186d1e5d403ef0d61384239fa7d153c49
+          ref: 26616846545e28502e245bdc8e6fc4e58e1476c9
           persist-credentials: false
           fetch-depth: 1
           fetch-tags: false
@@ -55,7 +55,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          test "$(git rev-parse HEAD)" = "361d9ae186d1e5d403ef0d61384239fa7d153c49"
+          test "$(git rev-parse HEAD)" = "26616846545e28502e245bdc8e6fc4e58e1476c9"
           mkdir -p .wheel-qa-synthetic/scripts .wheel-qa-synthetic/tests
           cp scripts/inspect_release_wheel_metadata.py .wheel-qa-synthetic/scripts/
           cp tests/test_inspect_release_wheel_metadata.py .wheel-qa-synthetic/tests/
