@@ -156,6 +156,32 @@ def main() -> int:
         assert "Traceback" not in summary.stderr and not summary_out.exists()
         print("INSTALLED_FHIR_DEPTH_SUMMARY_REJECTED")
 
+        # Exercise the actual installed console script, not source imports.
+        # A sparse >8 MiB fictional file must fail before JSON decoding, in
+        # both normal report mode and the stdout-only summary path.
+        oversized = tmp / "oversized-8mib.json"
+        with oversized.open("wb") as stream:
+            stream.truncate(8 * 1024 * 1024 + 1)
+        for summary_only in (False, True):
+            mode = "summary" if summary_only else "report"
+            output = tmp / f"oversized-{mode}-reports"
+            argv = [
+                str(cli),
+                "fhir",
+                "validate",
+                str(oversized),
+                "--output-dir",
+                str(output),
+            ]
+            if summary_only:
+                argv.append("--summary-only")
+            denied = _run(argv, cwd=tmp, expect=1)
+            assert denied.stdout == "", "oversized installed CLI printed a report"
+            assert "FHIR JSON input exceeds 8 MiB limit" in denied.stderr
+            assert "Traceback" not in denied.stderr
+            assert not output.exists(), "oversized input persisted an invalid report"
+            print(f"INSTALLED_FHIR_BYTE_BOUND_REJECTED: {mode}")
+
         # An existing unrelated local output file must be preserved, not overwritten.
         input_file = tmp / "valid-again.json"
         input_file.write_bytes(b'{"resourceType":"Patient","id":"fictional"}')
