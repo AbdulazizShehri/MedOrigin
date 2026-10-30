@@ -213,6 +213,7 @@ def _wheel_record_issues(archive: zipfile.ZipFile, metadata_path: str) -> list[s
             return ["wheel RECORD member hash mismatch"]
     return []
 
+
 def _wheel_header_issues(archive: zipfile.ZipFile, metadata_path: str, filename: str) -> list[str]:
     """Bind WHEEL compatibility tags to the actual archive filename.
 
