@@ -39,3 +39,24 @@ These documents do **not** establish that any browser flag, CSP, shared-executab
 - Before any public tag, installer or clinical use: independent #603 source-to-artifact review, version/authority #574, optional-dependency risk #622, Rust and macOS parity #673/#676, and separate explicit authorization are still required.
 
 The source-only gate deliberately returns **`D1_SOURCE_CONTRACT_PASS_NO_NETWORK_ISOLATION_PROOF`** followed by **`D1_NETWORK_ISOLATION_NO_GO`** when the code remains correctly cautious. This is *not* an approval code. If any future source configuration asserts safety or allows bundling without this process being replaced by an independently reviewed OS-enforced design, the script fails closed.
+
+
+## Win32 App Isolation fallback: concrete read-only preflight
+
+Microsoft [Win32 App Isolation release notes](https://learn.microsoft.com/en-us/windows/win32/secauthz/app-isolation-release-notes) explicitly state that packaged applications **fall back to FullTrust** on unsupported operating systems. The [overview](https://learn.microsoft.com/en-us/windows/win32/secauthz/app-isolation-overview) lists Windows 11 24H2 / build 26100 as the minimum and labels the feature **preview**. Do not infer actual process isolation from a manifest or installer checkbox. Microsoft also documents the distinction between Medium IL and AppContainer apps in its [package capability guidance](https://learn.microsoft.com/en-us/windows/apps/package-and-deploy/app-capability-declarations).
+
+A new, completely **read-only** feasibility preflight lives at **experiments/desktop-d1-tauri/tests/windows-d1-appcontainer-preflight.ps1**. It accepts the exact already running synthetic-only D1 root PID and expected executable path, checks Windows build number and root path identity, discovers the process tree twice to reject observed process churn, and calls the documented [GetTokenInformation](https://learn.microsoft.com/en-us/windows/win32/api/securitybaseapi/nf-securitybaseapi-gettokeninformation) / TokenIsAppContainer Win32 token API through .NET P/Invoke for the root and descendants. It fails closed if any observed process lacks AppContainer, no WebView2 child appears, token access fails, or the operating system is below the published minimum. No firewall changes, network calls, installer, process launch, injected DLLs, account changes, OS updates, or WebView2 ACL changes occur.
+
+On an authorized Windows desktop, while the synthetic D1 binary is **already running**, run:
+
+~~~powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File experiments/desktop-d1-tauri/tests/windows-d1-appcontainer-preflight.ps1 -RootPid 12345 -ExpectedExePath 'D:\path\to\medorigin-desktop-d1-preview.exe'
+~~~
+
+- Exit **2** = observed FullTrust/unsupported/missing child/identity mismatch, NO-GO.
+- Exit **1** = inconclusive token or process inspection, NO-GO.
+- Exit **0** only with marker **D1_TOKEN_PRECHECK_ONLY_NETWORK_ISOLATION_NO_GO**: all *observed* tokens marked AppContainer in one bounded snapshot. This is **not GO**, not proof of denied internetClient, no guarantee against PID reuse/reparenting, DNS/UDP or OS services, and cannot remove the D1_NETWORK_ISOLATION_NO_GO marker. AppContainer may itself be granted outbound network capabilities. Require independently verified token capabilities, OS-bound policy and actual attempted/packet traffic checks through cold start, run, restart and shutdown.
+
+The preflight's **-SelfTest** mode uses 8 synthetic scenarios without querying the host. A dedicated GitHub Windows job parses the source, runs the 8 cases, and verifies that an ordinary unrelated test-runner process is **not** qualified. This is not testing MedOrigin's actual D1 WebView2 process tree or real network isolation.
+
+Microsoft's [WebView2 process model](https://learn.microsoft.com/en-us/microsoft-edge/webview2/concepts/process-model) shows that browser/renderer/helper processes change over time, and a shared user data folder can share a browser process across app instances. Microsoft [WebView2 security guidance](https://learn.microsoft.com/en-us/deployedge/webview2-security-tools) warns against modifying LowIL/AppContainer user-data-folder ACLs. A successful token snapshot would narrow feasibility only; it does not establish an enforceable long-lived app process group or that no unrelated apps share the runtime.
