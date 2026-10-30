@@ -134,6 +134,28 @@ def main() -> int:
             valid=False,
         )
 
+        deep = b'{"resourceType":"Patient","extension":' + b"[" * 300 + b"0" + b"]" * 300 + b"}"
+        _assert_cli(cli, tmp, "deep-nesting.json", deep, valid=False)
+        # --summary-only must also fail before printing the deeply nested JSON.
+        summary_out = tmp / "deep-summary-reports"
+        summary = _run(
+            [
+                str(cli),
+                "fhir",
+                "validate",
+                str(tmp / "deep-nesting.json"),
+                "--summary-only",
+                "--output-dir",
+                str(summary_out),
+            ],
+            cwd=tmp,
+            expect=1,
+        )
+        assert summary.stdout == ""
+        assert "FHIR JSON nesting limit exceeded" in summary.stderr
+        assert "Traceback" not in summary.stderr and not summary_out.exists()
+        print("INSTALLED_FHIR_DEPTH_SUMMARY_REJECTED")
+
         # An existing unrelated local output file must be preserved, not overwritten.
         input_file = tmp / "valid-again.json"
         input_file.write_bytes(b'{"resourceType":"Patient","id":"fictional"}')
