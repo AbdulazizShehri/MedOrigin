@@ -85,18 +85,18 @@ jobs:
           ) | Out-Null
           if ($errors.Count -gt 0) { throw 'D1 token preflight PowerShell parser failure' }
 
-      - name: Eight synthetic scenarios must fail closed
+      - name: Ten synthetic token and capability scenarios must fail closed
         shell: pwsh
         run: |
           $file = 'experiments/desktop-d1-tauri/tests/windows-d1-appcontainer-preflight.ps1'
           $result = @(& pwsh -NoProfile -File $file -SelfTest)
           if ($LASTEXITCODE -ne 0 -or
-              -not ($result -contains 'D1_TOKEN_LOGIC_8_OF_8_PASS_NOT_LIVE_OR_NETWORK_PROOF') -or
+              -not ($result -contains 'D1_TOKEN_LOGIC_10_OF_10_PASS_NOT_LIVE_OR_NETWORK_PROOF') -or
               -not ($result -contains 'D1_NETWORK_ISOLATION_NO_GO')) {
             throw 'D1 token preflight synthetic negative matrix failed'
           }
 
-      - name: Native Win32 token PInvoke must read own process token
+      - name: Native Win32 AppContainer and network-capability APIs must read process token
         shell: pwsh
         run: |
           $file = 'experiments/desktop-d1-tauri/tests/windows-d1-appcontainer-preflight.ps1'
@@ -104,7 +104,7 @@ jobs:
           if ($LASTEXITCODE -ne 0 -or
               -not ($result -contains 'D1_NATIVE_TOKEN_API_READ_PASS_NOT_ISOLATION_PROOF') -or
               -not ($result -contains 'D1_NETWORK_ISOLATION_NO_GO')) {
-            throw 'D1 Win32 native token API self-test failed'
+            throw 'D1 Win32 native token and capabilities self-test failed'
           }
 
       - name: Ordinary unisolated test runner must never qualify as D1
