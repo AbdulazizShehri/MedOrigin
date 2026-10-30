@@ -1,0 +1,123 @@
+# Reproducible, strictly unpublished experiment. Never tag, upload, deploy, or approve.
+name: Base-only Core proposal (research isolation; NO-GO)
+
+on:
+  push:
+    branches:
+      - experiment/medorigin-base-only-proposal-20261030
+  pull_request:
+    branches:
+      - review/medorigin-developer-beta-ci-20261026
+
+permissions:
+  contents: read
+
+concurrency:
+  group: base-proposal-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  source-contract:
+    name: Base-only proposal negatives (py${{ matrix.python }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.11", "3.12"]
+    steps:
+      - name: Checkout exact source without credentials
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Setup pinned uv
+        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        with:
+          enable-cache: true
+
+      - name: Install Python ${{ matrix.python }}
+        run: uv python install ${{ matrix.python }}
+
+      - name: Unit tests against immutable root, test-only stage outside repo
+        run: >-
+          uv run --no-project --python ${{ matrix.python }}
+          python -m unittest discover -s tests
+          -p test_base_only_proposal_boundary.py -v
+
+      - name: Ruff lint
+        run: >-
+          uvx --python ${{ matrix.python }} ruff==0.14.4 check
+          tests/test_base_only_proposal_boundary.py
+
+      - name: Ruff formatting
+        run: >-
+          uvx --python ${{ matrix.python }} ruff==0.14.4 format --check
+          tests/test_base_only_proposal_boundary.py
+
+  build-proof:
+    name: Build wheel/sdist, prove metadata clean but release admission BLOCKED
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout exactly one source SHA without credentials
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Setup pinned uv
+        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        with:
+          enable-cache: true
+
+      - name: Install Python 3.11
+        run: uv python install 3.11
+
+      - name: Derive QUARANTINED staging outside checkout
+        shell: bash
+        run: |
+          set -euo pipefail
+          uv run --no-project --python 3.11 python scripts/stage_medorigin_base_only_proposal.py --out "$RUNNER_TEMP/base-only-proposal"
+          test -f "$RUNNER_TEMP/base-only-proposal/MEDORIGIN_SOURCE_PROVENANCE.json"
+          test -f "$RUNNER_TEMP/base-only-proposal/pyproject.toml"
+          test ! -e dist
+
+      - name: Build ephemeral proposal wheel and source distribution only
+        shell: bash
+        run: |
+          set -euo pipefail
+          uv build "$RUNNER_TEMP/base-only-proposal" --out-dir "$RUNNER_TEMP/proposal-dist"
+          test ! -e dist
+
+      - name: Verify base Wheel and sdist have no installable optional extras
+        shell: bash
+        run: |
+          set -euo pipefail
+          uv run --no-project --python 3.11 python scripts/check_base_core_publication_scope.py --dist "$RUNNER_TEMP/proposal-dist"
+
+      - name: Existing source/provenance release gate MUST REFUSE unaccepted proposal
+        shell: bash
+        run: |
+          set -euo pipefail
+          set +e
+          uv run --no-project --python 3.11 python scripts/check_sdist_publication_scope.py \
+            --sdist "$RUNNER_TEMP/proposal-dist/medscale-0.3.0.tar.gz" \
+            --verify-source-checkout . > "$RUNNER_TEMP/base-only-blocked.json"
+          status=$?
+          set -e
+          test "$status" -eq 2
+          uv run --no-project --python 3.11 python - "$RUNNER_TEMP/base-only-blocked.json" <<'PY'
+          import json
+          import sys
+          from pathlib import Path
+          evidence = json.loads(Path(sys.argv[1]).read_text())
+          assert evidence["status"] == "BLOCKED", evidence
+          assert evidence["publication_authorized"] is False
+          assert "invalid source provenance schema" in evidence["issues"], evidence
+          print("BASE_ONLY_METADATA_CLEAN_BUT_UNAPPROVED_RELEASE_SOURCE_BLOCKED")
+          PY
+
+      - name: Report only nonpublication evidence
+        run: echo 'BASE_ONLY_PROPOSAL_NOT_APPROVED_NO_ARTIFACT_UPLOAD'
