@@ -57,7 +57,22 @@ def _wheel_archive_member_issues(archive: zipfile.ZipFile) -> list[str]:
     unsafe_path = False
     duplicate = False
     symlink = False
-    for member in archive.infolist():
+    members = archive.infolist()
+    too_many = len(members) > 10_000
+    oversized = False
+    oversized_total = False
+    extreme_ratio = False
+    uncompressed_total = 0
+    for member in members:
+        # Bound central-directory claims *before* any payload extraction. A
+        # tiny archive can claim an arbitrarily large inflated footprint.
+        uncompressed_total += member.file_size
+        if member.file_size > 64 * 1024 * 1024:
+            oversized = True
+        if uncompressed_total > 256 * 1024 * 1024:
+            oversized_total = True
+        if member.file_size > member.compress_size * 1_000:
+            extreme_ratio = True
         name = member.filename.removesuffix("/")
         segments = name.split("/")
         if (
@@ -81,6 +96,14 @@ def _wheel_archive_member_issues(archive: zipfile.ZipFile) -> list[str]:
         issues.append("wheel archive contains duplicate ZIP member name")
     if symlink:
         issues.append("wheel archive contains symlink ZIP member")
+    if too_many:
+        issues.append("wheel archive contains too many ZIP members")
+    if oversized:
+        issues.append("wheel archive uncompressed member exceeds safety limit")
+    if oversized_total:
+        issues.append("wheel archive uncompressed total exceeds safety limit")
+    if extreme_ratio:
+        issues.append("wheel archive member compression ratio exceeds safety limit")
     return issues
 
 
