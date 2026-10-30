@@ -4,7 +4,9 @@ name: FHIR integrated Draft full CI (nonpublishing)
 
 on:
   push:
-    branches: [ci/medorigin-fhir-48commit-full-qualification-20261030]
+    branches:
+      - ci/medorigin-fhir-48commit-full-qualification-20261030
+      - fix/medorigin-fhir-json-float-overflow-20261030
   pull_request:
     branches: [test/medorigin-beta-fhir-strict-unicode-input-20261029]
 
