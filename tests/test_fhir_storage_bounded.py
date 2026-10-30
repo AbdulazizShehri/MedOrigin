@@ -13,7 +13,12 @@ from pathlib import Path
 
 import pytest
 
-from medscale.fhirkit import FhirStorageError, ValidationReport, report_hash, store_report
+from medscale.fhirkit import (
+    FhirStorageError,
+    ValidationReport,
+    report_hash,
+    store_report,
+)
 from medscale.fhirkit.storage import fhirkit_reports_dir, load_report
 
 _REPORT_LIMIT = 8 * 1024 * 1024
@@ -60,19 +65,25 @@ def test_existing_fifo_is_rejected_without_blocking(
     report = ValidationReport(status="valid")
     target = _existing_path(tmp_path, report)
     os.mkfifo(target)
-    code = (
-        "import sys; "
-        "from pathlib import Path; "
-        "from medscale.fhirkit import ValidationReport, report_hash, store_report, FhirStorageError; "
-        "from medscale.fhirkit.storage import load_report; "
-        "root=Path(sys.argv[1]); op=sys.argv[2]; "
-        "report=ValidationReport(status='valid'); "
-        "exec('try:\\n"
-        "    load_report(report_hash(report), root=root) if op == \\"load\\" "
-        "else store_report(report, root=root)\\n"
-        "except FhirStorageError:\\n    print(\\"REJECTED\\")\\n"
-        "else:\\n    raise SystemExit(2)')"
-    )
+    code = """
+import sys
+from pathlib import Path
+from medscale.fhirkit import FhirStorageError, ValidationReport, report_hash, store_report
+from medscale.fhirkit.storage import load_report
+
+root = Path(sys.argv[1])
+operation = sys.argv[2]
+report = ValidationReport(status="valid")
+try:
+    if operation == "load":
+        load_report(report_hash(report), root=root)
+    else:
+        store_report(report, root=root)
+except FhirStorageError:
+    print("REJECTED")
+else:
+    raise SystemExit(2)
+"""
     completed = subprocess.run(
         [sys.executable, "-c", code, str(tmp_path), operation],
         check=False,
