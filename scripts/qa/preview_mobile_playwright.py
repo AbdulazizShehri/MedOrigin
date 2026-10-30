@@ -7,11 +7,10 @@ Requires a separately installed Playwright Chromium test browser.
 
 from __future__ import annotations
 
-from pathlib import Path
 import runpy
+from pathlib import Path
 
 from playwright.sync_api import sync_playwright
-
 
 ROOT = Path(__file__).resolve().parents[2]
 RENDERER = ROOT / "examples" / "synthetic_fhir_developer_beta" / "preview.py"
