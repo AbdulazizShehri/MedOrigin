@@ -1,0 +1,47 @@
+# Synthetic-only real macOS App Sandbox denial proof. No product, publisher or artifact.
+name: D2 macOS App Sandbox loopback negative (nonpublishing)
+
+on:
+  push:
+    branches:
+      - test/medorigin-d2-macos-sandbox-negative-20261030
+  pull_request:
+    branches:
+      - test/medorigin-d2-macos-keyboard-4of4-20261030
+    paths:
+      - '.github/workflows/desktop-d2-macos-sandbox-negative.yml'
+      - 'experiments/desktop-d2-native-egui/tests/macos-native-sandbox-network-negative.sh'
+      - 'experiments/desktop-d2-native-egui/tests/macos-loopback-sandbox-probe.c'
+      - 'experiments/desktop-d2-native-egui/tests/macos-d2-no-network.entitlements'
+      - 'experiments/desktop-d2-native-egui/tests/macos-d2-app-sandbox-interactive.sh'
+      - 'experiments/desktop-d2-native-egui/README.md'
+
+permissions:
+  contents: read
+
+jobs:
+  macos-app-sandbox-loopback:
+    name: macOS signed App Sandbox rejects loopback TCP
+    runs-on: macos-latest
+    timeout-minutes: 12
+    steps:
+      - name: Read-only exact-head checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+          fetch-tags: false
+      - name: Verify shell syntax and sandbox tooling
+        shell: bash
+        run: |
+          bash -n experiments/desktop-d2-native-egui/tests/macos-native-sandbox-network-negative.sh
+          bash -n experiments/desktop-d2-native-egui/tests/macos-d2-app-sandbox-interactive.sh
+          clang --version
+          codesign --version
+      - name: Sign disposable probe and require OS-level outbound rejection
+        shell: bash
+        run: |
+          bash experiments/desktop-d2-native-egui/tests/macos-native-sandbox-network-negative.sh
+      - name: Confirm this is not a product/zero-egress release qualification
+        run: |
+          echo "MACOS_SANDBOX_PROBE_ONLY_NOT_D2_PACKET_EGRESS_OR_RELEASE_AUTHORITY"
