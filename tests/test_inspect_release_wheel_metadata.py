@@ -495,6 +495,45 @@ def test_strict_core_rejects_windows_normalized_name_collisions(
     assert "wheel archive contains duplicate ZIP member name" in result["issues"]
 
 
+@pytest.mark.parametrize(
+    "members",
+    [
+        ("safe", "safe/child.txt"),
+        ("safe/child.txt", "safe"),
+        ("Safe", "safe/child.txt"),
+        ("safe/branch", "safe/branch/child.txt"),
+        ("safe/e\u0301", "safe/\u00e9/child.txt"),
+    ],
+)
+def test_strict_core_rejects_file_directory_zip_member_collisions(
+    tmp_path: Path, members: tuple[str, str]
+) -> None:
+    wheel = _wheel(tmp_path / "medscale-0.3.0-py3-none-any.whl")
+    with zipfile.ZipFile(wheel, "a") as archive:
+        for member in members:
+            archive.writestr(member, b"synthetic")
+    # Complete, internally consistent RECORD must not hide path collisions.
+    _append_synthetic_integrity_record(wheel)
+    result = inspect_wheel(wheel, expected_version="0.3.0", require_core_only=True)
+    assert result["status"] == "BLOCKED"
+    assert (
+        "wheel archive contains file/directory ZIP member collision" in result["issues"]
+    )
+    assert result["publication_authorized"] is False
+
+
+def test_strict_core_allows_explicit_directory_with_children(tmp_path: Path) -> None:
+    wheel = _wheel(tmp_path / "medscale-0.3.0-py3-none-any.whl")
+    with zipfile.ZipFile(wheel, "a") as archive:
+        archive.writestr("safe/", b"")
+        archive.writestr("safe/child.txt", b"synthetic")
+        archive.writestr("safe/sibling.txt", b"synthetic")
+    _append_synthetic_integrity_record(wheel)
+    result = inspect_wheel(wheel, expected_version="0.3.0", require_core_only=True)
+    assert result["status"] == "METADATA_QUALIFIED_ONLY"
+    assert result["publication_authorized"] is False
+
+
 def test_strict_core_allows_distinct_safe_zip_members(tmp_path: Path) -> None:
     wheel = _wheel(tmp_path / "medscale-0.3.0-py3-none-any.whl")
     with zipfile.ZipFile(wheel, "a") as archive:

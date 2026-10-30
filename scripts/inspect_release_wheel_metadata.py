@@ -58,6 +58,11 @@ def _wheel_archive_member_issues(archive: zipfile.ZipFile) -> list[str]:
     no archive member is extracted to disk.
     """
     seen: set[str] = set()
+    # Track implicit directories too: a file cannot also be an ancestor of
+    # another archive member, regardless of ZIP entry ordering.
+    regular_files: set[str] = set()
+    directories: set[str] = set()
+    file_directory_collision = False
     unsafe_path = False
     duplicate = False
     symlink = False
@@ -107,6 +112,23 @@ def _wheel_archive_member_issues(archive: zipfile.ZipFile) -> list[str]:
         if portable_name in seen:
             duplicate = True
         seen.add(portable_name)
+        # A later file can shadow an earlier implicit/explicit directory;
+        # conversely an earlier file can block any later descendant. Compare
+        # portable casefold/NFC paths, not raw ZIP spellings.
+        prefix = ""
+        for segment in portable_name.split("/")[:-1]:
+            prefix = f"{prefix}/{segment}" if prefix else segment
+            if prefix in regular_files:
+                file_directory_collision = True
+            directories.add(prefix)
+        if member.is_dir():
+            if portable_name in regular_files:
+                file_directory_collision = True
+            directories.add(portable_name)
+        else:
+            if portable_name in directories:
+                file_directory_collision = True
+            regular_files.add(portable_name)
         if stat.S_ISLNK(member.external_attr >> 16):
             symlink = True
     issues: list[str] = []
@@ -114,6 +136,8 @@ def _wheel_archive_member_issues(archive: zipfile.ZipFile) -> list[str]:
         issues.append("wheel archive contains unsafe ZIP member path")
     if duplicate:
         issues.append("wheel archive contains duplicate ZIP member name")
+    if file_directory_collision:
+        issues.append("wheel archive contains file/directory ZIP member collision")
     if symlink:
         issues.append("wheel archive contains symlink ZIP member")
     if too_many:
