@@ -86,6 +86,10 @@ def main(argv: list[str] | None = None) -> int:
             object_pairs_hook=_unique_json_members,
             parse_constant=_reject_non_json_constant,
         )
+        # json.loads accepts exponent overflow as +/-inf and escaped lone
+        # surrogates as Python strings. Reject both before summary-only can
+        # emit invalid JSON or validation can raise an uncaught exception.
+        json.dumps(payload, ensure_ascii=False, allow_nan=False).encode("utf-8")
     except (ValueError, UnicodeError, OSError) as exc:
         print(f"input read error: {exc}", file=sys.stderr)
         return 1

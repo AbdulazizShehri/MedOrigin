@@ -119,6 +119,20 @@ def main() -> int:
         )
         _assert_cli(cli, tmp, "non-object.json", b"[]", valid=False)
         _assert_cli(cli, tmp, "missing-type.json", b'{"id":"fictional"}', valid=False)
+        _assert_cli(
+            cli,
+            tmp,
+            "overflow-number.json",
+            b'{"resourceType":"Patient","value":1e999}',
+            valid=False,
+        )
+        _assert_cli(
+            cli,
+            tmp,
+            "lone-surrogate.json",
+            b'{"resourceType":"Patient","id":"\\ud800"}',
+            valid=False,
+        )
 
         # An existing unrelated local output file must be preserved, not overwritten.
         input_file = tmp / "valid-again.json"
