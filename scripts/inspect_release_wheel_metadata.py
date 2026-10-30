@@ -9,6 +9,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import re
 import sys
 import zipfile
 from contextlib import ExitStack
@@ -23,6 +24,24 @@ EXPECTED_URLS = {
     "Documentation": HOME + "/tree/main/docs",
     "Issues": HOME + "/issues",
 }
+
+
+def _wheel_filename_matches(path: Path, distribution: str, version: str | None) -> bool:
+    """Bind strict candidate archive names to their PEP 427 identity and tag fields."""
+    if not version or not path.name.endswith(".whl"):
+        return False
+    parts = path.name[:-4].split("-")
+    if len(parts) not in (5, 6):
+        return False
+    normalized_name = re.sub(r"[-_.]+", "_", distribution).lower()
+    if parts[0] != normalized_name or parts[1] != version:
+        return False
+    if len(parts) == 6 and not re.fullmatch(r"[0-9][A-Za-z0-9_]*", parts[2]):
+        return False
+    # Compressed compatibility tags may contain dots, but not empty members.
+    return all(
+        re.fullmatch(r"[A-Za-z0-9_]+(?:\.[A-Za-z0-9_]+)*", tag) is not None for tag in parts[-3:]
+    )
 
 
 def inspect_wheel(
@@ -82,6 +101,12 @@ def inspect_wheel(
                         issues.append("wheel version missing")
                     elif expected_version is not None and version != expected_version:
                         issues.append("wheel version disagrees with expected candidate")
+                    if require_core_only and not _wheel_filename_matches(
+                        path, distribution, version
+                    ):
+                        issues.append(
+                            "wheel filename does not match distribution/version and wheel tags"
+                        )
                     if version:
                         # Bind the inspected METADATA to the actual top-level
                         # wheel distribution/version directory, not an unrelated
