@@ -5,6 +5,9 @@ on:
   push:
     branches:
       - experiment/medorigin-base-only-proposal-20261030
+  pull_request:
+    branches:
+      - review/medorigin-developer-beta-ci-20261026
 
 permissions:
   contents: read
