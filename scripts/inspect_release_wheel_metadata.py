@@ -75,15 +75,31 @@ def _wheel_archive_member_issues(archive: zipfile.ZipFile) -> list[str]:
             extreme_ratio = True
         name = member.filename.removesuffix("/")
         segments = name.split("/")
+        normalized_segments = [
+            unicodedata.normalize("NFC", segment).casefold() for segment in segments
+        ]
+        # Windows strips trailing spaces/dots and treats device names as special
+        # even when they carry an extension. Reject them rather than guessing
+        # how an installer or filesystem would interpret the ZIP member.
+        windows_ambiguous = any(
+            segment != segment.rstrip(" .")
+            or re.fullmatch(
+                r"(?:con|prn|aux|nul|com[1-9¹²³]|lpt[1-9¹²³])(?:\..*)?",
+                segment.rstrip(" ."),
+            )
+            is not None
+            for segment in normalized_segments
+        )
         if (
             not name
             or "\\" in name
-            or ":" in name
+            or any(char in name for char in '<>"|?*:')
             or any(segment in ("", ".", "..") for segment in segments)
             or any(ord(char) < 32 or ord(char) == 127 for char in name)
+            or windows_ambiguous
         ):
             unsafe_path = True
-        portable_name = unicodedata.normalize("NFC", name).casefold()
+        portable_name = "/".join(segment.rstrip(" .") for segment in normalized_segments)
         if portable_name in seen:
             duplicate = True
         seen.add(portable_name)
