@@ -48,12 +48,6 @@ jobs:
           uvx --python ${{ matrix.python }} ruff==0.14.4 check
           scripts/qa/fhir_installed_base_core_smoke.py
 
-      - name: Display exact Ruff style diff without accepting formatting drift
-        continue-on-error: true
-        run: >-
-          uvx --python ${{ matrix.python }} ruff==0.14.4 format --diff
-          scripts/qa/fhir_installed_base_core_smoke.py
-
       - name: Format-check source-only installed-package test
         run: >-
           uvx --python ${{ matrix.python }} ruff==0.14.4 format --check
