@@ -400,7 +400,10 @@ def test_workspace_strict_filename_uses_normalized_distribution(tmp_path: Path) 
 def test_strict_core_rejects_unsafe_zip_member_paths(tmp_path: Path, dangerous_member: str) -> None:
     wheel = _wheel(tmp_path / "medscale-0.3.0-py3-none-any.whl")
     with zipfile.ZipFile(wheel, "a") as archive:
-        archive.writestr(dangerous_member, b"synthetic")
+        member = zipfile.ZipInfo(dangerous_member)
+        # ZipInfo normalizes backslashes on Windows; preserve the raw ZIP name.
+        member.filename = dangerous_member
+        archive.writestr(member, b"synthetic")
     result = inspect_wheel(wheel, expected_version="0.3.0", require_core_only=True)
     assert result["status"] == "BLOCKED"
     assert result["publication_authorized"] is False

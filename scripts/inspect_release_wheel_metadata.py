@@ -50,6 +50,35 @@ def _wheel_filename_matches(path: Path, distribution: str, version: str | None) 
     )
 
 
+def _has_unsafe_raw_zip_names(archive: zipfile.ZipFile) -> bool:
+    """Inspect raw central-directory names before Windows zipfile normalizes slashes.
+
+    ZipInfo.filename may replace backslashes with '/' on Windows; inspecting
+    that normalized value alone would miss a platform-ambiguous ZIP name.
+    No member payload is read or extracted.
+    """
+    stream = archive.fp
+    if stream is None:
+        return True
+    original_offset = stream.tell()
+    try:
+        stream.seek(archive.start_dir)
+        for _ in archive.infolist():
+            header = stream.read(46)
+            if len(header) != 46 or header[:4] != b"PK\x01\x02":
+                return True
+            name_length = int.from_bytes(header[28:30], "little")
+            extra_length = int.from_bytes(header[30:32], "little")
+            comment_length = int.from_bytes(header[32:34], "little")
+            raw_name = stream.read(name_length)
+            if len(raw_name) != name_length or b"\\" in raw_name:
+                return True
+            stream.seek(extra_length + comment_length, 1)
+        return False
+    finally:
+        stream.seek(original_offset)
+
+
 def _wheel_archive_member_issues(archive: zipfile.ZipFile) -> list[str]:
     """Reject platform-ambiguous or escaping ZIP entries before publication.
 
@@ -68,6 +97,8 @@ def _wheel_archive_member_issues(archive: zipfile.ZipFile) -> list[str]:
     symlink = False
     members = archive.infolist()
     too_many = len(members) > 10_000
+    if not too_many:
+        unsafe_path = _has_unsafe_raw_zip_names(archive)
     oversized = False
     oversized_total = False
     extreme_ratio = False
@@ -93,7 +124,7 @@ def _wheel_archive_member_issues(archive: zipfile.ZipFile) -> list[str]:
         windows_ambiguous = any(
             segment != segment.rstrip(" .")
             or re.fullmatch(
-                r"(?:con|prn|aux|nul|com[1-9¹²³]|lpt[1-9¹²³])(?:\..*)?",
+                r"(?:con|conin\$|conout\$|prn|aux|nul|com[1-9¹²³]|lpt[1-9¹²³])(?:\..*)?",
                 segment.rstrip(" ."),
             )
             is not None
