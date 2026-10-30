@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
+import runpy
 import subprocess
 import sys
 import zipfile
@@ -145,6 +147,32 @@ def test_strict_core_only_wheel_policy_is_fail_closed(
     else:
         assert result["status"] == "METADATA_QUALIFIED_ONLY"
         assert result["issues"] == []
+
+
+def test_inspector_streams_digest_without_loading_entire_wheel(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    wheel = _wheel(tmp_path / "streamed.whl")
+    expected_sha256 = hashlib.sha256(wheel.read_bytes()).hexdigest()
+
+    def refuse_whole_file_read(_path: Path) -> bytes:
+        raise AssertionError("unbounded Path.read_bytes is prohibited")
+
+    monkeypatch.setattr(Path, "read_bytes", refuse_whole_file_read)
+    inspect = runpy.run_path(str(SCRIPT))["inspect_wheel"]
+    result = inspect(wheel, expected_version="0.3.0", require_core_only=True)
+    assert result["sha256"] == expected_sha256
+    assert result["status"] == "METADATA_QUALIFIED_ONLY"
+    assert result["publication_authorized"] is False
+
+
+def test_inspector_unreadable_artifact_fails_closed(tmp_path: Path) -> None:
+    inspect = runpy.run_path(str(SCRIPT))["inspect_wheel"]
+    result = inspect(tmp_path / "missing.whl", require_core_only=True)
+    assert result["status"] == "BLOCKED"
+    assert result["publication_authorized"] is False
+    assert result["sha256"] is None
+    assert "wheel unreadable: FileNotFoundError" in result["issues"]
 
 
 def test_valid_metadata_is_not_publication_authorization(tmp_path: Path) -> None:
