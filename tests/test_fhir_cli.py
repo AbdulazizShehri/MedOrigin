@@ -391,3 +391,42 @@ def test_clean_wheel_can_import_intentionally_shipped_modules(
         text=True,
     )
     assert "imports-ok" in completed.stdout
+
+@pytest.mark.parametrize("summary_only", [False, True])
+def test_fhir_cli_rejects_oversized_json_before_parsing(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], summary_only: bool
+) -> None:
+    """An oversized fictional file must fail closed without reading/parsing all bytes."""
+    source = tmp_path / "oversized-fictional.json"
+    with source.open("wb") as stream:
+        stream.truncate(8 * 1024 * 1024 + 1)
+    output_dir = tmp_path / "reports"
+    argv = [str(source), "--output-dir", str(output_dir)]
+    if summary_only:
+        argv.append("--summary-only")
+
+    assert fhir_cli.main(argv) == 1
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert "FHIR JSON input exceeds 8 MiB limit" in captured.err
+    assert "Traceback" not in captured.err
+    assert not output_dir.exists()
+
+
+def test_fhir_cli_input_byte_limit_is_inclusive(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A small valid resource at the limit succeeds; one byte below fails closed."""
+    payload = {"resourceType": "Patient", "id": "fictional"}
+    source = tmp_path / "fictional.json"
+    encoded = json.dumps(payload).encode("utf-8")
+    source.write_bytes(encoded)
+    monkeypatch.setattr(fhir_cli, "MAX_FHIR_INPUT_BYTES", len(encoded), raising=False)
+    assert fhir_cli.main([str(source), "--summary-only"]) == 0
+    assert json.loads(capsys.readouterr().out) == payload
+
+    monkeypatch.setattr(fhir_cli, "MAX_FHIR_INPUT_BYTES", len(encoded) - 1)
+    assert fhir_cli.main([str(source), "--summary-only"]) == 1
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert "FHIR JSON input exceeds 8 MiB limit" in captured.err
