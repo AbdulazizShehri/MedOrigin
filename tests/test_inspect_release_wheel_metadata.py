@@ -451,3 +451,63 @@ def test_strict_core_allows_distinct_safe_zip_members(tmp_path: Path) -> None:
     result = inspect_wheel(wheel, expected_version="0.3.0", require_core_only=True)
     assert result["status"] == "METADATA_QUALIFIED_ONLY"
     assert result["publication_authorized"] is False
+
+
+def _set_last_zip_member_declared_size(wheel: Path, uncompressed_bytes: int) -> None:
+    """Change only the central-directory claim; do not allocate a giant payload."""
+    import struct
+
+    archive = bytearray(wheel.read_bytes())
+    offset = archive.rfind(b"PK\x01\x02")
+    assert offset >= 0
+    struct.pack_into("<I", archive, offset + 24, uncompressed_bytes)
+    wheel.write_bytes(archive)
+
+
+def test_strict_core_rejects_extreme_member_declared_size(tmp_path: Path) -> None:
+    wheel = _wheel(tmp_path / "medscale-0.3.0-py3-none-any.whl")
+    with zipfile.ZipFile(wheel, "a") as archive:
+        archive.writestr("synthetic.bin", b"x")
+    _set_last_zip_member_declared_size(wheel, 65 * 1024 * 1024)
+    result = inspect_wheel(wheel, expected_version="0.3.0", require_core_only=True)
+    assert result["status"] == "BLOCKED"
+    assert "wheel archive uncompressed member exceeds safety limit" in result["issues"]
+    assert result["publication_authorized"] is False
+
+
+def test_strict_core_rejects_extreme_total_declared_size(tmp_path: Path) -> None:
+    wheel = _wheel(tmp_path / "medscale-0.3.0-py3-none-any.whl")
+    for number in range(5):
+        with zipfile.ZipFile(wheel, "a") as archive:
+            archive.writestr(f"synthetic-{number}.bin", b"x")
+        _set_last_zip_member_declared_size(wheel, 60 * 1024 * 1024)
+    result = inspect_wheel(wheel, expected_version="0.3.0", require_core_only=True)
+    assert result["status"] == "BLOCKED"
+    assert "wheel archive uncompressed total exceeds safety limit" in result["issues"]
+
+
+def test_strict_core_rejects_extreme_compression_ratio(tmp_path: Path) -> None:
+    wheel = _wheel(tmp_path / "medscale-0.3.0-py3-none-any.whl")
+    with zipfile.ZipFile(wheel, "a", compression=zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr("synthetic-zeros.bin", b"\0" * (4 * 1024 * 1024))
+    result = inspect_wheel(wheel, expected_version="0.3.0", require_core_only=True)
+    assert result["status"] == "BLOCKED"
+    assert "wheel archive member compression ratio exceeds safety limit" in result["issues"]
+
+
+def test_strict_core_rejects_excessive_member_count(tmp_path: Path) -> None:
+    wheel = _wheel(tmp_path / "medscale-0.3.0-py3-none-any.whl")
+    with zipfile.ZipFile(wheel, "a") as archive:
+        for i in range(10_001):
+            archive.writestr(f"data/{i}.bin", b"")
+    result = inspect_wheel(wheel, expected_version="0.3.0", require_core_only=True)
+    assert result["status"] == "BLOCKED"
+    assert "wheel archive contains too many ZIP members" in result["issues"]
+
+
+def test_strict_core_accepts_bounded_compressed_entries(tmp_path: Path) -> None:
+    wheel = _wheel(tmp_path / "medscale-0.3.0-py3-none-any.whl")
+    with zipfile.ZipFile(wheel, "a", compression=zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr("data/example.txt", b"fictional data" * 20)
+    result = inspect_wheel(wheel, expected_version="0.3.0", require_core_only=True)
+    assert result["status"] == "METADATA_QUALIFIED_ONLY"
