@@ -38,9 +38,7 @@ def _snapshot() -> dict[Path, str]:
     return {path: hashlib.sha256(path.read_bytes()).hexdigest() for path in FROZEN}
 
 
-def _assert_cli(
-    cli: Path, tmp: Path, filename: str, data: bytes, *, valid: bool
-) -> None:
+def _assert_cli(cli: Path, tmp: Path, filename: str, data: bytes, *, valid: bool) -> None:
     src = tmp / filename
     src.write_bytes(data)
     out = tmp / (filename + "-reports")
