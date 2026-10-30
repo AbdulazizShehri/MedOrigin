@@ -297,3 +297,58 @@ bundle is not notarized or authorized for distribution. VoiceOver spoken
 announcements/independent accessibility, RustSec/zbus maintenance, third-party
 licenses, owner version/ADR approval, publisher governance, signed release
 and protected-main merge remain separate NO-GO. No PHI or clinical data.
+
+## Test-only D2 GUI wrapper with an actual in-process loopback attempt
+
+The **product D2 source under src/** remains **completely network-free**.
+In particular, the existing `tests/browser_free_boundary.rs` continues
+to reject source code containing `std::net::` and `TcpStream::`.
+No exception or suppression was added to that guard. A first experimental
+attempt to insert an optional network feature into `src/app.rs` correctly
+**failed** this architectural test (3 tests passed, 1 failed). Those changes
+were **reverted before committing**.
+
+Instead, the new non-shipping `examples/medorigin_d2_self_sandbox_probe.rs`
+uses the unmodified `MedOriginNativePreview` component from the actual
+D2 crate and adds exactly one **localhost-only** connection attempt
+in the *test wrapper process*. The only destination is numeric 127.0.0.1
+on a supplied positive ephemeral port. No DNS, externally addressed socket,
+arbitrary endpoint, network plugin, EHR/PHI, or product networking is added.
+
+To build the separate **test-only** binary on an authorized Mac:
+
+    cargo +1.97.1 build --locked --example medorigin_d2_self_sandbox_probe
+    bash tests/macos-d2-self-process-network-negative.sh \
+      "$(pwd)/target/debug/examples/medorigin_d2_self_sandbox_probe"
+
+For an alternate CARGO_TARGET_DIR, provide its correct absolute example
+binary path. The script starts a disposable 127.0.0.1 listener and verifies:
+(1) an independent unrestricted C probe can connect;
+(2) the **exact same Rust example binary** can connect with no sandbox,
+showing `D2_SAME_BINARY_UNCONFINED_LOOPBACK_ALLOWED_CONTROL_PASS` inside
+its live AX tree; (3) a signed disposable App Sandbox .app using the same
+example binary and no network-client/server entitlement instead yields
+`D2_NATIVE_TEST_WRAPPER_LOOPBACK_EPERM_DENIAL_VISIBLE_IN_AX_PASS`;
+(4) the signed wrapper still supports genuine **AX 4/4** and genuine
+**keyboard-only 4/4** in-memory synthetic SHA-256 GUI workflows. It fails
+on any mismatch, crash, missing permission or inconclusive error and
+destroys its listener, app, and scratch directory on exit. Neither the
+production D2 executable nor its Cargo.lock/frozen research dependencies
+are modified; the test-only program is never distributed.
+
+**2026-10-30 real Apple Silicon macOS 26.6.2:** Rust 1.97.1,
+pinned eframe0.36.0, standalone example source build PASS, `cargo test
+--locked --all-targets` PASS (3 library + 4 architectural guards);
+same binary unrestricted control **connected**, signed sandboxed clone
+**reported EPERM**, actual synthetic D2 view-model controls/hash outputs
+**AX 4/4** and **keyboard 4/4** both PASS. Exact source-bound
+macOS hosted CI checks default product source tests, builds this separate
+example, lints Swift, and reruns the independently signed helper negative
+test; hosted CI does not claim a live graphical session.
+
+**This is not an unmodified product executable self-egress proof.**
+It proves the App Sandbox mechanism on a process **embedding the exact D2
+UI component** with a test-only networking shim. Packet-level verification
+of all product descendants, IPv6/DNS/proxies, Windows D1 WebView2 TCP, Linux
+maintenance, notarized signing, independent VoiceOver and security approval
+are separate NO-GO gates. Do not publish or merge to protected main.
