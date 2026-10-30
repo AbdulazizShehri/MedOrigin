@@ -46,6 +46,11 @@ jobs:
           uv run --no-project --python 3.12 --with playwright==1.56.0
           python scripts/qa/preview_mobile_playwright.py
 
+      - name: Show import-format expectation for QA harness
+        run: >-
+          uv run --no-project --python 3.12 --with ruff==0.14.4
+          ruff check --select I --diff scripts/qa/preview_mobile_playwright.py || true
+
       - name: Lint isolated browser QA harness
         run: >-
           uv run --no-project --python 3.12 --with ruff==0.14.4
