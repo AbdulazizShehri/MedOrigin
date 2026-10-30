@@ -138,7 +138,7 @@ def test_strict_core_only_wheel_policy_is_fail_closed(
     requires: tuple[str, ...],
     should_block: bool,
 ) -> None:
-    wheel = _wheel(tmp_path / "synthetic-core-candidate.whl", extras=extras, requires=requires)
+    wheel = _wheel(tmp_path / "medscale-0.3.0-py3-none-any.whl", extras=extras, requires=requires)
     result = inspect_wheel(wheel, expected_version="0.3.0", require_core_only=True)
     assert result["publication_authorized"] is False
     if should_block:
@@ -152,7 +152,7 @@ def test_strict_core_only_wheel_policy_is_fail_closed(
 def test_inspector_streams_digest_without_loading_entire_wheel(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    wheel = _wheel(tmp_path / "streamed.whl")
+    wheel = _wheel(tmp_path / "medscale-0.3.0-py3-none-any.whl")
     expected_sha256 = hashlib.sha256(wheel.read_bytes()).hexdigest()
 
     def refuse_whole_file_read(_path: Path) -> bytes:
@@ -326,3 +326,54 @@ def test_workspace_refuses_core_distribution_name(tmp_path: Path) -> None:
     core = _wheel(tmp_path / "core.whl")
     result = inspect_wheel(core, distribution="medscale-workspace")
     assert "distribution name must remain medscale-workspace" in result["issues"]
+
+
+@pytest.mark.parametrize(
+    "filename",
+    [
+        "other-0.3.0-py3-none-any.whl",
+        "medscale-9.9.9-py3-none-any.whl",
+        "medscale-0.3.0.whl",
+        "medscale-0.3.0--none-any.whl",
+        "medscale-0.3.0-py3-none-any..whl",
+    ],
+)
+def test_strict_core_rejects_wheel_filename_identity_mismatch(
+    tmp_path: Path, filename: str
+) -> None:
+    wheel = _wheel(tmp_path / filename)
+    result = inspect_wheel(wheel, expected_version="0.3.0", require_core_only=True)
+    assert result["status"] == "BLOCKED"
+    assert result["publication_authorized"] is False
+    assert "wheel filename does not match distribution/version and wheel tags" in result["issues"]
+
+
+@pytest.mark.parametrize(
+    "filename",
+    [
+        "medscale-0.3.0-py3-none-any.whl",
+        "medscale-0.3.0-1-py3-none-any.whl",
+    ],
+)
+def test_strict_core_accepts_wheel_filename_with_matching_identity(
+    tmp_path: Path, filename: str
+) -> None:
+    wheel = _wheel(tmp_path / filename)
+    result = inspect_wheel(wheel, expected_version="0.3.0", require_core_only=True)
+    assert result["status"] == "METADATA_QUALIFIED_ONLY"
+    assert result["publication_authorized"] is False
+
+
+def test_workspace_strict_filename_uses_normalized_distribution(tmp_path: Path) -> None:
+    wheel = _wheel(
+        tmp_path / "medscale_workspace-0.1.0.dev1-py3-none-any.whl",
+        name="medscale-workspace",
+        version="0.1.0.dev1",
+    )
+    result = inspect_wheel(
+        wheel,
+        expected_version="0.1.0.dev1",
+        distribution="medscale-workspace",
+        require_core_only=True,
+    )
+    assert result["status"] == "METADATA_QUALIFIED_ONLY"
