@@ -1,0 +1,61 @@
+# Strictly source-only: this checks truthful D1 NO-GO claims, NOT network isolation.
+name: D1 network-boundary source NO-GO contract
+
+on:
+  push:
+    branches:
+      - test/medorigin-d1-offline-policy-gate-20261030
+
+permissions:
+  contents: read
+
+concurrency:
+  group: d1-boundary-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  source-contract:
+    name: D1 source boundary (py${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12"]
+    steps:
+      - name: Checkout exact commit without persisted token
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Setup pinned uv
+        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        with:
+          enable-cache: true
+
+      - name: Install Python
+        run: uv python install ${{ matrix.python-version }}
+
+      - name: Source must remain explicit D1 network NO-GO
+        run: >-
+          uv run --no-project --python ${{ matrix.python-version }}
+          python scripts/verify_d1_network_boundary.py
+
+      - name: Run negative mutation cases without GUI/network operations
+        run: >-
+          uv run --no-project --python ${{ matrix.python-version }}
+          python -m unittest discover -s tests
+          -p test_d1_network_boundary_contract.py -v
+
+      - name: Ruff lint for the small source contract
+        run: >-
+          uvx --python ${{ matrix.python-version }} ruff==0.14.4 check
+          scripts/verify_d1_network_boundary.py
+          tests/test_d1_network_boundary_contract.py
+
+      - name: Ruff format check
+        run: >-
+          uvx --python ${{ matrix.python-version }} ruff==0.14.4 format --check
+          scripts/verify_d1_network_boundary.py
+          tests/test_d1_network_boundary_contract.py
