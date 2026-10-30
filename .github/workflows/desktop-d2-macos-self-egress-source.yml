@@ -29,7 +29,7 @@ jobs:
           fetch-depth: 1
           fetch-tags: false
       - name: Install pinned Rust compiler on hosted macOS
-        run: rustup toolchain install 1.97.1 --profile minimal
+        run: rustup toolchain install 1.97.1 --profile minimal --component rustfmt --component clippy
       - name: Check Rust format
         run: cargo +1.97.1 fmt --all -- --check
         working-directory: experiments/desktop-d2-native-egui
