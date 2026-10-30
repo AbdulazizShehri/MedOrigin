@@ -516,7 +516,9 @@ def test_strict_core_rejects_file_directory_zip_member_collisions(
     _append_synthetic_integrity_record(wheel)
     result = inspect_wheel(wheel, expected_version="0.3.0", require_core_only=True)
     assert result["status"] == "BLOCKED"
-    assert "wheel archive contains file/directory ZIP member collision" in result["issues"]
+    assert (
+        "wheel archive contains file/directory ZIP member collision" in result["issues"]
+    )
     assert result["publication_authorized"] is False
 
 
