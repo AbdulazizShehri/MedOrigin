@@ -573,6 +573,7 @@ def _append_synthetic_integrity_record(
     wheel: Path,
     *,
     row_mutator: Any | None = None,
+    wheel_headers: str | None = None,
 ) -> None:
     """Append a test-only PEP 376 RECORD and WHEEL using real SHA-256 digests."""
     import base64
@@ -585,8 +586,12 @@ def _append_synthetic_integrity_record(
         wheel_meta = f"{dist_info}/WHEEL"
         archive.writestr(
             wheel_meta,
-            "Wheel-Version: 1.0\nGenerator: synthetic-tests\nRoot-Is-Purelib: true\n"
-            "Tag: py3-none-any\n",
+            wheel_headers
+            if wheel_headers is not None
+            else (
+                "Wheel-Version: 1.0\nGenerator: synthetic-tests\nRoot-Is-Purelib: true\n"
+                "Tag: py3-none-any\n"
+            ),
         )
         rows = []
         for member in archive.infolist():
@@ -664,3 +669,66 @@ def test_strict_wheel_rejects_unlisted_zip_payload(tmp_path: Path) -> None:
     result = inspect_wheel(wheel, expected_version="0.3.0", require_core_only=True)
     assert result["status"] == "BLOCKED"
     assert "wheel RECORD does not cover archive files" in result["issues"]
+
+
+@pytest.mark.parametrize(
+    ("wheel_headers", "expected_issue"),
+    [
+        (
+            "Generator: synthetic-tests\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
+            "wheel WHEEL identity headers invalid",
+        ),
+        (
+            "Wheel-Version: 2.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
+            "wheel WHEEL version unsupported",
+        ),
+        (
+            "Wheel-Version: 1.0\nRoot-Is-Purelib: unknown\nTag: py3-none-any\n",
+            "wheel WHEEL Root-Is-Purelib invalid",
+        ),
+        (
+            "Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: cp311-none-any\n",
+            "wheel WHEEL tags disagree with archive filename",
+        ),
+        (
+            "Wheel-Version: 1.0\nRoot-Is-Purelib: true\n"
+            "Tag: py3-none-any\nTag: py3-none-any\n",
+            "wheel WHEEL tags disagree with archive filename",
+        ),
+    ],
+)
+def test_strict_wheel_rejects_invalid_wheel_identity(
+    tmp_path: Path, wheel_headers: str, expected_issue: str
+) -> None:
+    wheel = _wheel(tmp_path / "medscale-0.3.0-py3-none-any.whl")
+    _append_synthetic_integrity_record(wheel, wheel_headers=wheel_headers)
+    result = inspect_wheel(wheel, expected_version="0.3.0", require_core_only=True)
+    assert result["status"] == "BLOCKED"
+    assert result["publication_authorized"] is False
+    assert expected_issue in result["issues"]
+
+
+def test_strict_wheel_rejects_oversized_wheel_headers(tmp_path: Path) -> None:
+    wheel = _wheel(tmp_path / "medscale-0.3.0-py3-none-any.whl")
+    wheel_headers = (
+        "Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n"
+        "Generator: " + "x" * (64 * 1024) + "\n"
+    )
+    _append_synthetic_integrity_record(wheel, wheel_headers=wheel_headers)
+    result = inspect_wheel(wheel, expected_version="0.3.0", require_core_only=True)
+    assert result["status"] == "BLOCKED"
+    assert "wheel WHEEL exceeds safety limit" in result["issues"]
+
+
+def test_strict_wheel_matches_compressed_filename_tag_set(tmp_path: Path) -> None:
+    wheel = _wheel(tmp_path / "medscale-0.3.0-py3.py2-none-any.whl")
+    _append_synthetic_integrity_record(
+        wheel,
+        wheel_headers=(
+            "Wheel-Version: 1.0\nRoot-Is-Purelib: true\n"
+            "Tag: py3-none-any\nTag: py2-none-any\n"
+        ),
+    )
+    result = inspect_wheel(wheel, expected_version="0.3.0", require_core_only=True)
+    assert result["status"] == "METADATA_QUALIFIED_ONLY"
+    assert result["publication_authorized"] is False
