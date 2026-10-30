@@ -1,0 +1,49 @@
+# Synthetic-only preview check. It does NOT build, sign, tag, or publish MedOrigin.
+name: Synthetic preview mobile browser
+
+on:
+  push:
+    branches:
+      - test/medorigin-preview-mobile-browser-20261030
+
+permissions:
+  contents: read
+
+concurrency:
+  group: synthetic-preview-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  browser-responsive:
+    name: Chromium mobile overflow + inert escaped labels
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout exact source without credentials
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Install pinned uv action
+        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        with:
+          enable-cache: true
+
+      - name: Install Python 3.12
+        run: uv python install 3.12
+
+      - name: Install Playwright's isolated test browser
+        run: >-
+          uv run --no-project --python 3.12 --with playwright==1.56.0
+          python -m playwright install --with-deps chromium
+
+      - name: Run real-browser responsive synthetic evidence checks
+        run: >-
+          uv run --no-project --python 3.12 --with playwright==1.56.0
+          python scripts/qa/preview_mobile_playwright.py
+
+      - name: Lint isolated browser QA harness
+        run: >-
+          uv run --no-project --python 3.12 --with ruff==0.14.4
+          ruff check scripts/qa/preview_mobile_playwright.py
