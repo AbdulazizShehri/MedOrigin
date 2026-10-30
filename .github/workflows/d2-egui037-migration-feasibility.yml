@@ -1,0 +1,110 @@
+# Unpublished dependency migration feasibility only; existing Cargo.toml/lock immutable.
+name: D2 egui 0.37 feasibility (nonpublishing)
+
+on:
+  push:
+    branches:
+      - experiment/medorigin-d2-egui037-dependency-feasibility-20261030
+  pull_request:
+    branches:
+      - test/medorigin-d2-supply-chain-gate-20261029
+
+permissions:
+  contents: read
+
+concurrency:
+  group: d2-egui037-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  rust-graph-experiment:
+    name: Linux D2 isolated eframe 0.37 resolution and compile
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout exact SHA read-only
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+
+      - name: Set up Rust 1.97.1 without global project mutation
+        shell: bash
+        run: |
+          set -euo pipefail
+          rustup toolchain install 1.97.1 --profile minimal --component rustfmt,clippy
+          rustup default 1.97.1
+
+      - name: Stage isolated D0 + D2 source outside checkout
+        shell: bash
+        run: |
+          set -euo pipefail
+          root="$RUNNER_TEMP/medorigin-d2-egui037"
+          mkdir -p "$root/experiments"
+          cp -a experiments/desktop-d0-rust "$root/experiments/"
+          cp -a experiments/desktop-d2-native-egui "$root/experiments/"
+          python3 - "$root/experiments/desktop-d2-native-egui/Cargo.toml" <<'PY'
+          import pathlib
+          import sys
+          path = pathlib.Path(sys.argv[1])
+          src = path.read_text()
+          old = 'eframe = { version = "=0.36.0"'
+          assert src.count(old) == 1, 'unexpected baseline eframe version'
+          path.write_text(src.replace(old, 'eframe = { version = "=0.37.0"', 1))
+          print('D2_ISOLATED_ONLY_EFRAME_037_PROPOSAL_NOT_APPROVED')
+          PY
+          test "$(grep -c 'version = "=0.36.0"' experiments/desktop-d2-native-egui/Cargo.toml)" -eq 1
+          echo "D2_EXPERIMENT=${root}/experiments/desktop-d2-native-egui" >> "$GITHUB_ENV"
+
+      - name: Resolve candidate dependency lock, never overwrite committed lock
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$D2_EXPERIMENT"
+          cargo generate-lockfile
+          cargo metadata --locked --format-version 1 --no-deps > "$RUNNER_TEMP/d2-metadata.json"
+          cargo tree --locked --target x86_64-unknown-linux-gnu --edges normal > "$RUNNER_TEMP/d2-linux-tree.txt"
+          python3 - "$RUNNER_TEMP/d2-linux-tree.txt" Cargo.lock <<'PY'
+          import pathlib
+          import sys
+          import tomllib
+          tree = pathlib.Path(sys.argv[1]).read_text()
+          lock = tomllib.loads(pathlib.Path(sys.argv[2]).read_text())
+          packages = {(p["name"], p["version"]) for p in lock["package"]}
+          for name in ("eframe", "egui", "egui-winit"):
+              values = sorted(version for package, version in packages if package == name)
+              print(f"D2_CANDIDATE_{name.upper().replace('-', '_')}: {','.join(values)}")
+          if ("eframe", "0.37.0") not in packages:
+              raise SystemExit("D2_CANDIDATE_RESOLUTION_WRONG_VERSION")
+          linux_v5 = any("zbus v5." in line for line in tree.splitlines())
+          legacy = sorted(
+              f"{p['name']}@{p['version']}" for p in lock["package"]
+              if (p["name"], p["version"]) in {
+                  ("zvariant", "5.15.1"), ("zbus_names", "4.3.5"),
+                  ("zvariant_derive", "5.15.1")
+              }
+          )
+          print(f"D2_NEW_LOCK_KNOWN_MAINTENANCE_CANDIDATES: {','.join(legacy) if legacy else 'none'}")
+          print("D2_LINUX_ZBUS5_STILL_PRESENT_NO_GO" if linux_v5 else "D2_LINUX_ZBUS5_NOT_IN_RESOLVED_TREE_PENDING_RUSTSEC")
+          print("D2_FEASIBILITY_ONLY_NEVER_RELEASE_AUTHORIZED")
+          PY
+
+      - name: Compile native Rust D2 on Linux under isolated new lock
+        shell: bash
+        env:
+          CARGO_BUILD_JOBS: "2"
+          CARGO_TARGET_DIR: ${{ runner.temp }}/d2-egui037-target
+        run: |
+          set -euo pipefail
+          cd "$D2_EXPERIMENT"
+          cargo check --locked --all-targets
+          cargo test --locked --all-targets
+          echo "D2_LINUX_COMPILE_TEST_PASS_ONLY_MACOS_AX_NOT_QUALIFIED"
+
+      - name: Ensure original source and lock had no modifications
+        shell: bash
+        run: |
+          set -euo pipefail
+          git diff --exit-code -- experiments/desktop-d2-native-egui/Cargo.toml experiments/desktop-d2-native-egui/Cargo.lock
+          test ! -e dist
+          echo "D2_RUST_DEPENDENCY_PROPOSAL_UNAPPROVED_NO_RELEASE"
