@@ -35,6 +35,8 @@ def _reject_non_json_constant(_constant: str) -> object:
 
 
 MAX_FHIR_JSON_DEPTH = 256
+# Preview CLI admission bound: prevent unbounded local-file reads before JSON parsing.
+MAX_FHIR_INPUT_BYTES = 8 * 1024 * 1024
 
 
 def _reject_excessive_json_nesting(raw: str) -> None:
@@ -112,7 +114,11 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
     try:
-        raw_json = args.input_file.read_text(encoding="utf-8")
+        with args.input_file.open("rb") as source:
+            raw_bytes = source.read(MAX_FHIR_INPUT_BYTES + 1)
+        if len(raw_bytes) > MAX_FHIR_INPUT_BYTES:
+            raise ValueError("FHIR JSON input exceeds 8 MiB limit")
+        raw_json = raw_bytes.decode("utf-8")
         _reject_excessive_json_nesting(raw_json)
         payload = json.loads(
             raw_json,
