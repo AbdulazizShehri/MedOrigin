@@ -50,6 +50,35 @@ def _wheel_filename_matches(path: Path, distribution: str, version: str | None) 
     )
 
 
+def _has_unsafe_raw_zip_names(archive: zipfile.ZipFile) -> bool:
+    """Inspect raw central-directory names before Windows zipfile normalizes slashes.
+
+    ZipInfo.filename may replace backslashes with '/' on Windows; inspecting
+    that normalized value alone would miss a platform-ambiguous ZIP name.
+    No member payload is read or extracted.
+    """
+    stream = archive.fp
+    if stream is None:
+        return True
+    original_offset = stream.tell()
+    try:
+        stream.seek(archive.start_dir)
+        for _ in archive.infolist():
+            header = stream.read(46)
+            if len(header) != 46 or header[:4] != b"PK\x01\x02":
+                return True
+            name_length = int.from_bytes(header[28:30], "little")
+            extra_length = int.from_bytes(header[30:32], "little")
+            comment_length = int.from_bytes(header[32:34], "little")
+            raw_name = stream.read(name_length)
+            if len(raw_name) != name_length or b"\\" in raw_name:
+                return True
+            stream.seek(extra_length + comment_length, 1)
+        return False
+    finally:
+        stream.seek(original_offset)
+
+
 def _wheel_archive_member_issues(archive: zipfile.ZipFile) -> list[str]:
     """Reject platform-ambiguous or escaping ZIP entries before publication.
 
@@ -68,6 +97,8 @@ def _wheel_archive_member_issues(archive: zipfile.ZipFile) -> list[str]:
     symlink = False
     members = archive.infolist()
     too_many = len(members) > 10_000
+    if not too_many:
+        unsafe_path = _has_unsafe_raw_zip_names(archive)
     oversized = False
     oversized_total = False
     extreme_ratio = False
@@ -93,7 +124,7 @@ def _wheel_archive_member_issues(archive: zipfile.ZipFile) -> list[str]:
         windows_ambiguous = any(
             segment != segment.rstrip(" .")
             or re.fullmatch(
-                r"(?:con|prn|aux|nul|com[1-9¹²³]|lpt[1-9¹²³])(?:\..*)?",
+                r"(?:con|conin\$|conout\$|prn|aux|nul|com[1-9¹²³]|lpt[1-9¹²³])(?:\..*)?",
                 segment.rstrip(" ."),
             )
             is not None
@@ -214,10 +245,7 @@ def _wheel_record_issues(archive: zipfile.ZipFile, metadata_path: str) -> list[s
     return []
 
 
-
-def _wheel_header_issues(
-    archive: zipfile.ZipFile, metadata_path: str, filename: str
-) -> list[str]:
+def _wheel_header_issues(archive: zipfile.ZipFile, metadata_path: str, filename: str) -> list[str]:
     """Bind WHEEL compatibility tags to the actual archive filename.
 
     A valid RECORD hash proves internal consistency, not that a Wheel has
@@ -229,10 +257,7 @@ def _wheel_header_issues(
         return ["wheel WHEEL exceeds safety limit"]
 
     message = BytesParser(policy=default).parsebytes(archive.read(wheel_name))
-    if any(
-        len(message.get_all(field, [])) != 1
-        for field in ("Wheel-Version", "Root-Is-Purelib")
-    ):
+    if any(len(message.get_all(field, [])) != 1 for field in ("Wheel-Version", "Root-Is-Purelib")):
         return ["wheel WHEEL identity headers invalid"]
     if message.get("Wheel-Version") != "1.0":
         return ["wheel WHEEL version unsupported"]
@@ -351,9 +376,7 @@ def inspect_wheel(
             if require_core_only and not issues and len(metadata_paths) == 1:
                 issues.extend(_wheel_record_issues(archive, metadata_paths[0]))
                 if not issues:
-                    issues.extend(
-                        _wheel_header_issues(archive, metadata_paths[0], path.name)
-                    )
+                    issues.extend(_wheel_header_issues(archive, metadata_paths[0], path.name))
             # Rehash after ZIP inspection: keeping one open handle prevents a
             # path-swap race, but does not prevent an in-place write to that
             # handle between the first digest and metadata parsing.
