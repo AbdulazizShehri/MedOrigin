@@ -20,6 +20,10 @@ fn prove_localhost_denial() -> &'static str {
         Err(error) if matches!(error.raw_os_error(), Some(1 | 13)) => {
             "D2_SELF_PROCESS_APP_SANDBOX_LOOPBACK_DENIED_EPERM"
         }
+        #[cfg(target_os = "linux")]
+        Err(error) if matches!(error.raw_os_error(), Some(101 | 113)) => {
+            "D2_LINUX_ROOTLESS_NETNS_LOOPBACK_UNREACHABLE"
+        }
         Err(_) => "D2_SELF_SANDBOX_PROBE_INCONCLUSIVE_SOCKET_ERROR",
         Ok(_) => "D2_SELF_SANDBOX_PROBE_UNEXPECTED_NETWORK_ALLOWED_NO_GO",
     }
@@ -29,11 +33,19 @@ fn prove_localhost_denial() -> &'static str {
 struct NetworkTestWrapper {
     app: MedOriginNativePreview,
     probe_result: Option<&'static str>,
+    #[cfg(target_os = "linux")]
+    linux_logged: bool,
 }
 
 impl eframe::App for NetworkTestWrapper {
     fn ui(&mut self, ui: &mut egui::Ui, frame: &mut eframe::Frame) {
         let result = self.probe_result.get_or_insert_with(prove_localhost_denial);
+        #[cfg(target_os = "linux")]
+        if !self.linux_logged {
+            // Test-only process evidence. The actual D2 product has no network APIs.
+            eprintln!("MEDORIGIN_D2_LINUX_NETWORK_PROBE_RESULT={result}");
+            self.linux_logged = true;
+        }
         ui.monospace(*result);
         <MedOriginNativePreview as eframe::App>::ui(&mut self.app, ui, frame);
     }

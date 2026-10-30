@@ -352,3 +352,87 @@ UI component** with a test-only networking shim. Packet-level verification
 of all product descendants, IPv6/DNS/proxies, Windows D1 WebView2 TCP, Linux
 maintenance, notarized signing, independent VoiceOver and security approval
 are separate NO-GO gates. Do not publish or merge to protected main.
+
+## Experimental Linux rootless network namespace E2E (NO RELEASE)
+
+The separate, **nonshipping** `examples/medorigin_d2_self_sandbox_probe.rs`
+now supports a Linux-only probe result for `ENETUNREACH` / `EHOSTUNREACH`
+(errno 101/113) and emits that one in-memory synthetic probe result to the
+test process's stderr. This does **not** add networking to D2's
+`src/` files. The existing conservative
+`tests/browser_free_boundary.rs` contract still forbids network/browser
+entrypoints in the real application source without exceptions.
+
+On a specifically authorized Linux development host with unprivileged
+USER+NETWORK namespaces enabled, and a temporary built test example:
+
+    cargo +1.97.1 build --locked --example medorigin_d2_self_sandbox_probe
+    bash tests/linux-d2-rootless-netns-negative.sh \
+      "$(pwd)/target/debug/examples/medorigin_d2_self_sandbox_probe"
+
+The fail-closed script uses a temporary **127.0.0.1-only** listener, a
+separate Python TCP positive control and the **identical Rust test-only
+GUI executable** in two conditions: unrestricted connection **ALLOWED**,
+then `unshare -Urn` rootless network namespace **UNREACHABLE**. In both
+conditions it requires a real eframe window to appear in a disposable Xvfb
+display. Linux's X11 abstract UNIX sockets are network-namespace scoped,
+so Xvfb is intentionally started **within** the isolated namespace for
+the isolated GUI (not accessed across the boundary). The child compares
+its `/proc/self/ns/net` inode with the parent host namespace inode and
+requires exactly one DOWN loopback interface; the host never changes its
+firewall, addresses, or routes. The child explicitly requires
+`D2_LINUX_ROOTLESS_NETNS_LOOPBACK_UNREACHABLE`, never treats a timeout or
+unknown socket failure as a qualifying denial, and reports its native
+window observation. Nonzero exit if any permission, namespace, positive
+control, test-only process, socket result, or window condition fails.
+
+**Local evidence (2026-10-30):** authorized Ubuntu 26.04 WSL2,
+Rust 1.97.1, pinned eframe 0.36.0, real Xvfb/X11, rootless
+`unshare -Urn`; unrestricted same-binary socket and window PASS;
+within isolated user+network namespace, only `lo` DOWN, same-binary
+connection UNREACHABLE and GUI window visible, full E2E **exit 0**.
+The initial diagnostic uncovered WSLg's external Wayland default;
+the test explicitly selects disposable X11. A further diagnostic
+showed that an X server launched *outside* the network namespace cannot
+be used through its abstract UNIX socket from inside; the accepted
+test runs a separate Xvfb **inside** the new namespace.
+
+GitHub Actions source CI on Linux compiles and tests the exact code
+and conservatively preserves the production no-network source guard.
+It does **not** claim hosted unprivileged user/network namespace support
+or substitute source compilation for live namespace execution.
+
+**Limits:** this is an isolated **test-only wrapper** embedding actual D2
+UI components, not the untouched product executable, and does not
+prove every GUI descendant, data path, IPv6, DNS, proxies, system service,
+Windows D1 WebView2 outbound TCP or macOS notarization. This also
+does **not** resolve the Linux AccessKit/zbus5 transitive unmaintained
+RustSec notices (#673), VoiceOver, independent security review or owner
+publisher approval. No PHI, release, protected-main merge or installer.
+
+### Additional real default D2 executable smoke under rootless Linux isolation
+
+The native default executable is also tested **without a modified or
+test-only networking entry point**. Source-controlled
+`tests/linux-d2-real-app-isolated-window.sh` accepts only the absolute
+`medorigin-desktop-d2-native-egui` executable, creates separate unprivileged
+USER+NETWORK namespaces using `unshare -Urn`, verifies a distinct
+`/proc/self/ns/net` inode and exactly one DOWN loopback interface, and starts
+an Xvfb server **inside the same isolated namespace**. It then launches the
+unmodified default D2 app and requires its real X11 window title to appear,
+while the process remains alive; any missing user namespace, interface
+violation, GUI failure, crash or missing window fails closed.
+
+    cargo +1.97.1 build --locked --bin medorigin-desktop-d2-native-egui
+    bash tests/linux-d2-real-app-isolated-window.sh \
+      "$(pwd)/target/debug/medorigin-desktop-d2-native-egui"
+
+Observed on authorized Ubuntu 26.04 WSL2 / Rust1.97.1 / eframe0.36.0
+on 2026-10-30: `D2_UNMODIFIED_NATIVE_GUI_ROOTLESS_NETNS_WINDOW_PASS_NOT_RELEASE`,
+exit0. This is **real default binary** runtime evidence, separate from
+the `examples/` wrapper's positive-control/negative-control socket tests.
+The native product source contains NO networking API, so the default
+binary does not deliberately attempt a socket connection in this smoke;
+therefore a visible window and network namespace confinement **do not**
+constitute packet-level proof of zero egress by every transitive process
+or system service. No release, distribution, PHI or waiver is authorized.
