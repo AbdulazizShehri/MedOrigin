@@ -443,11 +443,61 @@ def test_strict_core_rejects_zip_symlinks_without_extracting(
     assert "wheel archive contains symlink ZIP member" in result["issues"]
 
 
+@pytest.mark.parametrize(
+    "unsafe_member",
+    [
+        "CON",
+        "safe/CON.txt",
+        "safe/prn",
+        "safe/AUX.log",
+        "safe/NUL",
+        "safe/com1.dat",
+        "safe/LPT9",
+        "safe/COM¹.txt",
+        "safe/LPT²",
+        "safe/angle<bad>.txt",
+        "safe/angle>bad.txt",
+        'safe/quote".txt',
+        "safe/pipe|bad.txt",
+        "safe/question?.txt",
+        "safe/star*.txt",
+        "safe/trailing.",
+        "safe/trailing ",
+        "safe/directory. /file.txt",
+    ],
+)
+def test_strict_core_rejects_windows_ambiguous_zip_members(
+    tmp_path: Path, unsafe_member: str
+) -> None:
+    wheel = _wheel(tmp_path / "medscale-0.3.0-py3-none-any.whl")
+    with zipfile.ZipFile(wheel, "a") as archive:
+        archive.writestr(unsafe_member, b"synthetic")
+    result = inspect_wheel(wheel, expected_version="0.3.0", require_core_only=True)
+    assert result["status"] == "BLOCKED"
+    assert result["publication_authorized"] is False
+    assert "wheel archive contains unsafe ZIP member path" in result["issues"]
+
+
+@pytest.mark.parametrize("variant", ["safe/file.", "safe/file "])
+def test_strict_core_rejects_windows_normalized_name_collisions(
+    tmp_path: Path, variant: str
+) -> None:
+    wheel = _wheel(tmp_path / "medscale-0.3.0-py3-none-any.whl")
+    with zipfile.ZipFile(wheel, "a") as archive:
+        archive.writestr("safe/file", b"one")
+        archive.writestr(variant, b"two")
+    result = inspect_wheel(wheel, expected_version="0.3.0", require_core_only=True)
+    assert result["status"] == "BLOCKED"
+    assert "wheel archive contains duplicate ZIP member name" in result["issues"]
+
+
 def test_strict_core_allows_distinct_safe_zip_members(tmp_path: Path) -> None:
     wheel = _wheel(tmp_path / "medscale-0.3.0-py3-none-any.whl")
     with zipfile.ZipFile(wheel, "a") as archive:
         archive.writestr("medscale/data/synthetic.json", b"{}")
         archive.writestr("medscale/data/assets/picture.txt", b"offline")
+        archive.writestr("medscale/data/CONnected.txt", b"safe")
+        archive.writestr("medscale/data/name.with.dots.txt", b"safe")
     result = inspect_wheel(wheel, expected_version="0.3.0", require_core_only=True)
     assert result["status"] == "METADATA_QUALIFIED_ONLY"
     assert result["publication_authorized"] is False
