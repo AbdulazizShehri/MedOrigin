@@ -15,7 +15,9 @@ import pytest
 
 from medscale.fhirkit import (
     FhirStorageError,
+    InvalidReportError,
     ValidationReport,
+    load_report_from_json,
     report_hash,
     store_report,
 )
@@ -105,3 +107,15 @@ def test_small_canonical_report_remains_idempotent(tmp_path: Path) -> None:
     assert load_report(report_hash(report), root=tmp_path) == path.read_text(
         encoding="utf-8"
     )
+
+def test_excessive_report_json_nesting_is_typed_failure(tmp_path: Path) -> None:
+    """Tiny but deeply nested corrupt reports must not escape as RecursionError."""
+    report = ValidationReport(status="valid")
+    target = _existing_path(tmp_path, report)
+    raw = '{"warnings":' + "[" * 10000 + "0" + "]" * 10000 + "}"
+    target.write_text(raw, encoding="utf-8")
+
+    with pytest.raises(InvalidReportError, match="strict"):
+        load_report_from_json(raw)
+    with pytest.raises(FhirStorageError, match="invalid or noncanonical"):
+        load_report(report_hash(report), root=tmp_path)
