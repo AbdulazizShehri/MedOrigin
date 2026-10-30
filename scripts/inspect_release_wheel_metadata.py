@@ -11,6 +11,7 @@ import hashlib
 import json
 import sys
 import zipfile
+from contextlib import ExitStack
 from email.parser import BytesParser
 from email.policy import default
 from pathlib import Path
@@ -35,9 +36,16 @@ def inspect_wheel(
     issues: list[str] = []
     version: str | None = None
     actual: dict[str, str] = {}
-    digest = hashlib.sha256(path.read_bytes()).hexdigest()
+    digest: str | None = None
     try:
-        with zipfile.ZipFile(path) as archive:
+        # Hash in bounded memory and inspect the exact same open file handle.
+        # A path replacement between hashing and ZIP inspection must not bind
+        # a digest from one artifact to metadata from another artifact.
+        with ExitStack() as stack:
+            stream = stack.enter_context(path.open("rb"))
+            digest = hashlib.file_digest(stream, "sha256").hexdigest()
+            stream.seek(0)
+            archive = stack.enter_context(zipfile.ZipFile(stream))
             metadata_paths = [
                 name for name in archive.namelist() if name.endswith(".dist-info/METADATA")
             ]
