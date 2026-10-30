@@ -139,3 +139,55 @@ usage remain NO-GO** until separate acceptance, security, provenance,
 dependency/licensing, accessibility, native UI, and offline-network gates.
 
 Upstream copy-first attribution: [UPSTREAM-NOTICE.md](UPSTREAM-NOTICE.md).
+
+## Real macOS NSAccessibility qualification (synthetic-only, nonpublishing)
+
+The source-controlled `tests/macos-native-ax-qualification.swift` runs on an
+**authorized interactive Mac** with Accessibility permission enabled for the
+inspecting process. It accepts the process ID of a **real running D2 native GUI**,
+enumerates the macOS AX window and requires all four allowlisted fictional
+fixture selector controls plus the verification button. It exercises **each
+selector through `AXPress`**, then invokes `Verify synthetic SHA-256` and
+reads the exact expected 64-character SHA-256 from a *live AX text node*, rather
+than calling the D0 hashing function inside the test. Any missing permission,
+window, selector, action or result fails with a nonzero exit code.
+
+From this crate's directory on the authorized machine:
+
+```sh
+cargo +1.97.1 build --locked
+cargo_pid=
+./target/debug/medorigin-desktop-d2-native-egui &
+cargo_pid=$!
+swift tests/macos-native-ax-qualification.swift "$cargo_pid"
+kill "$cargo_pid"
+```
+
+To conserve disk space, override `CARGO_TARGET_DIR` and delete the disposable
+target directory after testing. Do **not** run on patient/PHI data. The scripted
+AX test does not disable macOS privacy/security controls, require a paid
+service, interact with EHR systems or distribute the unsigned experiment.
+
+**Important asynchronous AccessKit activation:** the first AX request can
+legitimately expose only window/title-bar elements (an initial placeholder).
+The script repeatedly queries up to 20 times at 200-ms intervals, waiting
+for the native widget tree before treating it as failed; it also re-queries
+after each action. A single immediate AX screenshot/child listing is
+**insufficient evidence that widgets are permanently missing**.
+
+**Actual 2026-10-30 Apple Silicon/macOS 26.6.2 evidence:** the source-bound
+D2 **eframe 0.36.0** candidate at parent Draft #675, using Rust 1.97.1,
+was compiled and launched from a disposable Mac checkout. The fail-closed
+Swift AX smoke returned `MACOS_AX_NATIVE_UIA_4_OF_4_PASS_NONPUBLISHING`
+for all four selectors, AX button invocations and four expected digest readbacks,
+including on a fresh cold start. The experimental eframe 0.37.0 upgrade alone
+did **not** immediately solve missing AX nodes before activation and is **not
+part of this proposal**. This evidence corrects the earlier first-query-only
+title-bar observation recorded in issue #676; it does not erase that earlier
+observation or mean the macOS accessibility release gate is fully accepted.
+
+**Still unqualified:** physical keyboard/VoiceOver focus order, actual screen
+reader announcements, independent assistive-technology validation, platform
+packet-level zero egress, Linux transitive RustSec notices (#673), third-party
+licensing, release signing and artifact provenance. No new D2 release,
+installer, protected-main merge, public tag, PHI or clinical claim.
