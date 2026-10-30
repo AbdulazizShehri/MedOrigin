@@ -37,7 +37,7 @@ jobs:
           bash -n experiments/desktop-d2-native-egui/tests/macos-native-sandbox-network-negative.sh
           bash -n experiments/desktop-d2-native-egui/tests/macos-d2-app-sandbox-interactive.sh
           clang --version
-          codesign --version
+          command -v codesign
       - name: Sign disposable probe and require OS-level outbound rejection
         shell: bash
         run: |
