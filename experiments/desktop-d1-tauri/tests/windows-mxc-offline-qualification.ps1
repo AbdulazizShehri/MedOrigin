@@ -9,6 +9,7 @@ $ErrorActionPreference = 'Stop'
 $exe = (Resolve-Path -LiteralPath $ExePath -ErrorAction Stop).Path
 $ui = Join-Path $PSScriptRoot 'windows-uia-smoke.ps1'
 $observer = Join-Path $PSScriptRoot 'windows-egress-window.ps1'
+. (Join-Path $PSScriptRoot 'windows-mxc-owned-process-cleanup.ps1')
 
 function Test-TcpConnection {
     $client = [System.Net.Sockets.TcpClient]::new()
@@ -87,12 +88,17 @@ $job = Start-Job -ArgumentList (,$base) -ScriptBlock {
     if ($LASTEXITCODE -ne 0) { throw ('MXC hold subprocess failed: ' + $LASTEXITCODE) }
 }
 $rootPid = $null
+$rootCreationDate = $null
 try {
     for ($attempt = 0; $attempt -lt 30; $attempt++) {
         $candidate = @(Get-CimInstance Win32_Process -ErrorAction Stop |
             Where-Object { $_.Name -eq [IO.Path]::GetFileName($exe) -and $_.ExecutablePath -eq $exe })
         if ($candidate.Count -gt 1) { throw 'Ambiguous D1 roots; cannot qualify network PID' }
-        if ($candidate.Count -eq 1) { $rootPid = [int]$candidate[0].ProcessId; break }
+        if ($candidate.Count -eq 1) {
+            $rootPid = [int]$candidate[0].ProcessId
+            $rootCreationDate = [datetime]$candidate[0].CreationDate
+            break
+        }
         if ($job.State -ne 'Running') { throw 'MXC process exited before host observation' }
         Start-Sleep -Milliseconds 400
     }
@@ -113,7 +119,17 @@ try {
     }
 }
 finally {
-    if ($job.State -eq 'Running') { Stop-Job -Job $job -ErrorAction SilentlyContinue }
-    Remove-Job -Job $job -Force -ErrorAction SilentlyContinue
+    try {
+        # If the observer fails or times out, Stop-Job alone may orphan its
+        # native D1/WebView2 child processes. Terminate only the exact owned
+        # PID/creation-time identity and descendants, never shared WebView2.
+        if ($rootPid -and $rootCreationDate) {
+            Stop-MxcOwnedProcessTree -RootPid $rootPid -ExePath $exe -ExpectedCreationDate $rootCreationDate
+        }
+    }
+    finally {
+        if ($job.State -eq 'Running') { Stop-Job -Job $job -ErrorAction SilentlyContinue }
+        Remove-Job -Job $job -Force -ErrorAction SilentlyContinue
+    }
 }
 Write-Output 'MXC_D1_EXPERIMENT_PASS_NOT_APPLICATION_ZERO_EGRESS_OR_RELEASE_APPROVAL'
