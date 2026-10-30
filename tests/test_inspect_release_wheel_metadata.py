@@ -377,3 +377,77 @@ def test_workspace_strict_filename_uses_normalized_distribution(tmp_path: Path) 
         require_core_only=True,
     )
     assert result["status"] == "METADATA_QUALIFIED_ONLY"
+
+
+@pytest.mark.parametrize(
+    "dangerous_member",
+    [
+        "../escaped.txt",
+        "/absolute.txt",
+        "safe/../../escaped.txt",
+        r"safe\windows-path.txt",
+        "C:/drive.txt",
+        "safe//empty-component.txt",
+        "safe/./dot-component.txt",
+        "safe/file:ads",
+        "safe/\x01control.txt",
+    ],
+)
+def test_strict_core_rejects_unsafe_zip_member_paths(tmp_path: Path, dangerous_member: str) -> None:
+    wheel = _wheel(tmp_path / "medscale-0.3.0-py3-none-any.whl")
+    with zipfile.ZipFile(wheel, "a") as archive:
+        archive.writestr(dangerous_member, b"synthetic")
+    result = inspect_wheel(wheel, expected_version="0.3.0", require_core_only=True)
+    assert result["status"] == "BLOCKED"
+    assert result["publication_authorized"] is False
+    assert "wheel archive contains unsafe ZIP member path" in result["issues"]
+
+
+@pytest.mark.parametrize(
+    ("first_member", "second_member"),
+    [
+        ("asset.txt", "asset.txt"),
+        ("asset.txt", "ASSET.TXT"),
+        ("a/\u00e9.txt", "a/e\u0301.txt"),
+    ],
+)
+def test_strict_core_rejects_duplicate_zip_member_names(
+    tmp_path: Path, first_member: str, second_member: str
+) -> None:
+    wheel = _wheel(tmp_path / "medscale-0.3.0-py3-none-any.whl")
+    with zipfile.ZipFile(wheel, "a") as archive:
+        archive.writestr(first_member, b"one")
+        if first_member == second_member:
+            with pytest.warns(UserWarning, match="Duplicate name"):
+                archive.writestr(second_member, b"two")
+        else:
+            archive.writestr(second_member, b"two")
+    result = inspect_wheel(wheel, expected_version="0.3.0", require_core_only=True)
+    assert result["status"] == "BLOCKED"
+    assert "wheel archive contains duplicate ZIP member name" in result["issues"]
+
+
+def test_strict_core_rejects_zip_symlinks_without_extracting(
+    tmp_path: Path,
+) -> None:
+    import stat
+
+    wheel = _wheel(tmp_path / "medscale-0.3.0-py3-none-any.whl")
+    link = zipfile.ZipInfo("link-to-outside")
+    link.create_system = 3
+    link.external_attr = (stat.S_IFLNK | 0o777) << 16
+    with zipfile.ZipFile(wheel, "a") as archive:
+        archive.writestr(link, "../../outside.txt")
+    result = inspect_wheel(wheel, expected_version="0.3.0", require_core_only=True)
+    assert result["status"] == "BLOCKED"
+    assert "wheel archive contains symlink ZIP member" in result["issues"]
+
+
+def test_strict_core_allows_distinct_safe_zip_members(tmp_path: Path) -> None:
+    wheel = _wheel(tmp_path / "medscale-0.3.0-py3-none-any.whl")
+    with zipfile.ZipFile(wheel, "a") as archive:
+        archive.writestr("medscale/data/synthetic.json", b"{}")
+        archive.writestr("medscale/data/assets/picture.txt", b"offline")
+    result = inspect_wheel(wheel, expected_version="0.3.0", require_core_only=True)
+    assert result["status"] == "METADATA_QUALIFIED_ONLY"
+    assert result["publication_authorized"] is False

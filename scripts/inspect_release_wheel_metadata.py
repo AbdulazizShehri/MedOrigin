@@ -10,7 +10,9 @@ import argparse
 import hashlib
 import json
 import re
+import stat
 import sys
+import unicodedata
 import zipfile
 from contextlib import ExitStack
 from email.parser import BytesParser
@@ -44,6 +46,44 @@ def _wheel_filename_matches(path: Path, distribution: str, version: str | None) 
     )
 
 
+def _wheel_archive_member_issues(archive: zipfile.ZipFile) -> list[str]:
+    """Reject platform-ambiguous or escaping ZIP entries before publication.
+
+    Path comparison is case-insensitive and NFC-normalized so entries cannot
+    collide after extraction on Windows/macOS. This inspects headers only;
+    no archive member is extracted to disk.
+    """
+    seen: set[str] = set()
+    unsafe_path = False
+    duplicate = False
+    symlink = False
+    for member in archive.infolist():
+        name = member.filename.removesuffix("/")
+        segments = name.split("/")
+        if (
+            not name
+            or "\\" in name
+            or ":" in name
+            or any(segment in ("", ".", "..") for segment in segments)
+            or any(ord(char) < 32 or ord(char) == 127 for char in name)
+        ):
+            unsafe_path = True
+        portable_name = unicodedata.normalize("NFC", name).casefold()
+        if portable_name in seen:
+            duplicate = True
+        seen.add(portable_name)
+        if stat.S_ISLNK(member.external_attr >> 16):
+            symlink = True
+    issues: list[str] = []
+    if unsafe_path:
+        issues.append("wheel archive contains unsafe ZIP member path")
+    if duplicate:
+        issues.append("wheel archive contains duplicate ZIP member name")
+    if symlink:
+        issues.append("wheel archive contains symlink ZIP member")
+    return issues
+
+
 def inspect_wheel(
     path: Path,
     *,
@@ -65,6 +105,8 @@ def inspect_wheel(
             digest = hashlib.file_digest(stream, "sha256").hexdigest()
             stream.seek(0)
             archive = stack.enter_context(zipfile.ZipFile(stream))
+            if require_core_only:
+                issues.extend(_wheel_archive_member_issues(archive))
             metadata_paths = [
                 name for name in archive.namelist() if name.endswith(".dist-info/METADATA")
             ]
