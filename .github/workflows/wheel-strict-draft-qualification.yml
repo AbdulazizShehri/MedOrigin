@@ -1,0 +1,65 @@
+# Focused, nonpublishing exact-head qualification of the stacked Wheel safety Drafts.
+# Branch-only on purpose: never triggers a tag or protected-main publication.
+name: Wheel strict Draft qualification
+
+on:
+  push:
+    branches:
+      - ci/medorigin-wheel-full-qualification-20261030
+  pull_request:
+    branches:
+      - fix/medorigin-wheel-file-dir-collision-20261030
+
+permissions:
+  contents: read
+
+concurrency:
+  group: strict-wheel-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  wheel-integrity:
+    name: strict Wheel checks (py${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12"]
+    timeout-minutes: 15
+    steps:
+      - name: Read-only checkout at exact event SHA
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - name: Setup pinned uv Action
+        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        with:
+          enable-cache: true
+
+      - name: Install Python ${{ matrix.python-version }}
+        run: uv python install ${{ matrix.python-version }}
+
+      - name: Locked dependency environment; no optional extras
+        run: uv sync --frozen
+
+      - name: Strict Wheel inspector and release workflow contract regressions
+        run: >-
+          uv run --no-sync python -m pytest --noconftest -q
+          tests/test_inspect_release_wheel_metadata.py
+          tests/test_release_workflow_contract.py
+
+      - name: Ruff lint on changed safety surface
+        run: >-
+          uv run --no-sync ruff check
+          scripts/inspect_release_wheel_metadata.py
+          tests/test_inspect_release_wheel_metadata.py
+          tests/test_release_workflow_contract.py
+
+      - name: Ruff formatting on changed safety surface
+        run: >-
+          uv run --no-sync ruff format --check
+          scripts/inspect_release_wheel_metadata.py
+          tests/test_inspect_release_wheel_metadata.py
+          tests/test_release_workflow_contract.py
