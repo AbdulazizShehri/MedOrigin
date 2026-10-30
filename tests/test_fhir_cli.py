@@ -392,6 +392,7 @@ def test_clean_wheel_can_import_intentionally_shipped_modules(
     )
     assert "imports-ok" in completed.stdout
 
+
 @pytest.mark.parametrize("summary_only", [False, True])
 def test_fhir_cli_rejects_oversized_json_before_parsing(
     tmp_path: Path, capsys: pytest.CaptureFixture[str], summary_only: bool
