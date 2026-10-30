@@ -33,7 +33,9 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
-          fetch-depth: 0
+          # Only the pinned source commit is needed; avoid Windows long-ref checkout failures.
+          fetch-depth: 1
+          fetch-tags: false
 
       - name: Install pinned uv
         uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
