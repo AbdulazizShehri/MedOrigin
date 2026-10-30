@@ -409,3 +409,30 @@ Windows D1 WebView2 outbound TCP or macOS notarization. This also
 does **not** resolve the Linux AccessKit/zbus5 transitive unmaintained
 RustSec notices (#673), VoiceOver, independent security review or owner
 publisher approval. No PHI, release, protected-main merge or installer.
+
+### Additional real default D2 executable smoke under rootless Linux isolation
+
+The native default executable is also tested **without a modified or
+test-only networking entry point**. Source-controlled
+`tests/linux-d2-real-app-isolated-window.sh` accepts only the absolute
+`medorigin-desktop-d2-native-egui` executable, creates separate unprivileged
+USER+NETWORK namespaces using `unshare -Urn`, verifies a distinct
+`/proc/self/ns/net` inode and exactly one DOWN loopback interface, and starts
+an Xvfb server **inside the same isolated namespace**. It then launches the
+unmodified default D2 app and requires its real X11 window title to appear,
+while the process remains alive; any missing user namespace, interface
+violation, GUI failure, crash or missing window fails closed.
+
+    cargo +1.97.1 build --locked --bin medorigin-desktop-d2-native-egui
+    bash tests/linux-d2-real-app-isolated-window.sh \
+      "$(pwd)/target/debug/medorigin-desktop-d2-native-egui"
+
+Observed on authorized Ubuntu 26.04 WSL2 / Rust1.97.1 / eframe0.36.0
+on 2026-10-30: `D2_UNMODIFIED_NATIVE_GUI_ROOTLESS_NETNS_WINDOW_PASS_NOT_RELEASE`,
+exit0. This is **real default binary** runtime evidence, separate from
+the `examples/` wrapper's positive-control/negative-control socket tests.
+The native product source contains NO networking API, so the default
+binary does not deliberately attempt a socket connection in this smoke;
+therefore a visible window and network namespace confinement **do not**
+constitute packet-level proof of zero egress by every transitive process
+or system service. No release, distribution, PHI or waiver is authorized.

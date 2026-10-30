@@ -46,8 +46,13 @@ jobs:
       - name: Build isolated test-only native GUI wrapper
         run: cargo +1.97.1 build --locked --example medorigin_d2_self_sandbox_probe
         working-directory: experiments/desktop-d2-native-egui
-      - name: Validate rootless network test harness syntax
-        run: bash -n experiments/desktop-d2-native-egui/tests/linux-d2-rootless-netns-negative.sh
+      - name: Build unchanged native D2 default executable
+        run: cargo +1.97.1 build --locked --bin medorigin-desktop-d2-native-egui
+        working-directory: experiments/desktop-d2-native-egui
+      - name: Validate both Linux rootless harness scripts
+        run: |
+          bash -n experiments/desktop-d2-native-egui/tests/linux-d2-rootless-netns-negative.sh
+          bash -n experiments/desktop-d2-native-egui/tests/linux-d2-real-app-isolated-window.sh
       - name: Explicit source-only CI gate
         run: |
           echo "LINUX_D2_SOURCE_ONLY_PASS_NOT_ROOTLESS_NETNS_RUNTIME_OR_RELEASE"
