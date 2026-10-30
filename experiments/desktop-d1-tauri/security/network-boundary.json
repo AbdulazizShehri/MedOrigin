@@ -1,0 +1,20 @@
+{
+  "schema": "medorigin-d1-network-boundary/v1",
+  "mode": "synthetic_developer_experiment",
+  "decision": "D1_NETWORK_ISOLATION_NO_GO",
+  "release_authorized": false,
+  "webview2_runtime_egress_qualified": false,
+  "application_scoped_os_denial_verified": false,
+  "packet_level_all_descendants_verified": false,
+  "native_ipc_under_os_denial_verified": false,
+  "independent_security_review_completed": false,
+  "observation": "Windows D1 ordinary WebView2 descendants made external TCP connections; optional developer MXC is not embedded product isolation",
+  "required_surfaces": [
+    "application_fetch_and_tauri_ipc",
+    "webview2_browser_and_children",
+    "short_lived_tcp_udp_dns_proxy",
+    "os_services_and_updates",
+    "cold_start_steady_state_restart_shutdown",
+    "installer_rollback_and_runtime_upgrade"
+  ]
+}
