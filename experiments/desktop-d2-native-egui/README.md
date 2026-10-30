@@ -237,3 +237,63 @@ full focus behavior across all OS settings, screen-reader usability on a
 second Mac, independent security audit, Linux zbus RustSec maintenance
 (#673), OS-enforced network isolation or release authorization. Issue #676
 remains OPEN and publication remains NO-GO.
+
+
+## Experimental macOS App Sandbox network-denial acceptance (NO RELEASE)
+
+A separate source-controlled experiment evaluates **Apple App Sandbox** without
+granting the com.apple.security.network.client or network.server entitlements.
+This is an experimental, ad-hoc signed *developer-only* alternative to D1's
+unresolved Windows WebView2 egress; it **does not** approve switching desktop
+architecture or removing any broader security gate (#662/#673/#603).
+
+On an authorized Mac, from this crate directory, run the host-only test:
+
+    bash tests/macos-native-sandbox-network-negative.sh
+
+It compiles a tiny synthetic loopback TCP probe using clang, signs a temporary
+app with tests/macos-d2-no-network.entitlements, and verifies all of these:
+
+- Entitlements contain app-sandbox=true but NO network.client/server key.
+- An unsigned control successfully connects to an ephemeral listener **bound
+  only to 127.0.0.1**, ruling out a false pass from a closed port.
+- The identical probe inside a separate ad-hoc signed App Sandbox bundle gets
+  EPERM/EACCES (exit 77); crashes or unrelated failures do NOT count as denial.
+- No global firewall, Edge/WebView2, macOS security setting or remote socket
+  is touched. The listener and all temporary signed probe files are removed.
+
+The second **interactive** test applies the SAME entitlement source to a
+**temporary signed copy** of the actual prebuilt D2 native GUI. Run only in an
+approved interactive graphical developer session:
+
+    cargo +1.97.1 build --locked
+    bash tests/macos-d2-app-sandbox-interactive.sh \
+      "$(pwd)/target/debug/medorigin-desktop-d2-native-egui"
+
+When CARGO_TARGET_DIR is overridden, pass the correct absolute binary path.
+The script creates a temporary local .app with Info.plist, uses ad-hoc
+codesign with the fail-closed entitlement, checks signature and launches
+through Launch Services. Then it runs the **real AX 4/4** and **keyboard-only
+4/4** Swift tests against the signed app's own PID. It terminates the
+experiment and removes the temporary bundle on exit. No binary is uploaded.
+
+**2026-10-30 observed:** Apple Silicon/macOS 26.6.2, Rust 1.97.1,
+pinned eframe 0.36.0 native D2 compiled from an immutable Draft branch. The
+signed GUI passed four genuine Accessibility selector/hash checks and four
+keyboard Tab/Shift+Tab/Space selector/hash workflows, both exit 0. An unsigned
+loopback control connected, while an App Sandbox signed probe returned
+errno=1 (EPERM), with
+MACOS_APP_SANDBOX_LOOPBACK_DENY_PASS_NOT_PRODUCT_EGRESS_AUTHORITY.
+A naive sandbox-signed *unbundled* helper initially crashed with SIGTRAP
+because its app identifier/Info.plist was missing; the reproducible acceptance
+instead uses a verified .app bundle and requires **actual EPERM/EACCES** so a
+crash can never be mistaken for network isolation.
+
+**Strict limitations:** this is OS-enforced network denial for a bounded
+*probe* and signed-app graphical usability, NOT packet-level no-egress
+attestation for all D2 subprocesses, proxies, IPv6, DNS or system services.
+It does not qualify Windows/Linux or D1 WebView2. An ad-hoc signed developer
+bundle is not notarized or authorized for distribution. VoiceOver spoken
+announcements/independent accessibility, RustSec/zbus maintenance, third-party
+licenses, owner version/ADR approval, publisher governance, signed release
+and protected-main merge remain separate NO-GO. No PHI or clinical data.
