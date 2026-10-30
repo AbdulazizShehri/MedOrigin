@@ -1,0 +1,64 @@
+# No publisher, tag, installer, uploaded artifacts, patient data or secrets.
+# All builds and installations stay in the temporary GitHub runner workspace.
+name: FHIR installed Core 3OS (unapproved proposal)
+
+on:
+  push:
+    branches:
+      - test/medorigin-fhir-core-installed-3os-20261030
+  pull_request:
+    branches:
+      - ci/medorigin-fhir-48commit-full-qualification-20261030
+
+permissions:
+  contents: read
+
+concurrency:
+  group: fhir-installed-core-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  installed-core:
+    name: Installed FHIR CLI (${{ matrix.os }}, py${{ matrix.python }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 22
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        python: ["3.11", "3.12"]
+    steps:
+      - name: Checkout immutable source without retained credentials
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+          # Only the pinned source commit is needed; avoid Windows long-ref checkout failures.
+          fetch-depth: 1
+          fetch-tags: false
+
+      - name: Install pinned uv
+        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        with:
+          enable-cache: true
+
+      - name: Set up Python ${{ matrix.python }}
+        run: uv python install ${{ matrix.python }}
+
+      - name: Lint source-only installed-package test
+        run: >-
+          uvx --python ${{ matrix.python }} ruff==0.14.4 check
+          scripts/qa/fhir_installed_base_core_smoke.py
+
+      - name: Format-check source-only installed-package test
+        run: >-
+          uvx --python ${{ matrix.python }} ruff==0.14.4 format --check
+          scripts/qa/fhir_installed_base_core_smoke.py
+
+      - name: Build, install and exercise synthetic-only CLI in disposable isolated venv
+        run: >-
+          uv run --no-project --python ${{ matrix.python }}
+          python scripts/qa/fhir_installed_base_core_smoke.py
+
+      - name: No package release authority
+        run: echo "FICTIONAL_FHIR_CORE_ONLY_NOT_APPROVED_FOR_RELEASE"
