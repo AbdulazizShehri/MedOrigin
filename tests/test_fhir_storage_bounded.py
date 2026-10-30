@@ -62,9 +62,7 @@ def test_new_oversized_report_is_rejected_before_creating_artifact(
 
 @pytest.mark.skipif(not hasattr(os, "mkfifo"), reason="POSIX FIFO unavailable")
 @pytest.mark.parametrize("operation", ["load", "store"])
-def test_existing_fifo_is_rejected_without_blocking(
-    tmp_path: Path, operation: str
-) -> None:
+def test_existing_fifo_is_rejected_without_blocking(tmp_path: Path, operation: str) -> None:
     """A user-controlled FIFO must never stall report load or idempotent store."""
     report = ValidationReport(status="valid")
     target = _existing_path(tmp_path, report)
@@ -104,9 +102,7 @@ def test_small_canonical_report_remains_idempotent(tmp_path: Path) -> None:
     report = ValidationReport(status="valid")
     path = store_report(report, root=tmp_path)
     assert store_report(report, root=tmp_path) == path
-    assert load_report(report_hash(report), root=tmp_path) == path.read_text(
-        encoding="utf-8"
-    )
+    assert load_report(report_hash(report), root=tmp_path) == path.read_text(encoding="utf-8")
 
 
 def test_excessive_report_json_nesting_is_typed_failure(tmp_path: Path) -> None:
