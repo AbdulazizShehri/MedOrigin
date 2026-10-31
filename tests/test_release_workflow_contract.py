@@ -88,7 +88,7 @@ def test_tag_build_rejects_unqualified_extras_before_artifact_upload() -> None:
         "softprops/action-gh-release@"
     )
     pypi = _job_block(text, "testpypi-publish")
-    assert "needs: github-release" in pypi
+    assert "needs: [github-release, build]" in pypi
 
     triggers = text.split("  workflow_dispatch:", maxsplit=1)[0]
     assert "'scripts/check_base_core_publication_scope.py'" in triggers
@@ -121,7 +121,7 @@ def test_testpypi_publish_job_is_fail_closed_and_least_privilege() -> None:
     assert "startsWith(github.ref, 'refs/tags/v')" in release_block
     assert "contents: write" in release_block
 
-    assert "needs: github-release" in block
+    assert "needs: [github-release, build]" in block
     assert "github.event_name == 'push'" in block
     assert "startsWith(github.ref, 'refs/tags/v')" in block
     assert "vars.TESTPYPI_PUBLISH_ENABLED == 'true'" in block
@@ -386,7 +386,7 @@ def test_tagged_upload_and_github_release_consume_only_private_qualified_bytes()
     # No new tag/publication jobs are enabled and TestPyPI still only consumes
     # the qualified artifact uploaded by the build job, with owner gating.
     testpypi = _job_block(workflow, "testpypi-publish")
-    assert "needs: github-release" in testpypi
+    assert "needs: [github-release, build]" in testpypi
     assert "packages-dir: dist" in testpypi
     assert "vars.TESTPYPI_PUBLISH_ENABLED == 'true'" in testpypi
     watch = workflow.split("    paths:", maxsplit=1)[1].split("  workflow_dispatch:", maxsplit=1)[0]
