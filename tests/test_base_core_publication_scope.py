@@ -5,8 +5,8 @@ from __future__ import annotations
 import gzip
 import importlib.util
 import io
-import os
 import json
+import os
 import struct
 import subprocess
 import sys
