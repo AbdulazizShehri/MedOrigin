@@ -23,12 +23,12 @@ import tempfile
 import tarfile
 import zipfile
 import zlib
+from collections.abc import Iterator
 from contextlib import contextmanager
 from email import policy
 from email.message import EmailMessage
 from email.parser import BytesParser
 from pathlib import Path
-from typing import Iterator
 
 _MAX_ARCHIVE_BYTES = 30_000_000
 _MAX_METADATA_BYTES = 262_144
