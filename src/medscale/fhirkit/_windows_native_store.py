@@ -11,8 +11,8 @@ from __future__ import annotations
 import ctypes
 import msvcrt
 import os
-from pathlib import Path
 from collections.abc import Callable
+from pathlib import Path
 
 from medscale.fhirkit.errors import FhirStorageError
 
