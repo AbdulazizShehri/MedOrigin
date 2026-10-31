@@ -19,8 +19,8 @@ import os
 import re
 import stat
 import struct
-import tempfile
 import tarfile
+import tempfile
 import zipfile
 import zlib
 from collections.abc import Iterator
