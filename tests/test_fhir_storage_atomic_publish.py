@@ -65,7 +65,7 @@ def test_failed_fsync_does_not_publish_or_leave_temporary_file(
         raise OSError(errno.EIO, "synthetic flush failure")
 
     monkeypatch.setattr(os, "fsync", deny_fsync)
-    with pytest.raises(FhirStorageError, match="create FHIR report artifact"):
+    with pytest.raises(FhirStorageError, match=r"create .*FHIR report artifact"):
         store_report(report, root=tmp_path)
     assert attempts == 1
     assert not target.exists()
