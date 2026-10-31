@@ -163,8 +163,10 @@ class _NativeWindowsFiles:
         )
         ios = _IoStatusBlock()
         result = ctypes.c_void_p()
-        desired = _SYNC | _READ_ATTR | (
-            0x00010002 if read_write else (0x00000020 if directory else 0x00000001)
+        desired = (
+            _SYNC
+            | _READ_ATTR
+            | (0x00010002 if read_write else (0x00000020 if directory else 0x00000001))
         )
         status = self.create(
             ctypes.byref(result),
