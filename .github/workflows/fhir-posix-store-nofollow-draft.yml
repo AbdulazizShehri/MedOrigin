@@ -11,6 +11,7 @@ on:
     branches:
       - fix/medorigin-fhir-posix-nofollow-load-20261031
       - fix/medorigin-fhir-posix-nofollow-store-20261031
+      - fix/medorigin-fhir-windows-noreparse-native-load-20261031
 
 permissions:
   contents: read
@@ -48,8 +49,8 @@ jobs:
 
       - name: Pinned source lint and format
         run: |
-          uvx --python ${{ matrix.python }} ruff==0.14.4 check src/medscale/fhirkit/storage.py tests/test_fhir_storage_atomic_publish.py tests/test_fhir_posix_store_nofollow_race.py tests/test_fhir_windows_native_load_junction_race.py tests/test_fhir_windows_native_store_junction_race.py
-          uvx --python ${{ matrix.python }} ruff==0.14.4 format --check --diff src/medscale/fhirkit/storage.py tests/test_fhir_storage_atomic_publish.py tests/test_fhir_posix_store_nofollow_race.py tests/test_fhir_windows_native_load_junction_race.py tests/test_fhir_windows_native_store_junction_race.py
+          uvx --python ${{ matrix.python }} ruff==0.14.4 check src/medscale/fhirkit/storage.py src/medscale/fhirkit/_windows_native_store.py tests/test_fhir_storage_atomic_publish.py tests/test_fhir_posix_store_nofollow_race.py tests/test_fhir_windows_native_load_junction_race.py tests/test_fhir_windows_native_store_junction_race.py
+          uvx --python ${{ matrix.python }} ruff==0.14.4 format --check --diff src/medscale/fhirkit/storage.py src/medscale/fhirkit/_windows_native_store.py tests/test_fhir_storage_atomic_publish.py tests/test_fhir_posix_store_nofollow_race.py tests/test_fhir_windows_native_load_junction_race.py tests/test_fhir_windows_native_store_junction_race.py
 
       - name: Synthetic POSIX store/load race and cross-platform FHIR regressions
         env:
