@@ -132,6 +132,7 @@ if hasattr(os, "mkfifo"):
     assert "INSTALLED_FHIR_STORAGE_DIRECTORY_REJECTED" in result.stdout
     print(result.stdout, end="")
 
+
 def main() -> int:
     before = _snapshot()
     with tempfile.TemporaryDirectory(prefix="medorigin-fhir-installed-") as scratch:
