@@ -9,7 +9,6 @@ from __future__ import annotations
 import os
 import stat
 import subprocess
-import traceback
 from pathlib import Path
 
 import pytest
@@ -114,10 +113,18 @@ def test_windows_store_link_stays_pinned_after_directory_rename(
     decoy = tmp_path / "decoy-empty"
     decoy.mkdir()
     link_real = storage._windows_link_pinned
-    witnessed: list[bool] = []
+    witnessed: list[str] = []
 
-    def rename_at_link(native: object, source: int, parent: int) -> None:
-        directory.rename(parked)
+    def attempt_rename_at_link(native: object, source: int, parent: int) -> None:
+        try:
+            directory.rename(parked)
+        except PermissionError:
+            # Real hosted Windows2025 denied a directory rename while its
+            # child temporary file HANDLE was still open. This is a valid
+            # native denial, not evidence that the hook was not reached.
+            witnessed.append("windows-denied-rename")
+            link_real(native, source, parent)
+            return
         result = subprocess.run(
             ["cmd", "/d", "/c", "mklink", "/J", str(directory), str(decoy)],
             capture_output=True,
@@ -127,17 +134,23 @@ def test_windows_store_link_stays_pinned_after_directory_rename(
         )
         assert result.returncode == 0, result.stderr or result.stdout
         assert directory.lstat().st_file_attributes & stat.FILE_ATTRIBUTE_REPARSE_POINT
-        witnessed.append(True)
+        witnessed.append("swapped")
         link_real(native, source, parent)
 
-    monkeypatch.setattr(storage, "_windows_link_pinned", rename_at_link)
-    with pytest.raises(FhirStorageError, match=r"identity|changed|unable to create") as blocked:
-        store_report(report, root=root)
-    assert witnessed, (
-        "test did not exercise native HANDLE-relative hard-link step: "
-        f"{blocked.value!r}; native cause: {blocked.value.__cause__!r}; "
-        f"trace={''.join(traceback.format_exception(blocked.value.__cause__))}"
-    )
-    assert list(decoy.iterdir()) == [], "native hard-link operation followed substituted path"
-    assert parked.is_dir()
-    assert not list(parked.glob(".report-*.tmp")), "temporary files must be cleaned by HANDLE"
+    monkeypatch.setattr(storage, "_windows_link_pinned", attempt_rename_at_link)
+    try:
+        stored = store_report(report, root=root)
+    except FhirStorageError:
+        assert witnessed == ["swapped"], "only a successful path swap can justify refusal"
+    else:
+        assert witnessed == ["windows-denied-rename"]
+        assert stored == directory / "report.json"
+        assert stored.is_file()
+    assert witnessed, "native hard-link hook must execute"
+    assert list(decoy.iterdir()) == [], "native publication must never enter decoy"
+    if witnessed == ["swapped"]:
+        assert parked.is_dir()
+        assert not list(parked.glob(".report-*.tmp"))
+    else:
+        assert directory.is_dir()
+        assert not list(directory.glob(".report-*.tmp"))
