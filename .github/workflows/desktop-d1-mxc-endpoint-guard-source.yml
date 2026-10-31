@@ -1,0 +1,47 @@
+# Nonpublishing synthetic-only Windows source guard; not an MXC runtime or packet test.
+name: D1 MXC owned endpoint fail-closed source qualification
+on:
+  push:
+    branches:
+      - test/medorigin-d1-endpoint-guard-20261031
+  pull_request:
+    branches:
+      - test/medorigin-d1-mxc-sdk-import-ci-20261031
+    paths:
+      - 'experiments/desktop-d1-tauri/tests/windows-mxc-d1-*.ps1'
+      - '.github/workflows/desktop-d1-mxc-endpoint-guard-source.yml'
+permissions:
+  contents: read
+jobs:
+  windows-source:
+    runs-on: windows-2025
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+      - name: Reject synthetic owned TCP and UDP endpoints including loopback
+        shell: pwsh
+        run: |
+          powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File experiments/desktop-d1-tauri/tests/windows-mxc-d1-network-endpoint-guard.test.ps1
+          if ($LASTEXITCODE -ne 0) { throw 'Owned endpoint guard negative tests failed' }
+      - name: Retain source-bound D1 launcher and identity contracts
+        shell: pwsh
+        run: |
+          node --test experiments/desktop-d1-tauri/tests/windows-mxc-d1-real-app-contract.test.mjs experiments/desktop-d1-tauri/tests/windows-mxc-d1-sdk-import-order.test.mjs experiments/desktop-d1-tauri/tests/windows-mxc-d1-runtime-node-qualification.test.mjs
+          if ($LASTEXITCODE -ne 0) { throw 'D1 launcher source contracts failed' }
+          $paths = @(
+            'experiments/desktop-d1-tauri/tests/windows-mxc-d1-real-uia-qualification.ps1',
+            'experiments/desktop-d1-tauri/tests/windows-mxc-d1-network-endpoint-guard.ps1',
+            'experiments/desktop-d1-tauri/tests/windows-mxc-d1-network-endpoint-guard.test.ps1'
+          )
+          foreach ($path in $paths) {
+            $tokens = $null; $errors = $null
+            [System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path $path), [ref]$tokens, [ref]$errors) | Out-Null
+            if ($errors.Count -ne 0) { throw "PowerShell parse errors in $path" }
+          }
+      - name: Explicit evidence limit
+        shell: pwsh
+        run: |
+          Write-Output 'SOURCE_ONLY_NO_NATIVE_MXC_NO_WFP_PACKET_ATTESTATION_NO_RELEASE'
