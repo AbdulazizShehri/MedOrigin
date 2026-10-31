@@ -231,3 +231,54 @@ With the **corrected request**, on authorized nonadmin Windows 11 26H2 build 263
 The corrected test source pins the V1 discriminated containment configuration and has a **RED-before-fix, GREEN-after-fix** regression for misplacing `captureDenials`. A report is never accepted without `outputMetadata.captureDenials.outputPath`, matching a single local task-owned file and with `captureDenialsError` absent. It continues to use **mode:block**, no retained ETL, no network allows, no external service/PHI, no global firewall or product dependency, no fallback to permissive learning mode. Hosted CI only checks syntax/source contracts and cannot certify actual Windows PSEC/WFP or the real D1 WebView2 tree.
 
 **Keep issue #662 OPEN/NO-GO** until an OS-supported native nonpermissive trace or independently approved packet-level capture can attribute IPv4/IPv6 TCP/UDP/DNS and all WebView2 descendants, including cold-start/exit/restart lifecycle. No signed installer, clinical use, publisher or protected-main merge.
+
+
+### MXC D1 two-cold-start process-lifecycle qualification (NONPUBLISHING, 2026-10-31)
+
+This is an isolated test-only follow-up to Draft #763 and the MXC V1 capture
+NO-GO in Draft #765. The actual Windows 11 Home 26H2 build 26300.9818,
+ordinary non-admin host, pinned Rust 1.97.1 and temporary MXC SDK 1.0.1
+executed **two independent cold starts** of the same locally built, debug-only
+Tauri/WebView2 executable, SHA-256
+`A5DD3FD7FFE9EE4BE3D3448AA7B4101937A5585AB7E5ABFA390BC3496DD93416`.
+Both ran under explicit per-container network egress/ingress/host-loopback DENY
+with GUI enabled. Each independently passed all four synthetic UIA fixture
+selections, React-to-Tauri-to-Rust SHA verification, and the inherited 12-sample
+process-owned TCP watcher. The new lifecycle check requires a unique D1 root
+plus actual WebView2 descendants, records bounded PID + UTC process creation
+ticks, then confirms **none of those exact process identities remain alive**
+after the MXC runner's bounded shutdown. Both cold starts passed (8/8 fixture
+verifications, two process-lifecycle negatives) with no pre-existing exact-path
+D1 root. This is NOT kernel descendant containment or packet attestation.
+
+**Critical build-mode RED before the successful runs:** a direct
+`cargo +1.97.1 build --locked --bin medorigin-desktop-d1-preview` debug
+executable (SHA-256
+`FD83D4E321F6E78D0E74156CBC69E15824B2321AC137CA9C9134E8E0AFC7340E`)
+navigated its WebView2 to the configured development `localhost` URL,
+and the correctly restrictive MXC policy returned the visible
+`ERR_NETWORK_ACCESS_DENIED` page; real UIA could not find the fictional
+fixture buttons. This is **not** a WFP escape or a valid offline UI test.
+For a local **debug-only, unbundled, non-distributable** embedded-asset
+qualification, first run `npm ci --no-audit --no-fund`, then
+`npx tauri build --debug --no-bundle -- --locked` in this D1 experiment,
+with `CARGO_TARGET_DIR` pointing to task-owned disposable storage.
+Do NOT start a network dev server or relax MXC network denial to make the
+wrong build pass. Do NOT run a release build or generate installers.
+
+The source-only harness is
+`tests/windows-mxc-d1-cold-restart-qualification.mjs` and requires the
+exact locally built executable path plus its SHA-256. The PowerShell UIA
+observer emits a bounded synthetic process identity manifest, and the
+standalone parser's six negative/positive unit cases run in read-only CI.
+The on-host test used Node 24.19.0; current MXC TypeScript documentation
+specifies Node 24.21.0 or newer, so **this is a host observation, not a
+supported-runtime or independent release-security certification**.
+
+No packet-level/ETW/WFP capture, IPv4/IPv6 UDP or DNS delivery attestation,
+WebView2 updater behavior, full descendant lifetime attestation, second host,
+signed executable, installer or independent reviewer was qualified.
+Native optional capture returned E_NOTIMPL in #765 on this host. Keep
+issue #662 OPEN/NO-GO and all other release gates #574/#603/#622/#673/#676
+OPEN. No product Rust/React source, frozen Python root/lock, global firewall,
+OS network policy, publication, tag, PHI or protected main was changed.

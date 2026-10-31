@@ -67,6 +67,11 @@ for($i=0;$i -lt 15;$i++){
 }
 $webview=@($all | Where-Object {$ids.Contains([int]$_.ProcessId) -and $_.Name -eq 'msedgewebview2.exe'})
 if($webview.Count -lt 1){throw 'No actual WebView2 descendants under D1 root'}
+$inventory=@($all | Where-Object {$ids.Contains([int]$_.ProcessId)} | ForEach-Object {
+  if(-not $_.CreationDate){throw 'Process creation identity unavailable'}
+  [pscustomobject]@{pid=[int]$_.ProcessId;startTicks=[string]$_.CreationDate.ToUniversalTime().Ticks;name=[string]$_.Name}
+})
+Write-Output ('MXC_D1_PROCESS_SNAPSHOT_JSON='+(ConvertTo-Json -InputObject $inventory -Compress -Depth 3))
 $tcp=@(Get-NetTCPConnection -ErrorAction Stop | Where-Object {$ids.Contains([int]$_.OwningProcess)})
 $udp=@(Get-NetUDPEndpoint -ErrorAction Stop | Where-Object {$ids.Contains([int]$_.OwningProcess)})
 $nonloop=@($tcp | Where-Object {$_.RemoteAddress -notin @('127.0.0.1','::1','0.0.0.0','::') -and $_.State -notin @('Listen','Bound')})
