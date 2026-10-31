@@ -13,6 +13,7 @@ on:
       - feat/medorigin-core-inspected-snapshot-digests-20261031
       - security/medorigin-core-verified-handoff-20261031
       - security/medorigin-release-cross-job-digest-binding-20261031
+      - security/medorigin-release-cross-job-name-binding-20261031
   pull_request:
     branches:
       - candidate/medorigin-fhir-wheel-unpublished-20261030
@@ -24,6 +25,7 @@ on:
       - fix/medorigin-core-posix-dist-identity-20261031
       - feat/medorigin-core-inspected-snapshot-digests-20261031
       - security/medorigin-core-verified-handoff-20261031
+      - security/medorigin-release-cross-job-digest-binding-20261031
     paths:
       - '.github/workflows/medorigin-dist-enumeration-guard.yml'
       - 'scripts/check_base_core_publication_scope.py'

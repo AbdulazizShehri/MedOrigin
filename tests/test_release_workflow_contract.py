@@ -422,9 +422,13 @@ def test_tag_build_exports_qualified_archive_sha256_to_later_jobs() -> None:
     build = _job_block(workflow, "build")
     assert "wheel_sha256: ${{ steps.pin_qualified_digests.outputs.wheel_sha256 }}" in build
     assert "sdist_sha256: ${{ steps.pin_qualified_digests.outputs.sdist_sha256 }}" in build
+    assert "wheel_filename: ${{ steps.pin_qualified_digests.outputs.wheel_filename }}" in build
+    assert "sdist_filename: ${{ steps.pin_qualified_digests.outputs.sdist_filename }}" in build
     assert "id: pin_qualified_digests" in build
     assert "wheel_sha256=" in build
     assert "sdist_sha256=" in build
+    assert "wheel_filename=" in build
+    assert "sdist_filename=" in build
     assert "sha256sum" in build
     assert '>> "$GITHUB_OUTPUT"' in build
     assert build.index("stage_verified_core_handoff.py") < build.index("id: pin_qualified_digests")
@@ -445,6 +449,9 @@ def test_tag_consumers_recheck_sha256_against_original_build_outputs() -> None:
         assert block.count("Verify downloaded archives against build SHA-256") == 1
         assert block.count("BUILD_WHEEL_SHA256: ${{ needs.build.outputs.wheel_sha256 }}") == 1
         assert block.count("BUILD_SDIST_SHA256: ${{ needs.build.outputs.sdist_sha256 }}") == 1
+        assert block.count("BUILD_WHEEL_FILENAME: ${{ needs.build.outputs.wheel_filename }}") == 1
+        assert block.count("BUILD_SDIST_FILENAME: ${{ needs.build.outputs.sdist_filename }}") == 1
+        assert "basename --" in block
         assert "sha256sum" in block
         assert "find dist -mindepth 1 -maxdepth 1" in block
         assert block.index("Verify downloaded archives against build SHA-256") < block.index(after)
@@ -471,6 +478,10 @@ def test_tag_consumers_recheck_sha256_against_original_build_outputs() -> None:
         ("missing_archive", False),
         ("symlink_archive", False),
         ("wrong_expected_digest", False),
+        ("wheel_renamed_same_bytes", False),
+        ("sdist_renamed_same_bytes", False),
+        ("wrong_expected_filename", False),
+        ("unsafe_expected_filename", False),
     ],
 )
 def test_real_tagged_sha256_shell_guard_rejects_changed_download(
@@ -501,9 +512,23 @@ def test_real_tagged_sha256_shell_guard_rejects_changed_download(
         wheel.symlink_to(outside)
     elif attack == "wrong_expected_digest":
         wheel_sha = "0" * 64
+    elif attack == "wheel_renamed_same_bytes":
+        wheel.rename(dist / "rogue-0.3.0-py3-none-any.whl")
+    elif attack == "sdist_renamed_same_bytes":
+        sdist.rename(dist / "rogue-0.3.0.tar.gz")
 
+    expected_wheel_name = wheel.name
+    if attack == "wrong_expected_filename":
+        expected_wheel_name = "rogue-0.3.0-py3-none-any.whl"
+    elif attack == "unsafe_expected_filename":
+        expected_wheel_name = "../medscale-0.3.0-py3-none-any.whl"
     env = dict(os.environ)
-    env.update(BUILD_WHEEL_SHA256=wheel_sha, BUILD_SDIST_SHA256=sdist_sha)
+    env.update(
+        BUILD_WHEEL_SHA256=wheel_sha,
+        BUILD_SDIST_SHA256=sdist_sha,
+        BUILD_WHEEL_FILENAME=expected_wheel_name,
+        BUILD_SDIST_FILENAME=sdist.name,
+    )
     for job in ("install-smoke", "github-release", "testpypi-publish"):
         block = _job_block(_workflow_text(), job)
         name = "      - name: Verify downloaded archives against build SHA-256\n"
@@ -523,3 +548,52 @@ def test_real_tagged_sha256_shell_guard_rejects_changed_download(
         assert (result.returncode == 0) is should_pass, (
             f"{job}/{attack}: unexpected status {result.returncode}: {result.stderr}"
         )
+
+
+@pytest.mark.skipif(sys.platform != "linux", reason="Exact tagged Bash/sha256sum runner is Ubuntu")
+@pytest.mark.parametrize(
+    ("attack", "should_pass"),
+    [("clean", True), ("extra_file", False), ("unsafe_wheel_name", False)],
+)
+def test_real_tagged_build_exports_exact_private_archive_names(
+    tmp_path: Path, attack: str, should_pass: bool
+) -> None:
+    """Run the real build job output step, including basename injection checks."""
+    qualified = tmp_path / "qualified-dist"
+    qualified.mkdir()
+    wheel_name = (
+        "rogue name-0.3.0-py3-none-any.whl"
+        if attack == "unsafe_wheel_name"
+        else "medscale-0.3.0-py3-none-any.whl"
+    )
+    wheel = qualified / wheel_name
+    sdist = qualified / "medscale-0.3.0.tar.gz"
+    wheel.write_bytes(b"SYNTHETIC_WHEEL")
+    sdist.write_bytes(b"SYNTHETIC_SDIST")
+    if attack == "extra_file":
+        (qualified / "extra").write_bytes(b"UNQUALIFIED")
+
+    block = _job_block(_workflow_text(), "build")
+    name = "      - name: Pin exact qualified build archive hashes for downstream jobs\n"
+    assert block.count(name) == 1
+    section = block.split(name, maxsplit=1)[1].split("      - name:", maxsplit=1)[0]
+    exact_bash = dedent(section.split("        run: |\n", maxsplit=1)[1])
+    output_file = tmp_path / "github-output"
+    env = dict(os.environ, GITHUB_OUTPUT=str(output_file))
+    result = subprocess.run(
+        ["bash", "-e", "-o", "pipefail", "-c", exact_bash],
+        cwd=tmp_path,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=10,
+        check=False,
+    )
+    assert (result.returncode == 0) is should_pass, result.stderr
+    if should_pass:
+        lines = dict(line.split("=", 1) for line in output_file.read_text().splitlines())
+        assert set(lines) == {"wheel_sha256", "sdist_sha256", "wheel_filename", "sdist_filename"}
+        assert lines["wheel_filename"] == wheel.name
+        assert lines["sdist_filename"] == sdist.name
+        assert lines["wheel_sha256"] == hashlib.sha256(wheel.read_bytes()).hexdigest()
+        assert lines["sdist_sha256"] == hashlib.sha256(sdist.read_bytes()).hexdigest()
