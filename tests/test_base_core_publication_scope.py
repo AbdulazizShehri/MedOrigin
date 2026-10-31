@@ -843,9 +843,7 @@ def test_handoff_stages_only_exact_inspected_qualified_archive_bytes(
     assert set(receipt["inspected_private_snapshot_sha256"]) == {"wheel", "sdist"}
 
 
-def test_handoff_rejects_unsafe_optional_extra_without_output(
-    handoff: Any, tmp_path: Path
-) -> None:
+def test_handoff_rejects_unsafe_optional_extra_without_output(handoff: Any, tmp_path: Path) -> None:
     dist = make_dist(tmp_path / "candidate", wheel=metadata(extra="rq1-runtime-feasibility"))
     target = tmp_path / "qualified"
     with pytest.raises(handoff.HandoffError):
@@ -878,9 +876,7 @@ def test_handoff_rejects_replaced_original_after_first_inspection(
     assert not target.exists()
 
 
-def test_handoff_never_overwrites_existing_output_directory(
-    handoff: Any, tmp_path: Path
-) -> None:
+def test_handoff_never_overwrites_existing_output_directory(handoff: Any, tmp_path: Path) -> None:
     dist = make_dist(tmp_path / "candidate")
     target = tmp_path / "qualified"
     target.mkdir()
