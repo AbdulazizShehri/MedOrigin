@@ -36,8 +36,15 @@ MustThrow { Assert-MxcD1RootIdentity -Process $null -ExpectedPid 43521 -Expected
 MustThrow { Assert-MxcD1RootIdentity -Process $root -ExpectedPid 43521 -ExpectedExePath $root.ExecutablePath -ExpectedStartTicks 'bad' }
 $source = Get-Content -LiteralPath $uia -Raw
 $uses = [regex]::Matches($source, '(?m)^\s*Assert-MxcD1RootIdentity\b').Count
-if ($uses -lt 2 -or $source -notmatch [regex]::Escape('windows-mxc-d1-root-identity.ps1')) {
-    throw 'RED: UIA initial snapshot and temporal sampler do not both pin root process creation identity'
+$treeUses = [regex]::Matches($source, '(?m)^\s*\$\w+=Assert-MxcD1ProcessTreeContinuity\b').Count
+$treeHelper=Join-Path $here 'windows-mxc-d1-descendant-continuity.ps1'
+$treeSource=if(Test-Path -LiteralPath $treeHelper){Get-Content -LiteralPath $treeHelper -Raw}else{''}
+$delegated = ($treeUses -ge 2 -and
+    $source -match [regex]::Escape('windows-mxc-d1-descendant-continuity.ps1') -and
+    $treeSource -match '(?m)^\s*Assert-MxcD1RootIdentity\b')
+if (($uses -lt 2 -and -not $delegated) -or
+    $source -notmatch [regex]::Escape('windows-mxc-d1-root-identity.ps1')) {
+    throw 'RED: root creation identity not checked by both UIA sampling call sites'
 }
 $checks++
 Write-Output "D1_MXC_ROOT_PID_REUSE_FAIL_CLOSED_SYNTHETIC_PASS checks=$checks"
