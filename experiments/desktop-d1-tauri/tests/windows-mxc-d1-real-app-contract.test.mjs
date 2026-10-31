@@ -9,6 +9,7 @@ import {fileURLToPath} from 'node:url';
 const dir=dirname(fileURLToPath(import.meta.url));
 const runner=readFileSync(join(dir,'windows-mxc-d1-real-app-qualification.mjs'),'utf8');
 const uia=readFileSync(join(dir,'windows-mxc-d1-real-uia-qualification.ps1'),'utf8');
+const rootIdentity=readFileSync(join(dir,'windows-mxc-d1-root-identity.ps1'),'utf8');
 
 test('native process isolation is explicit and nonfallback, GUI allowed for D1',()=>{
   assert.match(runner,/getPlatformSupport\(\)/);
@@ -40,7 +41,9 @@ test('time-window sample roots and all descendants, explicitly not packet proof'
   assert.match(uia,/Get-CimInstance Win32_Process -ErrorAction Stop/);
   assert.match(uia,/Get-NetTCPConnection -ErrorAction Stop/);
   assert.match(uia,/Get-NetUDPEndpoint -ErrorAction Stop/);
-  assert.match(uia,/Exact source binary D1 root identity changed/);
+  assert.match(uia,/Assert-MxcD1RootIdentity -Process \$matches\[0\]/);
+  assert.match(uia,/Assert-MxcD1ProcessTreeContinuity -Processes \$live/);
+  assert.match(rootIdentity,/D1_MXC_ROOT_IDENTITY_NO_GO: root process creation identity changed/);
   assert.match(uia,/MXC_D1_TIME_WINDOWED_TCP_SAMPLER_PASS/);
   assert.match(uia,/NO_PACKET_LEVEL_ATTESTATION/);
 });
