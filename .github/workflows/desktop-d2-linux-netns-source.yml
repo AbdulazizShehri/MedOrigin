@@ -4,9 +4,11 @@ on:
   push:
     branches:
       - test/medorigin-d2-linux-netns-20261030
+      - test/medorigin-d2-linux-protocol-matrix-20261031
   pull_request:
     branches:
       - test/medorigin-d2-macos-self-egress-example-20261030
+      - test/medorigin-d2-linux-netns-20261030
     paths:
       - '.github/workflows/desktop-d2-linux-netns-source.yml'
       - 'experiments/desktop-d2-native-egui/**'
