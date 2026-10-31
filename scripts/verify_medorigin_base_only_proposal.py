@@ -271,6 +271,11 @@ def _refuse_windows_reparse_ancestors(dist: Path) -> None:
     """
     if os.name != "nt":
         return
+    # UNC shares, Win32 device names and extended-length path namespaces are
+    # not ordinary local filesystem roots. Reject their lexical drive *before*
+    # a filesystem query that could connect to an untrusted network share.
+    if dist.drive.startswith("\\"):
+        raise ProposalVerificationError("dist path uses Windows UNC/device namespace")
     absolute = dist.absolute()  # Do not resolve(), which would hide junction ancestors.
     for component in (absolute, *absolute.parents):
         attributes = getattr(component.lstat(), "st_file_attributes", 0)

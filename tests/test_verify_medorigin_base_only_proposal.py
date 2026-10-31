@@ -290,3 +290,29 @@ def test_windows_dist_junction_and_parent_reparse_are_not_regular(
     # not later when it attempts to parse a deliberately fake Wheel.
     with pytest.raises(gate.ProposalVerificationError, match=r"reparse|junction"):
         gate.verify(ROOT, direct)
+
+def test_windows_extended_namespace_dist_alias_is_rejected(gate: Any, tmp_path: Path) -> None:
+    """Reject alternate Windows path spellings before inspecting dist files."""
+    if os.name != "nt":
+        pytest.skip("Windows-only alternative namespace path regression")
+    dist = tmp_path / "normal-dist"
+    dist.mkdir()
+    wheel = dist / "medscale-0.3.0-py3-none-any.whl"
+    sdist = dist / "medscale-0.3.0.tar.gz"
+    wheel.write_bytes(b"FAKE_WHEEL")
+    sdist.write_bytes(b"FAKE_SDIST")
+    assert gate.qualified_dist_paths(dist) == (wheel, sdist)
+    # On a real unprivileged Windows 11 machine, this path exists and was
+    # admitted by the previous guard (RED: DID NOT RAISE). Reproduce on CI.
+    extended = Path("//?/" + dist.as_posix())
+    assert extended.is_dir(), "The negative requires a real Win32 namespace alias"
+    with pytest.raises(gate.ProposalVerificationError, match=r"namespace|UNC|device"):
+        gate.qualified_dist_paths(extended)
+    # Syntactic negatives must reject before probing remote/nonexistent targets.
+    for alias in (Path("//./D:/unauthorized-dist"), Path("//medorigin.invalid/share/dist")):
+        assert alias.drive.startswith("\\")
+        with pytest.raises(gate.ProposalVerificationError, match=r"namespace|UNC|device"):
+            gate.qualified_dist_paths(alias)
+    # Do not accept the alias from the full verifier before source parsing.
+    with pytest.raises(gate.ProposalVerificationError, match=r"namespace|UNC|device"):
+        gate.verify(ROOT, extended)
