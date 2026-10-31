@@ -45,7 +45,7 @@ jobs:
           set -euo pipefail
           uv python install "${{ matrix.python }}"
           if [[ "$RUNNER_OS" == "Windows" ]]; then
-            export PYTHONPATH="$PWD/src;$PWD/tests"
+            export PYTHONPATH="$(cygpath -w "$PWD/src");$(cygpath -w "$PWD/tests")"
           else
             export PYTHONPATH="$PWD/src:$PWD/tests"
           fi
