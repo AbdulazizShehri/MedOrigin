@@ -72,9 +72,9 @@ $inventory=ConvertTo-MxcD1PublicInventory -Inventory $initial.Inventory
 Write-Output ('MXC_D1_PROCESS_SNAPSHOT_JSON='+(ConvertTo-Json -InputObject $inventory -Compress -Depth 3))
 $tcp=@(Get-NetTCPConnection -ErrorAction Stop | Where-Object {$ids.Contains([int]$_.OwningProcess)})
 $udp=@(Get-NetUDPEndpoint -ErrorAction Stop | Where-Object {$ids.Contains([int]$_.OwningProcess)})
-$nonloop=@($tcp | Where-Object {$_.RemoteAddress -notin @('127.0.0.1','::1','0.0.0.0','::') -and $_.State -notin @('Listen','Bound')})
-Write-Output ('MXC_D1_PROCESS_TREE='+$ids.Count+' WEBVIEW2='+$webview.Count+' OWNED_TCP='+$tcp.Count+' NONLOOP_TCP='+$nonloop.Count+' UDP_ENDPOINTS='+$udp.Count+' ROOT_SHA256='+$sha)
-if($nonloop.Count -gt 0){throw 'Observed nonloopback TCP in MXC D1 descendant tree'}
+Write-Output ('MXC_D1_PROCESS_TREE='+$ids.Count+' WEBVIEW2='+$webview.Count+' OWNED_TCP='+$tcp.Count+' UDP_ENDPOINTS='+$udp.Count+' ROOT_SHA256='+$sha)
+. (Join-Path $PSScriptRoot 'windows-mxc-d1-network-endpoint-guard.ps1')
+Assert-MxcD1NoOwnedNetworkEndpoints -Tcp $tcp -Udp $udp -Phase initial | Out-Null
 $maxSampledTcp=0
 $maxSampledUdp=0
 for($sample=0;$sample -lt 12;$sample++){
@@ -85,10 +85,7 @@ for($sample=0;$sample -lt 12;$sample++){
   if($web.Count -lt 1){throw 'Real WebView2 descendants missing during windowed sampling'}
   $tcpNow=@(Get-NetTCPConnection -ErrorAction Stop | Where-Object {$tree.Contains([int]$_.OwningProcess)})
   $udpNow=@(Get-NetUDPEndpoint -ErrorAction Stop | Where-Object {$tree.Contains([int]$_.OwningProcess)})
-  $bad=@($tcpNow | Where-Object {
-    $_.RemoteAddress -notin @('127.0.0.1','::1','0.0.0.0','::') -and $_.State -notin @('Listen','Bound')
-  })
-  if($bad.Count -gt 0){throw ('Nonloopback TCP in WebView2/D1 process tree sample '+$sample)}
+  Assert-MxcD1NoOwnedNetworkEndpoints -Tcp $tcpNow -Udp $udpNow -Phase sample | Out-Null
   $maxSampledTcp=[math]::Max($maxSampledTcp,$tcpNow.Count)
   $maxSampledUdp=[math]::Max($maxSampledUdp,$udpNow.Count)
   Start-Sleep -Milliseconds 250
