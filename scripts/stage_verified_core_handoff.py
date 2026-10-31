@@ -33,9 +33,7 @@ def _qualified_pair(dist: Path) -> dict[str, list[Path]]:
     if len(entries) != 2 or any(not e.is_file(follow_symlinks=False) for e in entries):
         raise HandoffError("source distribution directory is not an exact regular pair")
     wheel = [
-        dist / e.name
-        for e in entries
-        if e.name.startswith("medscale-") and e.name.endswith(".whl")
+        dist / e.name for e in entries if e.name.startswith("medscale-") and e.name.endswith(".whl")
     ]
     sdist = [
         dist / e.name
