@@ -43,7 +43,7 @@ def test_failed_atomic_link_does_not_publish_or_leave_temporary_file(
         monkeypatch.setattr(storage, "_windows_link_pinned", deny_native_link)
     else:
         monkeypatch.setattr(os, "link", deny_link)
-    with pytest.raises(FhirStorageError, match="create .*FHIR report artifact"):
+    with pytest.raises(FhirStorageError, match=r"create .*FHIR report artifact"):
         store_report(report, root=tmp_path)
     assert attempts == 1
     assert not target.exists()
@@ -98,7 +98,9 @@ def test_atomic_link_collision_preserves_matching_existing_artifact(
         raise FileExistsError(errno.EEXIST, "synthetic concurrent writer")
 
     if os.name == "nt":
-        def concurrent_windows(_native: object, _source_handle: int, _directory_handle: int) -> None:
+        def concurrent_windows(
+            _native: object, _source_handle: int, _directory_handle: int
+        ) -> None:
             concurrent_identical_writer("native-temp", target)
         monkeypatch.setattr(storage, "_windows_link_pinned", concurrent_windows)
     else:
