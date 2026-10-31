@@ -1,0 +1,39 @@
+# Nonpublishing / source-only. Does not execute MXC or record any WFP packets.
+name: D1 MXC denial capture safety contract (experimental NO-GO)
+on:
+  push:
+    branches: [test/medorigin-d1-mxc-capture-denials-no-go-20261031]
+  pull_request:
+    branches: [test/medorigin-d1-mxc-real-tauri-20261031]
+    paths:
+      - '.github/workflows/desktop-d1-mxc-capture-source.yml'
+      - 'experiments/desktop-d1-tauri/tests/windows-mxc-capture-*'
+      - 'experiments/desktop-d1-tauri/README.md'
+permissions:
+  contents: read
+jobs:
+  windows-source-contract:
+    runs-on: windows-2025
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+          fetch-tags: false
+      - name: Parse scripts and test strict fail-closed denial report policy
+        shell: pwsh
+        run: |
+          $p='experiments/desktop-d1-tauri/tests'
+          node --check "$p/windows-mxc-capture-denials-experiment.mjs"
+          if($LASTEXITCODE -ne 0){throw 'probe syntax'}
+          node --check "$p/windows-mxc-capture-report-verdict.mjs"
+          if($LASTEXITCODE -ne 0){throw 'verdict syntax'}
+          node --test "$p/windows-mxc-capture-contract.test.mjs"
+          if($LASTEXITCODE -ne 0){throw 'denial capture source contract'}
+      - name: Explicit scope marker
+        shell: pwsh
+        run: |
+          Write-Output 'HOST_WSA10013_AND_NO_CAPTURE_REPORT_NO_GO'
+          Write-Output 'NOT_WFP_TRACE_NOT_WEBVIEW2_NOT_PACKET_ATTESTED'
+          Write-Output 'NO_PUBLISH_NO_SIGNED_INSTALLER_NO_PHI'
