@@ -467,9 +467,7 @@ def test_fhir_cli_rejects_nonregular_or_symlink_input(
 
 @pytest.mark.skipif(not hasattr(os, "mkfifo"), reason="POSIX FIFO unavailable")
 @pytest.mark.parametrize("summary_only", [False, True])
-def test_fhir_cli_rejects_fifo_input_without_blocking(
-    tmp_path: Path, summary_only: bool
-) -> None:
+def test_fhir_cli_rejects_fifo_input_without_blocking(tmp_path: Path, summary_only: bool) -> None:
     """A FIFO has no writer; opening it in blocking mode would hang the CLI."""
     source = tmp_path / "fifo-input.json"
     os.mkfifo(source)
@@ -477,10 +475,7 @@ def test_fhir_cli_rejects_fifo_input_without_blocking(
     argv = [str(source), "--output-dir", str(output)]
     if summary_only:
         argv.append("--summary-only")
-    child = (
-        "import sys; from medscale.cli import fhir; "
-        "raise SystemExit(fhir.main(sys.argv[1:]))"
-    )
+    child = "import sys; from medscale.cli import fhir; raise SystemExit(fhir.main(sys.argv[1:]))"
     result = subprocess.run(
         [sys.executable, "-c", child, *argv],
         check=False,

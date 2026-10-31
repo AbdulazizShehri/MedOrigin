@@ -58,7 +58,6 @@ def _assert_cli(cli: Path, tmp: Path, filename: str, data: bytes, *, valid: bool
     print(f"INSTALLED_FHIR_{'ACCEPTED' if valid else 'REJECTED'}: {filename}")
 
 
-
 def _assert_installed_cli_nonregular_inputs(cli: Path, tmp: Path) -> None:
     """Verify installed CLI rejects local nonregular paths without blocking."""
     fictional = tmp / "nonregular-control.json"
@@ -88,16 +87,19 @@ def _assert_installed_cli_nonregular_inputs(cli: Path, tmp: Path) -> None:
             env = os.environ.copy()
             env.pop("PYTHONPATH", None)
             result = subprocess.run(
-                command, cwd=tmp, env=env, capture_output=True, text=True,
-                check=False, timeout=8,
+                command,
+                cwd=tmp,
+                env=env,
+                capture_output=True,
+                text=True,
+                check=False,
+                timeout=8,
             )
             assert result.returncode == 1, (label, result.stdout, result.stderr)
             assert result.stdout == "" and "regular" in result.stderr
             assert "Traceback" not in result.stderr and not output.exists()
         print(f"INSTALLED_FHIR_INPUT_{label}_REJECTED_WITHOUT_REPORT")
-    assert fictional.read_text(encoding="utf-8") == (
-        '{"resourceType":"Patient","id":"fictional"}'
-    )
+    assert fictional.read_text(encoding="utf-8") == ('{"resourceType":"Patient","id":"fictional"}')
 
 
 def _assert_installed_report_storage(py: Path, tmp: Path) -> None:

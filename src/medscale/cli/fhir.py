@@ -69,7 +69,6 @@ def _reject_excessive_json_nesting(raw: str) -> None:
             depth -= 1
 
 
-
 def _read_bounded_regular_fhir_input(input_path: Path) -> bytes:
     """Read a bounded regular input without waiting on POSIX FIFOs or devices.
 
