@@ -658,25 +658,28 @@ def test_windows_dist_junction_swap_after_first_admission_is_refused(
 
 
 @pytest.mark.skipif(os.name != "nt", reason="Native Windows directory HANDLE test only")
-def test_windows_dist_handle_prevents_rename_during_metadata_scope(
+def test_windows_dist_rename_during_metadata_scope_fails_closed(
     checker: Any, monkeypatch: Any, tmp_path: Path
 ) -> None:
-    """The opened dist directory must stay rename-protected until parser exit."""
+    """Windows can rename an open dir; final object identity must still match."""
     dist = make_dist(tmp_path / "candidate")
+    moved = tmp_path / "renamed-dist"
     original_parse = checker._inspect_scope_metadata
     witnessed: list[bool] = []
 
-    def check_rename_while_pinned(
+    def rename_while_pinned(
         packages: dict[str, list[Path]], issues: list[str], versions: dict[str, str]
     ) -> None:
-        with pytest.raises(PermissionError):
-            dist.rename(tmp_path / "renamed-dist")
+        # Real Windows hosted CI proved rename CAN succeed despite an open
+        # FILE_READ_ATTRIBUTES dir HANDLE with FILE_SHARE_READ only.
+        dist.rename(moved)
         witnessed.append(True)
         original_parse(packages, issues, versions)
 
-    monkeypatch.setattr(checker, "_inspect_scope_metadata", check_rename_while_pinned)
+    monkeypatch.setattr(checker, "_inspect_scope_metadata", rename_while_pinned)
     result = checker.inspect(dist)
     assert witnessed, "the native directory HANDLE window was not exercised"
-    assert result["status"] == "BASE_CORE_PUBLICATION_SCOPE_CLEAN"
+    assert moved.is_dir() and not dist.exists()
+    assert result["status"] == "BLOCKED"
     assert result["publication_authorized"] is False
-    assert dist.is_dir()
+    assert any("identity" in str(issue).lower() for issue in result["issues"])
