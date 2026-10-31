@@ -66,7 +66,7 @@ jobs:
           uv run --no-project --python "${{ matrix.python }}" --with ruff==0.14.4 \
             ruff check scripts/check_base_core_publication_scope.py tests/test_base_core_publication_scope.py
           uv run --no-project --python "${{ matrix.python }}" --with ruff==0.14.4 \
-            ruff format --check scripts/check_base_core_publication_scope.py tests/test_base_core_publication_scope.py
+            ruff format --check --diff scripts/check_base_core_publication_scope.py tests/test_base_core_publication_scope.py
       - name: Explicit no-publication outcome
         shell: bash
         run: |
