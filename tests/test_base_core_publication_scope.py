@@ -544,3 +544,34 @@ def test_scope_gate_fails_closed_if_unsafe_archive_is_replaced_at_parse(
     assert result["status"] == "BLOCKED"
     assert result["publication_authorized"] is False
     assert any("optional extras" in str(issue) for issue in result["issues"])
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX descriptor-relative open only")
+def test_scope_gate_rejects_symlink_swapped_during_pinned_file_open(
+    checker: Any, monkeypatch: Any, tmp_path: Path
+) -> None:
+    """Reject a real symlink introduced after pinned dist inventory."""
+    dist = make_dist(tmp_path / "candidate")
+    wheel = dist / "medscale-0.3.0-py3-none-any.whl"
+    relocated = tmp_path / "original-wheel"
+    target = tmp_path / "untrusted-target"
+    target.write_bytes(b"NO_UNTRUSTED_ARCHIVE_BYTES")
+    actual_open = checker.os.open
+    witness: list[bool] = []
+
+    def swap_at_fd_open(path: Any, flags: int, *args: Any, **kwargs: Any) -> int:
+        if path == wheel.name and kwargs.get("dir_fd") is not None:
+            assert flags & checker.os.O_NOFOLLOW
+            assert not witness
+            wheel.rename(relocated)
+            wheel.symlink_to(target)
+            witness.append(True)
+        return actual_open(path, flags, *args, **kwargs)
+
+    monkeypatch.setattr(checker.os, "open", swap_at_fd_open)
+    result = checker.inspect(dist)
+    assert witness, "actual descriptor-relative archive open was not exercised"
+    assert wheel.is_symlink()
+    assert result["status"] == "BLOCKED"
+    assert result["publication_authorized"] is False
+    assert any("cannot pin publisher archive safely" in str(issue) for issue in result["issues"])
