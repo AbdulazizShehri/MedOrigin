@@ -803,7 +803,8 @@ def test_private_snapshot_digest_not_recomputed_from_modified_original(
     assert mutated
     assert result["status"] == "BASE_CORE_PUBLICATION_SCOPE_CLEAN"
     assert result["inspected_private_snapshot_sha256"]["wheel"] == original_digest
-    assert result["inspected_private_snapshot_sha256"]["wheel"] != hashlib.sha256(
-        wheel.read_bytes()
-    ).hexdigest()
+    assert (
+        result["inspected_private_snapshot_sha256"]["wheel"]
+        != hashlib.sha256(wheel.read_bytes()).hexdigest()
+    )
     assert result["publication_authorized"] is False
