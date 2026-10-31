@@ -3,13 +3,15 @@
 name: D1 MXC root PID reuse fail-closed source contract (nonpublishing)
 on:
   push:
-    branches: [test/medorigin-d1-mxc-root-identity-20261031]
+    branches: [test/medorigin-d1-mxc-root-identity-20261031, test/medorigin-d1-mxc-descendant-continuity-20261031]
   pull_request:
-    branches: [test/medorigin-d1-mxc-cold-restart-run11-20261031]
+    branches: [test/medorigin-d1-mxc-cold-restart-run11-20261031, test/medorigin-d1-mxc-root-identity-20261031]
     paths:
       - '.github/workflows/desktop-d1-mxc-root-identity-source.yml'
       - 'experiments/desktop-d1-tauri/tests/windows-mxc-d1-root-identity.ps1'
       - 'experiments/desktop-d1-tauri/tests/windows-mxc-d1-root-identity.test.ps1'
+      - 'experiments/desktop-d1-tauri/tests/windows-mxc-d1-descendant-continuity.ps1'
+      - 'experiments/desktop-d1-tauri/tests/windows-mxc-d1-descendant-continuity.test.ps1'
       - 'experiments/desktop-d1-tauri/tests/windows-mxc-d1-real-uia-qualification.ps1'
 permissions:
   contents: read
@@ -29,6 +31,12 @@ jobs:
           $p='experiments/desktop-d1-tauri/tests'
           & powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$p/windows-mxc-d1-root-identity.test.ps1"
           if ($LASTEXITCODE -ne 0) { throw 'D1 MXC root PID reuse guard failed' }
+      - name: Actual Windows CIM descendant PID reuse and lineage tests
+        shell: pwsh
+        run: |
+          $p='experiments/desktop-d1-tauri/tests'
+          & powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$p/windows-mxc-d1-descendant-continuity.test.ps1"
+          if ($LASTEXITCODE -ne 0) { throw 'D1 MXC descendant PID reuse proof failed' }
       - name: Existing D1 lifecycle unit contract
         shell: pwsh
         run: |
@@ -38,7 +46,7 @@ jobs:
         shell: pwsh
         run: |
           $p='experiments/desktop-d1-tauri/tests'
-          foreach ($file in @('windows-mxc-d1-root-identity.ps1','windows-mxc-d1-root-identity.test.ps1','windows-mxc-d1-real-uia-qualification.ps1')) {
+          foreach ($file in @('windows-mxc-d1-root-identity.ps1','windows-mxc-d1-root-identity.test.ps1','windows-mxc-d1-descendant-continuity.ps1','windows-mxc-d1-descendant-continuity.test.ps1','windows-mxc-d1-real-uia-qualification.ps1')) {
             $tokens=$null
             $errors=$null
             $ast=[System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path "$p/$file").Path,[ref]$tokens,[ref]$errors)
