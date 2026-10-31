@@ -372,8 +372,8 @@ def test_tagged_upload_and_github_release_consume_only_private_qualified_bytes()
     assert build.index(gate) < build.index(handoff) < build.index("actions/upload-artifact@")
     assert "path: qualified-dist/*" in build
     assert "path: dist/*" not in build
-    assert release.index(gate) < release.index(handoff) < release.index(
-        "softprops/action-gh-release@"
+    assert (
+        release.index(gate) < release.index(handoff) < release.index("softprops/action-gh-release@")
     )
     assert "files: qualified-dist/*" in release
     assert "files: dist/*" not in release
@@ -389,9 +389,7 @@ def test_tagged_upload_and_github_release_consume_only_private_qualified_bytes()
     assert "needs: github-release" in testpypi
     assert "packages-dir: dist" in testpypi
     assert "vars.TESTPYPI_PUBLISH_ENABLED == 'true'" in testpypi
-    watch = workflow.split("    paths:", maxsplit=1)[1].split(
-        "  workflow_dispatch:", maxsplit=1
-    )[0]
+    watch = workflow.split("    paths:", maxsplit=1)[1].split("  workflow_dispatch:", maxsplit=1)[0]
     assert "'scripts/stage_verified_core_handoff.py'" in watch
 
 
@@ -403,6 +401,9 @@ def test_nonpublishing_pr_rehearsal_remains_unaffected_by_new_handoff_gate() -> 
         assert "stage_verified_core_handoff.py" not in block
         assert "qualified-dist" not in block
         assert "softprops/action-gh-release@" not in block
-    assert _job_block(workflow, "build").count(
-        "scripts/check_base_core_publication_scope.py --dist dist"
-    ) == 1
+    assert (
+        _job_block(workflow, "build").count(
+            "scripts/check_base_core_publication_scope.py --dist dist"
+        )
+        == 1
+    )
