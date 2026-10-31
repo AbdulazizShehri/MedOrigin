@@ -243,3 +243,50 @@ def test_full_verifier_refuses_third_artifact_before_reading_archives(
     # bogus Wheel would not qualify this exact publisher boundary.
     with pytest.raises(gate.ProposalVerificationError, match="exactly two"):
         gate.verify(ROOT, dist)
+
+
+def test_windows_dist_junction_and_parent_reparse_are_not_regular(
+    gate: Any, tmp_path: Path
+) -> None:
+    """Native Windows junctions do not require symlink privilege and must fail closed."""
+    if os.name != "nt":
+        pytest.skip("Windows junction regression is OS-specific")
+    import stat
+    import subprocess
+
+    real_parent = tmp_path / "real"
+    dist = real_parent / "dist"
+    dist.mkdir(parents=True)
+    (dist / "medscale-0.3.0-py3-none-any.whl").write_bytes(b"FAKE_WHEEL")
+    (dist / "medscale-0.3.0.tar.gz").write_bytes(b"FAKE_SDIST")
+    assert gate.qualified_dist_paths(dist) == (
+        dist / "medscale-0.3.0-py3-none-any.whl",
+        dist / "medscale-0.3.0.tar.gz",
+    )
+
+    def junction(target: Path, dest: Path) -> None:
+        created = subprocess.run(
+            ["cmd.exe", "/d", "/c", "mklink", "/J", str(dest), str(target)],
+            capture_output=True,
+            text=True,
+            timeout=15,
+            check=False,
+        )
+        assert created.returncode == 0, created.stderr
+        assert getattr(dest.lstat(), "st_file_attributes", 0) & stat.FILE_ATTRIBUTE_REPARSE_POINT, (
+            "The negative is invalid without an actual NTFS junction"
+        )
+
+    direct = tmp_path / "dist-junction"
+    junction(dist, direct)
+    with pytest.raises(gate.ProposalVerificationError, match=r"reparse|junction"):
+        gate.qualified_dist_paths(direct)
+
+    alias = tmp_path / "ancestor-junction"
+    junction(real_parent, alias)
+    with pytest.raises(gate.ProposalVerificationError, match=r"reparse|junction"):
+        gate.qualified_dist_paths(alias / "dist")
+    # Exercise the real verifier entry point: it must fail on path admission,
+    # not later when it attempts to parse a deliberately fake Wheel.
+    with pytest.raises(gate.ProposalVerificationError, match=r"reparse|junction"):
+        gate.verify(ROOT, direct)

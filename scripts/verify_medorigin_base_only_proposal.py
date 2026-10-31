@@ -15,6 +15,7 @@ import io
 import itertools
 import json
 import os
+import stat
 import subprocess
 import sys
 import tarfile
@@ -260,6 +261,23 @@ def check_record(wheel: dict[str, bytes]) -> None:
         raise ProposalVerificationError("unreadable Wheel RECORD") from exc
 
 
+def _refuse_windows_reparse_ancestors(dist: Path) -> None:
+    """Reject NTFS junctions and other reparse points before pathname traversal.
+
+    Windows directory junctions are not Path.is_symlink(), and can be created
+    without the symlink privilege. Checking the lexical ancestors prevents
+    even an otherwise ordinary dist child beneath an alias from being admitted.
+    This preflight is not a defense against concurrent reparse-point swaps.
+    """
+    if os.name != "nt":
+        return
+    absolute = dist.absolute()  # Do not resolve(), which would hide junction ancestors.
+    for component in (absolute, *absolute.parents):
+        attributes = getattr(component.lstat(), "st_file_attributes", 0)
+        if attributes & stat.FILE_ATTRIBUTE_REPARSE_POINT:
+            raise ProposalVerificationError("dist path contains Windows junction/reparse point")
+
+
 def qualified_dist_paths(dist: Path) -> tuple[Path, Path]:
     """Refuse any unaccounted publisher input, not just mismatched extensions.
 
@@ -271,6 +289,7 @@ def qualified_dist_paths(dist: Path) -> tuple[Path, Path]:
     wheel = dist / "medscale-0.3.0-py3-none-any.whl"
     sdist = dist / "medscale-0.3.0.tar.gz"
     try:
+        _refuse_windows_reparse_ancestors(dist)
         if dist.is_symlink() or not dist.is_dir():
             raise ProposalVerificationError("dist must be an ordinary directory")
         with os.scandir(dist) as listing:
