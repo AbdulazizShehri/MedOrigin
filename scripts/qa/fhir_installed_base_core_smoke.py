@@ -137,6 +137,38 @@ def _assert_installed_windows_path_admission(cli: Path, tmp: Path) -> None:
         print(f"INSTALLED_FHIR_WINDOWS_{label}_REJECTED_PRE_IO")
 
 
+def _assert_installed_windows_report_root_admission(cli: Path, tmp: Path) -> None:
+    """Installed CLI must reject explicit remote/device output before probing."""
+    if os.name != "nt":
+        return
+    fictional = tmp / "fictional-output-path.json"
+    fictional.write_text('{"resourceType":"Patient","id":"fictional"}', encoding="utf-8")
+    roots = {
+        "UNC_LOOPBACK": r"\\127.0.0.1\unreachable\reports",
+        "EXTENDED_UNC": r"\\?\UNC\127.0.0.1\unreachable\reports",
+        "DEVICE": r"\\.\NUL",
+        "DRIVE_RELATIVE": r"C:relative-reports",
+        "ADS": r"reports:alternate",
+    }
+    for label, root in roots.items():
+        env = os.environ.copy()
+        env.pop("PYTHONPATH", None)
+        result = subprocess.run(
+            [str(cli), "fhir", "validate", str(fictional), "--output-dir", root],
+            cwd=tmp,
+            env=env,
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=8,
+        )
+        assert result.returncode == 1, (label, result.stdout, result.stderr)
+        assert result.stdout == ""
+        assert "report storage error:" in result.stderr
+        assert "Traceback" not in result.stderr
+        print(f"INSTALLED_FHIR_WINDOWS_REPORT_ROOT_{label}_REJECTED_PRE_IO")
+
+
 def _assert_installed_report_storage(py: Path, tmp: Path) -> None:
     """Exercise bounded storage using only the freshly installed Wheel."""
     code = r"""
@@ -338,6 +370,7 @@ def main() -> int:
 
         _assert_installed_cli_nonregular_inputs(cli, tmp)
         _assert_installed_windows_path_admission(cli, tmp)
+        _assert_installed_windows_report_root_admission(cli, tmp)
         _assert_installed_report_storage(py, tmp)
 
         # An existing unrelated local output file must be preserved, not overwritten.

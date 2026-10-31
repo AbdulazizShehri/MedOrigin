@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 import re
 import stat
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 
 from medscale._layout import fhirkit_reports_dir
 from medscale.fhirkit.errors import FhirStorageError, InvalidReportError
@@ -48,6 +48,43 @@ def _default_root() -> Path:
     return Path("data") / "fhirkit"
 
 
+def reject_unsafe_windows_local_path(
+    path: str | Path, *, windows: bool | None = None, subject: str = "FHIR JSON input"
+) -> None:
+    """Reject UNC/device/ADS paths and ambiguous Win32 aliases without IO."""
+    if windows is None:
+        windows = os.name == "nt"
+    if not windows:
+        return
+
+    raw = str(path).replace("/", "\\")
+    parsed = PureWindowsPath(raw)
+    message = f"{subject} must be a local regular file path"
+    if raw.startswith("\\") or (parsed.drive and not parsed.is_absolute()):
+        raise ValueError(message)
+    prefix = 2 if len(raw) >= 2 and raw[0].isalpha() and raw[1] == ":" else 0
+    if ":" in raw[prefix:]:
+        raise ValueError(message)
+    for component in parsed.parts:
+        if component in (parsed.anchor, parsed.drive, ".", ".."):
+            continue
+        stem = component.split(".", 1)[0].rstrip(" ").upper()
+        if (
+            component.rstrip(" .") != component
+            or stem in {"CON", "PRN", "AUX", "NUL", "CONIN$", "CONOUT$"}
+            or re.fullmatch(r"(?:COM|LPT)[1-9¹²³]", stem) is not None
+        ):
+            raise ValueError(message)
+
+
+def _reject_unsafe_windows_report_root(root: Path) -> None:
+    """Refuse network/device/ADS report roots before any filesystem probe."""
+    try:
+        reject_unsafe_windows_local_path(root, subject="FHIR report root")
+    except ValueError as exc:
+        raise FhirStorageError("FHIR report root must be a local regular file path") from exc
+
+
 def _reject_report_directory_symlinks(root: Path, digest: str) -> None:
     """Reject static symlink redirection below a caller-approved storage root.
 
@@ -63,6 +100,7 @@ def _reject_report_directory_symlinks(root: Path, digest: str) -> None:
 def store_report(report: ValidationReport, root: Path | None = None) -> Path:
     """Store a report in deterministic content-addressed storage."""
     root = root or _default_root()
+    _reject_unsafe_windows_report_root(root)
     report_json = report_to_json(report)
     if len(report_json.encode("utf-8")) > _MAX_REPORT_ARTIFACT_BYTES:
         raise FhirStorageError("FHIR report artifact exceeds size limit")
@@ -99,6 +137,7 @@ def load_report(report_hash_value: str, root: Path | None = None) -> str:
     ):
         raise FhirStorageError("report address must be a canonical SHA-256 digest")
     root = root or _default_root()
+    _reject_unsafe_windows_report_root(root)
     target_path = fhirkit_reports_dir(root) / report_hash_value / _DEFAULT_FILENAME
     _reject_report_directory_symlinks(root, report_hash_value)
     if target_path.is_symlink():

@@ -13,11 +13,11 @@ import os
 import re
 import stat
 import sys
-from pathlib import Path, PureWindowsPath
+from pathlib import Path
 
 from medscale.fhirkit.errors import FhirStorageError
 from medscale.fhirkit.report import load_report_from_json, report_to_json
-from medscale.fhirkit.storage import store_report
+from medscale.fhirkit.storage import reject_unsafe_windows_local_path, store_report
 from medscale.fhirkit.validate import validate_fhir
 
 
@@ -72,39 +72,8 @@ def _reject_excessive_json_nesting(raw: str) -> None:
 def _reject_unsafe_windows_fhir_path(
     input_path: str | Path, *, windows: bool | None = None
 ) -> None:
-    """Refuse Windows network/device namespaces and ambiguous local paths.
-
-    This lexical admission check MUST run before Path.exists(), is_symlink(),
-    or os.open(): a UNC existence check can initiate SMB authentication.
-    It does not replace OS-level file handle/reparse-point protections.
-    """
-    if windows is None:
-        windows = os.name == "nt"
-    if not windows:
-        return
-
-    raw = str(input_path).replace("/", "\\")
-    parsed = PureWindowsPath(raw)
-    # Reject UNC, extended-length/device namespaces, and current-drive-root
-    # paths. A local absolute path must explicitly identify its drive.
-    if raw.startswith("\\") or (parsed.drive and not parsed.is_absolute()):
-        raise ValueError("FHIR JSON input must be a local regular file path")
-    prefix = 2 if len(raw) >= 2 and raw[0].isalpha() and raw[1] == ":" else 0
-    if ":" in raw[prefix:]:
-        # Includes alternate data streams and invalid pseudo-drive names.
-        raise ValueError("FHIR JSON input must be a local regular file path")
-    for component in parsed.parts:
-        if component in (parsed.anchor, parsed.drive, ".", ".."):
-            continue
-        # Win32 aliases can refer to console, serial and null devices even
-        # when a seemingly ordinary extension is appended.
-        stem = component.split(".", 1)[0].rstrip(" ").upper()
-        if (
-            component.rstrip(" .") != component
-            or stem in {"CON", "PRN", "AUX", "NUL", "CONIN$", "CONOUT$"}
-            or re.fullmatch(r"(?:COM|LPT)[1-9¹²³]", stem) is not None
-        ):
-            raise ValueError("FHIR JSON input must be a local regular file path")
+    """Preserve the FHIR input admission API and its diagnostic contract."""
+    reject_unsafe_windows_local_path(input_path, windows=windows)
 
 
 def _read_bounded_regular_fhir_input(input_path: Path) -> bytes:
