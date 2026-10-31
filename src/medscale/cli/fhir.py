@@ -89,13 +89,19 @@ def _read_bounded_regular_fhir_input(input_path: Path) -> bytes:
         descriptor = os.open(input_path, flags)
     except OSError:
         raise ValueError("FHIR JSON input must be a readable regular file") from None
-    with os.fdopen(descriptor, "rb") as source:
-        metadata = os.fstat(source.fileno())
+    try:
+        # macOS fdopen() on a directory can raise before fstat() is reached.
+        metadata = os.fstat(descriptor)
         if not stat.S_ISREG(metadata.st_mode):
             raise ValueError("FHIR JSON input must be a regular file")
         if metadata.st_size > MAX_FHIR_INPUT_BYTES:
             raise ValueError("FHIR JSON input exceeds 8 MiB limit")
-        return source.read(MAX_FHIR_INPUT_BYTES + 1)
+        with os.fdopen(descriptor, "rb") as source:
+            descriptor = -1  # fdopen now owns the descriptor.
+            return source.read(MAX_FHIR_INPUT_BYTES + 1)
+    finally:
+        if descriptor >= 0:
+            os.close(descriptor)
 
 
 def main(argv: list[str] | None = None) -> int:
