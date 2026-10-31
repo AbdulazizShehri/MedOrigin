@@ -58,6 +58,81 @@ def _assert_cli(cli: Path, tmp: Path, filename: str, data: bytes, *, valid: bool
     print(f"INSTALLED_FHIR_{'ACCEPTED' if valid else 'REJECTED'}: {filename}")
 
 
+
+def _assert_installed_report_storage(py: Path, tmp: Path) -> None:
+    """Exercise bounded storage using only the freshly installed Wheel."""
+    code = r"""
+import os
+import signal
+import sys
+from pathlib import Path
+from medscale.fhirkit import FhirStorageError, ValidationReport, report_hash, store_report
+from medscale.fhirkit.storage import load_report
+
+root = Path(sys.argv[1])
+report = ValidationReport(status="valid")
+digest = report_hash(report)
+target = store_report(report, root=root)
+canonical = target.read_text(encoding="utf-8")
+assert load_report(digest, root=root) == canonical
+assert store_report(report, root=root) == target
+print("INSTALLED_FHIR_STORAGE_CANONICAL_IDEMPOTENT_PASS")
+
+def must_reject():
+    for operation in (
+        lambda: load_report(digest, root=root),
+        lambda: store_report(report, root=root),
+    ):
+        try:
+            operation()
+        except FhirStorageError:
+            pass
+        else:
+            raise AssertionError("unsafe stored report artifact was accepted")
+
+with target.open("wb") as stream:
+    stream.truncate(8 * 1024 * 1024 + 1)
+must_reject()
+assert target.stat().st_size == 8 * 1024 * 1024 + 1
+print("INSTALLED_FHIR_STORAGE_OVERSIZE_REJECTED")
+target.unlink()
+
+target.mkdir()
+must_reject()
+target.rmdir()
+print("INSTALLED_FHIR_STORAGE_DIRECTORY_REJECTED")
+
+outside = root.parent / "external-fictional-sentinel.txt"
+outside.write_text("unaltered fictional bytes", encoding="utf-8")
+try:
+    target.symlink_to(outside)
+except (OSError, NotImplementedError):
+    print("INSTALLED_FHIR_STORAGE_SYMLINK_UNAVAILABLE_ON_HOST")
+else:
+    must_reject()
+    assert outside.read_text(encoding="utf-8") == "unaltered fictional bytes"
+    target.unlink()
+    print("INSTALLED_FHIR_STORAGE_SYMLINK_REJECTED")
+
+if hasattr(os, "mkfifo"):
+    os.mkfifo(target)
+    signal.alarm(6)
+    try:
+        must_reject()
+    finally:
+        signal.alarm(0)
+        target.unlink()
+    print("INSTALLED_FHIR_STORAGE_FIFO_REJECTED_WITHOUT_BLOCKING")
+"""
+    result = _run(
+        [str(py), "-c", code, str(tmp / "installed-report-storage")],
+        cwd=tmp,
+    )
+    assert "INSTALLED_FHIR_STORAGE_CANONICAL_IDEMPOTENT_PASS" in result.stdout
+    assert "INSTALLED_FHIR_STORAGE_OVERSIZE_REJECTED" in result.stdout
+    assert "INSTALLED_FHIR_STORAGE_DIRECTORY_REJECTED" in result.stdout
+    print(result.stdout, end="")
+
 def main() -> int:
     before = _snapshot()
     with tempfile.TemporaryDirectory(prefix="medorigin-fhir-installed-") as scratch:
@@ -181,6 +256,8 @@ def main() -> int:
             assert "Traceback" not in denied.stderr
             assert not output.exists(), "oversized input persisted an invalid report"
             print(f"INSTALLED_FHIR_BYTE_BOUND_REJECTED: {mode}")
+
+        _assert_installed_report_storage(py, tmp)
 
         # An existing unrelated local output file must be preserved, not overwritten.
         input_file = tmp / "valid-again.json"
