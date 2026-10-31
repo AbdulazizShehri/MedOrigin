@@ -48,7 +48,7 @@ test('unsupported Windows Node is rejected before native SDK module evaluation',
   }
 });
 
-test('actual unsupported Windows host Node rejects before SDK resolution', {skip:process.platform!=='win32'||!/^v24\\.(?:[0-9]|1[0-9]|20)\\./.test(process.version)},()=>{
+test('actual unsupported Windows host Node rejects before SDK resolution', {skip:process.platform!=='win32'||!((process.versions.node.split('.').map(Number)[0]===24)&&(process.versions.node.split('.').map(Number)[1]<21))},()=>{
   const temp=mkdtempSync(join(tmpdir(),'medorigin-mxc-host-'));
   try {
     const fixture=join(temp,'synthetic-fixture.exe');
