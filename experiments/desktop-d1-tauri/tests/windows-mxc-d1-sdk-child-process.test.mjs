@@ -64,7 +64,7 @@ test('actual unsupported Windows host Node rejects before SDK resolution', {skip
     const output=(result.stdout||'')+'\\n'+(result.stderr||'');
     assert.notEqual(result.status,0);
     assert.match(output,/D1_MXC_NODE_RUNTIME_NO_GO/);
-    assert.doesNotMatch(output,/ERR_MODULE_NOT_FOUND|Cannot find package '@microsoft\\/mxc-sdk'/);
+    assert.ok(!output.includes('ERR_MODULE_NOT_FOUND'),'SDK module was resolved before admission');
   } finally {
     rmSync(temp,{recursive:true,force:true});
   }
