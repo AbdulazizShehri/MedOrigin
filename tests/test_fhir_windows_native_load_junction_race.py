@@ -13,9 +13,9 @@ from pathlib import Path
 
 import pytest
 
-from medscale.fhirkit import FhirStorageError, ValidationReport, load_report, report_hash
-from medscale.fhirkit import storage
+from medscale.fhirkit import FhirStorageError, ValidationReport, report_hash, storage
 from medscale.fhirkit.report import report_to_json
+from medscale.fhirkit.storage import load_report
 
 
 @pytest.mark.skipif(os.name != "nt", reason="NTFS junction and NtCreateFile are Windows-only")
@@ -63,7 +63,7 @@ def test_load_refuses_junction_swapped_after_lexical_preflight(
         visited.append(True)
 
     monkeypatch.setattr(storage, "_reject_report_directory_symlinks", replace_after_preflight)
-    with pytest.raises(FhirStorageError, match="unreadable|reparse|junction|untrusted"):
+    with pytest.raises(FhirStorageError, match=r"unreadable|reparse|junction|untrusted"):
         load_report(digest, root=root)
     assert visited, "real junction replacement hook not exercised"
     assert junction.is_dir() and moved.is_dir()
