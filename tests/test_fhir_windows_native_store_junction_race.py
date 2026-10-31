@@ -97,3 +97,42 @@ def test_windows_store_does_not_follow_hardlink_target_directory_after_pin(
         store_report(report, root=root)
     assert len(activated) == 2
     assert list(decoy.iterdir()) == []
+
+
+@pytest.mark.skipif(os.name != "nt", reason="native Windows HANDLE-relative link only")
+def test_windows_store_link_stays_pinned_after_directory_rename(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Rename/reparse after tempfile fsync, immediately before native hard link."""
+    report = ValidationReport(status="valid")
+    root = tmp_path / "root"
+    root.mkdir()
+    directory = storage.fhirkit_reports_dir(root) / report_hash(report)
+    directory.mkdir(parents=True)
+    parked = tmp_path / "parked-original"
+    decoy = tmp_path / "decoy-empty"
+    decoy.mkdir()
+    link_real = storage._windows_link_pinned
+    witnessed: list[bool] = []
+
+    def rename_at_link(native: object, source: int, parent: int) -> None:
+        directory.rename(parked)
+        result = subprocess.run(
+            ["cmd", "/d", "/c", "mklink", "/J", str(directory), str(decoy)],
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=15,
+        )
+        assert result.returncode == 0, result.stderr or result.stdout
+        assert directory.lstat().st_file_attributes & stat.FILE_ATTRIBUTE_REPARSE_POINT
+        witnessed.append(True)
+        link_real(native, source, parent)
+
+    monkeypatch.setattr(storage, "_windows_link_pinned", rename_at_link)
+    with pytest.raises(FhirStorageError, match=r"identity|changed|unable to create"):
+        store_report(report, root=root)
+    assert witnessed, "test did not exercise native HANDLE-relative hard-link step"
+    assert list(decoy.iterdir()) == [], "native hard-link operation followed substituted path"
+    assert parked.is_dir()
+    assert not list(parked.glob(".report-*.tmp")), "temporary files must be cleaned by HANDLE"
