@@ -34,6 +34,19 @@ function Valid([object[]]$processes) {
 $one=Valid @($root,$child,$grandchild,$unrelated)
 if ($one.Ids.Count -ne 3 -or -not $one.Ids.Contains(43003) -or $one.Ids.Contains(56001)) { throw 'Wrong attributed descendant inventory' }
 $checks++
+# Internal path identity is vital; exported diagnostic receipts must redact it.
+$public=ConvertTo-MxcD1PublicInventory -Inventory $one.Inventory
+$publicJson=ConvertTo-Json -InputObject $public -Compress -Depth 3
+if ($publicJson -match '"path"' -or $publicJson -match [regex]::Escape($rootPath) -or
+    $publicJson -match [regex]::Escape($child.ExecutablePath) -or
+    $publicJson -notmatch '"startTicks"' -or $publicJson -notmatch '"parentPid"') {
+    throw 'D1_MXC_DIAGNOSTIC_PRIVACY_NO_GO: full executable path leaked or required identity missing'
+}
+$observerText=Get-Content -LiteralPath $observer -Raw
+if ($observerText -notmatch [regex]::Escape('$inventory=ConvertTo-MxcD1PublicInventory -Inventory $initial.Inventory')) {
+    throw 'D1_MXC_DIAGNOSTIC_PRIVACY_NO_GO: observer bypasses redaction'
+}
+$checks++
 $two=Valid @($root,$child,$grandchild)
 if ($two.Ids.Count -ne 3 -or $seen.Count -ne 3) { throw 'Stable identities not retained' }
 $checks++
