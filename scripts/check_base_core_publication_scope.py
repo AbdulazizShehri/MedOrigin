@@ -19,13 +19,16 @@ import os
 import re
 import stat
 import struct
+import tempfile
 import tarfile
 import zipfile
 import zlib
+from contextlib import contextmanager
 from email import policy
 from email.message import EmailMessage
 from email.parser import BytesParser
 from pathlib import Path
+from typing import Iterator
 
 _MAX_ARCHIVE_BYTES = 30_000_000
 _MAX_METADATA_BYTES = 262_144
@@ -315,6 +318,119 @@ def _has_untrusted_ancestor_alias(dist: Path) -> bool:
     return False
 
 
+@contextmanager
+def _posix_pinned_scope_archives(
+    dist: Path, packages: dict[str, list[Path]]
+) -> Iterator[dict[str, list[Path]]]:
+    """Read bounded publisher inputs through no-follow dirfds into private copies.
+
+    All ZIP/TAR reads, metadata parsing and physical-envelope passes must use
+    the copies, never attacker-replaceable original dist filenames. This is
+    source-only gate hardening, not a publish-time filesystem lock or a
+    Windows HANDLE-pinning guarantee.
+    """
+    if os.name == "nt":
+        raise PublicationScopeError("POSIX pinned scope is unavailable on Windows")
+    names = {kind: packages[kind][0].name for kind in ("wheel", "sdist")}
+    if len(set(names.values())) != 2:
+        raise PublicationScopeError("dist: artifact filenames are not unique")
+    components = dist.absolute().parts
+    if not components or components[0] != "/" or any(
+        part in {".", ".."} for part in components[1:]
+    ):
+        raise PublicationScopeError("dist: noncanonical POSIX directory")
+    dir_flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | getattr(os, "O_CLOEXEC", 0)
+    descriptor = -1
+    try:
+        descriptor = os.open("/", dir_flags)
+        for component in components[1:]:
+            next_fd = os.open(component, dir_flags, dir_fd=descriptor)
+            os.close(descriptor)
+            descriptor = next_fd
+        with os.scandir(descriptor) as listing:
+            entries = list(itertools.islice(listing, 3))
+        if (
+            len(entries) != 2
+            or {entry.name for entry in entries} != set(names.values())
+            or any(not entry.is_file(follow_symlinks=False) for entry in entries)
+        ):
+            raise PublicationScopeError("dist: unexpected pinned directory contents")
+        with tempfile.TemporaryDirectory(prefix="medorigin-core-scope-pinned-") as temporary:
+            private = Path(temporary).resolve(strict=True)
+            copies: dict[str, list[Path]] = {}
+            for kind, name in names.items():
+                fd = os.open(
+                    name,
+                    os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK
+                    | getattr(os, "O_CLOEXEC", 0),
+                    dir_fd=descriptor,
+                )
+                with os.fdopen(fd, "rb") as source:
+                    before = os.fstat(source.fileno())
+                    if not stat.S_ISREG(before.st_mode) or before.st_size > _MAX_ARCHIVE_BYTES:
+                        raise PublicationScopeError(f"{kind}: unqualified pinned input")
+                    copied = 0
+                    target = private / name
+                    with target.open("xb") as output:
+                        while chunk := source.read(
+                            min(1024 * 1024, _MAX_ARCHIVE_BYTES + 1 - copied)
+                        ):
+                            copied += len(chunk)
+                            if copied > _MAX_ARCHIVE_BYTES:
+                                raise PublicationScopeError(f"{kind}: pinned input too large")
+                            output.write(chunk)
+                    after = os.fstat(source.fileno())
+                    before_id = (
+                        before.st_dev, before.st_ino, before.st_size,
+                        before.st_mtime_ns, before.st_ctime_ns,
+                    )
+                    after_id = (
+                        after.st_dev, after.st_ino, after.st_size,
+                        after.st_mtime_ns, after.st_ctime_ns,
+                    )
+                    if copied != before.st_size or before_id != after_id:
+                        raise PublicationScopeError(f"{kind}: pinned input mutated")
+                    copies[kind] = [target]
+            yield copies
+    except OSError as exc:
+        raise PublicationScopeError("dist: cannot pin publisher archive safely") from exc
+    finally:
+        if descriptor >= 0:
+            os.close(descriptor)
+
+
+def _inspect_scope_metadata(
+    packages: dict[str, list[Path]], issues: list[str], versions: dict[str, str]
+) -> None:
+    for kind, check in (("wheel", _wheel), ("sdist", _sdist)):
+        item = packages[kind][0]
+        if item.is_symlink() or not item.is_file() or item.stat().st_size > _MAX_ARCHIVE_BYTES:
+            issues.append(f"{kind}: missing, linked or oversized archive")
+            continue
+        try:
+            metadata = check(item)
+            version = str(metadata["Version"])
+            versions[kind] = version
+            if kind == "wheel":
+                prefix = re.escape(f"medscale-{version}")
+                filename_ok = (
+                    re.fullmatch(
+                        rf"{prefix}(?:-[0-9][A-Za-z0-9_.]*)?-[A-Za-z0-9_.]+-[A-Za-z0-9_.]+-[A-Za-z0-9_.]+[.]whl",
+                        item.name,
+                    )
+                    is not None
+                )
+            else:
+                filename_ok = item.name == f"medscale-{version}.tar.gz"
+            if not filename_ok:
+                issues.append(f"{kind}: filename does not match metadata version")
+            issues.extend(_check_policy(metadata, kind))
+        except PublicationScopeError as exc:
+            issues.append(str(exc))
+    if len(versions) == 2 and versions["wheel"] != versions["sdist"]:
+        issues.append("Wheel and sdist package versions disagree")
+
+
 def inspect(dist: Path) -> dict[str, object]:
     issues: list[str] = []
     # The tagged publisher uses dist/*, so checking only medscale-* while
@@ -353,33 +469,16 @@ def inspect(dist: Path) -> dict[str, object]:
             issues.append(f"{kind}: exactly one MedOrigin artifact required")
     versions: dict[str, str] = {}
     if not issues:
-        for kind, check in (("wheel", _wheel), ("sdist", _sdist)):
-            item = packages[kind][0]
-            if item.is_symlink() or not item.is_file() or item.stat().st_size > _MAX_ARCHIVE_BYTES:
-                issues.append(f"{kind}: missing, linked or oversized archive")
-                continue
+        if os.name == "nt":
+            # Static reparse/UNC admission only, NOT a Windows HANDLE-pinned
+            # guarantee. Keep existing Windows behavior and explicit NO-GO.
+            _inspect_scope_metadata(packages, issues, versions)
+        else:
             try:
-                metadata = check(item)
-                version = str(metadata["Version"])
-                versions[kind] = version
-                if kind == "wheel":
-                    prefix = re.escape(f"medscale-{version}")
-                    filename_ok = (
-                        re.fullmatch(
-                            rf"{prefix}(?:-[0-9][A-Za-z0-9_.]*)?-[A-Za-z0-9_.]+-[A-Za-z0-9_.]+-[A-Za-z0-9_.]+[.]whl",
-                            item.name,
-                        )
-                        is not None
-                    )
-                else:
-                    filename_ok = item.name == f"medscale-{version}.tar.gz"
-                if not filename_ok:
-                    issues.append(f"{kind}: filename does not match metadata version")
-                issues.extend(_check_policy(metadata, kind))
+                with _posix_pinned_scope_archives(dist, packages) as pinned:
+                    _inspect_scope_metadata(pinned, issues, versions)
             except PublicationScopeError as exc:
                 issues.append(str(exc))
-        if len(versions) == 2 and versions["wheel"] != versions["sdist"]:
-            issues.append("Wheel and sdist package versions disagree")
     return {
         "status": "BASE_CORE_PUBLICATION_SCOPE_CLEAN" if not issues else "BLOCKED",
         "scope": "base_synthetic_only",
