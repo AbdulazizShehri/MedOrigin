@@ -533,7 +533,7 @@ def test_scope_gate_fails_closed_if_unsafe_archive_is_replaced_at_parse(
         # This deterministic hook runs after the directory envelope and
         # per-item metadata-size checks, before the parser opens the filename.
         assert not witnessed
-        os.replace(replacement_path, original_path)
+        replacement_path.replace(original_path)
         witnessed.append(True)
         return real_parse(path)
 
@@ -600,7 +600,7 @@ def test_windows_native_handle_blocks_original_archive_rename_during_snapshot(
             # transferring HANDLE ownership to the CRT. A handle shared for
             # READ only must block rename/delete of the same original file.
             with pytest.raises(PermissionError):
-                os.replace(wheel, tmp_path / "renamed-original-wheel")
+                wheel.replace(tmp_path / "renamed-original-wheel")
             witnessed.append(True)
         return original(handle, flags)
 
