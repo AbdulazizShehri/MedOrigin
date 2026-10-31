@@ -130,9 +130,12 @@ def test_windows_store_link_stays_pinned_after_directory_rename(
         link_real(native, source, parent)
 
     monkeypatch.setattr(storage, "_windows_link_pinned", rename_at_link)
-    with pytest.raises(FhirStorageError, match=r"identity|changed|unable to create"):
+    with pytest.raises(FhirStorageError, match=r"identity|changed|unable to create") as blocked:
         store_report(report, root=root)
-    assert witnessed, "test did not exercise native HANDLE-relative hard-link step"
+    assert witnessed, (
+        "test did not exercise native HANDLE-relative hard-link step: "
+        f"{blocked.value!r}; native cause: {blocked.value.__cause__!r}"
+    )
     assert list(decoy.iterdir()) == [], "native hard-link operation followed substituted path"
     assert parked.is_dir()
     assert not list(parked.glob(".report-*.tmp")), "temporary files must be cleaned by HANDLE"
