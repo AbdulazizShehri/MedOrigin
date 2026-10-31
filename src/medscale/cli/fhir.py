@@ -13,7 +13,7 @@ import os
 import re
 import stat
 import sys
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 
 from medscale.fhirkit.errors import FhirStorageError
 from medscale.fhirkit.report import load_report_from_json, report_to_json
@@ -67,6 +67,44 @@ def _reject_excessive_json_nesting(raw: str) -> None:
                 raise ValueError("FHIR JSON nesting limit exceeded")
         elif character in "]}":
             depth -= 1
+
+
+def _reject_unsafe_windows_fhir_path(
+    input_path: str | Path, *, windows: bool | None = None
+) -> None:
+    """Refuse Windows network/device namespaces and ambiguous local paths.
+
+    This lexical admission check MUST run before Path.exists(), is_symlink(),
+    or os.open(): a UNC existence check can initiate SMB authentication.
+    It does not replace OS-level file handle/reparse-point protections.
+    """
+    if windows is None:
+        windows = os.name == "nt"
+    if not windows:
+        return
+
+    raw = str(input_path).replace("/", "\\")
+    parsed = PureWindowsPath(raw)
+    # Reject UNC, extended-length/device namespaces, and current-drive-root
+    # paths. A local absolute path must explicitly identify its drive.
+    if raw.startswith("\\") or (parsed.drive and not parsed.is_absolute()):
+        raise ValueError("FHIR JSON input must be a local regular file path")
+    prefix = 2 if len(raw) >= 2 and raw[0].isalpha() and raw[1] == ":" else 0
+    if ":" in raw[prefix:]:
+        # Includes alternate data streams and invalid pseudo-drive names.
+        raise ValueError("FHIR JSON input must be a local regular file path")
+    for component in parsed.parts:
+        if component in (parsed.anchor, parsed.drive, ".", ".."):
+            continue
+        # Win32 aliases can refer to console, serial and null devices even
+        # when a seemingly ordinary extension is appended.
+        stem = component.split(".", 1)[0].rstrip(" ").upper()
+        if (
+            component.rstrip(" .") != component
+            or stem in {"CON", "PRN", "AUX", "NUL", "CONIN$", "CONOUT$"}
+            or re.fullmatch(r"(?:COM|LPT)[1-9¹²³]", stem) is not None
+        ):
+            raise ValueError("FHIR JSON input must be a local regular file path")
 
 
 def _read_bounded_regular_fhir_input(input_path: Path) -> bytes:
@@ -145,10 +183,14 @@ def main(argv: list[str] | None = None) -> int:
     if tokens and tokens[0] == "validate":
         tokens.pop(0)
     args = parser.parse_args(tokens)
-    if args.input_file is None or not args.input_file.exists():
-        print(f"input read error: {args.input_file} does not exist", file=sys.stderr)
+    try:
+        _reject_unsafe_windows_fhir_path(args.input_file)
+    except ValueError as exc:
+        print(f"input read error: {exc}", file=sys.stderr)
         return 1
-
+    # Never call Path.exists() here: on Windows it follows a local symlink
+    # before the no-follow input guard and may initiate remote SMB access.
+    # os.open() below handles missing files without a preflight lookup.
     try:
         raw_bytes = _read_bounded_regular_fhir_input(args.input_file)
         if len(raw_bytes) > MAX_FHIR_INPUT_BYTES:

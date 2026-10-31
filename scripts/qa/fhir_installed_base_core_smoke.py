@@ -102,6 +102,41 @@ def _assert_installed_cli_nonregular_inputs(cli: Path, tmp: Path) -> None:
     assert fictional.read_text(encoding="utf-8") == ('{"resourceType":"Patient","id":"fictional"}')
 
 
+def _assert_installed_windows_path_admission(cli: Path, tmp: Path) -> None:
+    """Installed Windows CLI must reject namespaces before any filesystem IO."""
+    if os.name != "nt":
+        return
+    candidates = {
+        "UNC_LOOPBACK": r"\\127.0.0.1\unreachable\fictional.json",
+        "DEVICE_NAMESPACE": r"\\.\NUL",
+        "EXTENDED_NAMESPACE": r"\\?\C:\fictional.json",
+        "DRIVE_RELATIVE": r"C:fictional.json",
+        "ALTERNATE_STREAM": r"fictional.json:alternate",
+    }
+    for label, source in candidates.items():
+        for summary_only in (False, True):
+            output = tmp / f"windows-path-{label.lower()}-{summary_only}-reports"
+            command = [str(cli), "fhir", "validate", source, "--output-dir", str(output)]
+            if summary_only:
+                command.append("--summary-only")
+            env = os.environ.copy()
+            env.pop("PYTHONPATH", None)
+            result = subprocess.run(
+                command,
+                cwd=tmp,
+                env=env,
+                capture_output=True,
+                text=True,
+                check=False,
+                timeout=8,
+            )
+            assert result.returncode == 1, (label, result.stdout, result.stderr)
+            assert result.stdout == ""
+            assert "local regular file path" in result.stderr
+            assert "Traceback" not in result.stderr and not output.exists()
+        print(f"INSTALLED_FHIR_WINDOWS_{label}_REJECTED_PRE_IO")
+
+
 def _assert_installed_report_storage(py: Path, tmp: Path) -> None:
     """Exercise bounded storage using only the freshly installed Wheel."""
     code = r"""
@@ -302,6 +337,7 @@ def main() -> int:
             print(f"INSTALLED_FHIR_BYTE_BOUND_REJECTED: {mode}")
 
         _assert_installed_cli_nonregular_inputs(cli, tmp)
+        _assert_installed_windows_path_admission(cli, tmp)
         _assert_installed_report_storage(py, tmp)
 
         # An existing unrelated local output file must be preserved, not overwritten.
