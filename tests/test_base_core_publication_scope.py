@@ -576,3 +576,39 @@ def test_scope_gate_rejects_symlink_swapped_during_pinned_file_open(
     assert result["status"] == "BLOCKED"
     assert result["publication_authorized"] is False
     assert any("cannot pin publisher archive safely" in str(issue) for issue in result["issues"])
+
+
+@pytest.mark.skipif(os.name != "nt", reason="Windows CreateFileW HANDLE only")
+def test_windows_native_handle_blocks_original_archive_rename_during_snapshot(
+    checker: Any, monkeypatch: Any, tmp_path: Path
+) -> None:
+    """A live HANDLE must deny DELETE-sharing while private bytes are captured."""
+    import msvcrt
+
+    dist = make_dist(tmp_path / "candidate")
+    wheel = dist / "medscale-0.3.0-py3-none-any.whl"
+    sdist = dist / "medscale-0.3.0.tar.gz"
+    expected_wheel = wheel.read_bytes()
+    expected_sdist = sdist.read_bytes()
+    packages = {"wheel": [wheel], "sdist": [sdist]}
+    original = msvcrt.open_osfhandle
+    witnessed: list[bool] = []
+
+    def test_share_lock(handle: int, flags: int) -> int:
+        if not witnessed:
+            # This callback is reached AFTER native CreateFileW, BEFORE
+            # transferring HANDLE ownership to the CRT. A handle shared for
+            # READ only must block rename/delete of the same original file.
+            with pytest.raises(PermissionError):
+                os.replace(wheel, tmp_path / "renamed-original-wheel")
+            witnessed.append(True)
+        return original(handle, flags)
+
+    monkeypatch.setattr(msvcrt, "open_osfhandle", test_share_lock)
+    with checker._windows_pinned_scope_archives(dist, packages) as pinned:
+        assert pinned["wheel"][0].read_bytes() == expected_wheel
+        assert pinned["sdist"][0].read_bytes() == expected_sdist
+        private_wheel, private_sdist = pinned["wheel"][0], pinned["sdist"][0]
+    assert witnessed, "native HANDLE open and share-lock test were not exercised"
+    assert not private_wheel.exists() and not private_sdist.exists()
+    assert checker.inspect(dist)["status"] == "BASE_CORE_PUBLICATION_SCOPE_CLEAN"
