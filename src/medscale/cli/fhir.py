@@ -9,7 +9,9 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
+import stat
 import sys
 from pathlib import Path
 
@@ -67,6 +69,35 @@ def _reject_excessive_json_nesting(raw: str) -> None:
             depth -= 1
 
 
+
+def _read_bounded_regular_fhir_input(input_path: Path) -> bytes:
+    """Read a bounded regular input without waiting on POSIX FIFOs or devices.
+
+    Refuse final-component symlinks and use O_NOFOLLOW when available.
+    Parent-directory replacement races and Windows reparse-point races are
+    not fully addressed; this is not an OS sandbox or egress guarantee.
+    """
+    if input_path.is_symlink():
+        raise ValueError("FHIR JSON input must be a regular non-symlink file")
+    flags = (
+        os.O_RDONLY
+        | getattr(os, "O_BINARY", 0)
+        | getattr(os, "O_NONBLOCK", 0)
+        | getattr(os, "O_NOFOLLOW", 0)
+    )
+    try:
+        descriptor = os.open(input_path, flags)
+    except OSError:
+        raise ValueError("FHIR JSON input must be a readable regular file") from None
+    with os.fdopen(descriptor, "rb") as source:
+        metadata = os.fstat(source.fileno())
+        if not stat.S_ISREG(metadata.st_mode):
+            raise ValueError("FHIR JSON input must be a regular file")
+        if metadata.st_size > MAX_FHIR_INPUT_BYTES:
+            raise ValueError("FHIR JSON input exceeds 8 MiB limit")
+        return source.read(MAX_FHIR_INPUT_BYTES + 1)
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="medscale fhir validate",
@@ -114,8 +145,7 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
     try:
-        with args.input_file.open("rb") as source:
-            raw_bytes = source.read(MAX_FHIR_INPUT_BYTES + 1)
+        raw_bytes = _read_bounded_regular_fhir_input(args.input_file)
         if len(raw_bytes) > MAX_FHIR_INPUT_BYTES:
             raise ValueError("FHIR JSON input exceeds 8 MiB limit")
         raw_json = raw_bytes.decode("utf-8")
