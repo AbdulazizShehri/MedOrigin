@@ -342,3 +342,67 @@ def test_posix_dist_symlinked_ancestor_is_not_ordinary(gate: Any, tmp_path: Path
     # The actual verifier must reject before parsing bogus Wheel bytes.
     with pytest.raises(gate.ProposalVerificationError, match=r"symlink|ancestor"):
         gate.verify(ROOT, aliased_dist)
+
+
+def test_posix_directory_swap_after_preflight_fails_at_pinned_open(
+    gate: Any, monkeypatch: Any, tmp_path: Path
+) -> None:
+    """Race a symlink swap after directory enumeration, at the pinned file open."""
+    if os.name == "nt":
+        pytest.skip("POSIX descriptor-relative admission negative")
+    dist = tmp_path.resolve() / "dist"
+    dist.mkdir()
+    wheel = dist / "medscale-0.3.0-py3-none-any.whl"
+    sdist = dist / "medscale-0.3.0.tar.gz"
+    wheel.write_bytes(b"ORIGINAL_SYNTHETIC_WHEEL")
+    sdist.write_bytes(b"ORIGINAL_SYNTHETIC_SDIST")
+    target = tmp_path.resolve() / "attacker-target"
+    target.write_bytes(b"UNTRUSTED_SYNTHETIC_PAYLOAD")
+    relocated = tmp_path.resolve() / "relocated-original"
+    real_open = gate.os.open
+    witnessed: list[bool] = []
+
+    def race_at_descriptor_open(path: Any, flags: int, *args: Any, **kwargs: Any) -> int:
+        if path == wheel.name and kwargs.get("dir_fd") is not None:
+            # The nofollow flag MUST be present on the descriptor-relative
+            # file open. A pathname check alone is insufficient here.
+            assert flags & gate.os.O_NOFOLLOW
+            assert not witnessed
+            wheel.rename(relocated)
+            wheel.symlink_to(target)
+            witnessed.append(True)
+        return real_open(path, flags, *args, **kwargs)
+
+    monkeypatch.setattr(gate.os, "open", race_at_descriptor_open)
+    with pytest.raises(gate.ProposalVerificationError, match=r"pin|descriptor|source"):
+        gate.verify(ROOT, dist)
+    assert witnessed, "Verification did not use the descriptor-relative file open"
+    assert wheel.is_symlink()
+
+
+def test_posix_pinned_private_archive_copies_ignore_later_path_swaps(
+    gate: Any, tmp_path: Path
+) -> None:
+    """Archive verification must read the same pinned bytes for parse and hash."""
+    if os.name == "nt":
+        pytest.skip("POSIX-only descriptor-pinned artifact snapshot")
+    dist = tmp_path.resolve() / "dist"
+    dist.mkdir()
+    wheel = dist / "medscale-0.3.0-py3-none-any.whl"
+    sdist = dist / "medscale-0.3.0.tar.gz"
+    wheel.write_bytes(b"ORIGINAL_WHEEL")
+    sdist.write_bytes(b"ORIGINAL_SDIST")
+    with gate._posix_pinned_archive_snapshot(dist) as (stable_wheel, stable_sdist):
+        assert (stable_wheel.read_bytes(), stable_sdist.read_bytes()) == (
+            b"ORIGINAL_WHEEL",
+            b"ORIGINAL_SDIST",
+        )
+        assert stable_wheel != wheel and stable_sdist != sdist
+        wheel.unlink()
+        wheel.symlink_to(sdist)
+        sdist.write_bytes(b"CHANGED_ORIGINAL")
+        assert (stable_wheel.read_bytes(), stable_sdist.read_bytes()) == (
+            b"ORIGINAL_WHEEL",
+            b"ORIGINAL_SDIST",
+        )
+    assert not stable_wheel.exists() and not stable_sdist.exists()

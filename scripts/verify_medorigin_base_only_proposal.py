@@ -17,14 +17,17 @@ import json
 import os
 import stat
 import subprocess
+import tempfile
 import sys
 import tarfile
 import tomllib
 import zipfile
 import zlib
+from contextlib import contextmanager
 from email.parser import BytesParser
 from email.policy import default
 from pathlib import Path, PurePosixPath
+from typing import Iterator
 
 from check_core_wheel_source_identity import _plain_local_zip_layout
 from check_sdist_publication_scope import _expected_projected_metadata, _verify_generated_pkg_info
@@ -329,10 +332,98 @@ def qualified_dist_paths(dist: Path) -> tuple[Path, Path]:
     return wheel, sdist
 
 
+
+@contextmanager
+def _posix_pinned_archive_snapshot(dist: Path) -> Iterator[tuple[Path, Path]]:
+    """Pin POSIX path components and copy bounded regular-file bytes once.
+
+    Do not re-open the attacker-controlled dist path for parsing or SHA-256.
+    Walk directory handles from '/' with O_NOFOLLOW, then open each artifact
+    relative to the pinned dist descriptor. Both archive readers use private,
+    exclusive-write snapshots, not mutable original filenames. This does not
+    attest a publisher re-opening the originals, or prevent inode writes by
+    external actors outside the read window.
+    """
+    if os.name == "nt":
+        raise ProposalVerificationError("POSIX pinned snapshot unavailable on Windows")
+    qualified_dist_paths(dist)  # Preserve existing fail-closed admission and test contract.
+    absolute = dist.absolute()
+    components = absolute.parts
+    if not components or components[0] != "/" or any(
+        part in {".", ".."} for part in components[1:]
+    ):
+        raise ProposalVerificationError("dist has noncanonical POSIX path")
+    dir_flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | getattr(os, "O_CLOEXEC", 0)
+    names = ("medscale-0.3.0-py3-none-any.whl", "medscale-0.3.0.tar.gz")
+    directory = -1
+    try:
+        directory = os.open("/", dir_flags)
+        for component in components[1:]:
+            next_fd = os.open(component, dir_flags, dir_fd=directory)
+            os.close(directory)
+            directory = next_fd
+        with os.scandir(directory) as listing:
+            entries = list(itertools.islice(listing, 3))
+        if (
+            len(entries) != 2
+            or {entry.name for entry in entries} != set(names)
+            or any(not entry.is_file(follow_symlinks=False) for entry in entries)
+        ):
+            raise ProposalVerificationError("dist must contain exactly two regular artifact files")
+        with tempfile.TemporaryDirectory(prefix="medorigin-proposal-pinned-") as temp:
+            # Canonicalize ONLY the trusted, exclusive OS-created snapshot root.
+            private = Path(temp).resolve(strict=True)
+            for name in names:
+                fd = os.open(
+                    name,
+                    os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK | getattr(os, "O_CLOEXEC", 0),
+                    dir_fd=directory,
+                )
+                with os.fdopen(fd, "rb") as source:
+                    before = os.fstat(source.fileno())
+                    if not stat.S_ISREG(before.st_mode) or before.st_size > MAX_TOTAL:
+                        raise ProposalVerificationError("dist source is not a bounded regular file")
+                    copied = 0
+                    with (private / name).open("xb") as output:
+                        while chunk := source.read(min(1024 * 1024, MAX_TOTAL + 1 - copied)):
+                            copied += len(chunk)
+                            if copied > MAX_TOTAL:
+                                raise ProposalVerificationError("dist source exceeded archive budget")
+                            output.write(chunk)
+                    after = os.fstat(source.fileno())
+                    before_id = (
+                        before.st_dev, before.st_ino, before.st_size,
+                        before.st_mtime_ns, before.st_ctime_ns,
+                    )
+                    after_id = (
+                        after.st_dev, after.st_ino, after.st_size,
+                        after.st_mtime_ns, after.st_ctime_ns,
+                    )
+                    if copied != before.st_size or before_id != after_id:
+                        raise ProposalVerificationError("dist source mutated during pinned read")
+            yield private / names[0], private / names[1]
+    except OSError as exc:
+        raise ProposalVerificationError("dist path or source cannot be pinned safely") from exc
+    finally:
+        if directory >= 0:
+            os.close(directory)
+
+
 def verify(repository: Path, dist: Path) -> dict[str, object]:
+    if os.name == "nt":
+        # Windows still has static reparse/namespace admission only; do NOT
+        # misrepresent it as a descriptor/HANDLE-pinned race guarantee.
+        wd, sd = qualified_dist_paths(dist)
+        return _verify_source_bound_archives(repository, wd, sd)
+    with _posix_pinned_archive_snapshot(dist) as (wd, sd):
+        return _verify_source_bound_archives(repository, wd, sd)
+
+
+def _verify_source_bound_archives(
+    repository: Path, wd: Path, sd: Path
+) -> dict[str, object]:
     commit, sources, original, _lock, _mrl = trusted_source(repository)
     parent, changed = exact_removed_projected_root(original)
-    wd, sd = qualified_dist_paths(dist)
     wheel, sdist = load_wheel(wd), load_sdist(sd)
     expected_sdist = {SD + name: contents for name, contents in sources.items()}
     expected_sdist[SD + "pyproject.toml"] = changed
