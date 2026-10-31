@@ -27,6 +27,8 @@ on:
       - 'scripts/check_base_core_publication_scope.py'
       - 'tests/test_base_core_publication_scope.py'
       - 'scripts/stage_verified_core_handoff.py'
+      - '.github/workflows/release.yml'
+      - 'tests/test_release_workflow_contract.py'
 
 permissions:
   contents: read
@@ -68,14 +70,15 @@ jobs:
             python -m pytest -q -o addopts= \
             --basetemp "$RUNNER_TEMP/medorigin-dist-scope" \
             tests/test_base_core_publication_scope.py
+            tests/test_release_workflow_contract.py
       - name: Pinned source-only lint and formatter qualification
         shell: bash
         run: |
           set -euo pipefail
           uv run --no-project --python "${{ matrix.python }}" --with ruff==0.14.4 \
-            ruff check scripts/check_base_core_publication_scope.py tests/test_base_core_publication_scope.py scripts/stage_verified_core_handoff.py
+            ruff check scripts/check_base_core_publication_scope.py tests/test_base_core_publication_scope.py scripts/stage_verified_core_handoff.py tests/test_release_workflow_contract.py
           uv run --no-project --python "${{ matrix.python }}" --with ruff==0.14.4 \
-            ruff format --check --diff scripts/check_base_core_publication_scope.py tests/test_base_core_publication_scope.py scripts/stage_verified_core_handoff.py
+            ruff format --check --diff scripts/check_base_core_publication_scope.py tests/test_base_core_publication_scope.py scripts/stage_verified_core_handoff.py tests/test_release_workflow_contract.py
       - name: Explicit no-publication outcome
         shell: bash
         run: |
