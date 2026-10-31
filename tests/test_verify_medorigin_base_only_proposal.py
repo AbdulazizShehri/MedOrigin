@@ -342,3 +342,62 @@ def test_posix_dist_symlinked_ancestor_is_not_ordinary(gate: Any, tmp_path: Path
     # The actual verifier must reject before parsing bogus Wheel bytes.
     with pytest.raises(gate.ProposalVerificationError, match=r"symlink|ancestor"):
         gate.verify(ROOT, aliased_dist)
+
+
+def test_posix_directory_swap_after_preflight_fails_at_pinned_open(
+    gate: Any, monkeypatch: Any, tmp_path: Path
+) -> None:
+    """Race a real symlink replacement at the exact post-preflight boundary."""
+    if os.name == "nt":
+        pytest.skip("POSIX descriptor-relative admission negative")
+    dist = tmp_path.resolve() / "dist"
+    dist.mkdir()
+    good_wheel = dist / "medscale-0.3.0-py3-none-any.whl"
+    good_sdist = dist / "medscale-0.3.0.tar.gz"
+    good_wheel.write_bytes(b"ORIGINAL_SYNTHETIC_WHEEL")
+    good_sdist.write_bytes(b"ORIGINAL_SYNTHETIC_SDIST")
+    swapped = dist / "original-wheel"
+    target = tmp_path.resolve() / "attacker-target"
+    target.write_bytes(b"UNTRUSTED_SYNTHETIC_PAYLOAD")
+    original_gate = gate.qualified_dist_paths
+
+    def swap_after_check(root: Path) -> tuple[Path, Path]:
+        result = original_gate(root)
+        good_wheel.rename(swapped)
+        good_wheel.symlink_to(target)
+        return result
+
+    monkeypatch.setattr(gate, "qualified_dist_paths", swap_after_check)
+    # A ZIP-parsing rejection is NOT sufficient; disallow re-opening a
+    # pathname replaced after the admission scan, even if content is invalid.
+    with pytest.raises(gate.ProposalVerificationError, match=r"pin|descriptor|source"):
+        gate.verify(ROOT, dist)
+    assert good_wheel.is_symlink()
+
+
+def test_posix_pinned_private_archive_copies_ignore_later_path_swaps(
+    gate: Any, tmp_path: Path
+) -> None:
+    """Archive verification must read the same pinned bytes for parse and hash."""
+    if os.name == "nt":
+        pytest.skip("POSIX-only descriptor-pinned artifact snapshot")
+    dist = tmp_path.resolve() / "dist"
+    dist.mkdir()
+    wheel = dist / "medscale-0.3.0-py3-none-any.whl"
+    sdist = dist / "medscale-0.3.0.tar.gz"
+    wheel.write_bytes(b"ORIGINAL_WHEEL")
+    sdist.write_bytes(b"ORIGINAL_SDIST")
+    with gate._posix_pinned_archive_snapshot(dist) as (stable_wheel, stable_sdist):
+        assert (stable_wheel.read_bytes(), stable_sdist.read_bytes()) == (
+            b"ORIGINAL_WHEEL",
+            b"ORIGINAL_SDIST",
+        )
+        assert stable_wheel != wheel and stable_sdist != sdist
+        wheel.unlink()
+        wheel.symlink_to(sdist)
+        sdist.write_bytes(b"CHANGED_ORIGINAL")
+        assert (stable_wheel.read_bytes(), stable_sdist.read_bytes()) == (
+            b"ORIGINAL_WHEEL",
+            b"ORIGINAL_SDIST",
+        )
+    assert not stable_wheel.exists() and not stable_sdist.exists()
