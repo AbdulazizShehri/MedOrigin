@@ -359,3 +359,50 @@ def test_tag_path_inspects_exact_wheel_archive_before_publisher() -> None:
     assert "test \"$(find dist -maxdepth 1 -type f -name '*.whl' | wc -l)\" -eq 1" in smoke
     assert "needs: [quality, build, install-smoke]" in release
     assert "vars.GITHUB_RELEASE_PUBLISH_ENABLED == 'true'" in release
+
+
+def test_tagged_upload_and_github_release_consume_only_private_qualified_bytes() -> None:
+    """Guard the actual upload path, not merely a detached author-side checker."""
+    workflow = _workflow_text()
+    build = _job_block(workflow, "build")
+    release = _job_block(workflow, "github-release")
+    handoff = "scripts/stage_verified_core_handoff.py --dist dist --out qualified-dist"
+    gate = "scripts/check_base_core_publication_scope.py --dist dist"
+    assert build.count(handoff) == release.count(handoff) == 1
+    assert build.index(gate) < build.index(handoff) < build.index("actions/upload-artifact@")
+    assert "path: qualified-dist/*" in build
+    assert "path: dist/*" not in build
+    assert release.index(gate) < release.index(handoff) < release.index(
+        "softprops/action-gh-release@"
+    )
+    assert "files: qualified-dist/*" in release
+    assert "files: dist/*" not in release
+    for block in (build, release):
+        assert "continue-on-error: true" not in block
+        assert "|| true" not in block
+        assert "github.event_name == 'push'" in block
+    assert "vars.GITHUB_RELEASE_PUBLISH_ENABLED == 'true'" in release
+
+    # No new tag/publication jobs are enabled and TestPyPI still only consumes
+    # the qualified artifact uploaded by the build job, with owner gating.
+    testpypi = _job_block(workflow, "testpypi-publish")
+    assert "needs: github-release" in testpypi
+    assert "packages-dir: dist" in testpypi
+    assert "vars.TESTPYPI_PUBLISH_ENABLED == 'true'" in testpypi
+    watch = workflow.split("    paths:", maxsplit=1)[1].split(
+        "  workflow_dispatch:", maxsplit=1
+    )[0]
+    assert "'scripts/stage_verified_core_handoff.py'" in watch
+
+
+def test_nonpublishing_pr_rehearsal_remains_unaffected_by_new_handoff_gate() -> None:
+    """Frozen research extras are still denied by tags but can be tested in PR."""
+    workflow = _workflow_text()
+    for job in ("pr-artifact-build", "pr-artifact-roundtrip", "pr-clean-wheel-smoke"):
+        block = _job_block(workflow, job)
+        assert "stage_verified_core_handoff.py" not in block
+        assert "qualified-dist" not in block
+        assert "softprops/action-gh-release@" not in block
+    assert _job_block(workflow, "build").count(
+        "scripts/check_base_core_publication_scope.py --dist dist"
+    ) == 1
