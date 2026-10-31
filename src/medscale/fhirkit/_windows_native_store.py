@@ -150,7 +150,9 @@ class _NativeWindowsFiles:
             raise OSError("invalid native FHIR path component")
         data = ctypes.create_unicode_buffer(name)
         units = len(name) * ctypes.sizeof(ctypes.c_wchar)
-        uni = _UnicodeString(units, units + ctypes.sizeof(ctypes.c_wchar), ctypes.cast(data, ctypes.c_wchar_p))
+        uni = _UnicodeString(
+            units, units + ctypes.sizeof(ctypes.c_wchar), ctypes.cast(data, ctypes.c_wchar_p)
+        )
         obj = _ObjectAttributes(
             ctypes.sizeof(_ObjectAttributes),
             parent or None,
