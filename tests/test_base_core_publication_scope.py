@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import gzip
+import hashlib
 import importlib.util
 import io
 import json
@@ -744,3 +745,65 @@ def test_posix_dist_symlink_to_same_inode_during_scope_is_refused(
     assert result["status"] == "BLOCKED"
     assert result["publication_authorized"] is False
     assert any("identity" in str(issue).lower() for issue in result["issues"])
+
+
+def test_eligible_receipt_digests_match_exact_inspected_archive_bytes(
+    checker: Any, tmp_path: Path
+) -> None:
+    """A clean publisher-scope result identifies the two files actually parsed."""
+    dist = make_dist(tmp_path / "candidate")
+    expected = {
+        kind: hashlib.sha256((dist / name).read_bytes()).hexdigest()
+        for kind, name in (
+            ("wheel", "medscale-0.3.0-py3-none-any.whl"),
+            ("sdist", "medscale-0.3.0.tar.gz"),
+        )
+    }
+    result = checker.inspect(dist)
+    assert result["status"] == "BASE_CORE_PUBLICATION_SCOPE_CLEAN"
+    assert result["inspected_private_snapshot_sha256"] == expected
+    assert result["publication_authorized"] is False
+
+
+def test_blocked_optional_extra_has_no_qualified_snapshot_digest(
+    checker: Any, tmp_path: Path
+) -> None:
+    """No positive artifact digest may accidentally certify an unsafe pair."""
+    dist = make_dist(
+        tmp_path / "candidate",
+        wheel=metadata(extra="unreviewed-training"),
+    )
+    result = checker.inspect(dist)
+    assert result["status"] == "BLOCKED"
+    assert result["inspected_private_snapshot_sha256"] == {}
+    assert result["publication_authorized"] is False
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX original-path mutation snapshot proof")
+def test_private_snapshot_digest_not_recomputed_from_modified_original(
+    checker: Any, monkeypatch: Any, tmp_path: Path
+) -> None:
+    """The proposed digest is of parsed private bytes, never reopened originals."""
+    dist = make_dist(tmp_path.resolve() / "candidate")
+    wheel = dist / "medscale-0.3.0-py3-none-any.whl"
+    original_digest = hashlib.sha256(wheel.read_bytes()).hexdigest()
+    original_parse = checker._inspect_scope_metadata
+    mutated: list[bool] = []
+
+    def mutate_after_snapshot(
+        packages: dict[str, list[Path]], issues: list[str], versions: dict[str, str]
+    ) -> None:
+        assert not mutated
+        wheel.write_bytes(b"DELIBERATELY_MUTATED_SYNTHETIC_ORIGINAL")
+        mutated.append(True)
+        original_parse(packages, issues, versions)
+
+    monkeypatch.setattr(checker, "_inspect_scope_metadata", mutate_after_snapshot)
+    result = checker.inspect(dist)
+    assert mutated
+    assert result["status"] == "BASE_CORE_PUBLICATION_SCOPE_CLEAN"
+    assert result["inspected_private_snapshot_sha256"]["wheel"] == original_digest
+    assert result["inspected_private_snapshot_sha256"]["wheel"] != hashlib.sha256(
+        wheel.read_bytes()
+    ).hexdigest()
+    assert result["publication_authorized"] is False
