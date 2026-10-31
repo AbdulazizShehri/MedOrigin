@@ -19,16 +19,16 @@ import os
 import re
 import stat
 import struct
-import tempfile
 import tarfile
+import tempfile
 import zipfile
 import zlib
+from collections.abc import Iterator
 from contextlib import contextmanager
 from email import policy
 from email.message import EmailMessage
 from email.parser import BytesParser
 from pathlib import Path
-from typing import Iterator
 
 _MAX_ARCHIVE_BYTES = 30_000_000
 _MAX_METADATA_BYTES = 262_144
@@ -335,8 +335,10 @@ def _posix_pinned_scope_archives(
     if len(set(names.values())) != 2:
         raise PublicationScopeError("dist: artifact filenames are not unique")
     components = dist.absolute().parts
-    if not components or components[0] != "/" or any(
-        part in {".", ".."} for part in components[1:]
+    if (
+        not components
+        or components[0] != "/"
+        or any(part in {".", ".."} for part in components[1:])
     ):
         raise PublicationScopeError("dist: noncanonical POSIX directory")
     dir_flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | getattr(os, "O_CLOEXEC", 0)
@@ -361,8 +363,7 @@ def _posix_pinned_scope_archives(
             for kind, name in names.items():
                 fd = os.open(
                     name,
-                    os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK
-                    | getattr(os, "O_CLOEXEC", 0),
+                    os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK | getattr(os, "O_CLOEXEC", 0),
                     dir_fd=descriptor,
                 )
                 with os.fdopen(fd, "rb") as source:
@@ -381,12 +382,18 @@ def _posix_pinned_scope_archives(
                             output.write(chunk)
                     after = os.fstat(source.fileno())
                     before_id = (
-                        before.st_dev, before.st_ino, before.st_size,
-                        before.st_mtime_ns, before.st_ctime_ns,
+                        before.st_dev,
+                        before.st_ino,
+                        before.st_size,
+                        before.st_mtime_ns,
+                        before.st_ctime_ns,
                     )
                     after_id = (
-                        after.st_dev, after.st_ino, after.st_size,
-                        after.st_mtime_ns, after.st_ctime_ns,
+                        after.st_dev,
+                        after.st_ino,
+                        after.st_size,
+                        after.st_mtime_ns,
+                        after.st_ctime_ns,
                     )
                     if copied != before.st_size or before_id != after_id:
                         raise PublicationScopeError(f"{kind}: pinned input mutated")
@@ -397,6 +404,106 @@ def _posix_pinned_scope_archives(
     finally:
         if descriptor >= 0:
             os.close(descriptor)
+
+
+@contextmanager
+def _windows_pinned_scope_archives(
+    dist: Path, packages: dict[str, list[Path]]
+) -> Iterator[dict[str, list[Path]]]:
+    """Read original Windows archives from native file HANDLEs into private copies.
+
+    A FILE_SHARE_READ-only, OPEN_REPARSE_POINT CreateFileW handle prevents
+    writable/delete-sharing opens while held and refuses the final symlink.
+    This is deliberately NOT directory-ancestor HANDLE pinning, atomic
+    two-artifact validation, or a guarantee about a later publisher reopen.
+    """
+    if os.name != "nt":
+        raise PublicationScopeError("Windows pinned scope is unavailable on POSIX")
+    import ctypes
+    import msvcrt
+
+    names = {kind: packages[kind][0].name for kind in ("wheel", "sdist")}
+    if len(set(names.values())) != 2:
+        raise PublicationScopeError("dist: artifact filenames are not unique")
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    create_file = kernel32.CreateFileW
+    create_file.argtypes = (
+        ctypes.c_wchar_p,
+        ctypes.c_uint32,
+        ctypes.c_uint32,
+        ctypes.c_void_p,
+        ctypes.c_uint32,
+        ctypes.c_uint32,
+        ctypes.c_void_p,
+    )
+    create_file.restype = ctypes.c_void_p
+    close_handle = kernel32.CloseHandle
+    close_handle.argtypes = (ctypes.c_void_p,)
+    close_handle.restype = ctypes.c_int
+    invalid = ctypes.c_void_p(-1).value
+    try:
+        with tempfile.TemporaryDirectory(prefix="medorigin-core-scope-pinned-") as temporary:
+            private = Path(temporary).resolve(strict=True)
+            copies: dict[str, list[Path]] = {}
+            for kind, name in names.items():
+                raw_handle = create_file(
+                    str(dist / name),
+                    0x80000000,  # GENERIC_READ
+                    0x00000001,  # FILE_SHARE_READ; refuse concurrent WRITE/DELETE share
+                    None,
+                    3,  # OPEN_EXISTING
+                    0x00200000 | 0x08000000,  # OPEN_REPARSE_POINT | SEQUENTIAL_SCAN
+                    None,
+                )
+                if raw_handle is None or raw_handle == invalid:
+                    raise PublicationScopeError(f"{kind}: Windows HANDLE open refused")
+                try:
+                    fd = msvcrt.open_osfhandle(raw_handle, os.O_RDONLY | os.O_BINARY)
+                except OSError:
+                    close_handle(raw_handle)
+                    raise
+                with os.fdopen(fd, "rb") as source:
+                    before = os.fstat(source.fileno())
+                    if (
+                        not stat.S_ISREG(before.st_mode)
+                        or before.st_size > _MAX_ARCHIVE_BYTES
+                        or getattr(before, "st_file_attributes", 0)
+                        & stat.FILE_ATTRIBUTE_REPARSE_POINT
+                    ):
+                        raise PublicationScopeError(f"{kind}: linked or oversized Windows source")
+                    copied = 0
+                    target = private / name
+                    with target.open("xb") as output:
+                        while chunk := source.read(
+                            min(1024 * 1024, _MAX_ARCHIVE_BYTES + 1 - copied)
+                        ):
+                            copied += len(chunk)
+                            if copied > _MAX_ARCHIVE_BYTES:
+                                raise PublicationScopeError(
+                                    f"{kind}: Windows source exceeds budget"
+                                )
+                            output.write(chunk)
+                    after = os.fstat(source.fileno())
+                    before_id = (
+                        before.st_dev,
+                        before.st_ino,
+                        before.st_size,
+                        before.st_mtime_ns,
+                        before.st_ctime_ns,
+                    )
+                    after_id = (
+                        after.st_dev,
+                        after.st_ino,
+                        after.st_size,
+                        after.st_mtime_ns,
+                        after.st_ctime_ns,
+                    )
+                    if copied != before.st_size or before_id != after_id:
+                        raise PublicationScopeError(f"{kind}: Windows source mutated during read")
+                copies[kind] = [target]
+            yield copies
+    except OSError as exc:
+        raise PublicationScopeError("dist: Windows archive HANDLE cannot be pinned") from exc
 
 
 def _inspect_scope_metadata(
@@ -470,16 +577,19 @@ def inspect(dist: Path) -> dict[str, object]:
             issues.append(f"{kind}: exactly one MedOrigin artifact required")
     versions: dict[str, str] = {}
     if not issues:
-        if os.name == "nt":
-            # Static reparse/UNC admission only, NOT a Windows HANDLE-pinned
-            # guarantee. Keep existing Windows behavior and explicit NO-GO.
-            _inspect_scope_metadata(packages, issues, versions)
-        else:
-            try:
-                with _posix_pinned_scope_archives(dist, packages) as pinned:
-                    _inspect_scope_metadata(pinned, issues, versions)
-            except PublicationScopeError as exc:
-                issues.append(str(exc))
+        try:
+            # Windows pins each final file HANDLE; POSIX pins the full
+            # directory ancestry with dirfds. Both analyze private snapshots.
+            # Neither makes a later dist/* publisher reopen race-free.
+            snapshot = (
+                _windows_pinned_scope_archives(dist, packages)
+                if os.name == "nt"
+                else _posix_pinned_scope_archives(dist, packages)
+            )
+            with snapshot as pinned:
+                _inspect_scope_metadata(pinned, issues, versions)
+        except PublicationScopeError as exc:
+            issues.append(str(exc))
     return {
         "status": "BASE_CORE_PUBLICATION_SCOPE_CLEAN" if not issues else "BLOCKED",
         "scope": "base_synthetic_only",
