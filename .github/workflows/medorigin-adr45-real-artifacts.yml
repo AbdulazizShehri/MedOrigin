@@ -83,6 +83,9 @@ jobs:
           $blocked = $LASTEXITCODE
           Remove-Item -LiteralPath $rogue -Force
           if ($blocked -ne 2) { throw "Expected a strict rogue-artifact refusal (exit 2); got $blocked" }
+          # The negative control intentionally returned 2; reset native CLI status only
+          # AFTER confirming the exact fail-closed result, or pwsh fails the whole job.
+          $global:LASTEXITCODE = 0
           Write-Output 'ADR45_REAL_WHEEL_SDIST_BOUND_TO_GIT_PASS'
           Write-Output 'ADR45_ROGUE_REAL_DIST_REJECTED'
           Write-Output 'ADR45_PROPOSED_NOT_ACCEPTED_PUBLICATION_FALSE'
