@@ -441,7 +441,70 @@ def _windows_pinned_scope_archives(
     close_handle.argtypes = (ctypes.c_void_p,)
     close_handle.restype = ctypes.c_int
     invalid = ctypes.c_void_p(-1).value
+
+    class _FileTime(ctypes.Structure):
+        _fields_ = [
+            ("dwLowDateTime", ctypes.c_uint32),
+            ("dwHighDateTime", ctypes.c_uint32),
+        ]
+
+    class _ByHandleFileInformation(ctypes.Structure):
+        _fields_ = [
+            ("dwFileAttributes", ctypes.c_uint32),
+            ("ftCreationTime", _FileTime),
+            ("ftLastAccessTime", _FileTime),
+            ("ftLastWriteTime", _FileTime),
+            ("dwVolumeSerialNumber", ctypes.c_uint32),
+            ("nFileSizeHigh", ctypes.c_uint32),
+            ("nFileSizeLow", ctypes.c_uint32),
+            ("nNumberOfLinks", ctypes.c_uint32),
+            ("nFileIndexHigh", ctypes.c_uint32),
+            ("nFileIndexLow", ctypes.c_uint32),
+        ]
+
+    get_info = kernel32.GetFileInformationByHandle
+    get_info.argtypes = (
+        ctypes.c_void_p,
+        ctypes.POINTER(_ByHandleFileInformation),
+    )
+    get_info.restype = ctypes.c_int
+    # Open the *directory* before any final archive paths, denying rename and
+    # delete sharing while the two private copies are captured. OPEN_REPARSE_POINT
+    # prevents an NTFS junction from being silently dereferenced at this boundary.
+    directory_handle = create_file(
+        str(dist),
+        0x00000080,  # FILE_READ_ATTRIBUTES
+        0x00000001,  # FILE_SHARE_READ (no FILE_SHARE_DELETE)
+        None,
+        3,  # OPEN_EXISTING
+        0x02000000 | 0x00200000,  # BACKUP_SEMANTICS | OPEN_REPARSE_POINT
+        None,
+    )
+    if directory_handle is None or directory_handle == invalid:
+        raise PublicationScopeError("dist: Windows directory HANDLE open refused")
     try:
+        info = _ByHandleFileInformation()
+        if not get_info(directory_handle, ctypes.byref(info)):
+            raise PublicationScopeError("dist: Windows directory HANDLE cannot be inspected")
+        if (info.dwFileAttributes & 0x00000400) or not (
+            info.dwFileAttributes & 0x00000010
+        ):
+            raise PublicationScopeError("dist: Windows junction/reparse directory refused")
+        # An attacker may replace a lexical parent with a junction after the
+        # initial preflight. Reject that alias a second time *while pinned*.
+        try:
+            if _has_untrusted_ancestor_alias(dist):
+                raise PublicationScopeError("dist: Windows junction/reparse ancestor refused")
+        except (OSError, ValueError) as exc:
+            raise PublicationScopeError("dist: Windows ancestor cannot be checked") from exc
+        with os.scandir(dist) as listing:
+            entries = list(itertools.islice(listing, 3))
+        if (
+            len(entries) != 2
+            or {entry.name for entry in entries} != set(names.values())
+            or any(not entry.is_file(follow_symlinks=False) for entry in entries)
+        ):
+            raise PublicationScopeError("dist: pinned Windows directory contents changed")
         with tempfile.TemporaryDirectory(prefix="medorigin-core-scope-pinned-") as temporary:
             private = Path(temporary).resolve(strict=True)
             copies: dict[str, list[Path]] = {}
@@ -504,6 +567,8 @@ def _windows_pinned_scope_archives(
             yield copies
     except OSError as exc:
         raise PublicationScopeError("dist: Windows archive HANDLE cannot be pinned") from exc
+    finally:
+        close_handle(directory_handle)
 
 
 def _inspect_scope_metadata(
