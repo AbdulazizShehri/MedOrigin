@@ -283,6 +283,22 @@ def _refuse_windows_reparse_ancestors(dist: Path) -> None:
             raise ProposalVerificationError("dist path contains Windows junction/reparse point")
 
 
+def _refuse_posix_symlink_ancestors(dist: Path) -> None:
+    """Refuse a symlink in any lexical POSIX ancestor, including dist itself.
+
+    Walk root-first so a parent alias is refused before the verifier
+    dereferences any descendants. The verifier intentionally does NOT resolve
+    an untrusted path, since that would conceal a link's existence. This is
+    static admission checking, not an atomic directory-handle pin.
+    """
+    if os.name == "nt":
+        return
+    absolute = dist.absolute()
+    for component in reversed((absolute, *absolute.parents)):
+        if stat.S_ISLNK(component.lstat().st_mode):
+            raise ProposalVerificationError("dist path contains POSIX symlink ancestor")
+
+
 def qualified_dist_paths(dist: Path) -> tuple[Path, Path]:
     """Refuse any unaccounted publisher input, not just mismatched extensions.
 
@@ -295,6 +311,7 @@ def qualified_dist_paths(dist: Path) -> tuple[Path, Path]:
     sdist = dist / "medscale-0.3.0.tar.gz"
     try:
         _refuse_windows_reparse_ancestors(dist)
+        _refuse_posix_symlink_ancestors(dist)
         if dist.is_symlink() or not dist.is_dir():
             raise ProposalVerificationError("dist must be an ordinary directory")
         with os.scandir(dist) as listing:
