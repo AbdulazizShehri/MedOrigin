@@ -1,7 +1,14 @@
 from __future__ import annotations
 
+import hashlib
+import os
 import re
+import subprocess
+import sys
 from pathlib import Path
+from textwrap import dedent
+
+import pytest
 
 _WORKFLOW = Path(__file__).resolve().parents[1] / ".github" / "workflows" / "release.yml"
 _JOB_HEADER_RE = re.compile(r"^  [a-z0-9-]+:\s*$", re.MULTILINE)
@@ -88,7 +95,7 @@ def test_tag_build_rejects_unqualified_extras_before_artifact_upload() -> None:
         "softprops/action-gh-release@"
     )
     pypi = _job_block(text, "testpypi-publish")
-    assert "needs: github-release" in pypi
+    assert "needs: [github-release, build]" in pypi
 
     triggers = text.split("  workflow_dispatch:", maxsplit=1)[0]
     assert "'scripts/check_base_core_publication_scope.py'" in triggers
@@ -121,7 +128,7 @@ def test_testpypi_publish_job_is_fail_closed_and_least_privilege() -> None:
     assert "startsWith(github.ref, 'refs/tags/v')" in release_block
     assert "contents: write" in release_block
 
-    assert "needs: github-release" in block
+    assert "needs: [github-release, build]" in block
     assert "github.event_name == 'push'" in block
     assert "startsWith(github.ref, 'refs/tags/v')" in block
     assert "vars.TESTPYPI_PUBLISH_ENABLED == 'true'" in block
@@ -386,7 +393,7 @@ def test_tagged_upload_and_github_release_consume_only_private_qualified_bytes()
     # No new tag/publication jobs are enabled and TestPyPI still only consumes
     # the qualified artifact uploaded by the build job, with owner gating.
     testpypi = _job_block(workflow, "testpypi-publish")
-    assert "needs: github-release" in testpypi
+    assert "needs: [github-release, build]" in testpypi
     assert "packages-dir: dist" in testpypi
     assert "vars.TESTPYPI_PUBLISH_ENABLED == 'true'" in testpypi
     watch = workflow.split("    paths:", maxsplit=1)[1].split("  workflow_dispatch:", maxsplit=1)[0]
@@ -407,3 +414,112 @@ def test_nonpublishing_pr_rehearsal_remains_unaffected_by_new_handoff_gate() -> 
         )
         == 1
     )
+
+
+def test_tag_build_exports_qualified_archive_sha256_to_later_jobs() -> None:
+    """Pin exact built archive bytes outside the uploaded artifact itself."""
+    workflow = _workflow_text()
+    build = _job_block(workflow, "build")
+    assert "wheel_sha256: ${{ steps.pin_qualified_digests.outputs.wheel_sha256 }}" in build
+    assert "sdist_sha256: ${{ steps.pin_qualified_digests.outputs.sdist_sha256 }}" in build
+    assert "id: pin_qualified_digests" in build
+    assert "wheel_sha256=" in build
+    assert "sdist_sha256=" in build
+    assert "sha256sum" in build
+    assert '>> "$GITHUB_OUTPUT"' in build
+    assert build.index("stage_verified_core_handoff.py") < build.index("id: pin_qualified_digests")
+    assert build.index("id: pin_qualified_digests") < build.index("actions/upload-artifact@")
+
+
+def test_tag_consumers_recheck_sha256_against_original_build_outputs() -> None:
+    """Not enough to trust a downloaded archive's own editable manifest."""
+    workflow = _workflow_text()
+    smoke = _job_block(workflow, "install-smoke")
+    release = _job_block(workflow, "github-release")
+    pypi = _job_block(workflow, "testpypi-publish")
+    for block, after in (
+        (smoke, "uv pip install"),
+        (release, "softprops/action-gh-release@"),
+        (pypi, "pypa/gh-action-pypi-publish@"),
+    ):
+        assert block.count("Verify downloaded archives against build SHA-256") == 1
+        assert block.count("BUILD_WHEEL_SHA256: ${{ needs.build.outputs.wheel_sha256 }}") == 1
+        assert block.count("BUILD_SDIST_SHA256: ${{ needs.build.outputs.sdist_sha256 }}") == 1
+        assert "sha256sum" in block
+        assert "find dist -mindepth 1 -maxdepth 1" in block
+        assert block.index("Verify downloaded archives against build SHA-256") < block.index(after)
+        assert "continue-on-error: true" not in block
+        assert "|| true" not in block
+
+    assert "needs: build" in smoke
+    assert "needs: [quality, build, install-smoke]" in release
+    assert "needs: [github-release, build]" in pypi
+    assert "id-token: write" in pypi
+    assert "vars.TESTPYPI_PUBLISH_ENABLED == 'true'" in pypi
+    assert "actions/checkout@" not in pypi
+    assert workflow.count("pypa/gh-action-pypi-publish@") == 1
+
+
+@pytest.mark.skipif(sys.platform != "linux", reason="Exact tagged Bash/sha256sum runner is Ubuntu")
+@pytest.mark.parametrize(
+    ("attack", "should_pass"),
+    [
+        ("clean", True),
+        ("wheel_tamper", False),
+        ("sdist_tamper", False),
+        ("extra_file", False),
+        ("missing_archive", False),
+        ("symlink_archive", False),
+        ("wrong_expected_digest", False),
+    ],
+)
+def test_real_tagged_sha256_shell_guard_rejects_changed_download(
+    tmp_path: Path, attack: str, should_pass: bool
+) -> None:
+    """Execute the actual in-workflow Bash, not an independently copied validator."""
+    dist = tmp_path / "dist"
+    dist.mkdir()
+    wheel = dist / "medscale-0.3.0-py3-none-any.whl"
+    sdist = dist / "medscale-0.3.0.tar.gz"
+    wheel.write_bytes(b"QUALIFIED_SYNTHETIC_WHEEL")
+    sdist.write_bytes(b"QUALIFIED_SYNTHETIC_SDIST")
+    wheel_sha = hashlib.sha256(wheel.read_bytes()).hexdigest()
+    sdist_sha = hashlib.sha256(sdist.read_bytes()).hexdigest()
+
+    if attack == "wheel_tamper":
+        wheel.write_bytes(b"REPLACED_WHEEL_BYTES")
+    elif attack == "sdist_tamper":
+        sdist.write_bytes(b"REPLACED_SDIST_BYTES")
+    elif attack == "extra_file":
+        (dist / "unsigned-other-file").write_bytes(b"rogue")
+    elif attack == "missing_archive":
+        sdist.unlink()
+    elif attack == "symlink_archive":
+        outside = tmp_path / "outside-wheel"
+        outside.write_bytes(wheel.read_bytes())
+        wheel.unlink()
+        wheel.symlink_to(outside)
+    elif attack == "wrong_expected_digest":
+        wheel_sha = "0" * 64
+
+    env = dict(os.environ)
+    env.update(BUILD_WHEEL_SHA256=wheel_sha, BUILD_SDIST_SHA256=sdist_sha)
+    for job in ("install-smoke", "github-release", "testpypi-publish"):
+        block = _job_block(_workflow_text(), job)
+        name = "      - name: Verify downloaded archives against build SHA-256\n"
+        assert block.count(name) == 1
+        section = block.split(name, maxsplit=1)[1].split("      - name:", maxsplit=1)[0]
+        assert section.count("        run: |\n") == 1
+        exact_bash = dedent(section.split("        run: |\n", maxsplit=1)[1])
+        result = subprocess.run(
+            ["bash", "-e", "-o", "pipefail", "-c", exact_bash],
+            cwd=tmp_path,
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=False,
+        )
+        assert (result.returncode == 0) is should_pass, (
+            f"{job}/{attack}: unexpected status {result.returncode}: {result.stderr}"
+        )
