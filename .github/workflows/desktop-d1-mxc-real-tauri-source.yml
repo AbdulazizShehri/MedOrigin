@@ -1,0 +1,49 @@
+# Source-only validation. Does not run GUI, MXC, WFP or WebView2 on the hosted runner.
+name: D1 native MXC real Tauri GUI source contract (nonpublishing)
+on:
+  push:
+    branches: [test/medorigin-d1-mxc-real-tauri-20261031]
+  pull_request:
+    branches: [test/medorigin-d1-mxc-udp-matrix-20261031]
+    paths:
+      - '.github/workflows/desktop-d1-mxc-real-tauri-source.yml'
+      - 'experiments/desktop-d1-tauri/tests/windows-mxc-d1-real-*'
+      - 'experiments/desktop-d1-tauri/README.md'
+permissions:
+  contents: read
+jobs:
+  native-windows-source:
+    name: Windows native UIA harness syntax and fail-closed source gates (NOT runtime)
+    runs-on: windows-2025
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+          fetch-tags: false
+      - name: JS syntax and policy contracts
+        shell: pwsh
+        run: |
+          $p='experiments/desktop-d1-tauri/tests'
+          node --check "$p/windows-mxc-d1-real-app-qualification.mjs"
+          if ($LASTEXITCODE -ne 0) { throw 'D1 MXC runner JS syntax failed' }
+          node --test "$p/windows-mxc-d1-real-app-contract.test.mjs"
+          if ($LASTEXITCODE -ne 0) { throw 'D1 MXC source safety contracts failed' }
+      - name: Validate UIA observer PowerShell grammar without executing it
+        shell: pwsh
+        run: |
+          $p=(Resolve-Path 'experiments/desktop-d1-tauri/tests/windows-mxc-d1-real-uia-qualification.ps1').Path
+          $tokens=$null
+          $errors=$null
+          $ast=[System.Management.Automation.Language.Parser]::ParseFile($p,[ref]$tokens,[ref]$errors)
+          if ($null -eq $ast -or @($errors).Count -gt 0) {
+            $errors | ForEach-Object { Write-Error $_.Message }
+            throw 'D1 PowerShell UIA syntax invalid'
+          }
+          Write-Output 'D1_REAL_GUI_UIA_SOURCE_PARSE_PASS_NOT_RUNTIME'
+      - name: No release or egress assertion
+        shell: pwsh
+        run: |
+          Write-Output 'D1_ON_HOST_4_OF_4_IS_SEPARATE_UNATTESTED_HOSTED_CI'
+          Write-Output 'NO_PACKET_LEVEL_ATTESTATION_NO_RELEASE_NO_PHI'
