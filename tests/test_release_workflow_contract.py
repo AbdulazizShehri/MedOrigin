@@ -407,3 +407,49 @@ def test_nonpublishing_pr_rehearsal_remains_unaffected_by_new_handoff_gate() -> 
         )
         == 1
     )
+
+
+def test_tag_build_exports_qualified_archive_sha256_to_later_jobs() -> None:
+    """Pin exact built archive bytes outside the uploaded artifact itself."""
+    workflow = _workflow_text()
+    build = _job_block(workflow, "build")
+    assert "wheel_sha256: ${{ steps.pin_qualified_digests.outputs.wheel_sha256 }}" in build
+    assert "sdist_sha256: ${{ steps.pin_qualified_digests.outputs.sdist_sha256 }}" in build
+    assert "id: pin_qualified_digests" in build
+    assert "wheel_sha256=" in build
+    assert "sdist_sha256=" in build
+    assert "sha256sum" in build
+    assert '>> "$GITHUB_OUTPUT"' in build
+    assert build.index("stage_verified_core_handoff.py") < build.index(
+        "id: pin_qualified_digests"
+    )
+    assert build.index("id: pin_qualified_digests") < build.index("actions/upload-artifact@")
+
+
+def test_tag_consumers_recheck_sha256_against_original_build_outputs() -> None:
+    """Not enough to trust a downloaded archive's own editable manifest."""
+    workflow = _workflow_text()
+    smoke = _job_block(workflow, "install-smoke")
+    release = _job_block(workflow, "github-release")
+    pypi = _job_block(workflow, "testpypi-publish")
+    for block, after in (
+        (smoke, "uv pip install"),
+        (release, "softprops/action-gh-release@"),
+        (pypi, "pypa/gh-action-pypi-publish@"),
+    ):
+        assert block.count("Verify downloaded archives against build SHA-256") == 1
+        assert block.count("BUILD_WHEEL_SHA256: ${{ needs.build.outputs.wheel_sha256 }}") == 1
+        assert block.count("BUILD_SDIST_SHA256: ${{ needs.build.outputs.sdist_sha256 }}") == 1
+        assert "sha256sum" in block
+        assert "find dist -mindepth 1 -maxdepth 1" in block
+        assert block.index("Verify downloaded archives against build SHA-256") < block.index(after)
+        assert "continue-on-error: true" not in block
+        assert "|| true" not in block
+
+    assert "needs: build" in smoke
+    assert "needs: [quality, build, install-smoke]" in release
+    assert "needs: [github-release, build]" in pypi
+    assert "id-token: write" in pypi
+    assert "vars.TESTPYPI_PUBLISH_ENABLED == 'true'" in pypi
+    assert "actions/checkout@" not in pypi
+    assert workflow.count("pypa/gh-action-pypi-publish@") == 1
