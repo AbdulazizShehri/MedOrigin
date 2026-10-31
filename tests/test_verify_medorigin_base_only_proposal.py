@@ -347,32 +347,37 @@ def test_posix_dist_symlinked_ancestor_is_not_ordinary(gate: Any, tmp_path: Path
 def test_posix_directory_swap_after_preflight_fails_at_pinned_open(
     gate: Any, monkeypatch: Any, tmp_path: Path
 ) -> None:
-    """Race a real symlink replacement at the exact post-preflight boundary."""
+    """Race a symlink swap after directory enumeration, at the pinned file open."""
     if os.name == "nt":
         pytest.skip("POSIX descriptor-relative admission negative")
     dist = tmp_path.resolve() / "dist"
     dist.mkdir()
-    good_wheel = dist / "medscale-0.3.0-py3-none-any.whl"
-    good_sdist = dist / "medscale-0.3.0.tar.gz"
-    good_wheel.write_bytes(b"ORIGINAL_SYNTHETIC_WHEEL")
-    good_sdist.write_bytes(b"ORIGINAL_SYNTHETIC_SDIST")
-    swapped = dist / "original-wheel"
+    wheel = dist / "medscale-0.3.0-py3-none-any.whl"
+    sdist = dist / "medscale-0.3.0.tar.gz"
+    wheel.write_bytes(b"ORIGINAL_SYNTHETIC_WHEEL")
+    sdist.write_bytes(b"ORIGINAL_SYNTHETIC_SDIST")
     target = tmp_path.resolve() / "attacker-target"
     target.write_bytes(b"UNTRUSTED_SYNTHETIC_PAYLOAD")
-    original_gate = gate.qualified_dist_paths
+    relocated = tmp_path.resolve() / "relocated-original"
+    real_open = gate.os.open
+    witnessed: list[bool] = []
 
-    def swap_after_check(root: Path) -> tuple[Path, Path]:
-        result = original_gate(root)
-        good_wheel.rename(swapped)
-        good_wheel.symlink_to(target)
-        return result
+    def race_at_descriptor_open(path: Any, flags: int, *args: Any, **kwargs: Any) -> int:
+        if path == wheel.name and kwargs.get("dir_fd") is not None:
+            # The nofollow flag MUST be present on the descriptor-relative
+            # file open. A pathname check alone is insufficient here.
+            assert flags & gate.os.O_NOFOLLOW
+            assert not witnessed
+            wheel.rename(relocated)
+            wheel.symlink_to(target)
+            witnessed.append(True)
+        return real_open(path, flags, *args, **kwargs)
 
-    monkeypatch.setattr(gate, "qualified_dist_paths", swap_after_check)
-    # A ZIP-parsing rejection is NOT sufficient; disallow re-opening a
-    # pathname replaced after the admission scan, even if content is invalid.
+    monkeypatch.setattr(gate.os, "open", race_at_descriptor_open)
     with pytest.raises(gate.ProposalVerificationError, match=r"pin|descriptor|source"):
         gate.verify(ROOT, dist)
-    assert good_wheel.is_symlink()
+    assert witnessed, "Verification did not use the descriptor-relative file open"
+    assert wheel.is_symlink()
 
 
 def test_posix_pinned_private_archive_copies_ignore_later_path_swaps(
