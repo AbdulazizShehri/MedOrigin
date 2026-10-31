@@ -58,6 +58,48 @@ def _assert_cli(cli: Path, tmp: Path, filename: str, data: bytes, *, valid: bool
     print(f"INSTALLED_FHIR_{'ACCEPTED' if valid else 'REJECTED'}: {filename}")
 
 
+
+def _assert_installed_cli_nonregular_inputs(cli: Path, tmp: Path) -> None:
+    """Verify installed CLI rejects local nonregular paths without blocking."""
+    fictional = tmp / "nonregular-control.json"
+    fictional.write_text('{"resourceType":"Patient","id":"fictional"}', encoding="utf-8")
+    directory = tmp / "nonregular-directory.json"
+    directory.mkdir()
+    candidates: list[tuple[str, Path]] = [("DIRECTORY", directory)]
+    symlink = tmp / "nonregular-symlink.json"
+    try:
+        symlink.symlink_to(fictional)
+    except (OSError, NotImplementedError):
+        print("INSTALLED_FHIR_INPUT_SYMLINK_UNAVAILABLE_ON_HOST")
+    else:
+        candidates.append(("SYMLINK", symlink))
+    if hasattr(os, "mkfifo"):
+        fifo = tmp / "nonregular-fifo.json"
+        os.mkfifo(fifo)
+        candidates.append(("FIFO", fifo))
+    if os.name != "nt" and Path("/dev/null").is_char_device():
+        candidates.append(("DEVICE", Path("/dev/null")))
+    for label, source in candidates:
+        for summary_only in (False, True):
+            output = tmp / f"nonregular-{label.lower()}-{summary_only}-reports"
+            command = [str(cli), "fhir", "validate", str(source), "--output-dir", str(output)]
+            if summary_only:
+                command.append("--summary-only")
+            env = os.environ.copy()
+            env.pop("PYTHONPATH", None)
+            result = subprocess.run(
+                command, cwd=tmp, env=env, capture_output=True, text=True,
+                check=False, timeout=8,
+            )
+            assert result.returncode == 1, (label, result.stdout, result.stderr)
+            assert result.stdout == "" and "regular" in result.stderr
+            assert "Traceback" not in result.stderr and not output.exists()
+        print(f"INSTALLED_FHIR_INPUT_{label}_REJECTED_WITHOUT_REPORT")
+    assert fictional.read_text(encoding="utf-8") == (
+        '{"resourceType":"Patient","id":"fictional"}'
+    )
+
+
 def _assert_installed_report_storage(py: Path, tmp: Path) -> None:
     """Exercise bounded storage using only the freshly installed Wheel."""
     code = r"""
@@ -257,6 +299,7 @@ def main() -> int:
             assert not output.exists(), "oversized input persisted an invalid report"
             print(f"INSTALLED_FHIR_BYTE_BOUND_REJECTED: {mode}")
 
+        _assert_installed_cli_nonregular_inputs(cli, tmp)
         _assert_installed_report_storage(py, tmp)
 
         # An existing unrelated local output file must be preserved, not overwritten.
