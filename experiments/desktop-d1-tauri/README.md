@@ -191,3 +191,13 @@ No D1 code or release policy is modified here. There is no signed/packaged
 MedOrigin WFP launch integration, no independent review #603, no approved
 desktop architecture substitution, no package/installer and no publication.
 All existing developer/clinical NO-GOs and protected-main rules remain.
+
+## Native MXC IPv4/IPv6 TCP/UDP matrix — partial evidence, **NO-GO** (2026-10-31)
+
+The isolated, synthetic-only `tests/windows-mxc-protocol-matrix-{probe.rs,negative.mjs,contract.test.mjs}` experiment is a deliberately **failing** negative for the unqualified UDP API surface. It is a child of the earlier IPv4/TCP-only #760 proof, and it must not be substituted for the actual D1 Tauri/WebView2 descendant tree.
+
+On the authorized Windows 11 26H2 (build 26300.9818) non-admin host, native Rust 1.97.1 and Microsoft MXC SDK 1.0.1 were used **only in disposable D: scratch**. The exact same compiled Rust executable ran an unrestricted positive control: real local IPv4/IPv6 TCP listeners accepted both connections and real local IPv4/IPv6 UDP listeners each received one synthetic datagram. The contained executable then used explicit deny-by-default ingress, egress and host-loopback policy, without adding any global firewall rule or privileged capability.
+
+Observed in the OS-contained binary: `TCP4_LOOPBACK`, `TCP6_LOOPBACK`, `TCP4_TEST_NET`, `TCP6_DOC_NET` all returned **WSA10013**. But `UDP4_LOOPBACK`, `UDP6_LOOPBACK`, `UDP4_TEST_NET`, and `UDP6_DOC_NET` each returned **SENT23** from the WinSock send API. The independently listening local UDP receiver observed **zero additional contained UDP datagrams** on both loopback families during a bounded post-run observation. **Successful UDP send API return is not a delivery proof, and lack of local reception does not prove remote UDP/DNS egress is denied**; no packet/ETW trace or remote receiver exists for these observations. This distinction is why the runtime exits deliberately **1 / D1_MXC_PROTOCOL_MATRIX_NO_GO**, rather than producing any all-protocol pass.
+
+The extra hosted Windows workflow compiles/format-checks the native source and checks the fail-closed JavaScript policy. Hosted CI **never runs native MXC** and cannot prove OS-enforced WFP or real GUI/WebView2 behavior. To clear #662, an application-scoped process-container trial must launch the actual native GUI/WebView2 descendant tree and attest real IPv4/IPv6 TCP + UDP/DNS delivery at a separate observer, with no privileged/global policy changes or unsandboxed fallback. **Keep D1 NO-GO**. No publication, tags, distribution, PHI, production dependency or protected-main merge.
