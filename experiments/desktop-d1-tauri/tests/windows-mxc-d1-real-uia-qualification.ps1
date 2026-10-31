@@ -73,7 +73,3 @@ $nonloop=@($tcp | Where-Object {$_.RemoteAddress -notin @('127.0.0.1','::1','0.0
 Write-Output ('MXC_D1_PROCESS_TREE='+$ids.Count+' WEBVIEW2='+$webview.Count+' OWNED_TCP='+$tcp.Count+' NONLOOP_TCP='+$nonloop.Count+' UDP_ENDPOINTS='+$udp.Count+' ROOT_SHA256='+$sha)
 if($nonloop.Count -gt 0){throw 'Observed nonloopback TCP in MXC D1 descendant tree'}
 Write-Output 'MXC_D1_REAL_APP_UIA_4_OF_4_PASS_NONPUBLISHING_NETWORK_STILL_NO_GO'
-
-[executed on device: Abdulaziz (62835bd9-9ffe-4bd5-9010-6ac23b2d7223)]
-
-Note: you've used 85% of this month's Desktop Commander usage. Visit https://mcp.desktopcommander.app/ to learn more about usage and resets.
