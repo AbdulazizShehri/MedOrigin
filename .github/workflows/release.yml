@@ -100,6 +100,8 @@ jobs:
     outputs:
       wheel_sha256: ${{ steps.pin_qualified_digests.outputs.wheel_sha256 }}
       sdist_sha256: ${{ steps.pin_qualified_digests.outputs.sdist_sha256 }}
+      wheel_filename: ${{ steps.pin_qualified_digests.outputs.wheel_filename }}
+      sdist_filename: ${{ steps.pin_qualified_digests.outputs.sdist_filename }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -160,8 +162,14 @@ jobs:
           sdist_sha256="$(sha256sum -- "${sdist_files[0]}" | cut -d' ' -f1)"
           [[ "$wheel_sha256" =~ ^[0-9a-f]{64}$ ]]
           [[ "$sdist_sha256" =~ ^[0-9a-f]{64}$ ]]
+          wheel_filename="$(basename -- "${wheel_files[0]}")"
+          sdist_filename="$(basename -- "${sdist_files[0]}")"
+          [[ "$wheel_filename" =~ ^[A-Za-z0-9][A-Za-z0-9._+-]*\.whl$ ]]
+          [[ "$sdist_filename" =~ ^[A-Za-z0-9][A-Za-z0-9._+-]*\.tar\.gz$ ]]
           printf 'wheel_sha256=%s\n' "$wheel_sha256" >> "$GITHUB_OUTPUT"
           printf 'sdist_sha256=%s\n' "$sdist_sha256" >> "$GITHUB_OUTPUT"
+          printf 'wheel_filename=%s\n' "$wheel_filename" >> "$GITHUB_OUTPUT"
+          printf 'sdist_filename=%s\n' "$sdist_filename" >> "$GITHUB_OUTPUT"
       - name: Upload artifacts
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
@@ -196,10 +204,14 @@ jobs:
         env:
           BUILD_WHEEL_SHA256: ${{ needs.build.outputs.wheel_sha256 }}
           BUILD_SDIST_SHA256: ${{ needs.build.outputs.sdist_sha256 }}
+          BUILD_WHEEL_FILENAME: ${{ needs.build.outputs.wheel_filename }}
+          BUILD_SDIST_FILENAME: ${{ needs.build.outputs.sdist_filename }}
         run: |
           set -euo pipefail
           [[ "$BUILD_WHEEL_SHA256" =~ ^[0-9a-f]{64}$ ]]
           [[ "$BUILD_SDIST_SHA256" =~ ^[0-9a-f]{64}$ ]]
+          [[ "$BUILD_WHEEL_FILENAME" =~ ^[A-Za-z0-9][A-Za-z0-9._+-]*\.whl$ ]]
+          [[ "$BUILD_SDIST_FILENAME" =~ ^[A-Za-z0-9][A-Za-z0-9._+-]*\.tar\.gz$ ]]
           shopt -s nullglob
           wheel_files=(dist/*.whl)
           sdist_files=(dist/*.tar.gz)
@@ -208,6 +220,8 @@ jobs:
           test "${#sdist_files[@]}" -eq 1
           test -f "${wheel_files[0]}" && test ! -L "${wheel_files[0]}"
           test -f "${sdist_files[0]}" && test ! -L "${sdist_files[0]}"
+          test "$(basename -- "${wheel_files[0]}")" = "$BUILD_WHEEL_FILENAME"
+          test "$(basename -- "${sdist_files[0]}")" = "$BUILD_SDIST_FILENAME"
           test "$(sha256sum -- "${wheel_files[0]}" | cut -d' ' -f1)" = "$BUILD_WHEEL_SHA256"
           test "$(sha256sum -- "${sdist_files[0]}" | cut -d' ' -f1)" = "$BUILD_SDIST_SHA256"
       - name: Install exact wheel and bind CLI version to tag
@@ -299,10 +313,14 @@ jobs:
         env:
           BUILD_WHEEL_SHA256: ${{ needs.build.outputs.wheel_sha256 }}
           BUILD_SDIST_SHA256: ${{ needs.build.outputs.sdist_sha256 }}
+          BUILD_WHEEL_FILENAME: ${{ needs.build.outputs.wheel_filename }}
+          BUILD_SDIST_FILENAME: ${{ needs.build.outputs.sdist_filename }}
         run: |
           set -euo pipefail
           [[ "$BUILD_WHEEL_SHA256" =~ ^[0-9a-f]{64}$ ]]
           [[ "$BUILD_SDIST_SHA256" =~ ^[0-9a-f]{64}$ ]]
+          [[ "$BUILD_WHEEL_FILENAME" =~ ^[A-Za-z0-9][A-Za-z0-9._+-]*\.whl$ ]]
+          [[ "$BUILD_SDIST_FILENAME" =~ ^[A-Za-z0-9][A-Za-z0-9._+-]*\.tar\.gz$ ]]
           shopt -s nullglob
           wheel_files=(dist/*.whl)
           sdist_files=(dist/*.tar.gz)
@@ -311,6 +329,8 @@ jobs:
           test "${#sdist_files[@]}" -eq 1
           test -f "${wheel_files[0]}" && test ! -L "${wheel_files[0]}"
           test -f "${sdist_files[0]}" && test ! -L "${sdist_files[0]}"
+          test "$(basename -- "${wheel_files[0]}")" = "$BUILD_WHEEL_FILENAME"
+          test "$(basename -- "${sdist_files[0]}")" = "$BUILD_SDIST_FILENAME"
           test "$(sha256sum -- "${wheel_files[0]}" | cut -d' ' -f1)" = "$BUILD_WHEEL_SHA256"
           test "$(sha256sum -- "${sdist_files[0]}" | cut -d' ' -f1)" = "$BUILD_SDIST_SHA256"
       - name: Block release when optional/third-party runtime extras are packaged
@@ -347,10 +367,14 @@ jobs:
         env:
           BUILD_WHEEL_SHA256: ${{ needs.build.outputs.wheel_sha256 }}
           BUILD_SDIST_SHA256: ${{ needs.build.outputs.sdist_sha256 }}
+          BUILD_WHEEL_FILENAME: ${{ needs.build.outputs.wheel_filename }}
+          BUILD_SDIST_FILENAME: ${{ needs.build.outputs.sdist_filename }}
         run: |
           set -euo pipefail
           [[ "$BUILD_WHEEL_SHA256" =~ ^[0-9a-f]{64}$ ]]
           [[ "$BUILD_SDIST_SHA256" =~ ^[0-9a-f]{64}$ ]]
+          [[ "$BUILD_WHEEL_FILENAME" =~ ^[A-Za-z0-9][A-Za-z0-9._+-]*\.whl$ ]]
+          [[ "$BUILD_SDIST_FILENAME" =~ ^[A-Za-z0-9][A-Za-z0-9._+-]*\.tar\.gz$ ]]
           shopt -s nullglob
           wheel_files=(dist/*.whl)
           sdist_files=(dist/*.tar.gz)
@@ -359,6 +383,8 @@ jobs:
           test "${#sdist_files[@]}" -eq 1
           test -f "${wheel_files[0]}" && test ! -L "${wheel_files[0]}"
           test -f "${sdist_files[0]}" && test ! -L "${sdist_files[0]}"
+          test "$(basename -- "${wheel_files[0]}")" = "$BUILD_WHEEL_FILENAME"
+          test "$(basename -- "${sdist_files[0]}")" = "$BUILD_SDIST_FILENAME"
           test "$(sha256sum -- "${wheel_files[0]}" | cut -d' ' -f1)" = "$BUILD_WHEEL_SHA256"
           test "$(sha256sum -- "${sdist_files[0]}" | cut -d' ' -f1)" = "$BUILD_SDIST_SHA256"
       - name: Verify exact distribution payload
