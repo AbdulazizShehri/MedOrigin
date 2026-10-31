@@ -24,10 +24,12 @@ def deny_network_root_probe(monkeypatch: pytest.MonkeyPatch) -> None:
             raise AssertionError("UNC output path reached is_symlink")
         return original_is_symlink(self)
 
-    def guarded_mkdir(self: Path, *args: object, **kwargs: object) -> None:
+    def guarded_mkdir(
+        self: Path, mode: int = 0o777, parents: bool = False, exist_ok: bool = False
+    ) -> None:
         if str(self).startswith("\\\\"):
             raise AssertionError("UNC output path reached mkdir")
-        original_mkdir(self, *args, **kwargs)
+        original_mkdir(self, mode=mode, parents=parents, exist_ok=exist_ok)
 
     monkeypatch.setattr(Path, "is_symlink", guarded_is_symlink)
     monkeypatch.setattr(Path, "mkdir", guarded_mkdir)
