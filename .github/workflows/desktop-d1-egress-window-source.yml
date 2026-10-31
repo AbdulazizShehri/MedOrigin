@@ -1,0 +1,63 @@
+name: D1 Windows time-windowed egress detector regression (nonpublishing)
+
+on:
+  push:
+    branches:
+      - test/medorigin-d1-windowed-egress-20261031
+  pull_request:
+    branches:
+      - experiment/medorigin-desktop-d1-tauri-20261029
+    paths:
+      - '.github/workflows/desktop-d1-egress-window-source.yml'
+      - 'experiments/desktop-d1-tauri/tests/windows-egress-*'
+      - 'experiments/desktop-d1-tauri/README.md'
+
+permissions:
+  contents: read
+
+jobs:
+  windows-fail-closed-egress-test:
+    name: Windows PowerShell 5.1 parser and synthetic regression (NO network proof)
+    runs-on: windows-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout exact source, no persisted credentials
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+          fetch-tags: false
+      - name: Source parse of new and existing D1 probes
+        shell: pwsh
+        run: |
+          $root = 'experiments/desktop-d1-tauri/tests'
+          foreach ($name in @(
+            'windows-egress-window-functions.ps1',
+            'windows-egress-window.ps1',
+            'windows-egress-window-selftest.ps1',
+            'windows-egress-snapshot.ps1',
+            'windows-egress-probe-selftest.ps1'
+          )) {
+            $tokens = $null
+            $errors = $null
+            [void][System.Management.Automation.Language.Parser]::ParseFile(
+              (Resolve-Path (Join-Path $root $name)).Path,
+              [ref]$tokens, [ref]$errors
+            )
+            if ($errors.Count -ne 0) { throw "Parser errors in $name" }
+          }
+      - name: New temporal process-tree detection synthetic cases
+        shell: pwsh
+        run: |
+          & powershell.exe -NoProfile -ExecutionPolicy Bypass -File experiments/desktop-d1-tauri/tests/windows-egress-window-selftest.ps1
+          if ($LASTEXITCODE -ne 0) { throw "Time-windowed synthetic egress regression FAILED" }
+      - name: Historical single-snapshot detector regression
+        shell: pwsh
+        run: |
+          & powershell.exe -NoProfile -ExecutionPolicy Bypass -File experiments/desktop-d1-tauri/tests/windows-egress-probe-selftest.ps1
+          if ($LASTEXITCODE -ne 0) { throw "Existing snapshot detector regression FAILED" }
+      - name: Explicitly do NOT claim zero network egress
+        shell: pwsh
+        run: |
+          Write-Output 'D1_EGRESS_POWERSHELL_SYNTHETIC_SOURCE_ONLY_QUALIFIED'
+          Write-Output 'D1_NETWORK_ISOLATION_STILL_NO_GO_NO_PACKET_CAPTURE_OR_OS_DENIAL_OR_RELEASE'

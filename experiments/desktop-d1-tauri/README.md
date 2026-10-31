@@ -45,3 +45,63 @@ The UI Automation smoke test verifies all four fictional fixture IDs through **R
 ## Known blocks
 
 This independent D1 experiment must remain a **Draft** until a separately accepted topology/language decision (ADR-0003 + proposed ADR-0013), reviewed dependency locks/licenses/advisories, Windows/macOS/Linux app-level tests, verified zero network calls, IPC negative tests, WebView2 behavior, accessibility, process resource budgets and signed installer/uninstall lifecycle receipts. No release, tag, protected-main merge, PHI authorization or clinical-performance claim may be inferred from successful builds.
+
+## Windowed native process-tree TCP observation — fail-closed but not isolation
+
+The new separate, **nonpublishing** script
+`tests/windows-egress-window.ps1` checks for a **real already-running
+authorized D1 preview** during a bounded observation window. It does not
+launch/stop applications or modify Windows firewall/WFP, the registry,
+WebView2 runtimes, OS updates, network interfaces, the source package,
+or any release setting. The script requires the **actual process PID**
+and an independently computed **SHA-256 digest of its executable bytes**:
+
+```powershell
+$exe = 'D:\path\to\medorigin-desktop-d1-preview.exe'
+$sha = (Get-FileHash -Algorithm SHA256 -LiteralPath $exe).Hash
+$p = Start-Process -FilePath $exe -PassThru
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File tests/windows-egress-window.ps1 `
+  -RootPid $p.Id -ExpectedExeSha256 $sha -DurationSeconds 15 `
+  -IntervalMilliseconds 250
+# Stop ONLY this personally launched test process when finished.
+```
+
+**Fail closed:** verifies exact D1 process name, executable path, byte SHA,
+process start timestamp and absence of PID-reuse before each sample. Rebuilds
+descendant PID ownership from a fresh `Win32_Process` snapshot, observes
+ALL states of `Get-NetTCPConnection` including `SynSent`, and queries
+`Get-NetUDPEndpoint` each sample. Any observed non-loopback TCP in the
+tree (or malformed/ambiguous remote address on a non-listening socket)
+triggers **exit 2**. A missing/changed root, corrupt sample, denied
+process/TCP/UDP enumeration or invalid arguments triggers **exit 1**.
+Clean bounded observation exits **0** but prints
+`D1_NETWORK_ISOLATION_STILL_NO_GO`; it NEVER prints a
+`ZERO_EGRESS_PASS` or authorizes release. It reports the maximum number
+of UDP sockets **without claiming to inspect UDP payloads or destination
+addresses**. This only supplements the existing instant snapshot
+`tests/windows-egress-snapshot.ps1`; it does NOT supersede source or
+kernel packet-level/WFP evidence.
+
+**Technical self-tests, 2026-10-31:** Windows PowerShell 5.1,
+`tests/windows-egress-window-selftest.ps1` **12/12 PASS**, including nested
+descendant ownership, unrelated-PID exclusion, loopback IPv4,
+127/8, IPv6 and IPv4-mapped IPv6, missing root, non-loopback IPv4/IPv6,
+`SynSent`, delayed second-sample exfiltration attempt, ambiguous remote
+address and unexpected established wildcard. The separate invalid real PID
+watcher call fails closed exit 1. Unit tests use **mocked Win32 process
+and TCP records**; no outside traffic is generated and no actual D1
+binary was available during this development run. Thus **no real D1
+WebView2 runtime verdict** follows from those self-tests, unlike the
+historical real Windows observed external traffic in issue #662.
+
+**Important blind spots:** intervals can miss fast TCP handshakes and
+connections after process exit; process-tree sampling can miss short-lived
+descendants or broker/service traffic not owned by the child tree.
+UDP endpoint enumeration does not expose UDP packet destinations, and
+DNS/IPv6 UDP/proxy brokers remain outside this TCP-only verdict.
+The script cannot prove Windows Filtering Platform OS-enforced outbound
+denial, cannot guarantee that background WebView2 security updates are
+untouched, and is not a replacement for signed external review. It does
+not automatically close #662, approve D2 over D1, or change frozen
+research, version, clinical or publisher policy. No release, package,
+installer, real PHI, EHR writes or public publication.
