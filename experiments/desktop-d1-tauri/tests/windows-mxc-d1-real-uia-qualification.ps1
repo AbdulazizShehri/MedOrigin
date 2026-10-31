@@ -68,7 +68,7 @@ $initial=Assert-MxcD1ProcessTreeContinuity -Processes $all -RootPid $rootPid -Ex
 $ids=$initial.Ids
 $webview=@($all | Where-Object {$ids.Contains([int]$_.ProcessId) -and $_.Name -eq 'msedgewebview2.exe'})
 if($webview.Count -lt 1){throw 'No actual WebView2 descendants under D1 root'}
-$inventory=$initial.Inventory
+$inventory=ConvertTo-MxcD1PublicInventory -Inventory $initial.Inventory
 Write-Output ('MXC_D1_PROCESS_SNAPSHOT_JSON='+(ConvertTo-Json -InputObject $inventory -Compress -Depth 3))
 $tcp=@(Get-NetTCPConnection -ErrorAction Stop | Where-Object {$ids.Contains([int]$_.OwningProcess)})
 $udp=@(Get-NetUDPEndpoint -ErrorAction Stop | Where-Object {$ids.Contains([int]$_.OwningProcess)})
