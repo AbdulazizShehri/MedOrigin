@@ -61,6 +61,122 @@ def _open_posix_report_nofollow(target_path: Path, flags: int) -> int:
         os.close(directory_fd)
 
 
+def _open_windows_report_noreparse(target_path: Path) -> int:
+    """Open a Windows report without following filesystem reparse ancestors.
+
+    The full NT path is parsed with OBJ_DONT_REPARSE. Any unsupported native
+    behavior fails closed. FILE_OPEN_REPARSE_POINT means the final link may
+    itself be opened, so its HANDLE attributes are checked before reading.
+    This is only a read-side guard, not a safe Windows report publisher.
+    """
+    import ctypes
+    import msvcrt
+
+    if os.name != "nt":
+        raise OSError("native Windows FHIR report open is unavailable")
+    native_name = "\\??\\" + str(target_path.absolute())
+    wchar_size = ctypes.sizeof(ctypes.c_wchar)
+    if len(native_name) * wchar_size >= 65534:
+        raise OSError("Windows FHIR report path exceeds NT Unicode bounds")
+
+    class _UnicodeString(ctypes.Structure):
+        _fields_ = [  # noqa: RUF012 - fixed Windows native ABI field layout
+            ("Length", ctypes.c_ushort),
+            ("MaximumLength", ctypes.c_ushort),
+            ("Buffer", ctypes.c_wchar_p),
+        ]
+
+    class _ObjectAttributes(ctypes.Structure):
+        _fields_ = [  # noqa: RUF012 - fixed Windows native ABI field layout
+            ("Length", ctypes.c_ulong),
+            ("RootDirectory", ctypes.c_void_p),
+            ("ObjectName", ctypes.POINTER(_UnicodeString)),
+            ("Attributes", ctypes.c_ulong),
+            ("SecurityDescriptor", ctypes.c_void_p),
+            ("SecurityQualityOfService", ctypes.c_void_p),
+        ]
+
+    class _IoStatusBlock(ctypes.Structure):
+        _fields_ = [  # noqa: RUF012 - fixed Windows native ABI field layout
+            ("Status", ctypes.c_void_p),
+            ("Information", ctypes.c_size_t),
+        ]
+
+    class _FileAttributeTagInfo(ctypes.Structure):
+        _fields_ = [  # noqa: RUF012 - fixed Windows native ABI field layout
+            ("FileAttributes", ctypes.c_ulong),
+            ("ReparseTag", ctypes.c_ulong),
+        ]
+
+    buffer = ctypes.create_unicode_buffer(native_name)
+    unicode_name = _UnicodeString(
+        len(native_name) * wchar_size,
+        (len(native_name) + 1) * wchar_size,
+        ctypes.cast(buffer, ctypes.c_wchar_p),
+    )
+    attributes = _ObjectAttributes(
+        ctypes.sizeof(_ObjectAttributes),
+        None,
+        ctypes.pointer(unicode_name),
+        0x00000040 | 0x00001000,  # OBJ_CASE_INSENSITIVE | OBJ_DONT_REPARSE
+        None,
+        None,
+    )
+    status_block = _IoStatusBlock()
+    handle = ctypes.c_void_p()
+    native = ctypes.WinDLL("ntdll")
+    nt_create = native.NtCreateFile
+    nt_create.argtypes = (
+        ctypes.POINTER(ctypes.c_void_p),
+        ctypes.c_ulong,
+        ctypes.POINTER(_ObjectAttributes),
+        ctypes.POINTER(_IoStatusBlock),
+        ctypes.c_void_p,
+        ctypes.c_ulong,
+        ctypes.c_ulong,
+        ctypes.c_ulong,
+        ctypes.c_ulong,
+        ctypes.c_void_p,
+        ctypes.c_ulong,
+    )
+    nt_create.restype = ctypes.c_long
+    status = nt_create(
+        ctypes.byref(handle),
+        0x00100081,  # SYNCHRONIZE | FILE_READ_ATTRIBUTES | FILE_READ_DATA
+        ctypes.byref(attributes),
+        ctypes.byref(status_block),
+        None,
+        0,
+        0x00000007,  # FILE_SHARE_READ | WRITE | DELETE (read-only handle)
+        1,  # FILE_OPEN, never create
+        0x00200060,  # FILE_OPEN_REPARSE_POINT | NON_DIRECTORY | SYNCHRONOUS
+        None,
+        0,
+    )
+    if status < 0 or not handle.value:
+        raise OSError(
+            f"native FHIR report no-reparse open refused (NTSTATUS 0x{status & 0xFFFFFFFF:08x})"
+        )
+
+    kernel = ctypes.WinDLL("kernel32", use_last_error=True)
+    close_handle = kernel.CloseHandle
+    close_handle.argtypes = (ctypes.c_void_p,)
+    close_handle.restype = ctypes.c_int
+    get_info = kernel.GetFileInformationByHandleEx
+    get_info.argtypes = (ctypes.c_void_p, ctypes.c_int, ctypes.c_void_p, ctypes.c_ulong)
+    get_info.restype = ctypes.c_int
+    try:
+        info = _FileAttributeTagInfo()
+        if not get_info(handle, 9, ctypes.byref(info), ctypes.sizeof(info)):
+            raise OSError("cannot inspect native Windows FHIR report HANDLE")
+        if info.FileAttributes & 0x00000400:  # FILE_ATTRIBUTE_REPARSE_POINT
+            raise OSError("native Windows FHIR report is a reparse point")
+        return msvcrt.open_osfhandle(handle.value, os.O_RDONLY | os.O_BINARY)
+    except (OSError, ValueError):
+        close_handle(handle)
+        raise
+
+
 def _read_bounded_regular_descriptor(descriptor: int) -> str:
     """Consume and close an already-open regular-file FD under the size bound."""
     with os.fdopen(descriptor, "rb") as source:
@@ -79,15 +195,17 @@ def _read_bounded_regular_report(target_path: Path, *, secure_posix_ancestors: b
     """Read only a bounded regular artifact; never wait on a FIFO or device.
 
     O_NONBLOCK prevents POSIX FIFO opens from waiting for a writer. On load,
-    POSIX opens every ancestor with O_NOFOLLOW using pinned directory FDs.
-    Windows and the separate report-creation path still require race hardening.
+    POSIX uses O_NOFOLLOW pinned dirfds; Windows uses native OBJ_DONT_REPARSE
+    full-path opening plus HANDLE attribute validation. Windows report
+    creation and publication remain separate unqualified race boundaries.
     """
     flags = os.O_RDONLY | getattr(os, "O_NONBLOCK", 0) | getattr(os, "O_NOFOLLOW", 0)
-    descriptor = (
-        _open_posix_report_nofollow(target_path, flags)
-        if secure_posix_ancestors and os.name != "nt"
-        else os.open(target_path, flags)
-    )
+    if secure_posix_ancestors and os.name == "nt":
+        descriptor = _open_windows_report_noreparse(target_path)
+    elif secure_posix_ancestors:
+        descriptor = _open_posix_report_nofollow(target_path, flags)
+    else:
+        descriptor = os.open(target_path, flags)
     return _read_bounded_regular_descriptor(descriptor)
 
 
