@@ -519,11 +519,7 @@ def test_scope_gate_fails_closed_if_unsafe_archive_is_replaced_at_parse(
         sdist=metadata(extra="unreviewed-training") if kind == "sdist" else metadata(),
     )
     replacement = make_dist(tmp_path / "replacement")
-    name = (
-        "medscale-0.3.0-py3-none-any.whl"
-        if kind == "wheel"
-        else "medscale-0.3.0.tar.gz"
-    )
+    name = "medscale-0.3.0-py3-none-any.whl" if kind == "wheel" else "medscale-0.3.0.tar.gz"
     original_path = dist / name
     replacement_path = replacement / name
     real_parse = checker._wheel if kind == "wheel" else checker._sdist
