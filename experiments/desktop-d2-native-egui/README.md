@@ -436,3 +436,70 @@ binary does not deliberately attempt a socket connection in this smoke;
 therefore a visible window and network namespace confinement **do not**
 constitute packet-level proof of zero egress by every transitive process
 or system service. No release, distribution, PHI or waiver is authorized.
+
+## Windows native D2 synthetic UI Automation technical acceptance (NO RELEASE)
+
+The separate source-controlled `tests/windows-native-uia-qualification.ps1` is a
+real Windows 11 UI Automation test for a **running, unchanged, unpackaged
+native D2 executable built from a pinned source commit**. This is a bounded
+developer test and does **not** enable any clinical feature, access PHI,
+add browser/IPC/network capabilities, install a service, configure a
+firewall, or authorize release.
+
+On an authorized foreground Windows developer session, build with pinned
+Rust 1.97.1, launch the original native D2 executable, and supply its
+current PID and the SHA-256 of the *actual executable bytes*:
+
+```powershell
+$exe = 'D:\path\to\target\debug\medorigin-desktop-d2-native-egui.exe'
+$sha = (Get-FileHash -LiteralPath $exe -Algorithm SHA256).Hash
+$app = Start-Process -FilePath $exe -PassThru
+powershell.exe -NoProfile -STA -File tests\windows-native-uia-qualification.ps1 `
+  -AppPid $app.Id -ExpectedExeSha256 $sha
+```
+
+Only stop the process that this script's operator launched and authorized.
+The test itself **never starts or kills apps**. It checks the reported
+process executable name and byte SHA, visible window native handle/PID
+and MedOrigin title prefix; the hidden `Winit Thread Event Target` window
+is *not* mistaken for a second user window. Windows AccessKit exposes
+the four fictional fixture selectors as **UIA Button + TogglePattern** and
+the Verify control as **UIA Button + InvokePattern**. It uses these real
+UIA actions, re-queries controls after every change, and requires the
+exact expected 64-character SHA-256 to appear in the window's UIA **Text**
+node after each fixture verification. It fails closed on absent/ambiguous
+controls, unsupported patterns, a mismatch or a wrong executable SHA.
+
+The script also takes a **single bounded snapshot** of the native process
+and descendants, explicitly rejects any observed child named
+`msedgewebview2.exe` or an established external TCP connection owned by
+its process tree. This is an **observation**, not OS-enforced outbound
+network denial; it cannot exclude transient TCP, DNS/UDP, IPv6 flows
+outside the snapshot, network brokers, unexpected proxies or all process
+lifetime events. It does not fix **D1 Windows WebView2 egress #662** or
+approve replacing D1 with D2.
+
+**Observed real Windows 11, 2026-10-31:** Windows x64 MSVC Rust 1.97.1,
+source `62ea415826d93d5dcbfd6a52fa57c01f8fc537d4`, pinned
+eframe 0.36.0; local native executable SHA-256
+`d630f6845050b40c62496ee62396f3d08a710063b0af356ecbe1155ccf1c39ff`.
+Native process produced an actual visible UIA window and exactly the
+four fixture buttons plus Verify; real UIA **Toggle/Invoke and displayed
+SHA-256 4/4 PASS**. A fresh cold launch repeated **4/4 PASS** with
+`D2_WINDOWS_NATIVE_UIA_4_OF_4_PASS_NONPUBLISHING` exit0.
+The bounded process-tree snapshot on each run found **1 descendant and
+0 established external TCP**. Deliberately wrong PID999999 and a false
+64-digit executable SHA both failed closed (exit1). The first test
+draft incorrectly assumed InvokePattern for selectable labels; runtime
+UIA explicitly exposes TogglePattern for those selectors, which was
+corrected in the test source before committing. The first window probe
+also revealed a hidden winit event target; the accepted test binds the
+real visible window to the PID **and native window handle**.
+
+GitHub hosted CI checks this script's PowerShell syntax and Windows
+native source build/tests but intentionally **does not claim hosted
+interactive UIA acceptance**. No signed production installer, package
+or published artifact is created. Linux zbus transitive maintenance
+#673, macOS spoken VoiceOver #676, independent release-security #603
+and owner/ADR #574 remain separate NO-GO; #662 Windows D1 egress
+remains OPEN. Protect frozen research roots and historical data.
