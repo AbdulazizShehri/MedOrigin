@@ -15,6 +15,7 @@ on:
       - fix/medorigin-fhir-windows-localpath-20261031
       - fix/medorigin-fhir-windows-outputpath-20261031
       - fix/medorigin-fhir-atomic-report-20261031
+      - fix/medorigin-fhir-windows-junction-20261031
   pull_request:
     branches: [test/medorigin-beta-fhir-strict-unicode-input-20261029]
 

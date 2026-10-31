@@ -87,15 +87,33 @@ def _reject_unsafe_windows_report_root(root: Path) -> None:
 
 
 def _reject_report_directory_symlinks(root: Path, digest: str) -> None:
-    """Reject static symlink redirection below a caller-approved storage root.
+    """Reject static symlinks and Windows junctions in report directory paths.
 
     This is a path-layout safeguard, not an OS-enforced guarantee against a
     hostile process swapping directories between checks and file operations.
     """
     reports_dir = fhirkit_reports_dir(root)
-    for directory in (reports_dir.parent, reports_dir, reports_dir / digest):
+    directories: tuple[Path, ...] = (reports_dir.parent, reports_dir, reports_dir / digest)
+    if os.name == "nt":
+        # Junctions are reparse points but Path.is_symlink() returns False.
+        # Check every existing root ancestor, not just the final root, so
+        # a local-looking path cannot silently traverse a junction.
+        absolute_root = root.absolute()
+        directories = (*absolute_root.parents, absolute_root, *directories)
+    for directory in directories:
         if directory.is_symlink():
             raise FhirStorageError("refusing a symlinked report directory")
+        if os.name == "nt":
+            try:
+                metadata = directory.lstat()
+            except FileNotFoundError:
+                continue
+            except OSError as exc:
+                raise FhirStorageError("unable to inspect FHIR report directory") from exc
+            if getattr(metadata, "st_file_attributes", 0) & getattr(
+                stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0
+            ):
+                raise FhirStorageError("refusing a Windows reparse-point report directory")
 
 
 def store_report(report: ValidationReport, root: Path | None = None) -> Path:
