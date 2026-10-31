@@ -46,5 +46,3 @@ finally{
  try{rmSync(tmp,{recursive:true,force:true,maxRetries:40,retryDelay:250})}
  catch(e){console.log('D1_MXC_OWNED_TEMP_CLEANUP_PENDING',tmp,e.code);process.exitCode=1}
 }
-
-[executed on device: Abdulaziz (62835bd9-9ffe-4bd5-9010-6ac23b2d7223)]
