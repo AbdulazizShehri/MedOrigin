@@ -399,6 +399,31 @@ def _posix_pinned_scope_archives(
                         raise PublicationScopeError(f"{kind}: pinned input mutated")
                     copies[kind] = [target]
             yield copies
+            # A live POSIX dirfd does not prevent directory rename/replacement.
+            # Do not return CLEAN merely because the pinned private archives
+            # parsed successfully: reopen the original lexical path root-first,
+            # refusing any new symlinked ancestor, and compare inode identity.
+            original_stat = os.fstat(descriptor)
+            current_fd = -1
+            try:
+                current_fd = os.open("/", dir_flags)
+                for component in components[1:]:
+                    next_fd = os.open(component, dir_flags, dir_fd=current_fd)
+                    os.close(current_fd)
+                    current_fd = next_fd
+                current_stat = os.fstat(current_fd)
+                if (
+                    original_stat.st_dev != current_stat.st_dev
+                    or original_stat.st_ino != current_stat.st_ino
+                ):
+                    raise PublicationScopeError("dist: POSIX directory identity changed")
+            except OSError as exc:
+                raise PublicationScopeError(
+                    "dist: POSIX directory identity cannot be revalidated"
+                ) from exc
+            finally:
+                if current_fd >= 0:
+                    os.close(current_fd)
     except OSError as exc:
         raise PublicationScopeError("dist: cannot pin publisher archive safely") from exc
     finally:

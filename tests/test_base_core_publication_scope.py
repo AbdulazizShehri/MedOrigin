@@ -683,3 +683,64 @@ def test_windows_dist_rename_during_metadata_scope_fails_closed(
     assert result["status"] == "BLOCKED"
     assert result["publication_authorized"] is False
     assert any("identity" in str(issue).lower() for issue in result["issues"])
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX descriptor-pinned dist identity only")
+@pytest.mark.parametrize("replacement", [False, True], ids=["removed", "replaced"])
+def test_posix_dist_rename_during_metadata_scope_fails_closed(
+    checker: Any, monkeypatch: Any, tmp_path: Path, replacement: bool
+) -> None:
+    """A renamed dirfd stays usable; the original lexical dist must still match."""
+    root = tmp_path.resolve()
+    dist = make_dist(root / "candidate")
+    moved = root / "moved-original"
+    alternate = make_dist(root / "different-clean") if replacement else None
+    original_parse = checker._inspect_scope_metadata
+    witnessed: list[bool] = []
+
+    def rename_during_parse(
+        packages: dict[str, list[Path]], issues: list[str], versions: dict[str, str]
+    ) -> None:
+        assert not witnessed
+        dist.rename(moved)
+        if alternate is not None:
+            alternate.rename(dist)
+        witnessed.append(True)
+        original_parse(packages, issues, versions)
+
+    monkeypatch.setattr(checker, "_inspect_scope_metadata", rename_during_parse)
+    result = checker.inspect(dist)
+    assert witnessed, "did not execute real directory rename during metadata validation"
+    assert moved.is_dir()
+    assert dist.exists() is replacement
+    assert result["status"] == "BLOCKED"
+    assert result["publication_authorized"] is False
+    assert any("identity" in str(issue).lower() for issue in result["issues"])
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX O_NOFOLLOW path alias only")
+def test_posix_dist_symlink_to_same_inode_during_scope_is_refused(
+    checker: Any, monkeypatch: Any, tmp_path: Path
+) -> None:
+    """A post-admission symlink is disallowed even if it reaches the original inode."""
+    root = tmp_path.resolve()
+    dist = make_dist(root / "candidate")
+    moved = root / "same-original"
+    original_parse = checker._inspect_scope_metadata
+    witnessed: list[bool] = []
+
+    def substitute_same_inode_alias(
+        packages: dict[str, list[Path]], issues: list[str], versions: dict[str, str]
+    ) -> None:
+        dist.rename(moved)
+        dist.symlink_to(moved, target_is_directory=True)
+        witnessed.append(True)
+        original_parse(packages, issues, versions)
+
+    monkeypatch.setattr(checker, "_inspect_scope_metadata", substitute_same_inode_alias)
+    result = checker.inspect(dist)
+    assert witnessed and dist.is_symlink()
+    assert dist.resolve(strict=True) == moved
+    assert result["status"] == "BLOCKED"
+    assert result["publication_authorized"] is False
+    assert any("identity" in str(issue).lower() for issue in result["issues"])
