@@ -472,7 +472,9 @@ def _windows_pinned_scope_archives(
                         ):
                             copied += len(chunk)
                             if copied > _MAX_ARCHIVE_BYTES:
-                                raise PublicationScopeError(f"{kind}: Windows source exceeds budget")
+                                raise PublicationScopeError(
+                                    f"{kind}: Windows source exceeds budget"
+                                )
                             output.write(chunk)
                     after = os.fstat(source.fileno())
                     before_id = (
