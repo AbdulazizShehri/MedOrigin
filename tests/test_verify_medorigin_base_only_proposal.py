@@ -316,3 +316,29 @@ def test_windows_extended_namespace_dist_alias_is_rejected(gate: Any, tmp_path: 
     # Do not accept the alias from the full verifier before source parsing.
     with pytest.raises(gate.ProposalVerificationError, match=r"namespace|UNC|device"):
         gate.verify(ROOT, extended)
+
+def test_posix_dist_symlinked_ancestor_is_not_ordinary(gate: Any, tmp_path: Path) -> None:
+    """Real POSIX ancestor symlinks must not silently redirect dist admission."""
+    if os.name == "nt":
+        pytest.skip("POSIX-only ancestor symlink regression")
+    root = tmp_path.resolve()  # macOS /var can itself alias /private/var.
+    parent = root / "actual"
+    dist = parent / "dist"
+    dist.mkdir(parents=True)
+    wheel = dist / "medscale-0.3.0-py3-none-any.whl"
+    sdist = dist / "medscale-0.3.0.tar.gz"
+    wheel.write_bytes(b"FAKE_WHEEL")
+    sdist.write_bytes(b"FAKE_SDIST")
+    assert gate.qualified_dist_paths(dist) == (wheel, sdist)
+
+    alias = root / "directory-alias"
+    alias.symlink_to(parent, target_is_directory=True)
+    aliased_dist = alias / "dist"
+    assert aliased_dist.is_dir()
+    # This is a directory under a symlink ancestor, not a direct symlink.
+    assert not aliased_dist.is_symlink()
+    with pytest.raises(gate.ProposalVerificationError, match=r"symlink|ancestor"):
+        gate.qualified_dist_paths(aliased_dist)
+    # The actual verifier must reject before parsing bogus Wheel bytes.
+    with pytest.raises(gate.ProposalVerificationError, match=r"symlink|ancestor"):
+        gate.verify(ROOT, aliased_dist)

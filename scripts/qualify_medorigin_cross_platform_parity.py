@@ -171,7 +171,10 @@ def build_manifest(repo: Path) -> dict[str, Any]:
     if Path.cwd().resolve() != repo.resolve():
         raise ParityError("run from the checked-out repository root")
     with tempfile.TemporaryDirectory(prefix="medorigin-parity-review-") as temp:
-        root = Path(temp)
+        # Canonicalize this trusted, newly created scratch root only. macOS
+        # may expose the system temp directory through /var -> /private/var;
+        # never normalize an untrusted dist path inside the verifier itself.
+        root = Path(temp).resolve(strict=True)
         stage = root / "staged"
         dist = root / "dist"
         proposed = propose(stage)

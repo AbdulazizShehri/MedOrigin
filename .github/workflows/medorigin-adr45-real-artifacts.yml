@@ -7,11 +7,13 @@ on:
       - test/medorigin-adr45-real-artifacts-20261031
       - fix/medorigin-adr45-windows-dist-junction-20261031
       - fix/medorigin-adr45-windows-namespace-20261031
+      - fix/medorigin-adr45-posix-ancestor-symlink-20261031
   pull_request:
     branches:
       - test/medorigin-adr45-dist-envelope-20261031
       - test/medorigin-adr45-real-artifacts-20261031
       - fix/medorigin-adr45-windows-dist-junction-20261031
+      - fix/medorigin-adr45-windows-namespace-20261031
     paths:
       - '.github/workflows/medorigin-adr45-real-artifacts.yml'
       - 'scripts/stage_medorigin_base_only_proposal.py'
