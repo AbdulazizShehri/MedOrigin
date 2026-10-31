@@ -154,7 +154,9 @@ def _open_windows_report_noreparse(target_path: Path) -> int:
         0,
     )
     if status < 0 or not handle.value:
-        raise OSError(f"native FHIR report no-reparse open refused (NTSTATUS 0x{status & 0xffffffff:08x})")
+        raise OSError(
+            f"native FHIR report no-reparse open refused (NTSTATUS 0x{status & 0xffffffff:08x})"
+        )
 
     kernel = ctypes.WinDLL("kernel32", use_last_error=True)
     close_handle = kernel.CloseHandle
