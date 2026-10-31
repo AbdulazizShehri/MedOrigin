@@ -93,7 +93,7 @@ def _reject_report_directory_symlinks(root: Path, digest: str) -> None:
     hostile process swapping directories between checks and file operations.
     """
     reports_dir = fhirkit_reports_dir(root)
-    directories = (reports_dir.parent, reports_dir, reports_dir / digest)
+    directories: tuple[Path, ...] = (reports_dir.parent, reports_dir, reports_dir / digest)
     if os.name == "nt":
         # Junctions are reparse points but Path.is_symlink() returns False.
         # Check every existing root ancestor, not just the final root, so
