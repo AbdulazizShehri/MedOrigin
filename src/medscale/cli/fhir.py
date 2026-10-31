@@ -15,10 +15,9 @@ import stat
 import sys
 from pathlib import Path
 
-from medscale._windows_path_admission import reject_unsafe_windows_local_path
 from medscale.fhirkit.errors import FhirStorageError
 from medscale.fhirkit.report import load_report_from_json, report_to_json
-from medscale.fhirkit.storage import store_report
+from medscale.fhirkit.storage import reject_unsafe_windows_local_path, store_report
 from medscale.fhirkit.validate import validate_fhir
 
 

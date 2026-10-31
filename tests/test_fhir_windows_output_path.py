@@ -83,7 +83,7 @@ def test_storage_api_rejects_unc_report_root_before_io(
     ],
 )
 def test_report_root_lexical_gate_cross_platform(raw: str) -> None:
-    from medscale._windows_path_admission import reject_unsafe_windows_local_path
+    from medscale.fhirkit.storage import reject_unsafe_windows_local_path
 
     with pytest.raises(ValueError, match="FHIR report root must be a local regular file path"):
         reject_unsafe_windows_local_path(raw, windows=True, subject="FHIR report root")
@@ -91,6 +91,6 @@ def test_report_root_lexical_gate_cross_platform(raw: str) -> None:
 
 @pytest.mark.parametrize("raw", [r"C:\safe\reports", r".\reports", "reports"])
 def test_report_root_local_path_accepted_cross_platform(raw: str) -> None:
-    from medscale._windows_path_admission import reject_unsafe_windows_local_path
+    from medscale.fhirkit.storage import reject_unsafe_windows_local_path
 
     reject_unsafe_windows_local_path(raw, windows=True, subject="FHIR report root")

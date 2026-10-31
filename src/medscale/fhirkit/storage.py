@@ -5,10 +5,9 @@ from __future__ import annotations
 import os
 import re
 import stat
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 
 from medscale._layout import fhirkit_reports_dir
-from medscale._windows_path_admission import reject_unsafe_windows_local_path
 from medscale.fhirkit.errors import FhirStorageError, InvalidReportError
 from medscale.fhirkit.report import (
     ValidationReport,
@@ -47,6 +46,35 @@ def _read_bounded_regular_report(target_path: Path) -> str:
 
 def _default_root() -> Path:
     return Path("data") / "fhirkit"
+
+
+def reject_unsafe_windows_local_path(
+    path: str | Path, *, windows: bool | None = None, subject: str = "FHIR JSON input"
+) -> None:
+    """Reject UNC/device/ADS paths and ambiguous Win32 aliases without IO."""
+    if windows is None:
+        windows = os.name == "nt"
+    if not windows:
+        return
+
+    raw = str(path).replace("/", "\\")
+    parsed = PureWindowsPath(raw)
+    message = f"{subject} must be a local regular file path"
+    if raw.startswith("\\") or (parsed.drive and not parsed.is_absolute()):
+        raise ValueError(message)
+    prefix = 2 if len(raw) >= 2 and raw[0].isalpha() and raw[1] == ":" else 0
+    if ":" in raw[prefix:]:
+        raise ValueError(message)
+    for component in parsed.parts:
+        if component in (parsed.anchor, parsed.drive, ".", ".."):
+            continue
+        stem = component.split(".", 1)[0].rstrip(" ").upper()
+        if (
+            component.rstrip(" .") != component
+            or stem in {"CON", "PRN", "AUX", "NUL", "CONIN$", "CONOUT$"}
+            or re.fullmatch(r"(?:COM|LPT)[1-9¹²³]", stem) is not None
+        ):
+            raise ValueError(message)
 
 
 def _reject_unsafe_windows_report_root(root: Path) -> None:
