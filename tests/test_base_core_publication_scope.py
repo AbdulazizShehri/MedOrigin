@@ -459,11 +459,8 @@ def test_publisher_gate_rejects_any_unaccounted_dist_entry(
     assert any("unexpected artifact directory contents" in str(x) for x in result["issues"])
 
 
-
 @pytest.mark.skipif(os.name == "nt", reason="POSIX symlink ancestor only")
-def test_publisher_gate_rejects_posix_symlink_ancestor(
-    checker: Any, tmp_path: Path
-) -> None:
+def test_publisher_gate_rejects_posix_symlink_ancestor(checker: Any, tmp_path: Path) -> None:
     real = tmp_path / "real"
     real.mkdir()
     make_dist(real / "dist")
@@ -477,16 +474,17 @@ def test_publisher_gate_rejects_posix_symlink_ancestor(
 
 
 @pytest.mark.skipif(os.name != "nt", reason="NTFS junction ancestor only")
-def test_publisher_gate_rejects_windows_junction_ancestor(
-    checker: Any, tmp_path: Path
-) -> None:
+def test_publisher_gate_rejects_windows_junction_ancestor(checker: Any, tmp_path: Path) -> None:
     real = tmp_path / "real"
     real.mkdir()
     make_dist(real / "dist")
     alias = tmp_path / "alias"
     created = subprocess.run(
         ["cmd", "/c", "mklink", "/J", str(alias), str(real)],
-        capture_output=True, text=True, check=False, timeout=15,
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=15,
     )
     if created.returncode != 0:
         pytest.skip("NTFS junction creation unavailable on this host")
