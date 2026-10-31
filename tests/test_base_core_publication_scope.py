@@ -655,3 +655,28 @@ def test_windows_dist_junction_swap_after_first_admission_is_refused(
         "junction" in str(issue).lower() or "reparse" in str(issue).lower()
         for issue in result["issues"]
     )
+
+
+@pytest.mark.skipif(os.name != "nt", reason="Native Windows directory HANDLE test only")
+def test_windows_dist_handle_prevents_rename_during_metadata_scope(
+    checker: Any, monkeypatch: Any, tmp_path: Path
+) -> None:
+    """The opened dist directory must stay rename-protected until parser exit."""
+    dist = make_dist(tmp_path / "candidate")
+    original_parse = checker._inspect_scope_metadata
+    witnessed: list[bool] = []
+
+    def check_rename_while_pinned(
+        packages: dict[str, list[Path]], issues: list[str], versions: dict[str, str]
+    ) -> None:
+        with pytest.raises(PermissionError):
+            dist.rename(tmp_path / "renamed-dist")
+        witnessed.append(True)
+        original_parse(packages, issues, versions)
+
+    monkeypatch.setattr(checker, "_inspect_scope_metadata", check_rename_while_pinned)
+    result = checker.inspect(dist)
+    assert witnessed, "the native directory HANDLE window was not exercised"
+    assert result["status"] == "BASE_CORE_PUBLICATION_SCOPE_CLEAN"
+    assert result["publication_authorized"] is False
+    assert dist.is_dir()
