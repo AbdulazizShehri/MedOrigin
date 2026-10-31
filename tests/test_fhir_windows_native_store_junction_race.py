@@ -9,6 +9,7 @@ from __future__ import annotations
 import os
 import stat
 import subprocess
+import traceback
 from pathlib import Path
 
 import pytest
@@ -134,7 +135,8 @@ def test_windows_store_link_stays_pinned_after_directory_rename(
         store_report(report, root=root)
     assert witnessed, (
         "test did not exercise native HANDLE-relative hard-link step: "
-        f"{blocked.value!r}; native cause: {blocked.value.__cause__!r}"
+        f"{blocked.value!r}; native cause: {blocked.value.__cause__!r}; "
+        f"trace={''.join(traceback.format_exception(blocked.value.__cause__))}"
     )
     assert list(decoy.iterdir()) == [], "native hard-link operation followed substituted path"
     assert parked.is_dir()
