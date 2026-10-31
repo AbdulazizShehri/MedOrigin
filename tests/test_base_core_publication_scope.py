@@ -5,6 +5,7 @@ from __future__ import annotations
 import gzip
 import importlib.util
 import io
+import os
 import json
 import struct
 import subprocess
@@ -453,6 +454,44 @@ def test_publisher_gate_rejects_any_unaccounted_dist_entry(
     else:
         other.write_bytes(b"UNREVIEWED-SYNTHETIC-DIST-PAYLOAD")
     result = checker.inspect(folder)
+    assert result["status"] == "BLOCKED"
+    assert result["publication_authorized"] is False
+    assert any("unexpected artifact directory contents" in str(x) for x in result["issues"])
+
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX symlink ancestor only")
+def test_publisher_gate_rejects_posix_symlink_ancestor(
+    checker: Any, tmp_path: Path
+) -> None:
+    real = tmp_path / "real"
+    real.mkdir()
+    make_dist(real / "dist")
+    alias = tmp_path / "alias"
+    alias.symlink_to(real, target_is_directory=True)
+    assert not (alias / "dist").is_symlink()
+    result = checker.inspect(alias / "dist")
+    assert result["status"] == "BLOCKED"
+    assert result["publication_authorized"] is False
+    assert any("unexpected artifact directory contents" in str(x) for x in result["issues"])
+
+
+@pytest.mark.skipif(os.name != "nt", reason="NTFS junction ancestor only")
+def test_publisher_gate_rejects_windows_junction_ancestor(
+    checker: Any, tmp_path: Path
+) -> None:
+    real = tmp_path / "real"
+    real.mkdir()
+    make_dist(real / "dist")
+    alias = tmp_path / "alias"
+    created = subprocess.run(
+        ["cmd", "/c", "mklink", "/J", str(alias), str(real)],
+        capture_output=True, text=True, check=False, timeout=15,
+    )
+    if created.returncode != 0:
+        pytest.skip("NTFS junction creation unavailable on this host")
+    assert not (alias / "dist").is_symlink()
+    result = checker.inspect(alias / "dist")
     assert result["status"] == "BLOCKED"
     assert result["publication_authorized"] is False
     assert any("unexpected artifact directory contents" in str(x) for x in result["issues"])
