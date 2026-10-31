@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import argparse
 import gzip
+import hashlib
 import io
 import itertools
 import json
@@ -707,6 +708,7 @@ def inspect(dist: Path) -> dict[str, object]:
         if len(packages[kind]) != 1:
             issues.append(f"{kind}: exactly one MedOrigin artifact required")
     versions: dict[str, str] = {}
+    inspected: dict[str, str] = {}
     if not issues:
         try:
             # Windows pins each final file HANDLE; POSIX pins the full
@@ -719,12 +721,23 @@ def inspect(dist: Path) -> dict[str, object]:
             )
             with snapshot as pinned:
                 _inspect_scope_metadata(pinned, issues, versions)
+                if not issues:
+                    # Hash the EXACT private bytes parsed above; never re-open
+                    # the original dist filename to fabricate a positive
+                    # content receipt. Private files are bounded at snapshot.
+                    for kind in ("wheel", "sdist"):
+                        sha = hashlib.sha256()
+                        with pinned[kind][0].open("rb") as source:
+                            for chunk in iter(lambda: source.read(1024 * 1024), b""):
+                                sha.update(chunk)
+                        inspected[kind] = sha.hexdigest()
         except PublicationScopeError as exc:
             issues.append(str(exc))
     return {
         "status": "BASE_CORE_PUBLICATION_SCOPE_CLEAN" if not issues else "BLOCKED",
         "scope": "base_synthetic_only",
         "versions": versions,
+        "inspected_private_snapshot_sha256": inspected if not issues else {},
         "publication_authorized": False,
         "independent_security_review_complete": False,
         "issues": issues,
