@@ -29,3 +29,9 @@ test('fail closed on malformed, prerelease, non-Windows or unexpected runtime',(
   }
   assert.throws(()=>requireSupportedWindowsMxcNode('26.12.1','linux'),/D1_MXC_NODE_RUNTIME_NO_GO/);
 });
+
+test('reject unsafe numeric Node version components without SDK loading',()=>{
+  for(const version of ['24.999999999999999999999999999999999.0','26.8.999999999999999999999999999999999','26.9007199254740992.0']){
+    assert.throws(()=>requireSupportedWindowsMxcNode(version,'win32'),/D1_MXC_NODE_RUNTIME_NO_GO/,version);
+  }
+});
