@@ -102,3 +102,19 @@ function Assert-MxcD1ProcessTreeContinuity {
     $inventory=@($next.Values | Sort-Object pid)
     return [pscustomobject]@{Ids=$ids;Inventory=$inventory}
 }
+
+# Diagnostic receipts must never serialize absolute process paths, even when
+# the private sampler uses those paths to detect same-PID substitutions.
+function ConvertTo-MxcD1PublicInventory {
+    [CmdletBinding()]
+    param([Parameter(Mandatory=$true)][object[]]$Inventory)
+    $public=@($Inventory | ForEach-Object {
+        [pscustomobject]@{
+            pid=[int]$_.pid
+            parentPid=[int]$_.parentPid
+            startTicks=[string]$_.startTicks
+            name=[string]$_.name
+        }
+    })
+    return ,$public
+}
