@@ -5,7 +5,7 @@ import { getPlatformSupport, run } from '@microsoft/mxc-sdk/v1';
 import { createServer } from 'node:net';
 import { spawnSync } from 'node:child_process';
 import { mkdtempSync,mkdirSync,readFileSync,readdirSync,rmSync } from 'node:fs';
-import { dirname,join } from 'node:path';
+import { basename,dirname,join,resolve,sep } from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {assessCaptureResult} from './windows-mxc-capture-report-verdict.mjs';
 const dir=dirname(fileURLToPath(import.meta.url));
@@ -32,9 +32,8 @@ try {
   ensure(unconfined.stdout?.includes('D1_MXC_SYNTHETIC_LOCALHOST=CONNECTED'),'same-binary positive control unavailable');
   const request={
     command:`"${native}" ${port}`,
-    containment:{type:'process'},
+    containment:{type:'processcontainer',config:{captureDenials:{mode:'block',outputPath:join(output,'denials.json'),retainEtl:false}}},
     network:{egress:{default:'deny'},ingress:{default:'deny',hostLoopback:'deny'}},
-    processContainer:{captureDenials:{mode:'block',outputPath:join(output,'denials.json'),retainEtl:false}},
     filesystem:{readonlyPaths:[native],readwritePaths:[output]},
     workingDirectory:output,
     environment:{SystemRoot:process.env.SystemRoot,LOCALAPPDATA:output,TEMP:output,TMP:output},
@@ -43,7 +42,12 @@ try {
   console.log('MXC_CAPTURE_REQUEST_BLOCK_WITH_NO_ALLOW');
   const result=await run(request);
   console.log('MXC_CAPTURE_RESULT',JSON.stringify(result).slice(0,6500));
+  ensure(!result.outputMetadata?.captureDenialsError,'SDK reports capture finalization failure');
+  const reportPath=result.outputMetadata?.captureDenials?.outputPath;
+  ensure(typeof reportPath==='string' && reportPath.length>0,'SDK did not bind an authoritative capture output path');
+  ensure(resolve(dirname(reportPath))===resolve(output),'capture output escaped task-owned directory');
   const reports=readdirSync(output).filter(n=>n.endsWith('.json'));
+  ensure(reports.length===1 && reports[0]===basename(reportPath),'capture report filename differs from structured SDK metadata');
   console.log('MXC_CAPTURE_REPORT_FILES',JSON.stringify(reports));
   for(const name of reports){
     try{

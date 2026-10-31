@@ -2,9 +2,9 @@
 name: D1 MXC denial capture safety contract (experimental NO-GO)
 on:
   push:
-    branches: [test/medorigin-d1-mxc-capture-denials-no-go-20261031]
+    branches: [test/medorigin-d1-mxc-capture-denials-no-go-20261031, fix/medorigin-d1-capture-v1-config-20261031]
   pull_request:
-    branches: [test/medorigin-d1-mxc-real-tauri-20261031]
+    branches: [test/medorigin-d1-mxc-real-tauri-20261031, test/medorigin-d1-mxc-capture-denials-no-go-20261031]
     paths:
       - '.github/workflows/desktop-d1-mxc-capture-source.yml'
       - 'experiments/desktop-d1-tauri/tests/windows-mxc-capture-*'
