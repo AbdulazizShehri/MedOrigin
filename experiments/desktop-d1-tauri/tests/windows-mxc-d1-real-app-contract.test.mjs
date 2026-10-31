@@ -41,5 +41,3 @@ test('time-bound GUI must remain live, errors and cleanup remain fail-closed',()
  assert.match(js,/uiaStatus===0/);
  assert.match(js,/process\.exitCode=1/);
 });
-
-[executed on device: Abdulaziz (62835bd9-9ffe-4bd5-9010-6ac23b2d7223)]
