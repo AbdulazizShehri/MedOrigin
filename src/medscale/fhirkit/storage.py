@@ -93,13 +93,17 @@ def _reject_report_directory_symlinks(root: Path, digest: str) -> None:
     hostile process swapping directories between checks and file operations.
     """
     reports_dir = fhirkit_reports_dir(root)
-    directories: tuple[Path, ...] = (reports_dir.parent, reports_dir, reports_dir / digest)
-    if os.name == "nt":
-        # Junctions are reparse points but Path.is_symlink() returns False.
-        # Check every existing root ancestor, not just the final root, so
-        # a local-looking path cannot silently traverse a junction.
-        absolute_root = root.absolute()
-        directories = (*absolute_root.parents, absolute_root, *directories)
+    # A POSIX ancestor can be a symlink even when root itself is not.
+    # Check every lexical root ancestor on all platforms, then the generated
+    # report directories. Windows additionally checks junction/reparse flags.
+    absolute_root = root.absolute()
+    directories: tuple[Path, ...] = (
+        *absolute_root.parents,
+        absolute_root,
+        reports_dir.parent,
+        reports_dir,
+        reports_dir / digest,
+    )
     for directory in directories:
         if directory.is_symlink():
             raise FhirStorageError("refusing a symlinked report directory")
