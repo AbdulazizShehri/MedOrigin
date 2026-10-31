@@ -3,9 +3,9 @@
 name: D1 MXC root PID reuse fail-closed source contract (nonpublishing)
 on:
   push:
-    branches: [test/medorigin-d1-mxc-root-identity-20261031, test/medorigin-d1-mxc-descendant-continuity-20261031, test/medorigin-d1-mxc-node26-runtime-20261031]
+    branches: [test/medorigin-d1-mxc-root-identity-20261031, test/medorigin-d1-mxc-descendant-continuity-20261031, test/medorigin-d1-mxc-node26-runtime-20261031, test/medorigin-d1-mxc-sdk-import-ci-20261031]
   pull_request:
-    branches: [test/medorigin-d1-mxc-cold-restart-run11-20261031, test/medorigin-d1-mxc-descendant-parent-20261031, test/medorigin-d1-mxc-descendant-continuity-20261031]
+    branches: [test/medorigin-d1-mxc-cold-restart-run11-20261031, test/medorigin-d1-mxc-descendant-parent-20261031, test/medorigin-d1-mxc-descendant-continuity-20261031, fix/medorigin-mxc-sdk-import-gate-20261031]
     paths:
       - '.github/workflows/desktop-d1-mxc-root-identity-source.yml'
       - 'experiments/desktop-d1-tauri/tests/windows-mxc-d1-root-identity.ps1'
@@ -16,6 +16,9 @@ on:
       - 'experiments/desktop-d1-tauri/tests/windows-mxc-d1-real-app-qualification.mjs'
       - 'experiments/desktop-d1-tauri/tests/windows-mxc-d1-runtime-node-qualification.mjs'
       - 'experiments/desktop-d1-tauri/tests/windows-mxc-d1-runtime-node-qualification.test.mjs'
+      - 'experiments/desktop-d1-tauri/tests/windows-mxc-d1-sdk-import-order.test.mjs'
+      - 'experiments/desktop-d1-tauri/tests/windows-mxc-d1-sdk-child-process.test.mjs'
+      - 'experiments/desktop-d1-tauri/tests/windows-mxc-d1-real-app-contract.test.mjs'
 permissions:
   contents: read
 jobs:
@@ -50,6 +53,14 @@ jobs:
         run: |
           node --test experiments/desktop-d1-tauri/tests/windows-mxc-d1-runtime-node-qualification.test.mjs
           if ($LASTEXITCODE -ne 0) { throw 'MXC Windows Node runtime version gate failed' }
+      - name: MXC SDK import order and source-contract fail-closed negatives
+        shell: pwsh
+        run: |
+          $p='experiments/desktop-d1-tauri/tests'
+          node --check "$p/windows-mxc-d1-real-app-qualification.mjs"
+          if ($LASTEXITCODE -ne 0) { throw 'MXC D1 launcher syntax failed' }
+          node --test "$p/windows-mxc-d1-sdk-import-order.test.mjs" "$p/windows-mxc-d1-sdk-child-process.test.mjs" "$p/windows-mxc-d1-real-app-contract.test.mjs"
+          if ($LASTEXITCODE -ne 0) { throw 'MXC SDK import admission or real-app source contract failed' }
       - name: Source PowerShell syntax
         shell: pwsh
         run: |
