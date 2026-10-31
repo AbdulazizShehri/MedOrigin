@@ -508,7 +508,6 @@ def test_publisher_gate_rejects_symlink_dist_directory(checker: Any, tmp_path: P
     assert any("unexpected artifact directory contents" in str(x) for x in result["issues"])
 
 
-@pytest.mark.skipif(os.name == "nt", reason="POSIX pinned-open regression")
 @pytest.mark.parametrize("kind", ["wheel", "sdist"])
 def test_scope_gate_fails_closed_if_unsafe_archive_is_replaced_at_parse(
     checker: Any, monkeypatch: Any, tmp_path: Path, kind: str
