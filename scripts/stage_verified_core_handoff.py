@@ -32,7 +32,11 @@ def _qualified_pair(dist: Path) -> dict[str, list[Path]]:
         raise HandoffError("source distribution directory unavailable") from exc
     if len(entries) != 2 or any(not e.is_file(follow_symlinks=False) for e in entries):
         raise HandoffError("source distribution directory is not an exact regular pair")
-    wheel = [dist / e.name for e in entries if e.name.startswith("medscale-") and e.name.endswith(".whl")]
+    wheel = [
+        dist / e.name
+        for e in entries
+        if e.name.startswith("medscale-") and e.name.endswith(".whl")
+    ]
     sdist = [
         dist / e.name
         for e in entries
@@ -139,7 +143,9 @@ def main(argv: list[str] | None = None) -> int:
     try:
         receipt = stage(args.dist, args.out)
     except HandoffError as exc:
-        print(json.dumps({"status": "BLOCKED", "reason": str(exc), "publication_authorized": False}))
+        print(
+            json.dumps({"status": "BLOCKED", "reason": str(exc), "publication_authorized": False})
+        )
         return 2
     print(json.dumps(receipt, sort_keys=True))
     return 0
