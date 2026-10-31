@@ -10,6 +10,7 @@ on:
       - fix/medorigin-core-windows-handle-snapshot-20261031
       - fix/medorigin-core-windows-dist-handle-admission-20261031
       - fix/medorigin-core-posix-dist-identity-20261031
+      - feat/medorigin-core-inspected-snapshot-digests-20261031
   pull_request:
     branches:
       - candidate/medorigin-fhir-wheel-unpublished-20261030
@@ -18,6 +19,7 @@ on:
       - fix/medorigin-core-scope-pinned-snapshots-20261031
       - fix/medorigin-core-windows-handle-snapshot-20261031
       - fix/medorigin-core-windows-dist-handle-admission-20261031
+      - fix/medorigin-core-posix-dist-identity-20261031
     paths:
       - '.github/workflows/medorigin-dist-enumeration-guard.yml'
       - 'scripts/check_base_core_publication_scope.py'
