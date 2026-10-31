@@ -35,7 +35,7 @@ def test_failed_atomic_link_does_not_publish_or_leave_temporary_file(
         attempts += 1
         raise OSError(errno.EACCES, "synthetic link refusal")
 
-    monkeypatch.setattr(storage.os, "link", deny_link)
+    monkeypatch.setattr(os, "link", deny_link)
     with pytest.raises(FhirStorageError, match="create FHIR report artifact"):
         store_report(report, root=tmp_path)
     assert attempts == 1
@@ -55,7 +55,7 @@ def test_failed_fsync_does_not_publish_or_leave_temporary_file(
         attempts += 1
         raise OSError(errno.EIO, "synthetic flush failure")
 
-    monkeypatch.setattr(storage.os, "fsync", deny_fsync)
+    monkeypatch.setattr(os, "fsync", deny_fsync)
     with pytest.raises(FhirStorageError, match="create FHIR report artifact"):
         store_report(report, root=tmp_path)
     assert attempts == 1
@@ -80,7 +80,7 @@ def test_atomic_link_collision_preserves_matching_existing_artifact(
             output.write(expected)
         raise FileExistsError(errno.EEXIST, "synthetic concurrent writer")
 
-    monkeypatch.setattr(storage.os, "link", concurrent_identical_writer)
+    monkeypatch.setattr(os, "link", concurrent_identical_writer)
     assert store_report(report, root=tmp_path) == target
     assert attempts == 1
     assert target.read_text(encoding="utf-8") == expected
