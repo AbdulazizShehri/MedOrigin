@@ -468,9 +468,10 @@ def _windows_pinned_scope_archives(
         ctypes.POINTER(_ByHandleFileInformation),
     )
     get_info.restype = ctypes.c_int
-    # Open the *directory* before any final archive paths, denying rename and
-    # delete sharing while the two private copies are captured. OPEN_REPARSE_POINT
-    # prevents an NTFS junction from being silently dereferenced at this boundary.
+    # Open the *directory* before any final archive paths, requesting no
+    # delete-sharing. Windows can nevertheless rename this directory while the
+    # handle is held: enforce a final on-disk directory identity comparison.
+    # OPEN_REPARSE_POINT prevents silent NTFS junction dereference here.
     directory_handle = create_file(
         str(dist),
         0x00000080,  # FILE_READ_ATTRIBUTES
@@ -563,6 +564,48 @@ def _windows_pinned_scope_archives(
                         raise PublicationScopeError(f"{kind}: Windows source mutated during read")
                 copies[kind] = [target]
             yield copies
+            # File snapshots alone do not bind a later publisher pathname.
+            # Windows can rename the DIRECTORY while its HANDLE is open even
+            # without FILE_SHARE_DELETE. Verify the original lexical path
+            # still identifies the same non-reparse filesystem object.
+            reopened = create_file(
+                str(dist),
+                0x00000080,  # FILE_READ_ATTRIBUTES
+                0x00000001,  # FILE_SHARE_READ
+                None,
+                3,  # OPEN_EXISTING
+                0x02000000 | 0x00200000,
+                None,
+            )
+            if reopened is None or reopened == invalid:
+                raise PublicationScopeError("dist: Windows directory identity changed")
+            try:
+                after_info = _ByHandleFileInformation()
+                if not get_info(reopened, ctypes.byref(after_info)):
+                    raise PublicationScopeError("dist: Windows directory identity unavailable")
+                before_id = (
+                    info.dwVolumeSerialNumber,
+                    info.nFileIndexHigh,
+                    info.nFileIndexLow,
+                )
+                after_id = (
+                    after_info.dwVolumeSerialNumber,
+                    after_info.nFileIndexHigh,
+                    after_info.nFileIndexLow,
+                )
+                if (
+                    after_info.dwFileAttributes & 0x00000400
+                    or not (after_info.dwFileAttributes & 0x00000010)
+                    or before_id != after_id
+                ):
+                    raise PublicationScopeError("dist: Windows directory identity changed")
+            finally:
+                close_handle(reopened)
+            try:
+                if _has_untrusted_ancestor_alias(dist):
+                    raise PublicationScopeError("dist: Windows directory identity changed")
+            except (OSError, ValueError) as exc:
+                raise PublicationScopeError("dist: Windows directory identity unreadable") from exc
     except OSError as exc:
         raise PublicationScopeError("dist: Windows archive HANDLE cannot be pinned") from exc
     finally:
