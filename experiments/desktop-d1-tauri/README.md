@@ -105,3 +105,89 @@ untouched, and is not a replacement for signed external review. It does
 not automatically close #662, approve D2 over D1, or change frozen
 research, version, clinical or publisher policy. No release, package,
 installer, real PHI, EHR writes or public publication.
+
+## Windows native ProcessContainer OS WFP-denial candidate (2026-10-31, NONPUBLISHING)
+
+A promising **application-scoped** OS-enforced alternative to globally blocking
+`msedgewebview2.exe` has been tested using Microsoft's
+[MXC ProcessContainer](https://learn.microsoft.com/en-us/windows/apps/develop/mxc/quickstart)
+and [directional network policy](https://github.com/microsoft/mxc/blob/main/docs/backends/process-container/networking.md).
+Unlike a global program-path Windows Defender Firewall rule, the MXC
+ProcessContainer uses native PSEC and container-lifetime Windows Filtering
+Platform (WFP) conditions for **only the contained workload**. No Edge
+runtime update, global firewall policy or parent OS privilege was changed.
+
+### Reproduced on a real Windows host
+
+Authorized Windows 11 Home **26H2 build 26300.9818**, normal non-admin user,
+Node 24.19.0, isolated `@microsoft/mxc-sdk@1.0.1`, Rust 1.97.1 MSVC:
+- `getPlatformSupport()`: `isSupported=true`,
+  `availableMethods` includes `processcontainer`, no isolation warnings.
+  Native Win32 `cmd.exe` test ran successfully in the OS container (exit0).
+- Compiled standalone test-only
+  `tests/windows-mxc-tcp-probe.rs` using exact Rust1.97.1. Bound a
+  temporary host listener **only** to `127.0.0.1`. The **identical compiled
+  executable** launched unrestricted connected successfully to the host
+  listener (positive control).
+- Ran that same Rust binary **inside MXC ProcessContainer** with explicit
+  `network.egress.default=deny`, `network.ingress.default=deny`,
+  `network.ingress.hostLoopback=deny`, no internet/private-network capability,
+  no GUI/clipboard privilege. Native WinSock returned **`WSA10013`
+  (WSAEACCES)** for the host-local synthetic listener **and** for
+  `198.51.100.7:443` (reserved RFC5737 TEST-NET-2, not an external service).
+  A timeout, connection-refused, missing listener or routing error fails
+  the qualification. The source-bound test exited0:
+  `D1_MXC_NATIVE_PROCESSCONTAINER_EXPLICIT_IPV4_TCP_DENIAL_PASS_NOT_D1_APP`.
+- Early attempted Node.exe *inside* MXC exited `0xC0000142` during Windows
+  DLL initialization, **before** network testing; it was never counted as
+  denial evidence. Replaced with the minimal native Rust test executable and
+  reran successful OS checks under explicit policy. A host-local TCP
+  positive control prevents conflating a missing server with WFP denial.
+- The OS container is ephemeral. No UAC, global WFP/Defender rule, registry
+  change, AppContainer profile persistence, data transfer, PHI, installer,
+  package publication, or clinical use. Test SDK and binary stored only
+  in disposable developer scratch; no MXC package is added to D1 product
+  dependencies.
+
+### Re-run on an authorized compatible Windows 11 developer host
+
+The test sources are independent from the production executable. Run in
+`experiments/desktop-d1-tauri/tests` with supported Windows/Rust, and a
+separate expendable scratch location. The normal Windows command shell is
+used only to run this local experiment.
+
+```powershell
+npm install --no-save --no-package-lock --no-audit --no-fund @microsoft/mxc-sdk@1.0.1
+$env:MEDORIGIN_MXC_TEST_TMP = 'D:\\YourDisposableScratchDirectory'
+node windows-mxc-processcontainer-network-negative.mjs
+node --test windows-mxc-policy-contract.test.mjs
+```
+
+The harness compiles the exact test-only Rust source in a temporary directory,
+verifies unconfined loopback success, runs the child once inside native MXC,
+checks **both** explicit Windows `WSA10013` denials and an exit0 sentinel,
+then removes that temporary compiled executable and directory even on failure.
+The developer should remove any task-owned `node_modules` after validation.
+GitHub hosted CI performs *source-only* Rust compilation/formatting and Node
+syntactic/static policy gates. It does NOT claim interactive Win32 or native
+WFP runtime proof on the hosted runner.
+
+### Critical distinction — Issue #662 remains OPEN / NO-GO
+
+**This is NOT an egress test of the D1 Tauri application or its real
+WebView2 descendants.** MXC as configured above disables GUI; actual
+D1 UI requires separately reviewed `ui.disable=false` with appropriate
+least-privilege window/IPC permissions and cold-start/interaction tests.
+WebView2 may fail to initialize under restricted AppContainer filesystem
+ACLs and multi-process constraints. A future D1 evaluation must prove real
+fixture verification, native IPC, all spawned process containment, and
+both IPv4/IPv6 TCP+UDP/DNS-denial evidence under a verified enforcing MXC
+policy. It must NOT grant broad `internetClient`, open host networking,
+weaken WFP filters to make the UI work, or silently fall back to unsandboxed
+execution. Windows 26H2 build support is not blanket approval for older
+Windows versions; probe every target host and fail closed if unavailable.
+
+No D1 code or release policy is modified here. There is no signed/packaged
+MedOrigin WFP launch integration, no independent review #603, no approved
+desktop architecture substitution, no package/installer and no publication.
+All existing developer/clinical NO-GOs and protected-main rules remain.

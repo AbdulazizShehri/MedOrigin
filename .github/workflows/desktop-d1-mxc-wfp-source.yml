@@ -1,0 +1,54 @@
+# Nonpublishing source qualification only, not hosted OS WFP/runtime evidence.
+name: D1 MXC process-container OS egress source contract (nonpublishing)
+
+on:
+  push:
+    branches:
+      - test/medorigin-d1-mxc-processcontainer-20261031
+  pull_request:
+    branches:
+      - test/medorigin-d1-windowed-egress-20261031
+    paths:
+      - '.github/workflows/desktop-d1-mxc-wfp-source.yml'
+      - 'experiments/desktop-d1-tauri/tests/windows-mxc-*'
+      - 'experiments/desktop-d1-tauri/README.md'
+
+permissions:
+  contents: read
+
+jobs:
+  windows-native-probe-source:
+    name: Compile native WinSock probe; validate test-only deny policy (NOT OS runtime)
+    runs-on: windows-2025
+    timeout-minutes: 15
+    steps:
+      - name: Read-only checkout at exact source SHA
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+          fetch-tags: false
+      - name: Install pinned Rust MSVC compiler and formatter
+        shell: pwsh
+        run: rustup toolchain install 1.97.1 --profile minimal --component rustfmt
+      - name: Rust probe source format gate
+        shell: pwsh
+        run: rustfmt +1.97.1 --check experiments/desktop-d1-tauri/tests/windows-mxc-tcp-probe.rs
+      - name: Compile native WinSock probe without dependency or publication
+        shell: pwsh
+        run: |
+          rustc +1.97.1 -C debuginfo=0 -C opt-level=1 -o "$env:RUNNER_TEMP/medorigin-mxc-tcp-probe.exe" experiments/desktop-d1-tauri/tests/windows-mxc-tcp-probe.rs
+          if ($LASTEXITCODE -ne 0) { throw 'Synthetic native WinSock source failed compilation' }
+      - name: Validate JS syntax and fail-closed explicit policy expectations
+        shell: pwsh
+        run: |
+          $root='experiments/desktop-d1-tauri/tests'
+          node --check "$root/windows-mxc-processcontainer-network-negative.mjs"
+          if ($LASTEXITCODE -ne 0) { throw 'MXC experiment syntax failed' }
+          node --test "$root/windows-mxc-policy-contract.test.mjs"
+          if ($LASTEXITCODE -ne 0) { throw 'MXC scope/deny policy test failed' }
+      - name: Honest source-only evidence marker
+        shell: pwsh
+        run: |
+          Write-Output 'D1_MXC_SOURCE_ONLY_PASS_NOT_HOSTED_WINDOWS_WFP_PROOF'
+          Write-Output 'NO_D1_WEBVIEW2_RUNTIME_NO_PACKAGING_NO_RELEASE'
