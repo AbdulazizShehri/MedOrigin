@@ -11,14 +11,11 @@ from __future__ import annotations
 import ctypes
 import msvcrt
 import os
-import stat
-from contextlib import suppress
 from pathlib import Path
 from typing import Callable
 
 from medscale.fhirkit.errors import FhirStorageError
 
-_MAX_BYTES = 8 * 1024 * 1024
 _SHARE_ALL = 7
 _SYNC = 0x00100000
 _READ_ATTR = 0x80
