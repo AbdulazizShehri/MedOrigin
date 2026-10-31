@@ -1,6 +1,7 @@
 // NONPUBLISHING synthetic-only Windows D1 WebView2 + MXC runtime qualification.
 // Must run on a real authorized interactive Windows desktop with a source-built D1 debug exe.
 import {getPlatformSupport, run} from '@microsoft/mxc-sdk/v1';
+import {requireSupportedWindowsMxcNode} from './windows-mxc-d1-runtime-node-qualification.mjs';
 import {mkdtempSync, rmSync, existsSync, readFileSync} from 'node:fs';
 import {join, dirname, resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
@@ -13,6 +14,7 @@ requireCondition(process.platform==='win32'&&existsSync(exe),'exact Windows D1 e
 requireCondition(/^[0-9a-fA-F]{64}$/.test(expected),'expected SHA-256 required');
 const actual=createHash('sha256').update(readFileSync(exe)).digest('hex');
 requireCondition(actual.toLowerCase()===expected.toLowerCase(),'source-built D1 executable SHA mismatch');
+requireSupportedWindowsMxcNode(process.versions.node,process.platform);
 const support=getPlatformSupport();
 requireCondition(support.isSupported&&support.availableMethods.includes('processcontainer'),'native ProcessContainer unavailable');
 requireCondition((support.isolationWarnings||[]).length===0,'backend isolation warnings');
