@@ -627,9 +627,7 @@ def test_windows_dist_junction_swap_after_first_admission_is_refused(
     original_snapshot = checker._windows_pinned_scope_archives
     observed: list[bool] = []
 
-    def swap_before_directory_handle(
-        dist: Path, packages: dict[str, list[Path]]
-    ) -> Any:
+    def swap_before_directory_handle(dist: Path, packages: dict[str, list[Path]]) -> Any:
         assert not observed
         dist.rename(shifted)
         created = subprocess.run(
