@@ -47,3 +47,25 @@ test('unsupported Windows Node is rejected before native SDK module evaluation',
     rmSync(temp,{recursive:true,force:true});
   }
 });
+
+test('actual unsupported Windows host Node rejects before SDK resolution', {skip:process.platform!=='win32'||!/^v24\\.(?:[0-9]|1[0-9]|20)\\./.test(process.version)},()=>{
+  const temp=mkdtempSync(join(tmpdir(),'medorigin-mxc-host-'));
+  try {
+    const fixture=join(temp,'synthetic-fixture.exe');
+    writeFileSync(fixture,Buffer.from('not an executable: synthetic hash preflight'));
+    const sha=createHash('sha256').update(readFileSync(fixture)).digest('hex');
+    const original=readFileSync(new URL('./windows-mxc-d1-real-app-qualification.mjs',import.meta.url),'utf8');
+    const gateUrl=new URL('./windows-mxc-d1-runtime-node-qualification.mjs',import.meta.url).href;
+    const modified=original.replace("from './windows-mxc-d1-runtime-node-qualification.mjs'","from '"+gateUrl+"'");
+    assert.notEqual(modified,original);
+    const isolated=join(temp,'actual-host-runtime.mjs');
+    writeFileSync(isolated,modified);
+    const result=spawnSync(process.execPath,[isolated,fixture,sha],{encoding:'utf8',timeout:12000});
+    const output=(result.stdout||'')+'\\n'+(result.stderr||'');
+    assert.notEqual(result.status,0);
+    assert.match(output,/D1_MXC_NODE_RUNTIME_NO_GO/);
+    assert.doesNotMatch(output,/ERR_MODULE_NOT_FOUND|Cannot find package '@microsoft\\/mxc-sdk'/);
+  } finally {
+    rmSync(temp,{recursive:true,force:true});
+  }
+});
