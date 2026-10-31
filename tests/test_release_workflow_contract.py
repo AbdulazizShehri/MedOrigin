@@ -1,7 +1,14 @@
 from __future__ import annotations
 
+import hashlib
+import os
 import re
+import subprocess
+import sys
 from pathlib import Path
+from textwrap import dedent
+
+import pytest
 
 _WORKFLOW = Path(__file__).resolve().parents[1] / ".github" / "workflows" / "release.yml"
 _JOB_HEADER_RE = re.compile(r"^  [a-z0-9-]+:\s*$", re.MULTILINE)
@@ -453,3 +460,68 @@ def test_tag_consumers_recheck_sha256_against_original_build_outputs() -> None:
     assert "vars.TESTPYPI_PUBLISH_ENABLED == 'true'" in pypi
     assert "actions/checkout@" not in pypi
     assert workflow.count("pypa/gh-action-pypi-publish@") == 1
+
+
+@pytest.mark.skipif(sys.platform != "linux", reason="Exact tagged Bash/sha256sum runner is Ubuntu")
+@pytest.mark.parametrize(
+    ("attack", "should_pass"),
+    [
+        ("clean", True),
+        ("wheel_tamper", False),
+        ("sdist_tamper", False),
+        ("extra_file", False),
+        ("missing_archive", False),
+        ("symlink_archive", False),
+        ("wrong_expected_digest", False),
+    ],
+)
+def test_real_tagged_sha256_shell_guard_rejects_changed_download(
+    tmp_path: Path, attack: str, should_pass: bool
+) -> None:
+    """Execute the actual in-workflow Bash, not an independently copied validator."""
+    dist = tmp_path / "dist"
+    dist.mkdir()
+    wheel = dist / "medscale-0.3.0-py3-none-any.whl"
+    sdist = dist / "medscale-0.3.0.tar.gz"
+    wheel.write_bytes(b"QUALIFIED_SYNTHETIC_WHEEL")
+    sdist.write_bytes(b"QUALIFIED_SYNTHETIC_SDIST")
+    wheel_sha = hashlib.sha256(wheel.read_bytes()).hexdigest()
+    sdist_sha = hashlib.sha256(sdist.read_bytes()).hexdigest()
+
+    if attack == "wheel_tamper":
+        wheel.write_bytes(b"REPLACED_WHEEL_BYTES")
+    elif attack == "sdist_tamper":
+        sdist.write_bytes(b"REPLACED_SDIST_BYTES")
+    elif attack == "extra_file":
+        (dist / "unsigned-other-file").write_bytes(b"rogue")
+    elif attack == "missing_archive":
+        sdist.unlink()
+    elif attack == "symlink_archive":
+        outside = tmp_path / "outside-wheel"
+        outside.write_bytes(wheel.read_bytes())
+        wheel.unlink()
+        wheel.symlink_to(outside)
+    elif attack == "wrong_expected_digest":
+        wheel_sha = "0" * 64
+
+    env = dict(os.environ)
+    env.update(BUILD_WHEEL_SHA256=wheel_sha, BUILD_SDIST_SHA256=sdist_sha)
+    for job in ("install-smoke", "github-release", "testpypi-publish"):
+        block = _job_block(_workflow_text(), job)
+        name = "      - name: Verify downloaded archives against build SHA-256\n"
+        assert block.count(name) == 1
+        section = block.split(name, maxsplit=1)[1].split("      - name:", maxsplit=1)[0]
+        assert section.count("        run: |\n") == 1
+        exact_bash = dedent(section.split("        run: |\n", maxsplit=1)[1])
+        result = subprocess.run(
+            ["bash", "-e", "-o", "pipefail", "-c", exact_bash],
+            cwd=tmp_path,
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=False,
+        )
+        assert (result.returncode == 0) is should_pass, (
+            f"{job}/{attack}: unexpected status {result.returncode}: {result.stderr}"
+        )
