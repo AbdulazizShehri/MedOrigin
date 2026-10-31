@@ -12,7 +12,9 @@ import base64
 import csv
 import hashlib
 import io
+import itertools
 import json
+import os
 import subprocess
 import sys
 import tarfile
@@ -258,17 +260,38 @@ def check_record(wheel: dict[str, bytes]) -> None:
         raise ProposalVerificationError("unreadable Wheel RECORD") from exc
 
 
+def qualified_dist_paths(dist: Path) -> tuple[Path, Path]:
+    """Refuse any unaccounted publisher input, not just mismatched extensions.
+
+    This proposal is never publishable. The strict directory envelope matters
+    because later publisher steps ingest the entire dist directory, not merely
+    the two matching archive filenames. Scan at most three entries to reject a
+    rogue third artifact without materializing an attacker-sized listing.
+    """
+    wheel = dist / "medscale-0.3.0-py3-none-any.whl"
+    sdist = dist / "medscale-0.3.0.tar.gz"
+    try:
+        if dist.is_symlink() or not dist.is_dir():
+            raise ProposalVerificationError("dist must be an ordinary directory")
+        with os.scandir(dist) as listing:
+            entries = list(itertools.islice(listing, 3))
+        if (
+            len(entries) != 2
+            or {entry.name for entry in entries} != {wheel.name, sdist.name}
+            or any(not entry.is_file(follow_symlinks=False) for entry in entries)
+        ):
+            raise ProposalVerificationError("dist must contain exactly two regular artifact files")
+        if any(path.stat().st_size > MAX_TOTAL for path in (wheel, sdist)):
+            raise ProposalVerificationError("dist contains an oversized artifact")
+    except OSError as exc:
+        raise ProposalVerificationError("dist directory cannot be inspected safely") from exc
+    return wheel, sdist
+
+
 def verify(repository: Path, dist: Path) -> dict[str, object]:
     commit, sources, original, _lock, _mrl = trusted_source(repository)
     parent, changed = exact_removed_projected_root(original)
-    wd = dist / "medscale-0.3.0-py3-none-any.whl"
-    sd = dist / "medscale-0.3.0.tar.gz"
-    if not dist.is_dir() or sorted(
-        x.name for x in dist.iterdir() if x.suffix in {".whl", ".gz"}
-    ) != sorted([wd.name, sd.name]):
-        raise ProposalVerificationError("requires exactly one Wheel and one sdist")
-    if any(p.is_symlink() or not p.is_file() or p.stat().st_size > MAX_TOTAL for p in (wd, sd)):
-        raise ProposalVerificationError("artifact missing, linked or oversized")
+    wd, sd = qualified_dist_paths(dist)
     wheel, sdist = load_wheel(wd), load_sdist(sd)
     expected_sdist = {SD + name: contents for name, contents in sources.items()}
     expected_sdist[SD + "pyproject.toml"] = changed

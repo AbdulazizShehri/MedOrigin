@@ -1,0 +1,57 @@
+# ADR-0045 remains PROPOSED and NEVER PUBLISHED by this workflow.
+name: ADR45 proposal Wheel-sdist directory envelope safety (nonpublishing)
+
+on:
+  push:
+    branches:
+      - test/medorigin-adr45-dist-envelope-20261031
+  pull_request:
+    branches:
+      - test/medorigin-core-dist-extra-rejection-20261031
+    paths:
+      - '.github/workflows/medorigin-adr45-dist-envelope.yml'
+      - 'scripts/verify_medorigin_base_only_proposal.py'
+      - 'tests/test_verify_medorigin_base_only_proposal.py'
+
+permissions:
+  contents: read
+
+jobs:
+  verify-proposal-archive-envelope:
+    name: Proposal-only verifier source regression (${{ matrix.os }} Python ${{ matrix.python }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2025]
+        python: ["3.11", "3.12"]
+    steps:
+      - name: Read-only exact-source checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+          fetch-tags: false
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Python runtime via pinned open-source uv
+        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        with:
+          version: "0.12.19"
+          enable-cache: false
+      - name: Run adversarial source-verifier regressions (never build or publish)
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          uv python install "${{ matrix.python }}"
+          $env:PYTHONPATH = [string]::Join(
+            [IO.Path]::PathSeparator,
+            @((Join-Path (Get-Location) 'src'), (Join-Path (Get-Location) 'scripts'), (Join-Path (Get-Location) 'tests'))
+          )
+          uv run --no-project --python "${{ matrix.python }}" --with pytest==8.4.2 python -m pytest -q -o addopts= --basetemp "$env:RUNNER_TEMP/adr45-proposal" tests/test_verify_medorigin_base_only_proposal.py
+          if ($LASTEXITCODE -ne 0) { throw 'Proposed package source verifier regression failed' }
+      - name: Explicit nonpublishing result
+        shell: pwsh
+        run: |
+          Write-Output 'ADR45_UNAPPROVED_PROPOSAL_ENVELOPE_SOURCE_TESTED'
+          Write-Output 'PUBLICATION_AUTHORIZED_FALSE_INDEPENDENT_REVIEW_NOT_COMPLETE'

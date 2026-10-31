@@ -164,3 +164,82 @@ def test_cli_uses_explicit_receipt_without_logging_full_verifier_data(
     assert json.loads(receipt.read_text(encoding="utf-8")) == evidence
     assert gate.main(argv) == 2
     assert json.loads(receipt.read_text(encoding="utf-8")) == evidence
+
+
+@pytest.mark.parametrize(
+    "extra",
+    [
+        "unreviewed.txt",
+        "unreviewed-1.0.0-py3-none-any.whl",
+        "unreviewed-1.0.0.tar.gz",
+        ".hidden",
+        "unreviewed.zip",
+        "rogue-folder",
+    ],
+)
+def test_verifier_refuses_extra_unaccounted_dist_entry(
+    gate: Any, tmp_path: Path, extra: str
+) -> None:
+    dist = tmp_path / "dist"
+    dist.mkdir()
+    (dist / "medscale-0.3.0-py3-none-any.whl").write_bytes(b"FAKE_WHEEL")
+    (dist / "medscale-0.3.0.tar.gz").write_bytes(b"FAKE_SDIST")
+    rogue = dist / extra
+    if extra == "rogue-folder":
+        rogue.mkdir()
+    else:
+        rogue.write_bytes(b"UNQUALIFIED")
+    with pytest.raises(gate.ProposalVerificationError, match="exactly two"):
+        gate.qualified_dist_paths(dist)
+
+
+def test_verifier_accepts_only_two_ordinary_expected_filenames(gate: Any, tmp_path: Path) -> None:
+    dist = tmp_path / "dist"
+    dist.mkdir()
+    wheel = dist / "medscale-0.3.0-py3-none-any.whl"
+    sdist = dist / "medscale-0.3.0.tar.gz"
+    wheel.write_bytes(b"FAKE_WHEEL")
+    sdist.write_bytes(b"FAKE_SDIST")
+    assert gate.qualified_dist_paths(dist) == (wheel, sdist)
+    sdist.unlink()
+    with pytest.raises(gate.ProposalVerificationError):
+        gate.qualified_dist_paths(dist)
+
+
+def test_verifier_refuses_untrusted_symlinks(gate: Any, tmp_path: Path) -> None:
+    import pytest
+
+    dist = tmp_path / "dist"
+    dist.mkdir()
+    wheel = dist / "medscale-0.3.0-py3-none-any.whl"
+    sdist = dist / "medscale-0.3.0.tar.gz"
+    wheel.write_bytes(b"FAKE_WHEEL")
+    try:
+        sdist.symlink_to(wheel)
+    except (NotImplementedError, OSError):
+        pytest.skip("Unprivileged symlinks unavailable on this Windows host")
+    with pytest.raises(gate.ProposalVerificationError):
+        gate.qualified_dist_paths(dist)
+    sdist.unlink()
+    sdist.write_bytes(b"FAKE_SDIST")
+    linked = tmp_path / "dist-link"
+    try:
+        linked.symlink_to(dist, target_is_directory=True)
+    except (NotImplementedError, OSError):
+        pytest.skip("Directory symlinks unavailable on this host")
+    with pytest.raises(gate.ProposalVerificationError):
+        gate.qualified_dist_paths(linked)
+
+
+def test_full_verifier_refuses_third_artifact_before_reading_archives(
+    gate: Any, tmp_path: Path
+) -> None:
+    dist = tmp_path / "dist"
+    dist.mkdir()
+    (dist / "medscale-0.3.0-py3-none-any.whl").write_bytes(b"BOGUS_WHEEL")
+    (dist / "medscale-0.3.0.tar.gz").write_bytes(b"BOGUS_SDIST")
+    (dist / "unreviewed-package.txt").write_bytes(b"UNQUALIFIED")
+    # Must reject the directory envelope itself. A failure to parse the
+    # bogus Wheel would not qualify this exact publisher boundary.
+    with pytest.raises(gate.ProposalVerificationError, match="exactly two"):
+        gate.verify(ROOT, dist)
