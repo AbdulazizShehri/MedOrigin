@@ -335,8 +335,10 @@ def _posix_pinned_scope_archives(
     if len(set(names.values())) != 2:
         raise PublicationScopeError("dist: artifact filenames are not unique")
     components = dist.absolute().parts
-    if not components or components[0] != "/" or any(
-        part in {".", ".."} for part in components[1:]
+    if (
+        not components
+        or components[0] != "/"
+        or any(part in {".", ".."} for part in components[1:])
     ):
         raise PublicationScopeError("dist: noncanonical POSIX directory")
     dir_flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | getattr(os, "O_CLOEXEC", 0)
@@ -361,8 +363,7 @@ def _posix_pinned_scope_archives(
             for kind, name in names.items():
                 fd = os.open(
                     name,
-                    os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK
-                    | getattr(os, "O_CLOEXEC", 0),
+                    os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK | getattr(os, "O_CLOEXEC", 0),
                     dir_fd=descriptor,
                 )
                 with os.fdopen(fd, "rb") as source:
@@ -381,12 +382,18 @@ def _posix_pinned_scope_archives(
                             output.write(chunk)
                     after = os.fstat(source.fileno())
                     before_id = (
-                        before.st_dev, before.st_ino, before.st_size,
-                        before.st_mtime_ns, before.st_ctime_ns,
+                        before.st_dev,
+                        before.st_ino,
+                        before.st_size,
+                        before.st_mtime_ns,
+                        before.st_ctime_ns,
                     )
                     after_id = (
-                        after.st_dev, after.st_ino, after.st_size,
-                        after.st_mtime_ns, after.st_ctime_ns,
+                        after.st_dev,
+                        after.st_ino,
+                        after.st_size,
+                        after.st_mtime_ns,
+                        after.st_ctime_ns,
                     )
                     if copied != before.st_size or before_id != after_id:
                         raise PublicationScopeError(f"{kind}: pinned input mutated")
@@ -478,12 +485,18 @@ def _windows_pinned_scope_archives(
                             output.write(chunk)
                     after = os.fstat(source.fileno())
                     before_id = (
-                        before.st_dev, before.st_ino, before.st_size,
-                        before.st_mtime_ns, before.st_ctime_ns,
+                        before.st_dev,
+                        before.st_ino,
+                        before.st_size,
+                        before.st_mtime_ns,
+                        before.st_ctime_ns,
                     )
                     after_id = (
-                        after.st_dev, after.st_ino, after.st_size,
-                        after.st_mtime_ns, after.st_ctime_ns,
+                        after.st_dev,
+                        after.st_ino,
+                        after.st_size,
+                        after.st_mtime_ns,
+                        after.st_ctime_ns,
                     )
                     if copied != before.st_size or before_id != after_id:
                         raise PublicationScopeError(f"{kind}: Windows source mutated during read")
