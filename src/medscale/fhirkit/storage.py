@@ -5,7 +5,6 @@ from __future__ import annotations
 import os
 import re
 import stat
-import tempfile
 from contextlib import suppress
 from pathlib import Path, PureWindowsPath
 
@@ -356,6 +355,15 @@ def _store_posix_report(
     return target_path
 
 
+def _windows_link_pinned(native: object, source_handle: int, directory_handle: int) -> None:
+    """Native no-clobber hard link; separately replaceable in synthetic tests."""
+    from medscale.fhirkit._windows_native_store import _NativeWindowsFiles
+
+    if not isinstance(native, _NativeWindowsFiles):
+        raise FhirStorageError("invalid native Windows FHIR publisher")
+    native.link(source_handle, directory_handle)
+
+
 def store_report(report: ValidationReport, root: Path | None = None) -> Path:
     """Store a report in deterministic content-addressed storage."""
     root = root or _default_root()
@@ -368,50 +376,21 @@ def store_report(report: ValidationReport, root: Path | None = None) -> Path:
     target_path = target_dir / _DEFAULT_FILENAME
     if os.name != "nt":
         return _store_posix_report(report_json, root, report_hash_value, target_dir, target_path)
-    _reject_report_directory_symlinks(root, report_hash_value)
-    target_path.parent.mkdir(parents=True, exist_ok=True)
-    _reject_report_directory_symlinks(root, report_hash_value)
-    temporary_path: Path | None = None
-    try:
-        # Writing directly to report.json exposes a truncated canonical file
-        # if the process stops midway. Stage complete bytes on the same volume,
-        # flush before publication, then use a no-clobber hard link. An
-        # unsupported hard-link filesystem fails closed; never use os.replace.
-        with tempfile.NamedTemporaryFile(
-            mode="w",
-            encoding="utf-8",
-            newline="\n",
-            prefix=".report-",
-            suffix=".tmp",
-            dir=target_dir,
-            delete=False,
-        ) as output:
-            temporary_path = Path(output.name)
-            output.write(report_json)
-            output.flush()
-            os.fsync(output.fileno())
-        try:
-            os.link(temporary_path, target_path)
-        except FileExistsError as exc:
-            if target_path.is_symlink():
-                raise FhirStorageError("refusing a symlink at the FHIR report path") from exc
-            try:
-                existing = _read_bounded_regular_report(target_path)
-            except (OSError, UnicodeError) as read_exc:
-                raise FhirStorageError("existing FHIR report is unreadable") from read_exc
-            if existing != report_json:
-                raise FhirStorageError(
-                    "existing FHIR report differs from canonical content"
-                ) from exc
-    except OSError as exc:
-        raise FhirStorageError("unable to create FHIR report artifact") from exc
-    finally:
-        if temporary_path is not None:
-            try:
-                temporary_path.unlink(missing_ok=True)
-            except OSError as exc:
-                raise FhirStorageError("unable to clean temporary FHIR report artifact") from exc
-    return target_path
+    # Native Windows store uses root-to-leaf no-reparse DIRECTORY handles for
+    # mkdir, exclusive temp writes, hard-link publication and temp disposal.
+    # No lexical pathname write fallback is permitted on native API failure.
+    from medscale.fhirkit._windows_native_store import store as native_store
+
+    return native_store(
+        report_json,
+        root,
+        report_hash_value,
+        target_dir,
+        target_path,
+        _reject_report_directory_symlinks,
+        _windows_link_pinned,
+        _read_bounded_regular_descriptor,
+    )
 
 
 def load_report(report_hash_value: str, root: Path | None = None) -> str:

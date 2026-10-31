@@ -37,8 +37,15 @@ def test_failed_atomic_link_does_not_publish_or_leave_temporary_file(
         attempts += 1
         raise OSError(errno.EACCES, "synthetic link refusal")
 
-    monkeypatch.setattr(os, "link", deny_link)
-    with pytest.raises(FhirStorageError, match="create FHIR report artifact"):
+    if os.name == "nt":
+
+        def deny_native_link(_native: object, _source_handle: int, _directory_handle: int) -> None:
+            deny_link("native-temp", "report.json")
+
+        monkeypatch.setattr(storage, "_windows_link_pinned", deny_native_link)
+    else:
+        monkeypatch.setattr(os, "link", deny_link)
+    with pytest.raises(FhirStorageError, match=r"create .*FHIR report artifact"):
         store_report(report, root=tmp_path)
     assert attempts == 1
     assert not target.exists()
@@ -58,7 +65,7 @@ def test_failed_fsync_does_not_publish_or_leave_temporary_file(
         raise OSError(errno.EIO, "synthetic flush failure")
 
     monkeypatch.setattr(os, "fsync", deny_fsync)
-    with pytest.raises(FhirStorageError, match="create FHIR report artifact"):
+    with pytest.raises(FhirStorageError, match=r"create .*FHIR report artifact"):
         store_report(report, root=tmp_path)
     assert attempts == 1
     assert not target.exists()
@@ -92,7 +99,16 @@ def test_atomic_link_collision_preserves_matching_existing_artifact(
                 output.write(expected)
         raise FileExistsError(errno.EEXIST, "synthetic concurrent writer")
 
-    monkeypatch.setattr(os, "link", concurrent_identical_writer)
+    if os.name == "nt":
+
+        def concurrent_windows(
+            _native: object, _source_handle: int, _directory_handle: int
+        ) -> None:
+            concurrent_identical_writer("native-temp", target)
+
+        monkeypatch.setattr(storage, "_windows_link_pinned", concurrent_windows)
+    else:
+        monkeypatch.setattr(os, "link", concurrent_identical_writer)
     assert store_report(report, root=tmp_path) == target
     assert attempts == 1
     assert target.read_text(encoding="utf-8") == expected
