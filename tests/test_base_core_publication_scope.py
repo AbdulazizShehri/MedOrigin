@@ -716,3 +716,31 @@ def test_posix_dist_rename_during_metadata_scope_fails_closed(
     assert result["status"] == "BLOCKED"
     assert result["publication_authorized"] is False
     assert any("identity" in str(issue).lower() for issue in result["issues"])
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX O_NOFOLLOW path alias only")
+def test_posix_dist_symlink_to_same_inode_during_scope_is_refused(
+    checker: Any, monkeypatch: Any, tmp_path: Path
+) -> None:
+    """A post-admission symlink is disallowed even if it reaches the original inode."""
+    root = tmp_path.resolve()
+    dist = make_dist(root / "candidate")
+    moved = root / "same-original"
+    original_parse = checker._inspect_scope_metadata
+    witnessed: list[bool] = []
+
+    def substitute_same_inode_alias(
+        packages: dict[str, list[Path]], issues: list[str], versions: dict[str, str]
+    ) -> None:
+        dist.rename(moved)
+        dist.symlink_to(moved, target_is_directory=True)
+        witnessed.append(True)
+        original_parse(packages, issues, versions)
+
+    monkeypatch.setattr(checker, "_inspect_scope_metadata", substitute_same_inode_alias)
+    result = checker.inspect(dist)
+    assert witnessed and dist.is_symlink()
+    assert dist.resolve(strict=True) == moved
+    assert result["status"] == "BLOCKED"
+    assert result["publication_authorized"] is False
+    assert any("identity" in str(issue).lower() for issue in result["issues"])
