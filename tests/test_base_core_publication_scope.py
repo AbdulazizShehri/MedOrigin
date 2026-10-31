@@ -608,3 +608,78 @@ def test_windows_native_handle_blocks_original_archive_rename_during_snapshot(
     assert witnessed, "native HANDLE open and share-lock test were not exercised"
     assert not private_wheel.exists() and not private_sdist.exists()
     assert checker.inspect(dist)["status"] == "BASE_CORE_PUBLICATION_SCOPE_CLEAN"
+
+
+@pytest.mark.skipif(os.name != "nt", reason="Native NTFS directory junction only")
+@pytest.mark.parametrize("unsafe_kind", ["wheel", "sdist"])
+def test_windows_dist_junction_swap_after_first_admission_is_refused(
+    checker: Any, monkeypatch: Any, tmp_path: Path, unsafe_kind: str
+) -> None:
+    """A reparse directory swapped in after first scan cannot qualify archives."""
+    root = tmp_path
+    initial = make_dist(
+        root / "candidate",
+        wheel=metadata(extra="unreviewed-training") if unsafe_kind == "wheel" else metadata(),
+        sdist=metadata(extra="unreviewed-training") if unsafe_kind == "sdist" else metadata(),
+    )
+    clean = make_dist(root / "separate-clean")
+    shifted = root / "original-unsafe-dist"
+    original_snapshot = checker._windows_pinned_scope_archives
+    observed: list[bool] = []
+
+    def swap_before_directory_handle(dist: Path, packages: dict[str, list[Path]]) -> Any:
+        assert not observed
+        dist.rename(shifted)
+        created = subprocess.run(
+            ["cmd", "/d", "/c", "mklink", "/J", str(dist), str(clean)],
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=15,
+        )
+        assert created.returncode == 0, created.stderr or created.stdout
+        assert dist.is_dir() and not dist.is_symlink()
+        assert (
+            getattr(dist.lstat(), "st_file_attributes", 0)
+            & checker.stat.FILE_ATTRIBUTE_REPARSE_POINT
+        ), "test must create a real NTFS junction, not an ordinary folder"
+        observed.append(True)
+        return original_snapshot(dist, packages)
+
+    monkeypatch.setattr(checker, "_windows_pinned_scope_archives", swap_before_directory_handle)
+    result = checker.inspect(initial)
+    assert observed, "test did not execute the actual post-preflight junction swap"
+    assert result["status"] == "BLOCKED"
+    assert result["publication_authorized"] is False
+    assert any(
+        "junction" in str(issue).lower() or "reparse" in str(issue).lower()
+        for issue in result["issues"]
+    )
+
+
+@pytest.mark.skipif(os.name != "nt", reason="Native Windows directory HANDLE test only")
+def test_windows_dist_rename_during_metadata_scope_fails_closed(
+    checker: Any, monkeypatch: Any, tmp_path: Path
+) -> None:
+    """Windows can rename an open dir; final object identity must still match."""
+    dist = make_dist(tmp_path / "candidate")
+    moved = tmp_path / "renamed-dist"
+    original_parse = checker._inspect_scope_metadata
+    witnessed: list[bool] = []
+
+    def rename_while_pinned(
+        packages: dict[str, list[Path]], issues: list[str], versions: dict[str, str]
+    ) -> None:
+        # Real Windows hosted CI proved rename CAN succeed despite an open
+        # FILE_READ_ATTRIBUTES dir HANDLE with FILE_SHARE_READ only.
+        dist.rename(moved)
+        witnessed.append(True)
+        original_parse(packages, issues, versions)
+
+    monkeypatch.setattr(checker, "_inspect_scope_metadata", rename_while_pinned)
+    result = checker.inspect(dist)
+    assert witnessed, "the native directory HANDLE window was not exercised"
+    assert moved.is_dir() and not dist.exists()
+    assert result["status"] == "BLOCKED"
+    assert result["publication_authorized"] is False
+    assert any("identity" in str(issue).lower() for issue in result["issues"])

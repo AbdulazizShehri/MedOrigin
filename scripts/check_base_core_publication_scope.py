@@ -441,7 +441,69 @@ def _windows_pinned_scope_archives(
     close_handle.argtypes = (ctypes.c_void_p,)
     close_handle.restype = ctypes.c_int
     invalid = ctypes.c_void_p(-1).value
+
+    class _FileTime(ctypes.Structure):
+        _fields_ = [  # noqa: RUF012 - ctypes requires mutable field descriptors
+            ("dwLowDateTime", ctypes.c_uint32),
+            ("dwHighDateTime", ctypes.c_uint32),
+        ]
+
+    class _ByHandleFileInformation(ctypes.Structure):
+        _fields_ = [  # noqa: RUF012 - ctypes requires mutable field descriptors
+            ("dwFileAttributes", ctypes.c_uint32),
+            ("ftCreationTime", _FileTime),
+            ("ftLastAccessTime", _FileTime),
+            ("ftLastWriteTime", _FileTime),
+            ("dwVolumeSerialNumber", ctypes.c_uint32),
+            ("nFileSizeHigh", ctypes.c_uint32),
+            ("nFileSizeLow", ctypes.c_uint32),
+            ("nNumberOfLinks", ctypes.c_uint32),
+            ("nFileIndexHigh", ctypes.c_uint32),
+            ("nFileIndexLow", ctypes.c_uint32),
+        ]
+
+    get_info = kernel32.GetFileInformationByHandle
+    get_info.argtypes = (
+        ctypes.c_void_p,
+        ctypes.POINTER(_ByHandleFileInformation),
+    )
+    get_info.restype = ctypes.c_int
+    # Open the *directory* before any final archive paths, requesting no
+    # delete-sharing. Windows can nevertheless rename this directory while the
+    # handle is held: enforce a final on-disk directory identity comparison.
+    # OPEN_REPARSE_POINT prevents silent NTFS junction dereference here.
+    directory_handle = create_file(
+        str(dist),
+        0x00000080,  # FILE_READ_ATTRIBUTES
+        0x00000001,  # FILE_SHARE_READ (no FILE_SHARE_DELETE)
+        None,
+        3,  # OPEN_EXISTING
+        0x02000000 | 0x00200000,  # BACKUP_SEMANTICS | OPEN_REPARSE_POINT
+        None,
+    )
+    if directory_handle is None or directory_handle == invalid:
+        raise PublicationScopeError("dist: Windows directory HANDLE open refused")
     try:
+        info = _ByHandleFileInformation()
+        if not get_info(directory_handle, ctypes.byref(info)):
+            raise PublicationScopeError("dist: Windows directory HANDLE cannot be inspected")
+        if (info.dwFileAttributes & 0x00000400) or not (info.dwFileAttributes & 0x00000010):
+            raise PublicationScopeError("dist: Windows junction/reparse directory refused")
+        # An attacker may replace a lexical parent with a junction after the
+        # initial preflight. Reject that alias a second time *while pinned*.
+        try:
+            if _has_untrusted_ancestor_alias(dist):
+                raise PublicationScopeError("dist: Windows junction/reparse ancestor refused")
+        except (OSError, ValueError) as exc:
+            raise PublicationScopeError("dist: Windows ancestor cannot be checked") from exc
+        with os.scandir(dist) as listing:
+            entries = list(itertools.islice(listing, 3))
+        if (
+            len(entries) != 2
+            or {entry.name for entry in entries} != set(names.values())
+            or any(not entry.is_file(follow_symlinks=False) for entry in entries)
+        ):
+            raise PublicationScopeError("dist: pinned Windows directory contents changed")
         with tempfile.TemporaryDirectory(prefix="medorigin-core-scope-pinned-") as temporary:
             private = Path(temporary).resolve(strict=True)
             copies: dict[str, list[Path]] = {}
@@ -502,8 +564,52 @@ def _windows_pinned_scope_archives(
                         raise PublicationScopeError(f"{kind}: Windows source mutated during read")
                 copies[kind] = [target]
             yield copies
+            # File snapshots alone do not bind a later publisher pathname.
+            # Windows can rename the DIRECTORY while its HANDLE is open even
+            # without FILE_SHARE_DELETE. Verify the original lexical path
+            # still identifies the same non-reparse filesystem object.
+            reopened = create_file(
+                str(dist),
+                0x00000080,  # FILE_READ_ATTRIBUTES
+                0x00000001,  # FILE_SHARE_READ
+                None,
+                3,  # OPEN_EXISTING
+                0x02000000 | 0x00200000,
+                None,
+            )
+            if reopened is None or reopened == invalid:
+                raise PublicationScopeError("dist: Windows directory identity changed")
+            try:
+                after_info = _ByHandleFileInformation()
+                if not get_info(reopened, ctypes.byref(after_info)):
+                    raise PublicationScopeError("dist: Windows directory identity unavailable")
+                before_id = (
+                    info.dwVolumeSerialNumber,
+                    info.nFileIndexHigh,
+                    info.nFileIndexLow,
+                )
+                after_id = (
+                    after_info.dwVolumeSerialNumber,
+                    after_info.nFileIndexHigh,
+                    after_info.nFileIndexLow,
+                )
+                if (
+                    after_info.dwFileAttributes & 0x00000400
+                    or not (after_info.dwFileAttributes & 0x00000010)
+                    or before_id != after_id
+                ):
+                    raise PublicationScopeError("dist: Windows directory identity changed")
+            finally:
+                close_handle(reopened)
+            try:
+                if _has_untrusted_ancestor_alias(dist):
+                    raise PublicationScopeError("dist: Windows directory identity changed")
+            except (OSError, ValueError) as exc:
+                raise PublicationScopeError("dist: Windows directory identity unreadable") from exc
     except OSError as exc:
         raise PublicationScopeError("dist: Windows archive HANDLE cannot be pinned") from exc
+    finally:
+        close_handle(directory_handle)
 
 
 def _inspect_scope_metadata(
