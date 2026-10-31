@@ -443,13 +443,13 @@ def _windows_pinned_scope_archives(
     invalid = ctypes.c_void_p(-1).value
 
     class _FileTime(ctypes.Structure):
-        _fields_ = [
+        _fields_ = [  # noqa: RUF012 - ctypes requires mutable field descriptors
             ("dwLowDateTime", ctypes.c_uint32),
             ("dwHighDateTime", ctypes.c_uint32),
         ]
 
     class _ByHandleFileInformation(ctypes.Structure):
-        _fields_ = [
+        _fields_ = [  # noqa: RUF012 - ctypes requires mutable field descriptors
             ("dwFileAttributes", ctypes.c_uint32),
             ("ftCreationTime", _FileTime),
             ("ftLastAccessTime", _FileTime),
