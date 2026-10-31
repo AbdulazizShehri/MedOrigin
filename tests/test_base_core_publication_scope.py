@@ -428,3 +428,44 @@ def test_sdist_publisher_gate_rejects_hidden_physical_payloads(
     assert result["status"] == "BLOCKED"
     assert any(expected in issue for issue in result["issues"])
     assert result["publication_authorized"] is False
+
+
+@pytest.mark.parametrize(
+    "extra_name",
+    [
+        "unreviewed-1.0.0-py3-none-any.whl",
+        "unreviewed-1.0.0.tar.gz",
+        "README.txt",
+        ".hidden-metadata",
+        "medscale-0.3.0.zip",
+        "unexpected-subdirectory",
+    ],
+)
+def test_publisher_gate_rejects_any_unaccounted_dist_entry(
+    checker: Any, tmp_path: Path, extra_name: str
+) -> None:
+    # The release workflow publishes dist/*, not just medscale-*.
+    # A valid Core Wheel/sdist pair plus a third artifact must not qualify.
+    folder = make_dist(tmp_path / "unexpected-artifact")
+    other = folder / extra_name
+    if extra_name == "unexpected-subdirectory":
+        other.mkdir()
+    else:
+        other.write_bytes(b"UNREVIEWED-SYNTHETIC-DIST-PAYLOAD")
+    result = checker.inspect(folder)
+    assert result["status"] == "BLOCKED"
+    assert result["publication_authorized"] is False
+    assert any("unexpected artifact directory contents" in str(x) for x in result["issues"])
+
+
+def test_publisher_gate_rejects_symlink_dist_directory(checker: Any, tmp_path: Path) -> None:
+    folder = make_dist(tmp_path / "real-artifacts")
+    target = tmp_path / "symlink-dist"
+    try:
+        target.symlink_to(folder, target_is_directory=True)
+    except (OSError, NotImplementedError):
+        pytest.skip("Unprivileged directory symlinks are unavailable on this host")
+    result = checker.inspect(target)
+    assert result["status"] == "BLOCKED"
+    assert result["publication_authorized"] is False
+    assert any("unexpected artifact directory contents" in str(x) for x in result["issues"])

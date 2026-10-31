@@ -13,7 +13,9 @@ from __future__ import annotations
 import argparse
 import gzip
 import io
+import itertools
 import json
+import os
 import re
 import struct
 import tarfile
@@ -291,10 +293,33 @@ def _sdist(path: Path) -> EmailMessage:
 
 def inspect(dist: Path) -> dict[str, object]:
     issues: list[str] = []
+    # The tagged publisher uses dist/*, so checking only medscale-* while
+    # ignoring an extra payload is not sufficient. Enumerate at most THREE
+    # top-level entries and reject any artifact other than the expected pair.
+    # Use lstat-style checks so directories and symlinks cannot be treated
+    # as regular publisher inputs. No archive is extracted or uploaded.
+    if dist.is_symlink() or not dist.is_dir():
+        issues.append("unexpected artifact directory contents")
+        entries: list[os.DirEntry[str]] = []
+    else:
+        with os.scandir(dist) as listing:
+            entries = list(itertools.islice(listing, 3))
     packages = {
-        "wheel": list(dist.glob("medscale-*.whl")),
-        "sdist": list(dist.glob("medscale-*.tar.gz")),
+        "wheel": [
+            dist / entry.name
+            for entry in entries
+            if entry.name.startswith("medscale-") and entry.name.endswith(".whl")
+        ],
+        "sdist": [
+            dist / entry.name
+            for entry in entries
+            if entry.name.startswith("medscale-") and entry.name.endswith(".tar.gz")
+        ],
     }
+    if (
+        len(entries) != 2 or any(not entry.is_file(follow_symlinks=False) for entry in entries)
+    ) and entries:
+        issues.append("unexpected artifact directory contents")
     for kind in ("wheel", "sdist"):
         if len(packages[kind]) != 1:
             issues.append(f"{kind}: exactly one MedOrigin artifact required")
