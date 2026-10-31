@@ -11,6 +11,7 @@ on:
       - candidate/medorigin-fhir-wheel-unpublished-20261030
       - test/medorigin-fhir-installed-storage-3os-20261031
       - fix/medorigin-fhir-nonregular-input-20261031
+      - fix/medorigin-fhir-windows-localpath-20261031
   pull_request:
     branches:
       - ci/medorigin-fhir-48commit-full-qualification-20261030
