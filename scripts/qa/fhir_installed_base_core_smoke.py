@@ -58,7 +58,6 @@ def _assert_cli(cli: Path, tmp: Path, filename: str, data: bytes, *, valid: bool
     print(f"INSTALLED_FHIR_{'ACCEPTED' if valid else 'REJECTED'}: {filename}")
 
 
-
 def _assert_installed_report_storage(py: Path, tmp: Path) -> None:
     """Exercise bounded storage using only the freshly installed Wheel."""
     code = r"""
