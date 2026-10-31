@@ -11,6 +11,7 @@ on:
       - fix/medorigin-core-windows-dist-handle-admission-20261031
       - fix/medorigin-core-posix-dist-identity-20261031
       - feat/medorigin-core-inspected-snapshot-digests-20261031
+      - security/medorigin-core-verified-handoff-20261031
   pull_request:
     branches:
       - candidate/medorigin-fhir-wheel-unpublished-20261030
@@ -20,10 +21,12 @@ on:
       - fix/medorigin-core-windows-handle-snapshot-20261031
       - fix/medorigin-core-windows-dist-handle-admission-20261031
       - fix/medorigin-core-posix-dist-identity-20261031
+      - feat/medorigin-core-inspected-snapshot-digests-20261031
     paths:
       - '.github/workflows/medorigin-dist-enumeration-guard.yml'
       - 'scripts/check_base_core_publication_scope.py'
       - 'tests/test_base_core_publication_scope.py'
+      - 'scripts/stage_verified_core_handoff.py'
 
 permissions:
   contents: read
@@ -70,9 +73,9 @@ jobs:
         run: |
           set -euo pipefail
           uv run --no-project --python "${{ matrix.python }}" --with ruff==0.14.4 \
-            ruff check scripts/check_base_core_publication_scope.py tests/test_base_core_publication_scope.py
+            ruff check scripts/check_base_core_publication_scope.py tests/test_base_core_publication_scope.py scripts/stage_verified_core_handoff.py
           uv run --no-project --python "${{ matrix.python }}" --with ruff==0.14.4 \
-            ruff format --check --diff scripts/check_base_core_publication_scope.py tests/test_base_core_publication_scope.py
+            ruff format --check --diff scripts/check_base_core_publication_scope.py tests/test_base_core_publication_scope.py scripts/stage_verified_core_handoff.py
       - name: Explicit no-publication outcome
         shell: bash
         run: |
