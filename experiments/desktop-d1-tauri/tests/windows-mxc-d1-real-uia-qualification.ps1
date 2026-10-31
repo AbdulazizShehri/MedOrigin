@@ -61,23 +61,14 @@ foreach($case in $cases){
   if(-not $ok){throw ('MXC D1 UIA mismatch '+$case.id)}
   Write-Output ('MXC_D1_UIA_PASS '+$case.id)
 }
-$all=@(Get-CimInstance Win32_Process)
-$rootAtSnapshot=@($all | Where-Object { [int]$_.ProcessId -eq $rootPid })
-if($rootAtSnapshot.Count -ne 1){throw 'D1 root missing at process-tree snapshot'}
-Assert-MxcD1RootIdentity -Process $rootAtSnapshot[0] -ExpectedPid $rootPid -ExpectedExePath $full -ExpectedStartTicks $rootStartTicks | Out-Null
-$ids=New-Object 'System.Collections.Generic.HashSet[int]'
-[void]$ids.Add($rootPid)
-for($i=0;$i -lt 15;$i++){
-  $added=$false
-  foreach($p in $all){if($ids.Contains([int]$p.ParentProcessId) -and -not $ids.Contains([int]$p.ProcessId)){[void]$ids.Add([int]$p.ProcessId);$added=$true}}
-  if(-not $added){break}
-}
+. (Join-Path $PSScriptRoot 'windows-mxc-d1-descendant-continuity.ps1')
+$identityHistory=@{}
+$all=@(Get-CimInstance Win32_Process -ErrorAction Stop)
+$initial=Assert-MxcD1ProcessTreeContinuity -Processes $all -RootPid $rootPid -ExpectedExePath $full -ExpectedStartTicks $rootStartTicks -Seen $identityHistory
+$ids=$initial.Ids
 $webview=@($all | Where-Object {$ids.Contains([int]$_.ProcessId) -and $_.Name -eq 'msedgewebview2.exe'})
 if($webview.Count -lt 1){throw 'No actual WebView2 descendants under D1 root'}
-$inventory=@($all | Where-Object {$ids.Contains([int]$_.ProcessId)} | ForEach-Object {
-  if(-not $_.CreationDate){throw 'Process creation identity unavailable'}
-  [pscustomobject]@{pid=[int]$_.ProcessId;startTicks=[string]$_.CreationDate.ToUniversalTime().Ticks;name=[string]$_.Name}
-})
+$inventory=$initial.Inventory
 Write-Output ('MXC_D1_PROCESS_SNAPSHOT_JSON='+(ConvertTo-Json -InputObject $inventory -Compress -Depth 3))
 $tcp=@(Get-NetTCPConnection -ErrorAction Stop | Where-Object {$ids.Contains([int]$_.OwningProcess)})
 $udp=@(Get-NetUDPEndpoint -ErrorAction Stop | Where-Object {$ids.Contains([int]$_.OwningProcess)})
@@ -88,21 +79,8 @@ $maxSampledTcp=0
 $maxSampledUdp=0
 for($sample=0;$sample -lt 12;$sample++){
   $live=@(Get-CimInstance Win32_Process -ErrorAction Stop)
-  $roots=@($live | Where-Object { $_.ProcessId -eq $rootPid -and $_.ExecutablePath -eq $full })
-  if($roots.Count -ne 1){throw 'Exact source binary D1 root identity changed in windowed sampling'}
-  Assert-MxcD1RootIdentity -Process $roots[0] -ExpectedPid $rootPid -ExpectedExePath $full -ExpectedStartTicks $rootStartTicks | Out-Null
-  $tree=New-Object 'System.Collections.Generic.HashSet[int]'
-  [void]$tree.Add($rootPid)
-  for($depth=0;$depth -lt 15;$depth++){
-    $new=$false
-    foreach($child in $live){
-      if($tree.Contains([int]$child.ParentProcessId) -and -not $tree.Contains([int]$child.ProcessId)){
-        [void]$tree.Add([int]$child.ProcessId)
-        $new=$true
-      }
-    }
-    if(-not $new){break}
-  }
+  $sampled=Assert-MxcD1ProcessTreeContinuity -Processes $live -RootPid $rootPid -ExpectedExePath $full -ExpectedStartTicks $rootStartTicks -Seen $identityHistory
+  $tree=$sampled.Ids
   $web=@($live | Where-Object {$tree.Contains([int]$_.ProcessId) -and $_.Name -eq 'msedgewebview2.exe'})
   if($web.Count -lt 1){throw 'Real WebView2 descendants missing during windowed sampling'}
   $tcpNow=@(Get-NetTCPConnection -ErrorAction Stop | Where-Object {$tree.Contains([int]$_.OwningProcess)})
