@@ -11,6 +11,7 @@ on:
       - 'scripts/stage_medorigin_core_projection.py'
       - 'scripts/check_sdist_publication_scope.py'
       - 'scripts/check_base_core_publication_scope.py'
+      - 'scripts/stage_verified_core_handoff.py'
       - 'scripts/check_core_wheel_source_identity.py'
       - 'scripts/inspect_release_wheel_metadata.py'
       - 'scripts/check_release_tag_main_head.py'
@@ -133,12 +134,17 @@ jobs:
         run: |
           set -euo pipefail
           python3 scripts/check_base_core_publication_scope.py --dist dist
+      - name: Stage exact verified private Core bytes for tagged artifact upload
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/stage_verified_core_handoff.py --dist dist --out qualified-dist
 
       - name: Upload artifacts
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: dist-${{ github.ref_name }}
-          path: dist/*
+          path: qualified-dist/*
           retention-days: 30
 
   install-smoke:
@@ -249,10 +255,12 @@ jobs:
           path: dist
       - name: Block release when optional/third-party runtime extras are packaged
         run: python scripts/check_base_core_publication_scope.py --dist dist
+      - name: Stage exactly requalified release bytes, never original dist/*
+        run: python scripts/stage_verified_core_handoff.py --dist dist --out qualified-dist
       - name: Create Release
         uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
         with:
-          files: dist/*
+          files: qualified-dist/*
           generate_release_notes: true
           draft: false
           prerelease: false
