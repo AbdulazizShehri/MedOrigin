@@ -506,3 +506,41 @@ def test_publisher_gate_rejects_symlink_dist_directory(checker: Any, tmp_path: P
     assert result["status"] == "BLOCKED"
     assert result["publication_authorized"] is False
     assert any("unexpected artifact directory contents" in str(x) for x in result["issues"])
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX pinned-open regression")
+@pytest.mark.parametrize("kind", ["wheel", "sdist"])
+def test_scope_gate_fails_closed_if_unsafe_archive_is_replaced_at_parse(
+    checker: Any, monkeypatch: Any, tmp_path: Path, kind: str
+) -> None:
+    """Parsed metadata must come from bytes bound before archive-name reuse."""
+    dist = make_dist(
+        tmp_path / "unsafe",
+        wheel=metadata(extra="unreviewed-training") if kind == "wheel" else metadata(),
+        sdist=metadata(extra="unreviewed-training") if kind == "sdist" else metadata(),
+    )
+    replacement = make_dist(tmp_path / "replacement")
+    name = (
+        "medscale-0.3.0-py3-none-any.whl"
+        if kind == "wheel"
+        else "medscale-0.3.0.tar.gz"
+    )
+    original_path = dist / name
+    replacement_path = replacement / name
+    real_parse = checker._wheel if kind == "wheel" else checker._sdist
+    witnessed: list[bool] = []
+
+    def substitute_before_parser(path: Path) -> Any:
+        # This deterministic hook runs after the directory envelope and
+        # per-item metadata-size checks, before the parser opens the filename.
+        assert not witnessed
+        os.replace(replacement_path, original_path)
+        witnessed.append(True)
+        return real_parse(path)
+
+    monkeypatch.setattr(checker, "_wheel" if kind == "wheel" else "_sdist", substitute_before_parser)
+    result = checker.inspect(dist)
+    assert witnessed, "the exercised archive parser was not reached"
+    assert result["status"] == "BLOCKED"
+    assert result["publication_authorized"] is False
+    assert any("optional extras" in str(issue) for issue in result["issues"])
