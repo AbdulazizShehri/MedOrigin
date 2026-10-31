@@ -436,3 +436,42 @@ binary does not deliberately attempt a socket connection in this smoke;
 therefore a visible window and network namespace confinement **do not**
 constitute packet-level proof of zero egress by every transitive process
 or system service. No release, distribution, PHI or waiver is authorized.
+
+
+### Native Linux IPv4/IPv6 TCP+UDP namespace protocol matrix (2026-10-31)
+
+The **unchanged default native D2 executable** is launched under the
+existing tests/linux-d2-real-app-isolated-window.sh rootless
+unshare -Urn Xvfb harness. An additional **test-only** protocol matrix
+requires four successful host loopback controls (IPv4/IPv6 x TCP/UDP)
+before namespace creation. Once the real D2 GUI window is visible, it
+requires the live native GUI PID's /proc/<pid>/ns/net to match the
+isolated shell's network namespace, with exactly one lo interface DOWN.
+A separate synthetic Python test process in that *same* namespace then
+tries TCP connect and UDP sendto for both loopback addresses and
+documentation-only addresses 192.0.2.1 / 2001:db8::1. All **eight**
+attempts must fail with explicit no-route/no-address errors; timeouts,
+permission/setup failures, unexpected errors and successful sends fail
+the qualification. No real external packet or DNS request is made.
+
+    cargo +1.97.1 build --locked --bin medorigin-desktop-d2-native-egui
+    bash tests/linux-d2-real-app-isolated-window.sh       "$(pwd)/target/debug/medorigin-desktop-d2-native-egui"
+
+**Observed 2026-10-31 on authorized Windows 11 WSL2 Ubuntu 26.04:**
+Rust 1.97.1, pinned eframe 0.36.0, native default GUI window PASS;
+host IPv4/IPv6 TCP+UDP loopback positive controls 4/4 PASS; exact native
+GUI PID matched the isolated netns; sibling synthetic protocol probes
+8/8 explicitly denied; script exit 0. These are local runtime results,
+not hosted CI or independent security acceptance.
+
+This is OS namespace and protocol-matrix evidence on the actual default
+GUI process plus a *sibling* synthetic probe. It does **not** claim
+network requests originate in the unchanged D2 product, that a future
+product-spawned descendant was exercised, or packet-level proof for
+DNS, proxies, system services or Windows D1 WebView2. The test requires
+working IPv6 on the host rather than silently skipping it. GitHub
+source-only CI compiles/lints the code and shell script but cannot
+substitute for this authorized-host runtime test. Issue #662 (Windows
+D1), #673 (Linux RustSec maintenance), #676 (VoiceOver), #603
+(independent security), #574 (owner policy) and #622 (optional extras)
+remain release NO-GO. No publishing, merge, PHI or clinical claims.
