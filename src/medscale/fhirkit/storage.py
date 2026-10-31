@@ -392,6 +392,7 @@ def store_report(report: ValidationReport, root: Path | None = None) -> Path:
         _read_bounded_regular_descriptor,
     )
 
+
 def load_report(report_hash_value: str, root: Path | None = None) -> str:
     """Load a stored report by deterministic artifact id."""
     if (
