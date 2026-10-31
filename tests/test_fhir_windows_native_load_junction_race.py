@@ -31,13 +31,17 @@ def test_load_refuses_junction_swapped_after_lexical_preflight(
     root.mkdir(parents=True)
     target = storage.fhirkit_reports_dir(root) / digest / "report.json"
     target.parent.mkdir(parents=True)
-    target.write_text(report_to_json(report), encoding="utf-8")
+    with target.open("w", encoding="utf-8", newline="\n") as output:
+        output.write(report_to_json(report))
 
     decoy = tmp_path / "decoy"
     decoy_root = decoy if swap == "root" else decoy / "reports"
     fake_target = storage.fhirkit_reports_dir(decoy_root) / digest / "report.json"
     fake_target.parent.mkdir(parents=True)
-    fake_target.write_text(report_to_json(report), encoding="utf-8")
+    with fake_target.open("w", encoding="utf-8", newline="\n") as output:
+        output.write(report_to_json(report))
+
+    assert load_report(digest, root=root) == report_to_json(report)
 
     junction = root if swap == "root" else anchor
     destination = decoy
