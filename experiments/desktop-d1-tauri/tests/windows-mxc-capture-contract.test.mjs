@@ -32,11 +32,15 @@ test('warnings and malformed reports do not become a pass',()=>{
   assert.throws(()=>assessCaptureResult(good,['denials.json'],()=>'{invalid'),SyntaxError);
 });
 test('source keeps deny-by-default, block-only capture and no retained ETL',()=>{
-  assert.match(runner,/containment:\{type:'process'\}/);
+  assert.match(runner,/containment:\{type:'processcontainer',config:\{captureDenials:\{mode:'block'/);
+  assert.doesNotMatch(runner,/^\s*processContainer:\s*\{/m,'V1 rejects top-level processContainer configuration');
   assert.match(runner,/egress:\{default:'deny'\}/);
   assert.match(runner,/ingress:\{default:'deny',hostLoopback:'deny'\}/);
   assert.match(runner,/captureDenials:\{mode:'block'/);
   assert.match(runner,/retainEtl:false/);
+  assert.match(runner,/result\.outputMetadata\?\.captureDenialsError/);
+  assert.match(runner,/result\.outputMetadata\?\.captureDenials\?\.outputPath/);
+  assert.match(runner,/resolve\(dirname\(reportPath\)\)===resolve\(output\)/);
   assert.doesNotMatch(runner,/mode:'allow'|hostLoopback:'allow'|default:'allow'/);
 });
 test('control uses identical test-only binary and reserved target, no host-wide changes',()=>{
