@@ -1,0 +1,36 @@
+# NONPUBLISHING D1 MXC supported Windows Node runtime contract.
+# This is source-only: no native MXC, WebView2, WFP, packet or release test.
+name: D1 MXC supported Node runtime fail-closed source contract
+on:
+  push:
+    branches: [test/medorigin-d1-mxc-supported-node-20261031]
+  pull_request:
+    branches: [test/medorigin-d1-mxc-descendant-continuity-20261031]
+    paths:
+      - '.github/workflows/desktop-d1-mxc-node-runtime-source.yml'
+      - 'experiments/desktop-d1-tauri/tests/windows-mxc-d1-node-runtime.mjs'
+      - 'experiments/desktop-d1-tauri/tests/windows-mxc-d1-node-runtime.test.mjs'
+      - 'experiments/desktop-d1-tauri/tests/windows-mxc-d1-real-app-qualification.mjs'
+permissions:
+  contents: read
+jobs:
+  windows-source:
+    runs-on: windows-2025
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+          fetch-tags: false
+      - name: Unsupported Windows Node versions reject before MXC SDK load
+        shell: pwsh
+        run: |
+          node --test experiments/desktop-d1-tauri/tests/windows-mxc-d1-node-runtime.test.mjs
+          if ($LASTEXITCODE -ne 0) { throw 'MXC Node runtime source contract failed' }
+          node --check experiments/desktop-d1-tauri/tests/windows-mxc-d1-real-app-qualification.mjs
+          if ($LASTEXITCODE -ne 0) { throw 'MXC launcher syntax failed' }
+      - name: Qualification scope
+        shell: pwsh
+        run: |
+          Write-Output 'SOURCE_ONLY_NO_NATIVE_MXC_NO_WEBVIEW2_NO_WFP_NO_PACKET_ATTESTATION_NO_RELEASE'

@@ -1,11 +1,14 @@
 // NONPUBLISHING synthetic-only Windows D1 WebView2 + MXC runtime qualification.
 // Must run on a real authorized interactive Windows desktop with a source-built D1 debug exe.
-import {getPlatformSupport, run} from '@microsoft/mxc-sdk/v1';
+import {assertSupportedWindowsMxcNode} from './windows-mxc-d1-node-runtime.mjs';
 import {mkdtempSync, rmSync, existsSync, readFileSync} from 'node:fs';
 import {join, dirname, resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {createHash} from 'node:crypto';
 import {spawnSync} from 'node:child_process';
+// Refuse unsupported Windows Node before loading the native MXC SDK.
+assertSupportedWindowsMxcNode();
+const {getPlatformSupport, run}=await import('@microsoft/mxc-sdk/v1');
 const exe=resolve(process.argv[2]||'');
 const expected=process.argv[3]||'';
 function requireCondition(ok,reason){if(!ok)throw Error('D1_MXC_REAL_APP_NO_GO: '+reason)}
