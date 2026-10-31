@@ -486,9 +486,7 @@ def _windows_pinned_scope_archives(
         info = _ByHandleFileInformation()
         if not get_info(directory_handle, ctypes.byref(info)):
             raise PublicationScopeError("dist: Windows directory HANDLE cannot be inspected")
-        if (info.dwFileAttributes & 0x00000400) or not (
-            info.dwFileAttributes & 0x00000010
-        ):
+        if (info.dwFileAttributes & 0x00000400) or not (info.dwFileAttributes & 0x00000010):
             raise PublicationScopeError("dist: Windows junction/reparse directory refused")
         # An attacker may replace a lexical parent with a junction after the
         # initial preflight. Reject that alias a second time *while pinned*.
