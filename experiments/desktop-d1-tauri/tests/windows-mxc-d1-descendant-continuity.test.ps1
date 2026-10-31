@@ -53,7 +53,7 @@ MustThrow { Valid @($root,(P 43002 $rootPid $child.Name ($start.AddSeconds(60)) 
 MustThrow { Valid @($root,[pscustomobject]@{ProcessId=43002;ParentProcessId=$rootPid;Name='msedgewebview2.exe';CreationDate=$null;ExecutablePath=$child.ExecutablePath}) }
 $source=Get-Content -LiteralPath $observer -Raw
 if ($source -notmatch [regex]::Escape('windows-mxc-d1-descendant-continuity.ps1') -or
-    ([regex]::Matches($source,'(?m)^\s*Assert-MxcD1ProcessTreeContinuity\b')).Count -lt 2) {
+    ([regex]::Matches($source,'(?m)^\s*\$\w+=Assert-MxcD1ProcessTreeContinuity\b')).Count -lt 2) {
   throw 'RED: real D1 observer does not preserve descendant identity across snapshot and temporal samples'
 }
 $checks++
