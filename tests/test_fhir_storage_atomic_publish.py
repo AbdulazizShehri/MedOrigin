@@ -30,7 +30,9 @@ def test_failed_atomic_link_does_not_publish_or_leave_temporary_file(
     target = _target(tmp_path, report)
     attempts = 0
 
-    def deny_link(_source: os.PathLike[str], _destination: os.PathLike[str]) -> None:
+    def deny_link(
+        _source: os.PathLike[str] | str, _destination: os.PathLike[str] | str, **_kwargs: object
+    ) -> None:
         nonlocal attempts
         attempts += 1
         raise OSError(errno.EACCES, "synthetic link refusal")
@@ -72,12 +74,22 @@ def test_atomic_link_collision_preserves_matching_existing_artifact(
     attempts = 0
 
     def concurrent_identical_writer(
-        _source: os.PathLike[str], destination: os.PathLike[str]
+        _source: os.PathLike[str] | str, destination: os.PathLike[str] | str, **kwargs: object
     ) -> None:
         nonlocal attempts
         attempts += 1
-        with Path(destination).open("w", encoding="utf-8", newline="\n") as output:
-            output.write(expected)
+        if "dst_dir_fd" in kwargs:
+            descriptor = os.open(
+                destination,
+                os.O_WRONLY | os.O_CREAT | os.O_EXCL,
+                0o600,
+                dir_fd=kwargs["dst_dir_fd"],
+            )
+            with os.fdopen(descriptor, "w", encoding="utf-8", newline="\n") as output:
+                output.write(expected)
+        else:
+            with Path(destination).open("w", encoding="utf-8", newline="\n") as output:
+                output.write(expected)
         raise FileExistsError(errno.EEXIST, "synthetic concurrent writer")
 
     monkeypatch.setattr(os, "link", concurrent_identical_writer)

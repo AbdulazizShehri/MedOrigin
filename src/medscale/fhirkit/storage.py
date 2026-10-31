@@ -6,6 +6,7 @@ import os
 import re
 import stat
 import tempfile
+from contextlib import suppress
 from pathlib import Path, PureWindowsPath
 
 from medscale._layout import fhirkit_reports_dir
@@ -24,26 +25,54 @@ _DEFAULT_FILENAME = "report.json"
 _MAX_REPORT_ARTIFACT_BYTES = 8 * 1024 * 1024
 
 
-def _open_posix_report_nofollow(target_path: Path, flags: int) -> int:
-    """Open a report through anchored directory descriptors, never path symlinks.
+def _open_posix_directory_nofollow(directory: Path, *, create: bool = False) -> int:
+    """Return a pinned directory FD, walking from / without following symlinks.
 
-    Each directory is opened relative to the preceding pinned directory inode.
-    An attacker swapping a checked ancestor cannot redirect the final open.
-    This read-only POSIX safeguard does not harden report *creation* or Windows.
+    For creation, mkdirat operates relative to each pinned parent, rather than
+    allowing a checked pathname to be swapped to an attacker-owned directory.
+    The caller owns the returned descriptor.
     """
-    absolute = target_path.absolute()
+    absolute = directory.absolute()
     if ".." in absolute.parts:
         raise FhirStorageError("refusing a noncanonical FHIR report path")
-    directory_flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
-    directory_fd = os.open(absolute.anchor, directory_flags)
+    flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
+    directory_fd = os.open(absolute.anchor, flags)
     try:
-        for component in absolute.parts[1:-1]:
-            child_fd = os.open(component, directory_flags, dir_fd=directory_fd)
+        for component in absolute.parts[1:]:
+            if create:
+                with suppress(FileExistsError):
+                    os.mkdir(component, dir_fd=directory_fd)
+            child_fd = os.open(component, flags, dir_fd=directory_fd)
             os.close(directory_fd)
             directory_fd = child_fd
-        return os.open(absolute.name, flags, dir_fd=directory_fd)
+        result, directory_fd = directory_fd, -1
+        return result
+    finally:
+        if directory_fd >= 0:
+            os.close(directory_fd)
+
+
+def _open_posix_report_nofollow(target_path: Path, flags: int) -> int:
+    """Open a report relative to a pinned, symlink-free POSIX directory."""
+    directory_fd = _open_posix_directory_nofollow(target_path.parent)
+    try:
+        return os.open(target_path.name, flags, dir_fd=directory_fd)
     finally:
         os.close(directory_fd)
+
+
+def _read_bounded_regular_descriptor(descriptor: int) -> str:
+    """Consume and close an already-open regular-file FD under the size bound."""
+    with os.fdopen(descriptor, "rb") as source:
+        metadata = os.fstat(source.fileno())
+        if not stat.S_ISREG(metadata.st_mode):
+            raise FhirStorageError("FHIR report artifact is not a regular file")
+        if metadata.st_size > _MAX_REPORT_ARTIFACT_BYTES:
+            raise FhirStorageError("FHIR report artifact exceeds size limit")
+        raw = source.read(_MAX_REPORT_ARTIFACT_BYTES + 1)
+    if len(raw) > _MAX_REPORT_ARTIFACT_BYTES:
+        raise FhirStorageError("FHIR report artifact exceeds size limit")
+    return raw.decode("utf-8")
 
 
 def _read_bounded_regular_report(target_path: Path, *, secure_posix_ancestors: bool = False) -> str:
@@ -59,16 +88,7 @@ def _read_bounded_regular_report(target_path: Path, *, secure_posix_ancestors: b
         if secure_posix_ancestors and os.name != "nt"
         else os.open(target_path, flags)
     )
-    with os.fdopen(descriptor, "rb") as source:
-        metadata = os.fstat(source.fileno())
-        if not stat.S_ISREG(metadata.st_mode):
-            raise FhirStorageError("FHIR report artifact is not a regular file")
-        if metadata.st_size > _MAX_REPORT_ARTIFACT_BYTES:
-            raise FhirStorageError("FHIR report artifact exceeds size limit")
-        raw = source.read(_MAX_REPORT_ARTIFACT_BYTES + 1)
-    if len(raw) > _MAX_REPORT_ARTIFACT_BYTES:
-        raise FhirStorageError("FHIR report artifact exceeds size limit")
-    return raw.decode("utf-8")
+    return _read_bounded_regular_descriptor(descriptor)
 
 
 def _default_root() -> Path:
@@ -146,6 +166,78 @@ def _reject_report_directory_symlinks(root: Path, digest: str) -> None:
                 raise FhirStorageError("refusing a Windows reparse-point report directory")
 
 
+def _assert_posix_store_directory_pinned(target_dir: Path, directory_fd: int) -> None:
+    """Fail if the public path no longer points to the pinned store directory."""
+    verification_fd = _open_posix_directory_nofollow(target_dir)
+    try:
+        pinned, current = os.fstat(directory_fd), os.fstat(verification_fd)
+        if (pinned.st_dev, pinned.st_ino) != (current.st_dev, current.st_ino):
+            raise FhirStorageError("FHIR report directory changed during publication")
+    finally:
+        os.close(verification_fd)
+
+
+def _store_posix_report(
+    report_json: str, root: Path, digest: str, target_dir: Path, target_path: Path
+) -> Path:
+    """Stage, link and clean up relative to one pinned POSIX directory inode.
+
+    This blocks symlink-swap redirection of mkdir, temporary writes, hard-link
+    publication and cleanup. A hostile rename *after return* is not preventable
+    by a file API and is not a filesystem-ownership or release-security proof.
+    """
+    _reject_report_directory_symlinks(root, digest)
+    directory_fd = -1
+    temporary_name: str | None = None
+    try:
+        directory_fd = _open_posix_directory_nofollow(target_dir, create=True)
+        _reject_report_directory_symlinks(root, digest)
+        _assert_posix_store_directory_pinned(target_dir, directory_fd)
+        temporary_name = f".report-{os.urandom(16).hex()}.tmp"
+        flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW
+        temporary_fd = os.open(temporary_name, flags, 0o600, dir_fd=directory_fd)
+        with os.fdopen(temporary_fd, "w", encoding="utf-8", newline="\n") as output:
+            output.write(report_json)
+            output.flush()
+            os.fsync(output.fileno())
+        try:
+            os.link(
+                temporary_name,
+                _DEFAULT_FILENAME,
+                src_dir_fd=directory_fd,
+                dst_dir_fd=directory_fd,
+                follow_symlinks=False,
+            )
+        except FileExistsError as exc:
+            try:
+                existing_fd = os.open(
+                    _DEFAULT_FILENAME,
+                    os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK,
+                    dir_fd=directory_fd,
+                )
+                existing = _read_bounded_regular_descriptor(existing_fd)
+            except (OSError, UnicodeError) as read_exc:
+                raise FhirStorageError("existing FHIR report is unreadable") from read_exc
+            if existing != report_json:
+                raise FhirStorageError(
+                    "existing FHIR report differs from canonical content"
+                ) from exc
+        _assert_posix_store_directory_pinned(target_dir, directory_fd)
+    except OSError as exc:
+        raise FhirStorageError("unable to create FHIR report artifact") from exc
+    finally:
+        if directory_fd >= 0:
+            try:
+                if temporary_name is not None:
+                    with suppress(FileNotFoundError):
+                        os.unlink(temporary_name, dir_fd=directory_fd)
+            except OSError as exc:
+                raise FhirStorageError("unable to clean temporary FHIR report artifact") from exc
+            finally:
+                os.close(directory_fd)
+    return target_path
+
+
 def store_report(report: ValidationReport, root: Path | None = None) -> Path:
     """Store a report in deterministic content-addressed storage."""
     root = root or _default_root()
@@ -156,6 +248,8 @@ def store_report(report: ValidationReport, root: Path | None = None) -> Path:
     report_hash_value = report_hash(report)
     target_dir = fhirkit_reports_dir(root) / report_hash_value
     target_path = target_dir / _DEFAULT_FILENAME
+    if os.name != "nt":
+        return _store_posix_report(report_json, root, report_hash_value, target_dir, target_path)
     _reject_report_directory_symlinks(root, report_hash_value)
     target_path.parent.mkdir(parents=True, exist_ok=True)
     _reject_report_directory_symlinks(root, report_hash_value)
