@@ -17,6 +17,7 @@ import itertools
 import json
 import os
 import re
+import stat
 import struct
 import tarfile
 import zipfile
@@ -291,6 +292,29 @@ def _sdist(path: Path) -> EmailMessage:
         raise PublicationScopeError("sdist: invalid archive") from exc
 
 
+def _has_untrusted_ancestor_alias(dist: Path) -> bool:
+    """Fail closed on lexical symlink/junction ancestors of publisher inputs.
+
+    A direct dist.is_symlink() check misses ordinary child directories reached
+    through an alias. This is static pathname admission, NOT an atomic
+    defense against concurrent filesystem swaps or a security approval.
+    """
+    # Never query an untrusted Windows UNC/device/extended path, which may
+    # reach a remote share or an alternate namespace before lstat.
+    if os.name == "nt" and dist.drive.startswith("\\\\"):
+        return True
+    absolute = dist.absolute()  # Do not resolve(): that hides the alias.
+    for component in (absolute, *absolute.parents):
+        info = component.lstat()
+        if stat.S_ISLNK(info.st_mode):
+            return True
+        if os.name == "nt" and (
+            getattr(info, "st_file_attributes", 0) & stat.FILE_ATTRIBUTE_REPARSE_POINT
+        ):
+            return True
+    return False
+
+
 def inspect(dist: Path) -> dict[str, object]:
     issues: list[str] = []
     # The tagged publisher uses dist/*, so checking only medscale-* while
@@ -298,7 +322,11 @@ def inspect(dist: Path) -> dict[str, object]:
     # top-level entries and reject any artifact other than the expected pair.
     # Use lstat-style checks so directories and symlinks cannot be treated
     # as regular publisher inputs. No archive is extracted or uploaded.
-    if dist.is_symlink() or not dist.is_dir():
+    try:
+        untrusted_alias = _has_untrusted_ancestor_alias(dist)
+    except (OSError, ValueError):
+        untrusted_alias = True
+    if untrusted_alias or dist.is_symlink() or not dist.is_dir():
         issues.append("unexpected artifact directory contents")
         entries: list[os.DirEntry[str]] = []
     else:
