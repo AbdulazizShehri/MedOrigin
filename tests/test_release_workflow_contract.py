@@ -427,9 +427,7 @@ def test_tag_build_exports_qualified_archive_sha256_to_later_jobs() -> None:
     assert "sdist_sha256=" in build
     assert "sha256sum" in build
     assert '>> "$GITHUB_OUTPUT"' in build
-    assert build.index("stage_verified_core_handoff.py") < build.index(
-        "id: pin_qualified_digests"
-    )
+    assert build.index("stage_verified_core_handoff.py") < build.index("id: pin_qualified_digests")
     assert build.index("id: pin_qualified_digests") < build.index("actions/upload-artifact@")
 
 
