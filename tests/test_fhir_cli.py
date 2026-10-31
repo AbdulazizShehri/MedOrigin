@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -431,3 +432,79 @@ def test_fhir_cli_input_byte_limit_is_inclusive(
     captured = capsys.readouterr()
     assert captured.out == ""
     assert "FHIR JSON input exceeds 8 MiB limit" in captured.err
+
+
+@pytest.mark.parametrize("summary_only", [False, True])
+@pytest.mark.parametrize("artifact_kind", ["directory", "symlink"])
+def test_fhir_cli_rejects_nonregular_or_symlink_input(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    summary_only: bool,
+    artifact_kind: str,
+) -> None:
+    """Do not accept a symlink to a valid fictional resource or a directory."""
+    source = tmp_path / "unsafe-input.json"
+    if artifact_kind == "directory":
+        source.mkdir()
+    else:
+        regular = tmp_path / "fictional-resource.json"
+        regular.write_text('{"resourceType":"Patient","id":"fictional"}', encoding="utf-8")
+        try:
+            source.symlink_to(regular)
+        except (OSError, NotImplementedError):
+            pytest.skip("creating a symlink is not supported on this host")
+    output = tmp_path / "reports"
+    argv = [str(source), "--output-dir", str(output)]
+    if summary_only:
+        argv.append("--summary-only")
+    assert fhir_cli.main(argv) == 1
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert "regular" in captured.err
+    assert "Traceback" not in captured.err
+    assert not output.exists()
+
+
+@pytest.mark.skipif(not hasattr(os, "mkfifo"), reason="POSIX FIFO unavailable")
+@pytest.mark.parametrize("summary_only", [False, True])
+def test_fhir_cli_rejects_fifo_input_without_blocking(
+    tmp_path: Path, summary_only: bool
+) -> None:
+    """A FIFO has no writer; opening it in blocking mode would hang the CLI."""
+    source = tmp_path / "fifo-input.json"
+    os.mkfifo(source)
+    output = tmp_path / "reports"
+    argv = [str(source), "--output-dir", str(output)]
+    if summary_only:
+        argv.append("--summary-only")
+    child = (
+        "import sys; from medscale.cli import fhir; "
+        "raise SystemExit(fhir.main(sys.argv[1:]))"
+    )
+    result = subprocess.run(
+        [sys.executable, "-c", child, *argv],
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=3,
+    )
+    assert result.returncode == 1
+    assert result.stdout == ""
+    assert "regular" in result.stderr
+    assert "Traceback" not in result.stderr
+    assert not output.exists()
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="POSIX character device")
+def test_fhir_cli_rejects_character_device_input(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    device = Path("/dev/null")
+    if not device.is_char_device():
+        pytest.skip("no POSIX null character device on this host")
+    output = tmp_path / "reports"
+    assert fhir_cli.main([str(device), "--output-dir", str(output)]) == 1
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert "regular" in captured.err
+    assert not output.exists()
