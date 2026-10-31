@@ -538,7 +538,9 @@ def test_scope_gate_fails_closed_if_unsafe_archive_is_replaced_at_parse(
         witnessed.append(True)
         return real_parse(path)
 
-    monkeypatch.setattr(checker, "_wheel" if kind == "wheel" else "_sdist", substitute_before_parser)
+    monkeypatch.setattr(
+        checker, "_wheel" if kind == "wheel" else "_sdist", substitute_before_parser
+    )
     result = checker.inspect(dist)
     assert witnessed, "the exercised archive parser was not reached"
     assert result["status"] == "BLOCKED"
