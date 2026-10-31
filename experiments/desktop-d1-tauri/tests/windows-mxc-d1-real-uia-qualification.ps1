@@ -7,7 +7,11 @@ $sha=(Get-FileHash -LiteralPath $full -Algorithm SHA256).Hash
 if($ExpectedExeSha256 -notmatch '^[0-9a-fA-F]{64}$' -or $sha -ne $ExpectedExeSha256){throw 'Exact executable SHA-256 mismatch'}
 $matches=@(Get-CimInstance Win32_Process -Filter "Name='medorigin-desktop-d1-preview.exe'" | Where-Object { $_.ExecutablePath -eq $full })
 if($matches.Count -ne 1){throw ('Expected exactly one exact-path D1 root; got '+$matches.Count)}
+. (Join-Path $PSScriptRoot 'windows-mxc-d1-root-identity.ps1')
 $rootPid=[int]$matches[0].ProcessId
+if(-not $matches[0].CreationDate){throw 'Missing D1 root process creation timestamp'}
+$rootStartTicks=[string]$matches[0].CreationDate.ToUniversalTime().Ticks
+Assert-MxcD1RootIdentity -Process $matches[0] -ExpectedPid $rootPid -ExpectedExePath $full -ExpectedStartTicks $rootStartTicks | Out-Null
 $root=[System.Windows.Automation.AutomationElement]::RootElement
 $window=$null
 for($i=0;$i -lt 40;$i++){
@@ -58,6 +62,9 @@ foreach($case in $cases){
   Write-Output ('MXC_D1_UIA_PASS '+$case.id)
 }
 $all=@(Get-CimInstance Win32_Process)
+$rootAtSnapshot=@($all | Where-Object { [int]$_.ProcessId -eq $rootPid })
+if($rootAtSnapshot.Count -ne 1){throw 'D1 root missing at process-tree snapshot'}
+Assert-MxcD1RootIdentity -Process $rootAtSnapshot[0] -ExpectedPid $rootPid -ExpectedExePath $full -ExpectedStartTicks $rootStartTicks | Out-Null
 $ids=New-Object 'System.Collections.Generic.HashSet[int]'
 [void]$ids.Add($rootPid)
 for($i=0;$i -lt 15;$i++){
@@ -83,6 +90,7 @@ for($sample=0;$sample -lt 12;$sample++){
   $live=@(Get-CimInstance Win32_Process -ErrorAction Stop)
   $roots=@($live | Where-Object { $_.ProcessId -eq $rootPid -and $_.ExecutablePath -eq $full })
   if($roots.Count -ne 1){throw 'Exact source binary D1 root identity changed in windowed sampling'}
+  Assert-MxcD1RootIdentity -Process $roots[0] -ExpectedPid $rootPid -ExpectedExePath $full -ExpectedStartTicks $rootStartTicks | Out-Null
   $tree=New-Object 'System.Collections.Generic.HashSet[int]'
   [void]$tree.Add($rootPid)
   for($depth=0;$depth -lt 15;$depth++){
