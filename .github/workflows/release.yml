@@ -97,6 +97,9 @@ jobs:
     if: github.event_name == 'push'
     needs: quality
     runs-on: ubuntu-latest
+    outputs:
+      wheel_sha256: ${{ steps.pin_qualified_digests.outputs.wheel_sha256 }}
+      sdist_sha256: ${{ steps.pin_qualified_digests.outputs.sdist_sha256 }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -140,6 +143,25 @@ jobs:
           set -euo pipefail
           python3 scripts/stage_verified_core_handoff.py --dist dist --out qualified-dist
 
+      - name: Pin exact qualified build archive hashes for downstream jobs
+        id: pin_qualified_digests
+        shell: bash
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          wheel_files=(qualified-dist/*.whl)
+          sdist_files=(qualified-dist/*.tar.gz)
+          test "$(find qualified-dist -mindepth 1 -maxdepth 1 | wc -l)" -eq 2
+          test "${#wheel_files[@]}" -eq 1
+          test "${#sdist_files[@]}" -eq 1
+          test -f "${wheel_files[0]}" && test ! -L "${wheel_files[0]}"
+          test -f "${sdist_files[0]}" && test ! -L "${sdist_files[0]}"
+          wheel_sha256="$(sha256sum -- "${wheel_files[0]}" | cut -d' ' -f1)"
+          sdist_sha256="$(sha256sum -- "${sdist_files[0]}" | cut -d' ' -f1)"
+          [[ "$wheel_sha256" =~ ^[0-9a-f]{64}$ ]]
+          [[ "$sdist_sha256" =~ ^[0-9a-f]{64}$ ]]
+          printf 'wheel_sha256=%s\n' "$wheel_sha256" >> "$GITHUB_OUTPUT"
+          printf 'sdist_sha256=%s\n' "$sdist_sha256" >> "$GITHUB_OUTPUT"
       - name: Upload artifacts
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
@@ -169,6 +191,25 @@ jobs:
         with:
           name: dist-${{ github.ref_name }}
           path: dist
+      - name: Verify downloaded archives against build SHA-256
+        shell: bash
+        env:
+          BUILD_WHEEL_SHA256: ${{ needs.build.outputs.wheel_sha256 }}
+          BUILD_SDIST_SHA256: ${{ needs.build.outputs.sdist_sha256 }}
+        run: |
+          set -euo pipefail
+          [[ "$BUILD_WHEEL_SHA256" =~ ^[0-9a-f]{64}$ ]]
+          [[ "$BUILD_SDIST_SHA256" =~ ^[0-9a-f]{64}$ ]]
+          shopt -s nullglob
+          wheel_files=(dist/*.whl)
+          sdist_files=(dist/*.tar.gz)
+          test "$(find dist -mindepth 1 -maxdepth 1 | wc -l)" -eq 2
+          test "${#wheel_files[@]}" -eq 1
+          test "${#sdist_files[@]}" -eq 1
+          test -f "${wheel_files[0]}" && test ! -L "${wheel_files[0]}"
+          test -f "${sdist_files[0]}" && test ! -L "${sdist_files[0]}"
+          test "$(sha256sum -- "${wheel_files[0]}" | cut -d' ' -f1)" = "$BUILD_WHEEL_SHA256"
+          test "$(sha256sum -- "${sdist_files[0]}" | cut -d' ' -f1)" = "$BUILD_SDIST_SHA256"
       - name: Install exact wheel and bind CLI version to tag
         shell: bash
         run: |
@@ -253,6 +294,25 @@ jobs:
         with:
           name: dist-${{ github.ref_name }}
           path: dist
+      - name: Verify downloaded archives against build SHA-256
+        shell: bash
+        env:
+          BUILD_WHEEL_SHA256: ${{ needs.build.outputs.wheel_sha256 }}
+          BUILD_SDIST_SHA256: ${{ needs.build.outputs.sdist_sha256 }}
+        run: |
+          set -euo pipefail
+          [[ "$BUILD_WHEEL_SHA256" =~ ^[0-9a-f]{64}$ ]]
+          [[ "$BUILD_SDIST_SHA256" =~ ^[0-9a-f]{64}$ ]]
+          shopt -s nullglob
+          wheel_files=(dist/*.whl)
+          sdist_files=(dist/*.tar.gz)
+          test "$(find dist -mindepth 1 -maxdepth 1 | wc -l)" -eq 2
+          test "${#wheel_files[@]}" -eq 1
+          test "${#sdist_files[@]}" -eq 1
+          test -f "${wheel_files[0]}" && test ! -L "${wheel_files[0]}"
+          test -f "${sdist_files[0]}" && test ! -L "${sdist_files[0]}"
+          test "$(sha256sum -- "${wheel_files[0]}" | cut -d' ' -f1)" = "$BUILD_WHEEL_SHA256"
+          test "$(sha256sum -- "${sdist_files[0]}" | cut -d' ' -f1)" = "$BUILD_SDIST_SHA256"
       - name: Block release when optional/third-party runtime extras are packaged
         run: python scripts/check_base_core_publication_scope.py --dist dist
       - name: Stage exactly requalified release bytes, never original dist/*
@@ -267,7 +327,7 @@ jobs:
 
   testpypi-publish:
     name: TestPyPI trusted publish
-    needs: github-release
+    needs: [github-release, build]
     if: >-
       github.event_name == 'push' &&
       startsWith(github.ref, 'refs/tags/v') &&
@@ -282,6 +342,25 @@ jobs:
         with:
           name: dist-${{ github.ref_name }}
           path: dist
+      - name: Verify downloaded archives against build SHA-256
+        shell: bash
+        env:
+          BUILD_WHEEL_SHA256: ${{ needs.build.outputs.wheel_sha256 }}
+          BUILD_SDIST_SHA256: ${{ needs.build.outputs.sdist_sha256 }}
+        run: |
+          set -euo pipefail
+          [[ "$BUILD_WHEEL_SHA256" =~ ^[0-9a-f]{64}$ ]]
+          [[ "$BUILD_SDIST_SHA256" =~ ^[0-9a-f]{64}$ ]]
+          shopt -s nullglob
+          wheel_files=(dist/*.whl)
+          sdist_files=(dist/*.tar.gz)
+          test "$(find dist -mindepth 1 -maxdepth 1 | wc -l)" -eq 2
+          test "${#wheel_files[@]}" -eq 1
+          test "${#sdist_files[@]}" -eq 1
+          test -f "${wheel_files[0]}" && test ! -L "${wheel_files[0]}"
+          test -f "${sdist_files[0]}" && test ! -L "${sdist_files[0]}"
+          test "$(sha256sum -- "${wheel_files[0]}" | cut -d' ' -f1)" = "$BUILD_WHEEL_SHA256"
+          test "$(sha256sum -- "${sdist_files[0]}" | cut -d' ' -f1)" = "$BUILD_SDIST_SHA256"
       - name: Verify exact distribution payload
         shell: bash
         run: |
