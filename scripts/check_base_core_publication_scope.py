@@ -415,7 +415,8 @@ def _inspect_scope_metadata(
                 prefix = re.escape(f"medscale-{version}")
                 filename_ok = (
                     re.fullmatch(
-                        rf"{prefix}(?:-[0-9][A-Za-z0-9_.]*)?-[A-Za-z0-9_.]+-[A-Za-z0-9_.]+-[A-Za-z0-9_.]+[.]whl",
+                        rf"{prefix}(?:-[0-9][A-Za-z0-9_.]*)?"
+                        r"-[A-Za-z0-9_.]+-[A-Za-z0-9_.]+-[A-Za-z0-9_.]+[.]whl",
                         item.name,
                     )
                     is not None
