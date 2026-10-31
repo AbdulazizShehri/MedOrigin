@@ -17,8 +17,8 @@ import itertools
 import json
 import os
 import re
-import struct
 import stat
+import struct
 import tarfile
 import zipfile
 import zlib
