@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import re
 import stat
+import tempfile
 from pathlib import Path, PureWindowsPath
 
 from medscale._layout import fhirkit_reports_dir
@@ -110,22 +111,46 @@ def store_report(report: ValidationReport, root: Path | None = None) -> Path:
     _reject_report_directory_symlinks(root, report_hash_value)
     target_path.parent.mkdir(parents=True, exist_ok=True)
     _reject_report_directory_symlinks(root, report_hash_value)
+    temporary_path: Path | None = None
     try:
-        # Exclusive creation is atomic: never truncate an existing artifact or
-        # follow a pre-existing report.json symlink to an unrelated user file.
-        with target_path.open("x", encoding="utf-8", newline="\n") as output:
+        # Writing directly to report.json exposes a truncated canonical file
+        # if the process stops midway. Stage complete bytes on the same volume,
+        # flush before publication, then use a no-clobber hard link. An
+        # unsupported hard-link filesystem fails closed; never use os.replace.
+        with tempfile.NamedTemporaryFile(
+            mode="w",
+            encoding="utf-8",
+            newline="\n",
+            prefix=".report-",
+            suffix=".tmp",
+            dir=target_dir,
+            delete=False,
+        ) as output:
+            temporary_path = Path(output.name)
             output.write(report_json)
-    except FileExistsError as exc:
-        if target_path.is_symlink():
-            raise FhirStorageError("refusing a symlink at the FHIR report path") from exc
+            output.flush()
+            os.fsync(output.fileno())
         try:
-            existing = _read_bounded_regular_report(target_path)
-        except (OSError, UnicodeError) as read_exc:
-            raise FhirStorageError("existing FHIR report is unreadable") from read_exc
-        if existing != report_json:
-            raise FhirStorageError("existing FHIR report differs from canonical content") from exc
+            os.link(temporary_path, target_path)
+        except FileExistsError as exc:
+            if target_path.is_symlink():
+                raise FhirStorageError("refusing a symlink at the FHIR report path") from exc
+            try:
+                existing = _read_bounded_regular_report(target_path)
+            except (OSError, UnicodeError) as read_exc:
+                raise FhirStorageError("existing FHIR report is unreadable") from read_exc
+            if existing != report_json:
+                raise FhirStorageError(
+                    "existing FHIR report differs from canonical content"
+                ) from exc
     except OSError as exc:
         raise FhirStorageError("unable to create FHIR report artifact") from exc
+    finally:
+        if temporary_path is not None:
+            try:
+                temporary_path.unlink(missing_ok=True)
+            except OSError as exc:
+                raise FhirStorageError("unable to clean temporary FHIR report artifact") from exc
     return target_path
 
 
