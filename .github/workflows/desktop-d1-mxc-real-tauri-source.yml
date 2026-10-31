@@ -1,0 +1,46 @@
+name: D1 MXC real Tauri UIA source guard (nonpublishing)
+
+on:
+  push:
+    branches:
+      - test/medorigin-d1-mxc-real-tauri-uia-20261031
+    paths:
+      - experiments/desktop-d1-tauri/tests/windows-mxc-d1-real-app-qualification.mjs
+      - experiments/desktop-d1-tauri/tests/windows-mxc-d1-real-uia-qualification.ps1
+      - experiments/desktop-d1-tauri/tests/windows-mxc-d1-real-app-contract.test.mjs
+      - .github/workflows/desktop-d1-mxc-real-tauri-source.yml
+  pull_request:
+    paths:
+      - experiments/desktop-d1-tauri/tests/windows-mxc-d1-real-app-qualification.mjs
+      - experiments/desktop-d1-tauri/tests/windows-mxc-d1-real-uia-qualification.ps1
+      - experiments/desktop-d1-tauri/tests/windows-mxc-d1-real-app-contract.test.mjs
+      - .github/workflows/desktop-d1-mxc-real-tauri-source.yml
+
+permissions:
+  contents: read
+
+jobs:
+  windows-source-only:
+    runs-on: windows-2025
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Strict static source and PowerShell syntax checks (NO interactive GUI claim)
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $dir = 'experiments/desktop-d1-tauri/tests'
+          node --check "$dir/windows-mxc-d1-real-app-qualification.mjs"
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          node --test "$dir/windows-mxc-d1-real-app-contract.test.mjs"
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          $tokens = $null
+          $parseErrors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile(
+            (Resolve-Path "$dir/windows-mxc-d1-real-uia-qualification.ps1").Path,
+            [ref]$tokens, [ref]$parseErrors
+          ) | Out-Null
+          if (@($parseErrors).Count -ne 0) { throw 'PowerShell UIA source parse failed' }
+          Write-Output 'D1_MXC_REAL_TAURI_SOURCE_ONLY_PASS_NOT_RUNTIME_NOT_RELEASE'
