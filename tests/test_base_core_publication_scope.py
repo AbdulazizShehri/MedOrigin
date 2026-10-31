@@ -808,3 +808,84 @@ def test_private_snapshot_digest_not_recomputed_from_modified_original(
         != hashlib.sha256(wheel.read_bytes()).hexdigest()
     )
     assert result["publication_authorized"] is False
+
+
+@pytest.fixture
+def handoff() -> Any:
+    """Load the independent no-upload staging code from the exact branch."""
+    script = SCRIPT.parent / "stage_verified_core_handoff.py"
+    sys.path.insert(0, str(SCRIPT.parent))
+    try:
+        spec = importlib.util.spec_from_file_location("medorigin_verified_handoff", script)
+        assert spec is not None and spec.loader is not None
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return module
+    finally:
+        sys.path.remove(str(SCRIPT.parent))
+
+
+def test_handoff_stages_only_exact_inspected_qualified_archive_bytes(
+    handoff: Any, tmp_path: Path
+) -> None:
+    """A downstream uploader can read the staged pair, never original dist/*."""
+    dist = make_dist(tmp_path / "candidate")
+    target = tmp_path / "qualified"
+    original = {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in dist.iterdir()}
+    receipt = handoff.stage(dist, target)
+    assert receipt["status"] == "STAGED_SCOPE_CLEAN_NOT_AUTHORIZED"
+    assert receipt["publication_authorized"] is False
+    assert target.is_dir()
+    assert sorted(p.name for p in target.iterdir()) == sorted(original)
+    assert {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in target.iterdir()} == (
+        original
+    )
+    assert set(receipt["inspected_private_snapshot_sha256"]) == {"wheel", "sdist"}
+
+
+def test_handoff_rejects_unsafe_optional_extra_without_output(
+    handoff: Any, tmp_path: Path
+) -> None:
+    dist = make_dist(tmp_path / "candidate", wheel=metadata(extra="rq1-runtime-feasibility"))
+    target = tmp_path / "qualified"
+    with pytest.raises(handoff.HandoffError):
+        handoff.stage(dist, target)
+    assert not target.exists()
+
+
+def test_handoff_rejects_replaced_original_after_first_inspection(
+    handoff: Any, monkeypatch: Any, tmp_path: Path
+) -> None:
+    """A fresh file read must never inherit a stale prior CLEAN certificate."""
+    dist = make_dist(tmp_path / "candidate")
+    target = tmp_path / "qualified"
+    wheel = dist / "medscale-0.3.0-py3-none-any.whl"
+    original_inspect = handoff.scope.inspect
+    witnessed: list[bool] = []
+
+    def mutate_after_first_inspect(folder: Path) -> dict[str, object]:
+        receipt = original_inspect(folder)
+        if not witnessed:
+            assert receipt["status"] == "BASE_CORE_PUBLICATION_SCOPE_CLEAN"
+            wheel.write_bytes(b"SYNTHETIC_REPLACED_AFTER_INSPECT")
+            witnessed.append(True)
+        return receipt
+
+    monkeypatch.setattr(handoff.scope, "inspect", mutate_after_first_inspect)
+    with pytest.raises(handoff.HandoffError):
+        handoff.stage(dist, target)
+    assert witnessed
+    assert not target.exists()
+
+
+def test_handoff_never_overwrites_existing_output_directory(
+    handoff: Any, tmp_path: Path
+) -> None:
+    dist = make_dist(tmp_path / "candidate")
+    target = tmp_path / "qualified"
+    target.mkdir()
+    sentinel = target / "keep-original.txt"
+    sentinel.write_text("DO NOT CLOBBER", encoding="utf-8")
+    with pytest.raises(handoff.HandoffError):
+        handoff.stage(dist, target)
+    assert sentinel.read_text(encoding="utf-8") == "DO NOT CLOBBER"
