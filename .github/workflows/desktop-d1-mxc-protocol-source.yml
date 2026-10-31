@@ -1,0 +1,48 @@
+# Source-only, nonpublishing CI. DO NOT infer WFP/UDP delivery or D1 containment.
+name: D1 MXC IPv6 and UDP protocol matrix source (NO-GO experiment)
+on:
+  push:
+    branches: [test/medorigin-d1-mxc-udp-matrix-20261031]
+  pull_request:
+    branches: [test/medorigin-d1-mxc-processcontainer-20261031]
+    paths:
+      - '.github/workflows/desktop-d1-mxc-protocol-source.yml'
+      - 'experiments/desktop-d1-tauri/tests/windows-mxc-protocol-*'
+      - 'experiments/desktop-d1-tauri/README.md'
+permissions:
+  contents: read
+jobs:
+  source-only:
+    name: Windows MSVC source and fail-closed static contract (not runtime)
+    runs-on: windows-2025
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+          fetch-tags: false
+      - name: Pin native Rust compiler
+        shell: pwsh
+        run: rustup toolchain install 1.97.1 --profile minimal --component rustfmt
+      - name: Format and compile synthetic TCP and UDP probe
+        shell: pwsh
+        run: |
+          $p='experiments/desktop-d1-tauri/tests/windows-mxc-protocol-matrix-probe.rs'
+          rustfmt +1.97.1 --check "$p"
+          if ($LASTEXITCODE -ne 0) { throw 'rustfmt' }
+          rustc +1.97.1 -C debuginfo=0 -o "$env:RUNNER_TEMP/mxc-protocol.exe" "$p"
+          if ($LASTEXITCODE -ne 0) { throw 'rustc' }
+      - name: Node source contract tests, no SDK and no network
+        shell: pwsh
+        run: |
+          $p='experiments/desktop-d1-tauri/tests'
+          node --check "$p/windows-mxc-protocol-matrix-negative.mjs"
+          if ($LASTEXITCODE -ne 0) { throw 'Node syntax' }
+          node --test "$p/windows-mxc-protocol-matrix-contract.test.mjs"
+          if ($LASTEXITCODE -ne 0) { throw 'NO-GO source policy test' }
+      - name: Scope-limited marker
+        shell: pwsh
+        run: |
+          Write-Output 'SOURCE_ONLY_PASS_REAL_WINDOWS_UDP_API_AMBIGUOUS'
+          Write-Output 'NO_WEBVIEW2_NO_PACKET_ATTESTATION_NO_RELEASE'
