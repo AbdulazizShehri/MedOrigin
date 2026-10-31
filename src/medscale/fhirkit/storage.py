@@ -24,16 +24,42 @@ _DEFAULT_FILENAME = "report.json"
 _MAX_REPORT_ARTIFACT_BYTES = 8 * 1024 * 1024
 
 
-def _read_bounded_regular_report(target_path: Path) -> str:
+def _open_posix_report_nofollow(target_path: Path, flags: int) -> int:
+    """Open a report through anchored directory descriptors, never path symlinks.
+
+    Each directory is opened relative to the preceding pinned directory inode.
+    An attacker swapping a checked ancestor cannot redirect the final open.
+    This read-only POSIX safeguard does not harden report *creation* or Windows.
+    """
+    absolute = target_path.absolute()
+    if ".." in absolute.parts:
+        raise FhirStorageError("refusing a noncanonical FHIR report path")
+    directory_flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
+    directory_fd = os.open(absolute.anchor, directory_flags)
+    try:
+        for component in absolute.parts[1:-1]:
+            child_fd = os.open(component, directory_flags, dir_fd=directory_fd)
+            os.close(directory_fd)
+            directory_fd = child_fd
+        return os.open(absolute.name, flags, dir_fd=directory_fd)
+    finally:
+        os.close(directory_fd)
+
+
+def _read_bounded_regular_report(target_path: Path, *, secure_posix_ancestors: bool = False) -> str:
     """Read only a bounded regular artifact; never wait on a FIFO or device.
 
-    O_NONBLOCK prevents POSIX FIFO opens from waiting for a writer, and
-    O_NOFOLLOW refuses a final-component symlink where supported. Parent
-    directory races and Windows reparse-point races are not fully solved by
-    these portable checks; this is not a hostile-filesystem isolation claim.
+    O_NONBLOCK prevents POSIX FIFO opens from waiting for a writer. On load,
+    POSIX opens every ancestor with O_NOFOLLOW using pinned directory FDs.
+    Windows and the separate report-creation path still require race hardening.
     """
     flags = os.O_RDONLY | getattr(os, "O_NONBLOCK", 0) | getattr(os, "O_NOFOLLOW", 0)
-    with os.fdopen(os.open(target_path, flags), "rb") as source:
+    descriptor = (
+        _open_posix_report_nofollow(target_path, flags)
+        if secure_posix_ancestors and os.name != "nt"
+        else os.open(target_path, flags)
+    )
+    with os.fdopen(descriptor, "rb") as source:
         metadata = os.fstat(source.fileno())
         if not stat.S_ISREG(metadata.st_mode):
             raise FhirStorageError("FHIR report artifact is not a regular file")
@@ -190,7 +216,7 @@ def load_report(report_hash_value: str, root: Path | None = None) -> str:
     if target_path.is_symlink():
         raise FhirStorageError("refusing a symlink at the FHIR report path")
     try:
-        raw = _read_bounded_regular_report(target_path)
+        raw = _read_bounded_regular_report(target_path, secure_posix_ancestors=True)
     except (OSError, UnicodeError) as exc:
         raise FhirStorageError("missing or unreadable FHIR report artifact") from exc
     try:
