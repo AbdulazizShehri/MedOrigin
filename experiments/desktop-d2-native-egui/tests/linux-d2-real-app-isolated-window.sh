@@ -25,6 +25,34 @@ fi
 if [[ "$inside" == "0" ]]; then
   # Host network configuration is never changed. This user's Linux kernel must
   # allow unprivileged user and network namespaces; fail if it does not.
+  # Positive controls run only on host loopback, with no external traffic.
+  # Both protocol families and both socket types must be usable on this host;
+  # a missing IPv6 stack is NOT counted as a successful negative test.
+  python3 - <<'PYHOST'
+import socket
+
+for family, bind_addr in (
+    (socket.AF_INET, ("127.0.0.1", 0)),
+    (socket.AF_INET6, ("::1", 0, 0, 0)),
+):
+    for kind in (socket.SOCK_STREAM, socket.SOCK_DGRAM):
+        with socket.socket(family, kind) as server:
+            server.settimeout(2)
+            server.bind(bind_addr)
+            if kind == socket.SOCK_STREAM:
+                server.listen(1)
+            with socket.socket(family, kind) as client:
+                client.settimeout(2)
+                if kind == socket.SOCK_STREAM:
+                    client.connect(server.getsockname())
+                    peer, _ = server.accept()
+                    peer.close()
+                else:
+                    client.sendto(b"synthetic", server.getsockname())
+                    received, _ = server.recvfrom(32)
+                    assert received == b"synthetic"
+print("D2_HOST_IPV4_IPV6_TCP_UDP_LOOPBACK_POSITIVE_CONTROL_PASS")
+PYHOST
   host_ns="$(readlink /proc/self/ns/net)"
   MEDORIGIN_D2_EXPECT_HOST_NETNS="$host_ns" \
     unshare -Urn -- bash "$0" --inside "$binary"
@@ -70,6 +98,50 @@ for _ in {1..60}; do
       cat "$log" >&2
       exit 1
     fi
+    # Verify the REAL unmodified D2 GUI PID is in our new netns.
+    if [[ "$(readlink "/proc/$pid/ns/net")" != "$(readlink /proc/self/ns/net)" ]]; then
+      echo "D2_LINUX_NATIVE_NO_GO: GUI PID escaped the isolated network namespace" >&2
+      exit 1
+    fi
+    # A sibling synthetic Python probe runs in the EXACT same namespace.
+    # The product binary has no socket code; this cannot prove what any
+    # future product-spawned descendants might attempt.
+    MEDORIGIN_D2_EXPECT_ISOLATED_NS="$(readlink /proc/self/ns/net)" python3 - <<'PYISOLATED'
+import errno
+import os
+import socket
+
+assert os.readlink("/proc/self/ns/net") == os.environ["MEDORIGIN_D2_EXPECT_ISOLATED_NS"]
+attempts = (
+    (socket.AF_INET, ("127.0.0.1", 9)),
+    (socket.AF_INET, ("192.0.2.1", 9)),  # RFC 5737 documentation-only
+    (socket.AF_INET6, ("::1", 9, 0, 0)),
+    (socket.AF_INET6, ("2001:db8::1", 9, 0, 0)),  # RFC 3849 documentation-only
+)
+for family, address in attempts:
+    for kind in (socket.SOCK_STREAM, socket.SOCK_DGRAM):
+        with socket.socket(family, kind) as sock:
+            sock.settimeout(1)
+            try:
+                if kind == socket.SOCK_STREAM:
+                    sock.connect(address)
+                else:
+                    sock.sendto(b"synthetic", address)
+            except OSError as exc:
+                expected = {errno.ENETUNREACH, errno.EHOSTUNREACH}
+                if family == socket.AF_INET6:
+                    expected.add(errno.EADDRNOTAVAIL)
+                if exc.errno not in expected:
+                    raise AssertionError(
+                        f"Unexpected socket failure: family={family} kind={kind} errno={exc.errno}"
+                    ) from exc
+            else:
+                raise AssertionError(
+                    f"Unexpected network allowance: family={family} kind={kind} addr={address}"
+                )
+print("D2_NATIVE_SAME_NETNS_8_OF_8_IPV4_IPV6_TCP_UDP_DENIED_PASS")
+PYISOLATED
+    echo "D2_UNMODIFIED_NATIVE_GUI_ROOTLESS_NETNS_IPV4_IPV6_TCP_UDP_NEGATIVE_PASS_NOT_RELEASE"
     echo "D2_UNMODIFIED_NATIVE_GUI_ROOTLESS_NETNS_WINDOW_PASS_NOT_RELEASE"
     exit 0
   fi
