@@ -115,3 +115,72 @@ normal D1 product dependency or a distributed entrypoint yet.
 No PHI, clinical deployment, package publication, public release,
 system-wide firewall/audit change, installer, signed artifact,
 protected-main merge or remote inference.
+
+
+## 2026-11-01 continuation — real UIA now mandatory for guarded success
+
+**This section supersedes the earlier timeout-only definition of guarded
+success above.** The previous wrapper accepted an MXC timeout without
+requiring any proof that the contained UI or Tauri IPC had worked. It
+could therefore print a misleading success message when a blank or hung
+GUI simply consumed its allotted time.
+
+**Test-first proof:** New regression at `54abc57bcc524c92a449916effce5f22c787a9c7`
+failed (RED) against the original wrapper because it lacked
+`assertGuardedUiaEvidence(...)` and still treated timeout as success.
+The corrected guarded entrypoint now launches the exact-SHA-bound Windows
+UIAutomation observer **concurrently** with the native MXC process run.
+The real observer requires all four fictional React → Tauri IPC → Rust
+SHA journeys, verified root executable SHA, a nonempty WebView2
+descendant tree, a clean initial TCP/UDP snapshot, and exactly 12
+identity-bracketed bounded socket samples with zero observed owned
+TCP/UDP sockets. The contained runtime must also be warning-free,
+reach the intended finite timeout, and preserve the pinned executable
+SHA before/after. No direct uncontained fallback was introduced.
+
+The Windows observer uses an explicit four-second startup delay and a
+70-second bounded PowerShell process. The MXC container has a 90-second
+lifetime; a missing, crashed or failed observer, nonzero TCP/UDP
+count, incomplete four-journey proof, early GUI exit, incomplete socket
+samples or SDK warning all force **NO-GO**. The parser accepts actual
+Windows CRLF while requiring each full evidence marker and the matching
+root SHA, not substring-only success.
+
+- Local Windows RED at old source: the newly required UIA proof was
+  absent, test exit **1** (expected).
+- Local Windows source tests on updated wrapper: **9 PASS, 0 FAIL,
+  0 SKIP** (previous four preflight tests, the new source gate, and
+  four positive/negative UIA-evidence parser tests). Adversarial
+  cases remove one journey, introduce external/owned TCP or UDP,
+  change root SHA/process count, remove final marker or undercount
+  socket samples; every mutation fails closed.
+- Hosted Windows 2025 GitHub Actions on code head
+  `5a8793cd7f7ba5222b7a3d6e6e91f0ebb8416173`:
+  [run 41300503242](https://github.com/AbdulazizShehri/MedOrigin/actions/runs/41300503242)
+  **SUCCESS**, inspected job 124830242027; **9/9 guarded
+  tests passed**, and all other workflow steps passed.
+- **Actual native guarded MXC + UIA**: authorized Windows with supported
+  Node `v24.22.1` and offline cached MXC SDK `1.0.1`.
+  Launched the **older, unpublished synthetic-only** pinned executable
+  SHA-256
+  `7eceea367a05ce60576d633ff48f593d8dbff9ed2a56ff227d37c2280759b74a`
+  with the revised guarded entrypoint. The new mandatory observer
+  successfully completed its four UIA journeys and process-tree/socket
+  checks. Launcher output:
+  `D1_GUARDED_REAL_UIA_4_OF_4_AND_SOCKETS_PASS_NETWORK_STILL_NO_GO`,
+  **exit 0** after the expected bounded MXC timeout.
+- After the real run: **zero** remaining pinned-path D1 root
+  processes, **zero** owned MXC scratch dirs, disposable local staging
+  removed (`QA_STAGE_REMAINS=False`); original binary SHA unchanged,
+  D: free approximately **11.54 GiB**.
+
+**Strict evidence boundary:** This qualifies the newer *optional
+developer wrapper* with one real contained GUI run of the older
+synthetic binary. It is not a newly rebuilt D1 executable at the current
+branch head, a permanent production launcher, a signed/immutable
+trust path, DNS/IPv6 external or kernel/WFP packet-level proof, or an
+independent security review. Snapshot polling can miss broker/service
+traffic and packets between observations. The raw executable remains
+directly launchable outside this wrapper. **#662 remains OPEN /
+RELEASE NO-GO**. No PHI, installer, main merge, release, tag, host-wide
+network policy or public package publication.
