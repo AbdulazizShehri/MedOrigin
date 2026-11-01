@@ -22,7 +22,9 @@ const s=getPlatformSupport();
 demand(s.isSupported&&s.availableMethods?.includes('processcontainer')&&!(s.isolationWarnings||[]).length,'native MXC ProcessContainer required');
 const configurations=[
  {label:'deny',egress:'deny',ingress:'deny'},
- {label:'allow-egress',egress:'allow',ingress:'deny'}
+ {label:'allow-egress',egress:'allow',ingress:'deny'},
+ {label:'allow-ingress',egress:'deny',ingress:'allow'},
+ {label:'allow-both',egress:'allow',ingress:'allow'}
 ];
 for(const config of configurations){
  const tmp=mkdtempSync(join(dirname(exe),'mxc-d1-token-policy-'));
@@ -41,9 +43,9 @@ for(const config of configurations){
    demand(result.exitCode===0&&result.stdout?.includes('D1_NATIVE_PRIMARY_TOKEN_GATE_ACCEPTED_NO_PACKET_PROOF'),'denied MXC policy should admit the verified token');
    console.log('D1_PRIMARY_TOKEN_DENY_POLICY_POSITIVE_PASS');
   }else{
-   demand(result.exitCode===76&&result.stderr?.includes('primary_token_has_network_capability'),'permissive egress must fail the exact runtime token gate');
-   console.log('D1_PRIMARY_TOKEN_ALLOW_EGRESS_NEGATIVE_PASS');
+   demand(result.exitCode===76&&result.stderr?.includes('primary_token_has_network_capability'),'permissive ingress or egress must fail the exact runtime token gate');
+   console.log('D1_PRIMARY_TOKEN_PERMISSIVE_NETWORK_POLICY_NEGATIVE_PASS',config.label);
   }
  }finally{rmSync(tmp,{recursive:true,force:true,maxRetries:10,retryDelay:100})}
 }
-console.log('D1_EXACT_RUNTIME_TOKEN_GATE_DENY_ALLOW_DIFFERENTIAL_PASS_NO_WFP_ATTESTATION');
+console.log('D1_EXACT_RUNTIME_TOKEN_GATE_FOUR_POLICY_MATRIX_PASS_NO_WFP_ATTESTATION');
