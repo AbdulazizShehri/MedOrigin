@@ -1,0 +1,45 @@
+# Read-only POSIX synthetic failure regression. No publication or artifacts.
+name: FHIR POSIX temporary descriptor adoption cleanup QA
+on:
+  push:
+    branches:
+      - fix/medorigin-fhir-posix-tempfd-cleanup-20261101
+  pull_request:
+    branches:
+      - fix/medorigin-fhir-windows-existing-adoption-cleanup-20261101
+permissions:
+  contents: read
+jobs:
+  posix-tempfd:
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-latest]
+        python: ["3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+          fetch-depth: 1
+          fetch-tags: false
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        with:
+          enable-cache: false
+      - run: uv python install ${{ matrix.python }}
+      - name: Pinned Ruff
+        run: |
+          uvx --python ${{ matrix.python }} ruff==0.14.4 check src/medscale/fhirkit/storage.py tests/test_fhir_posix_tempfd_cleanup.py
+          uvx --python ${{ matrix.python }} ruff==0.14.4 format --check --diff src/medscale/fhirkit/storage.py tests/test_fhir_posix_tempfd_cleanup.py
+      - name: Real POSIX synthetic descriptor failure and retained storage tests
+        env:
+          PYTHONPATH: src
+        run: >-
+          uv run --no-project --python ${{ matrix.python }} --with pytest==8.4.2
+          python -m pytest -q
+          tests/test_fhir_posix_tempfd_cleanup.py
+          tests/test_fhir_storage_bounded.py
+          tests/test_fhir_storage_atomic_publish.py
+      - run: echo "POSIX_FHIR_TEMP_FD_ADOPTION_SYNTHETIC_ONLY_NO_RELEASE"
