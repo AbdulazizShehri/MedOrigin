@@ -134,7 +134,9 @@ def main() -> int:
     try:
         result = handoff(args.builder, args.dist)
     except HandoffError as exc:
-        print(json.dumps({"status": "BLOCKED", "reason": str(exc), "publication_authorized": False}))
+        print(
+            json.dumps({"status": "BLOCKED", "reason": str(exc), "publication_authorized": False})
+        )
         return 2
     print(json.dumps(result, sort_keys=True))
     return 0
