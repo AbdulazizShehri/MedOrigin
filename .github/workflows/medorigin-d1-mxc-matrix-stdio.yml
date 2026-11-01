@@ -1,0 +1,36 @@
+# NONPUBLISHING source-only native socket transcript integrity tests.
+# No MXC SDK, WebView2, OS network, PHI, release or publication.
+name: D1 MXC native stdout integrity source contracts
+on:
+  push:
+    branches:
+      - test/medorigin-d1-mxc-matrix-stdio-20261101
+  pull_request:
+    branches:
+      - test/medorigin-d1-udp-softaccept-negative-20261101
+    paths:
+      - 'experiments/desktop-d1-tauri/tests/windows-mxc-protocol-matrix-verdict.mjs'
+      - 'experiments/desktop-d1-tauri/tests/windows-mxc-protocol-matrix-stdio.test.mjs'
+      - '.github/workflows/medorigin-d1-mxc-matrix-stdio.yml'
+permissions:
+  contents: read
+jobs:
+  source-only:
+    runs-on: windows-2025
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+      - name: Reject extra native stdout and preserve eight-protocol verdict
+        shell: pwsh
+        run: |
+          $p='experiments/desktop-d1-tauri/tests'
+          node --check "$p/windows-mxc-protocol-matrix-verdict.mjs"
+          if ($LASTEXITCODE -ne 0) { throw 'D1 MXC verdict parse NO-GO' }
+          node --check "$p/windows-mxc-protocol-matrix-stdio.test.mjs"
+          if ($LASTEXITCODE -ne 0) { throw 'D1 MXC transcript test parse NO-GO' }
+          node --test "$p/windows-mxc-protocol-matrix-verdict.test.mjs" "$p/windows-mxc-protocol-matrix-contract.test.mjs" "$p/windows-mxc-protocol-matrix-stdio.test.mjs"
+          if ($LASTEXITCODE -ne 0) { throw 'D1 MXC native transcript source NO-GO' }
+          Write-Output 'D1_MXC_STDOUT_SOURCE_ONLY_NOT_NATIVE_OS_OR_RELEASE'
