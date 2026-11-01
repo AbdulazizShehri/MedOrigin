@@ -317,7 +317,13 @@ def store(
                     native.dispose_temp(msvcrt.get_osfhandle(output.fileno()))
         finally:
             if not transferred:
-                native.close(temp_handle)
+                # The NT temporary file already exists even if CRT adoption
+                # fails. Mark it for deletion using its original pinned HANDLE
+                # before closing; never fall back to a pathname unlink.
+                try:
+                    native.dispose_temp(temp_handle)
+                finally:
+                    native.close(temp_handle)
     except OSError as exc:
         raise FhirStorageError("unable to create native Windows FHIR report artifact") from exc
     finally:
