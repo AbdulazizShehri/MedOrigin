@@ -1,0 +1,33 @@
+# Nonpublishing source-only guard. Does not execute native MXC or attest WFP packets.
+name: D1 MXC TCP WSAEACCES source-only contract
+on:
+  push:
+    branches: [test/medorigin-d1-mxc-tcp-wsaeacces-20261101]
+  pull_request:
+    branches: [test/medorigin-d1-mxc-endpoint-negative-20261101]
+    paths:
+      - 'experiments/desktop-d1-tauri/tests/windows-mxc-synthetic-local-socket-probe.rs'
+      - 'experiments/desktop-d1-tauri/tests/windows-mxc-synthetic-local-socket-differential.mjs'
+      - 'experiments/desktop-d1-tauri/tests/windows-mxc-synthetic-local-socket-source-contract.test.mjs'
+      - '.github/workflows/desktop-d1-mxc-tcp-wsaeacces-source.yml'
+permissions:
+  contents: read
+jobs:
+  windows-source:
+    runs-on: windows-2025
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Fail-closed synthetic TCP error-classification contracts
+        shell: pwsh
+        run: |
+          $tests='experiments/desktop-d1-tauri/tests'
+          node --test "$tests/windows-mxc-synthetic-local-socket-source-contract.test.mjs"
+          if ($LASTEXITCODE -ne 0) { throw 'D1 WSAEACCES source contract failed' }
+          node --check "$tests/windows-mxc-synthetic-local-socket-differential.mjs"
+          if ($LASTEXITCODE -ne 0) { throw 'D1 MXC synthetic harness syntax failed' }
+          rustc --edition 2024 -D warnings --emit metadata -o "$env:RUNNER_TEMP/d1-mxc-wsaeacces.rmeta" "$tests/windows-mxc-synthetic-local-socket-probe.rs"
+          if ($LASTEXITCODE -ne 0) { throw 'D1 MXC synthetic Rust probe compile failed' }
+          Write-Output 'D1_MXC_WSAEACCES_SOURCE_ONLY_NO_NATIVE_MXC_NO_PACKET_OR_DNS_PROOF_NO_RELEASE'

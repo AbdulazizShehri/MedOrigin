@@ -26,3 +26,8 @@ test('host positive controls and MXC differential use exactly the same binary',(
  assert.match(host,/await check\('IPv4','127\.0\.0\.1'\)/);
  assert.match(host,/await check\('IPv6','::1'\)/);
 });
+test('contained TCP must prove WSAEACCES 10013 instead of accepting generic failure',()=>{
+ assert.match(rust,/raw_os_error\(\)/);
+ assert.match(rust,/D1_TCP_WSAEACCES_10013/);
+ assert.match(host,/result\.stdout\.includes\('D1_TCP_WSAEACCES_10013'\)/);
+});

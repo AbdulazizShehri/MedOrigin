@@ -32,7 +32,14 @@ fn main() {
             let _ = stream.write_all(b"D1_SYNTHETIC_TCP_PROBE");
             println!("D1_TCP_CONNECTED");
         }
-        Err(_) => println!("D1_TCP_CONNECT_DENIED_OR_FAILED"),
+        Err(error) => {
+            println!("D1_TCP_CONNECT_DENIED_OR_FAILED");
+            if error.raw_os_error() == Some(10013) {
+                println!("D1_TCP_WSAEACCES_10013");
+            } else {
+                println!("D1_TCP_OTHER_ERROR_NOT_OS_DENIAL");
+            }
+        },
     }
     let bind = match ip { IpAddr::V4(_) => "0.0.0.0:0", IpAddr::V6(_) => "[::]:0" };
     match UdpSocket::bind(bind) {
