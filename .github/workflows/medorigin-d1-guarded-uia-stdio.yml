@@ -1,0 +1,32 @@
+# NONPUBLISHING synthetic-only observer stdout/stderr fail-closed regression.
+# Hosted Windows CI does not execute native MXC, WebView2 or WFP packet capture.
+name: D1 guarded UIA observer exact stdio source contracts
+on:
+  push:
+    branches:
+      - test/medorigin-d1-observer-stdio-failclosed-20261101
+  pull_request:
+    branches:
+      - test/medorigin-d1-guarded-exact-stdout-20261101
+permissions:
+  contents: read
+jobs:
+  observer-stdio-source:
+    runs-on: windows-2025
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+      - name: Parse and exercise actual source-bound observer regression
+        shell: pwsh
+        run: |
+          $t='experiments/desktop-d1-tauri/tests'
+          node --check "$t/windows-mxc-d1-guarded-uia-observer.mjs"
+          if($LASTEXITCODE -ne 0){throw 'Observer syntax NO-GO'}
+          node --check "$t/windows-mxc-d1-guarded-preview-launch.mjs"
+          if($LASTEXITCODE -ne 0){throw 'Launcher syntax NO-GO'}
+          node --test "$t/windows-mxc-d1-guarded-uia-observer.test.mjs" "$t/windows-mxc-d1-guarded-cold-restart.test.mjs"
+          if($LASTEXITCODE -ne 0){throw 'UIA observer stdio regression NO-GO'}
+          Write-Output 'D1_UIA_OBSERVER_STDIO_SOURCE_ONLY_NATIVE_WFP_RELEASE_NO_GO'
