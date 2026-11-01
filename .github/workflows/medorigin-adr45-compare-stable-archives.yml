@@ -50,9 +50,9 @@ jobs:
       - name: Pin Ruff syntax, import safety and formatting
         shell: pwsh
         run: |
-          uvx --from ruff==0.14.4 ruff check scripts/compare_medorigin_base_only_archives.py tests/test_compare_medorigin_base_only_archives.py
+          uvx --from ruff==0.14.4 ruff check scripts/compare_medorigin_base_only_archives.py tests/test_compare_medorigin_base_only_archives.py scripts/qa/adr45_private_builder_handoff.py tests/test_adr45_private_builder_handoff.py
           if ($LASTEXITCODE -ne 0) { throw 'ADR45 comparator Ruff lint NO-GO' }
-          uvx --from ruff==0.14.4 ruff format --check scripts/compare_medorigin_base_only_archives.py tests/test_compare_medorigin_base_only_archives.py
+          uvx --from ruff==0.14.4 ruff format --check scripts/compare_medorigin_base_only_archives.py tests/test_compare_medorigin_base_only_archives.py scripts/qa/adr45_private_builder_handoff.py tests/test_adr45_private_builder_handoff.py
           if ($LASTEXITCODE -ne 0) { throw 'ADR45 comparator Ruff format NO-GO' }
       - name: Explicit NO-GO
         shell: pwsh
