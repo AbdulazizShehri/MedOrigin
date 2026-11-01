@@ -65,16 +65,19 @@ try{
  // The Rust probe's 'control' mode contains NO remote test-net attempts.
  const expectedTcp4Nonce=randomBytes(16).toString('hex');
  const expectedTcp6Nonce=randomBytes(16).toString('hex');
- if(expectedTcp4Nonce===expectedTcp6Nonce)deny('duplicate TCP proof challenges');
+ const expectedUdp4Nonce=randomBytes(16).toString('hex');
+ const expectedUdp6Nonce=randomBytes(16).toString('hex');
+ if(new Set([expectedTcp4Nonce,expectedTcp6Nonce,expectedUdp4Nonce,expectedUdp6Nonce]).size!==4)
+  deny('duplicate TCP/UDP proof challenges');
  const control=spawnSync(exe,[String(expectedTcp4Port),String(expectedTcp6Port),'control',
-  expectedTcp4Nonce,expectedTcp6Nonce],
+  expectedTcp4Nonce,expectedTcp6Nonce,expectedUdp4Nonce,expectedUdp6Nonce],
   {encoding:'utf8',timeout:12000,maxBuffer:32768,windowsHide:true});
  await new Promise(done=>setTimeout(done,300));
  if(sha!==digest())deny('native Rust probe bytes changed during local control');
  const assessment=assessNativePositiveControl({
   control,tcp4Accepts:tcp4Peers.length,tcp6Accepts:tcp6Peers.length,
   tcp4Peers,tcp6Peers,expectedTcp4Port,expectedTcp6Port,
-  expectedTcp4Nonce,expectedTcp6Nonce,
+  expectedTcp4Nonce,expectedTcp6Nonce,expectedUdp4Nonce,expectedUdp6Nonce,
   udp4Receipts:udp4Packets.length,udp6Receipts:udp6Packets.length,
   udp4Packets,udp6Packets
  });

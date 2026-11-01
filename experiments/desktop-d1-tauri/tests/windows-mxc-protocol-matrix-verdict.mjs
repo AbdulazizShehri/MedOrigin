@@ -20,7 +20,7 @@ function requireCondition(condition,reason){if(!condition)failure(reason)}
 export function assessNativePositiveControl({
  control,udp4Receipts,udp6Receipts,tcp4Accepts,tcp6Accepts,
  tcp4Peers,tcp6Peers,expectedTcp4Port,expectedTcp6Port,
- expectedTcp4Nonce,expectedTcp6Nonce,udp4Packets,udp6Packets
+ expectedTcp4Nonce,expectedTcp6Nonce,expectedUdp4Nonce,expectedUdp6Nonce,udp4Packets,udp6Packets
 }) {
  requireCondition(control&&typeof control==='object',
   'unrestricted native control result missing');
@@ -75,18 +75,21 @@ export function assessNativePositiveControl({
  };
  requirePeer(tcp4Peers,expectedTcp4Port,'IPv4','127.0.0.1',expectedTcp4Nonce);
  requirePeer(tcp6Peers,expectedTcp6Port,'IPv6','::1',expectedTcp6Nonce);
- const payload=Buffer.from('synthetic-mxc-udp-probe','utf8');
- const validPacket=(packet,family,address)=>
+ const challenges=[expectedTcp4Nonce,expectedTcp6Nonce,expectedUdp4Nonce,expectedUdp6Nonce];
+ requireCondition(challenges.every(validNonce)&&new Set(challenges).size===4,
+  'four distinct lowercase 128-bit TCP/UDP local control challenges required');
+ const payload=nonce=>Buffer.concat([Buffer.from('mxcudp:','ascii'),Buffer.from(nonce,'hex')]);
+ const validPacket=(packet,family,address,nonce)=>
   packet&&typeof packet==='object'&&
-  Buffer.isBuffer(packet.payload)&&packet.payload.equals(payload)&&
+  Buffer.isBuffer(packet.payload)&&packet.payload.equals(payload(nonce))&&
   packet.address===address&&packet.family===family&&
-  packet.size===payload.length&&
+  packet.size===23&&
   Number.isSafeInteger(packet.port)&&packet.port>=1&&packet.port<=65535;
  requireCondition(Array.isArray(udp4Packets)&&udp4Packets.length===1&&
-  validPacket(udp4Packets[0],'IPv4','127.0.0.1'),
+  validPacket(udp4Packets[0],'IPv4','127.0.0.1',expectedUdp4Nonce),
   'unrestricted native UDP4 listener payload or source not exact');
  requireCondition(Array.isArray(udp6Packets)&&udp6Packets.length===1&&
-  validPacket(udp6Packets[0],'IPv6','::1'),
+  validPacket(udp6Packets[0],'IPv6','::1',expectedUdp6Nonce),
   'unrestricted native UDP6 listener payload or source not exact');
  return Object.freeze({classification:'UNCONFINED_LOCAL_POSITIVE_CONTROL_ONLY'});
 }

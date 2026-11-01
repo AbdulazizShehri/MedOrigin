@@ -16,7 +16,7 @@ const positiveRows=[
  'D1_MXC_UDP6_LOOPBACK=SENT23'
 ];
 const positivePacket=(family)=>({
- payload:Buffer.from('synthetic-mxc-udp-probe','utf8'),
+ payload:Buffer.concat([Buffer.from('mxcudp:'),Buffer.from((family==='IPv4'?'c':'d').repeat(32),'hex')]),
  address:family==='IPv4'?'127.0.0.1':'::1',
  family,size:23,port:42000
 });
@@ -31,6 +31,7 @@ const positive=()=>({
   proof:Buffer.from('D1_MXC_TCP6_PROOF='+'b'.repeat(32))}],
  expectedTcp4Port:43001,expectedTcp6Port:43002,
  expectedTcp4Nonce:'a'.repeat(32),expectedTcp6Nonce:'b'.repeat(32),
+ expectedUdp4Nonce:'c'.repeat(32),expectedUdp6Nonce:'d'.repeat(32),
  udp4Receipts:1,udp6Receipts:1,tcp4Accepts:1,tcp6Accepts:1,
  udp4Packets:[positivePacket('IPv4')],udp6Packets:[positivePacket('IPv6')]
 });
