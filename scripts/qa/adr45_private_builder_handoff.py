@@ -27,10 +27,13 @@ class HandoffError(ValueError):
     """Unsafe or drifting original builder outputs. Always fail closed."""
 
 
-def _identity(info: os.stat_result) -> tuple[int, int, int, int, int]:
+def _identity(info: os.stat_result) -> tuple[int, int, int, int, int, int, int]:
     # Windows fd fstat ctime can differ from path lstat for one normal file.
     ctime = 0 if os.name == "nt" else info.st_ctime_ns
-    return (info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns, ctime)
+    return (
+        info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns,
+        ctime, info.st_mode, info.st_nlink,
+    )
 
 
 def _pinned_bytes(path: Path, *, limit: int, parent_id: tuple[int, int]) -> bytes:
@@ -80,6 +83,7 @@ def handoff(builder: Path, destination: Path) -> dict[str, object]:
             raise HandoffError("builder must contain exact three allowlisted entries")
         if any(not item.is_file(follow_symlinks=False) for item in entries):
             raise HandoffError("builder contains symlink or nonregular entry")
+        initial_files = {name: _identity((builder / name).lstat()) for name in BUILDER_NAMES}
         wheel = _pinned_bytes(builder / WHEEL, limit=MAX_ARTIFACT_BYTES, parent_id=directory_id)
         sdist = _pinned_bytes(builder / SDIST, limit=MAX_ARTIFACT_BYTES, parent_id=directory_id)
         _pinned_bytes(builder / ".gitignore", limit=MAX_IGNORE_BYTES, parent_id=directory_id)
@@ -90,6 +94,11 @@ def handoff(builder: Path, destination: Path) -> dict[str, object]:
             repeat = list(itertools.islice(scan, 4))
         if len(repeat) != 3 or {item.name for item in repeat} != BUILDER_NAMES:
             raise HandoffError("builder entries changed during snapshot")
+        if any(
+            _identity((builder / name).lstat()) != initial_files[name]
+            for name in BUILDER_NAMES
+        ):
+            raise HandoffError("builder source file identity changed after snapshot")
         # Do not make a destination directory until source inputs pass
         # all metadata, byte, and directory checks above.
         destination.mkdir()
