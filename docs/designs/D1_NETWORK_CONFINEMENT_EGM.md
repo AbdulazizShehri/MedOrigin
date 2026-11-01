@@ -89,6 +89,30 @@ must **reuse or explicitly replace** these experimental sources after a
 fresh review, rather than creating redundant tools or claiming their tests
 are already sufficient.
 
+### 2026-11-01 actual guarded two-cold-start lifecycle qualification
+
+The [exact-source guarded D1 two-cold-start evidence](../../experiments/desktop-d1-tauri/evidence/windows-mxc-d1-two-guarded-cold-starts-20261101.md)
+now includes **two genuine native Windows MXC restarts** of the
+source-built D1 application with the **current** named networkLoopback
+token guard, plus separate historical harness qualification.
+The updated cold-restart harness reuses the strictly verified guarded
+launcher instead of the older loose evidence parser. Current-source
+exe SHA-256 is
+`a36043a4028d9703e2cc29cc9e7e1b0a49476b74d5c02e0a17c8bb786aac8c6b`;
+**8/8** WebView2 UIA synthetic fixture journeys passed across two
+cold starts; after each actual MXC shutdown the exact root/WebView2
+process PID+creation-time identities were not present. Current executable
+also refused direct/plain or environment-spoofed Windows launches
+**2/2 with exit 76**; current Rust unit tests **2/2 PASS**. Hosted
+Windows source-only contracts **31/31 PASS**.
+
+**Scope limit:** This is positive D1 GUI and bounded process-cleanup
+evidence, **not** independent OS kernel WFP/packet/DNS/IPv4/IPv6
+or WebView2 broker/service egress attestation; it also does not
+address interrupted installer upgrade, crash-recovery, signed mandatory
+startup or independently approved release. All #662 security NO-GO
+gates remain unchanged.
+
 ### 2026-11-01 actual MXC capture compatibility finding
 
 The [capture integrity and native failure report](../../experiments/desktop-d1-tauri/evidence/windows-mxc-capture-receipt-native-no-go-20261101.md)

@@ -36,6 +36,29 @@ export function requireQualifiedRun({status,stdout}) {
     throw Error('D1_LIFECYCLE_NO_GO: real GUI/IPC/network-window qualification missing');
   return parseD1Snapshot(stdout);
 }
+
+// The guarded entrypoint emits a validated *sanitized* process census only
+// after its full native MXC GUI/UIA + bounded socket-sample qualification.
+// A legacy runner's free-form success substrings cannot pass this contract.
+// This proves process identity lifecycle observations, NOT packet/DNS denial.
+export function requireGuardedQualifiedRun({status,stdout,sha256}) {
+ if(status!==0||typeof stdout!=='string'||stdout.length>2*1024*1024||
+   typeof sha256!=='string'||!/^[a-f0-9]{64}$/i.test(sha256))
+  throw Error('D1_LIFECYCLE_NO_GO: guarded runner status, output or hash invalid');
+ const rows=stdout.split(/\r?\n/).map(x=>x.trim()).filter(Boolean);
+ const prefix='D1_GUARDED_PROCESS_SNAPSHOT_JSON=';
+ const digest='D1_GUARDED_EXECUTABLE_SHA256='+sha256.toLowerCase();
+ const marker='D1_GUARDED_REAL_UIA_4_OF_4_AND_SOCKETS_PASS_NETWORK_STILL_NO_GO';
+ const records=rows.filter(x=>x.startsWith('D1_GUARDED_'));
+ if(records.length!==3||records[0].startsWith(prefix)===false||
+   records[1]!==digest||records[2]!==marker)
+  throw Error('D1_LIFECYCLE_NO_GO: missing, repeated, unordered or mismatched guarded receipt');
+ let parsed;
+ try{parsed=JSON.parse(records[0].slice(prefix.length))}
+ catch{throw Error('D1_LIFECYCLE_NO_GO: invalid guarded identity JSON')}
+ return validate(parsed,true);
+}
+
 export function assertNoResidual(original, live) {
   validate(original,true);
   validate(live,false);

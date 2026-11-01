@@ -5,6 +5,7 @@
 import {requireSupportedWindowsMxcNode} from './windows-mxc-d1-runtime-node-qualification.mjs';
 import {requirePinnedD1Executable} from './windows-mxc-d1-guarded-launch-preflight.mjs';
 import {observeGuardedUia,assertGuardedUiaEvidence} from './windows-mxc-d1-guarded-uia-observer.mjs';
+import {parseD1Snapshot} from './windows-mxc-d1-lifecycle-proof.mjs';
 import {mkdtempSync,rmSync} from 'node:fs';
 import {createHash} from 'node:crypto';
 import {readFileSync} from 'node:fs';
@@ -50,6 +51,11 @@ try {
    reject('runtime warnings or early GUI exit; containment not qualified');
  if(uiaSpawnError)reject('Windows UIA observer process failed to launch or complete');
  assertGuardedUiaEvidence(uiaStatus,uiaOutput,admitted.sha256);
+ // Emit only the validated, sanitized identity census *after* MXC completes.
+ // The cold-restart runner must tie the same SHA to two disjoint lifecycles.
+ const verifiedSnapshot=parseD1Snapshot(uiaOutput);
+ console.log('D1_GUARDED_PROCESS_SNAPSHOT_JSON='+JSON.stringify(verifiedSnapshot));
+ console.log('D1_GUARDED_EXECUTABLE_SHA256='+admitted.sha256);
  console.log('D1_GUARDED_REAL_UIA_4_OF_4_AND_SOCKETS_PASS_NETWORK_STILL_NO_GO');
 } catch(error) {
  console.error('D1_MXC_GUARDED_LAUNCH_NO_GO',error.message);
