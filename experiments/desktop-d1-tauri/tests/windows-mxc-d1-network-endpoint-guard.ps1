@@ -4,10 +4,13 @@
 function Assert-MxcD1ObservedEndpoints {
   [CmdletBinding()]
   param(
-    [Parameter(Mandatory=$true)][AllowEmptyCollection()][object[]]$Tcp,
-    [Parameter(Mandatory=$true)][AllowEmptyCollection()][object[]]$Udp,
+    [Parameter(Mandatory=$true)][AllowNull()][AllowEmptyCollection()][object[]]$Tcp,
+    [Parameter(Mandatory=$true)][AllowNull()][AllowEmptyCollection()][object[]]$Udp,
     [Parameter(Mandatory=$true)][ValidatePattern('^[a-zA-Z0-9_-]+$')][string]$Phase
   )
+  if($null -eq $Tcp -or $null -eq $Udp) {
+    throw ('D1_MXC_ENDPOINT_NO_GO '+$Phase+' missing socket observation source')
+  }
   foreach($endpoint in $Tcp) {
     if($null -eq $endpoint) { throw ('D1_MXC_ENDPOINT_NO_GO '+$Phase+' null TCP record') }
     $state=[string]$endpoint.State
