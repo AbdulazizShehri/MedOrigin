@@ -15,10 +15,16 @@ const positiveRows=[
  'D1_MXC_UDP4_LOOPBACK=SENT23',
  'D1_MXC_UDP6_LOOPBACK=SENT23'
 ];
+const positivePacket=(family)=>({
+ payload:Buffer.from('synthetic-mxc-udp-probe','utf8'),
+ address:family==='IPv4'?'127.0.0.1':'::1',
+ family,size:23,port:42000
+});
 const positive=()=>({
  control:{status:0,signal:null,error:undefined,stderr:'',
   stdout:positiveRows.join('\n')+'\n'},
- udp4Receipts:1,udp6Receipts:1
+ udp4Receipts:1,udp6Receipts:1,tcp4Accepts:1,tcp6Accepts:1,
+ udp4Packets:[positivePacket('IPv4')],udp6Packets:[positivePacket('IPv6')]
 });
 const verdict=()=>({
  result:{stdout:[...keys.map(k=>'D1_MXC_'+k+'=WSA10013'),
