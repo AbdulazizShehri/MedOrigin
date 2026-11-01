@@ -1,0 +1,43 @@
+# Unpublished D1 T1; Windows provider/channel metadata is NOT packet evidence.
+name: D1 native passive observer availability (SOURCE ONLY)
+on:
+  push:
+    branches:
+      - test/medorigin-d1-native-passive-wfp-inventory-20261102
+  pull_request:
+    branches:
+      - test/medorigin-d1-t1-clean-source-20261101
+    paths:
+      - 'experiments/desktop-d1-tauri/tests/windows-d1-passive-os-observer-inventory.mjs'
+      - 'experiments/desktop-d1-tauri/tests/windows-d1-passive-os-observer-inventory.ps1'
+      - 'experiments/desktop-d1-tauri/tests/windows-d1-passive-os-observer-inventory.test.mjs'
+      - '.github/workflows/medorigin-d1-native-passive-observer-source.yml'
+permissions:
+  contents: read
+jobs:
+  tests-source-only:
+    runs-on: windows-2025
+    timeout-minutes: 7
+    steps:
+      - name: Exact unmerged source, no persisted token
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Fail-closed passive provider metadata regression
+        shell: pwsh
+        run: |
+          $t='experiments/desktop-d1-tauri/tests'
+          node --check "$t/windows-d1-passive-os-observer-inventory.mjs"
+          if ($LASTEXITCODE -ne 0) { throw 'D1 passive metadata module syntax NO-GO' }
+          node --check "$t/windows-d1-passive-os-observer-inventory.test.mjs"
+          if ($LASTEXITCODE -ne 0) { throw 'D1 passive metadata contract syntax NO-GO' }
+          node --test "$t/windows-d1-passive-os-observer-inventory.test.mjs" "$t/windows-d1-observer-capability-inventory.test.mjs" "$t/windows-d1-egm-evidence-verdict.test.mjs"
+          if ($LASTEXITCODE -ne 0) { throw 'D1 passive metadata source contracts NO-GO' }
+      - name: Explicit denial of network isolation authority
+        shell: pwsh
+        run: |
+          Write-Output 'D1_T1_PASSIVE_METADATA_SOURCE_ONLY_NO_PACKET_CAPTURE'
+          Write-Output 'WFP_PROVIDER_INSTALLED_DOES_NOT_EQUAL_DENIED_PACKET_PROOF'
+          Write-Output 'G3_BLOCKED_G4_G5_NOT_RUN_G7_BLOCKED_NO_PUBLICATION'
