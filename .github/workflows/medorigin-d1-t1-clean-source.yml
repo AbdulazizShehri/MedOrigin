@@ -1,0 +1,35 @@
+# Nonpublishing EGM T1 source identity tests only. No live inventory or OS capture.
+name: D1 EGM T1 clean Git source provenance
+on:
+  push:
+    branches:
+      - test/medorigin-d1-t1-clean-source-20261101
+  pull_request:
+    branches:
+      - test/medorigin-d1-egm-t1-inventory-20261101
+    paths:
+      - 'experiments/desktop-d1-tauri/tests/windows-d1-observer-capability-inventory.mjs'
+      - 'experiments/desktop-d1-tauri/tests/windows-d1-observer-capability-inventory.test.mjs'
+      - '.github/workflows/medorigin-d1-t1-clean-source.yml'
+permissions:
+  contents: read
+jobs:
+  source-only:
+    runs-on: windows-2025
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+      - name: Fail-closed source provenance regression
+        shell: pwsh
+        run: |
+          $t='experiments/desktop-d1-tauri/tests'
+          node --check "$t/windows-d1-observer-capability-inventory.mjs"
+          if($LASTEXITCODE -ne 0){throw 'T1 module syntax NO-GO'}
+          node --check "$t/windows-d1-observer-capability-inventory.test.mjs"
+          if($LASTEXITCODE -ne 0){throw 'T1 test syntax NO-GO'}
+          node --test "$t/windows-d1-observer-capability-inventory.test.mjs"
+          if($LASTEXITCODE -ne 0){throw 'T1 provenance/source tests NO-GO'}
+          Write-Output 'D1_EGM_T1_CLEAN_SOURCE_ONLY_NO_OS_OBSERVER_NO_RELEASE'
