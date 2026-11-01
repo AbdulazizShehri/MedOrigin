@@ -34,8 +34,11 @@ test('UDP local reception is measured separately from send API result',()=>{
 });
 test('fail-closed all-eight WSA10013 acceptance; no false UDP pass',()=>{
   assert.match(probe,/if result != "WSA10013"/);
-  assert.match(runner,/D1_MXC_.*WSA10013/);
-  assert.match(runner,/requireGate\(result.exitCode===0/);
-  assert.match(runner,/D1_MXC_ALL_8_NATIVE_SOCKETS_WSA10013_PASS/);
+  assert.match(runner,/assessNativeProtocolMatrix\(\{result,delivered4,delivered6\}\)/);
+  const verifier=readFileSync(join(d,'windows-mxc-protocol-matrix-verdict.mjs'),'utf8');
+  assert.match(verifier,/value==='WSA10013'/);
+  assert.match(verifier,/result.exitCode===0/);
+  assert.match(verifier,/D1_MXC_ALL_8_NATIVE_SOCKETS_WSA10013_PASS/);
+  assert.match(verifier,/zero local delivery is NOT OS packet\/WFP denial proof/);
   assert.doesNotMatch(runner,/D1_MXC_ZERO_EGRESS_PASS|gh release create|netsh advfirewall/i);
 });
