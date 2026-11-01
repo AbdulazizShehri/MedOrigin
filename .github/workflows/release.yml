@@ -277,8 +277,22 @@ jobs:
       - name: Verify exact distribution payload
         shell: bash
         run: |
-          test "$(find dist -maxdepth 1 -type f -name '*.whl' | wc -l)" -eq 1
-          test "$(find dist -maxdepth 1 -type f -name '*.tar.gz' | wc -l)" -eq 1
+          set -euo pipefail
+          shopt -s nullglob dotglob
+          test -d dist && test ! -L dist
+          files=(dist/*)
+          test "${#files[@]}" -eq 2
+          wheels=0
+          sdists=0
+          for artifact in "${files[@]}"; do
+            test -f "$artifact" && test ! -L "$artifact"
+            case "${artifact##*/}" in
+              medscale-*.whl) wheels=$((wheels + 1));;
+              medscale-*.tar.gz) sdists=$((sdists + 1));;
+              *) echo "Unreviewed TestPyPI payload: $artifact" >&2; exit 1;;
+            esac
+          done
+          test "$wheels" -eq 1 && test "$sdists" -eq 1
       # The only route here is needs: github-release, whose artifact scope
       # check must pass first; do not checkout code or elevate token scopes.
       - name: Publish exact artifact to TestPyPI

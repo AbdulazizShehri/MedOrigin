@@ -359,3 +359,71 @@ def test_tag_path_inspects_exact_wheel_archive_before_publisher() -> None:
     assert "test \"$(find dist -maxdepth 1 -type f -name '*.whl' | wc -l)\" -eq 1" in smoke
     assert "needs: [quality, build, install-smoke]" in release
     assert "vars.GITHUB_RELEASE_PUBLISH_ENABLED == 'true'" in release
+
+
+def test_testpypi_oidc_payload_rejects_unreviewed_files_and_links() -> None:
+    """Exercise the actual downstream pre-OIDC shell, not an invented validator."""
+    import shutil
+    import subprocess
+    import tempfile
+    import textwrap
+
+    if shutil.which("bash") is None:
+        return  # Windows source CI may not have bash; Ubuntu qualification runs it.
+
+    job = _job_block(_workflow_text(), "testpypi-publish")
+    start = "      - name: Verify exact distribution payload\n        shell: bash\n        run: |\n"
+    end = "      # The only route here is needs: github-release"
+    assert start in job and end in job
+    script = textwrap.dedent(job.split(start, maxsplit=1)[1].split(end, maxsplit=1)[0])
+    assert "set -euo pipefail" in script
+    assert "dotglob" in script and "nullglob" in script
+    assert " -L " in script  # Refuse linked files, not only unexpected names.
+
+    for fixture in (
+        "clean",
+        "hidden",
+        "unexpected-text",
+        "unexpected-wheel",
+        "unexpected-directory",
+        "linked-wheel",
+        "extra-sdist",
+    ):
+        with tempfile.TemporaryDirectory(prefix="medorigin-testpypi-envelope-") as tmp:
+            root = Path(tmp)
+            dist = root / "dist"
+            dist.mkdir()
+            wheel = dist / "medscale-0.3.0-py3-none-any.whl"
+            wheel.write_bytes(b"synthetic-wheel-only")
+            (dist / "medscale-0.3.0.tar.gz").write_bytes(b"synthetic-sdist-only")
+            if fixture == "hidden":
+                (dist / ".unreviewed").write_text("synthetic", encoding="utf-8")
+            elif fixture == "unexpected-text":
+                (dist / "unreviewed.txt").write_text("synthetic", encoding="utf-8")
+            elif fixture == "unexpected-wheel":
+                (dist / "other-0.3.0-py3-none-any.whl").write_bytes(b"synthetic")
+            elif fixture == "unexpected-directory":
+                (dist / "unreviewed").mkdir()
+            elif fixture == "extra-sdist":
+                (dist / "other-0.3.0.tar.gz").write_bytes(b"synthetic")
+            elif fixture == "linked-wheel":
+                outside = root / "synthetic-outside"
+                outside.write_bytes(b"synthetic")
+                wheel.unlink()
+                try:
+                    wheel.symlink_to(outside)
+                except (OSError, NotImplementedError):
+                    continue  # Windows without symlink privileges; Linux covers this.
+            result = subprocess.run(
+                ["bash", "-c", script],
+                cwd=root,
+                capture_output=True,
+                text=True,
+                timeout=10,
+                check=False,
+            )
+            assert (result.returncode == 0) is (fixture == "clean"), (
+                fixture,
+                result.stdout,
+                result.stderr,
+            )
