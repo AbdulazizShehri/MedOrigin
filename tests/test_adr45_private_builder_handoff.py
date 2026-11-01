@@ -2,6 +2,7 @@
 
 Source-only synthetic bytes; not a package publisher or an ADR approval.
 """
+
 from __future__ import annotations
 
 import importlib.util
@@ -51,9 +52,7 @@ def test_private_exact_two_archives_and_receipts(gate: Any, tmp_path: Path) -> N
 
 
 @pytest.mark.parametrize("extra", ["unapproved.whl", "unexpected.txt", "test-dir"])
-def test_builder_extra_item_never_permitted(
-    gate: Any, tmp_path: Path, extra: str
-) -> None:
+def test_builder_extra_item_never_permitted(gate: Any, tmp_path: Path, extra: str) -> None:
     src = make_builder(tmp_path / "builder")
     path = src / extra
     if extra == "test-dir":
