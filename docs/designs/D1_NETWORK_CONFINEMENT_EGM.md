@@ -175,3 +175,33 @@ fails `E_NOTIMPL`.
 This draft applies the design-document principles in Google's [elephant-goldfish-model](https://github.com/google/elephant-goldfish-model) repository, pinned source snapshot `403d8881d62022490637d740657b33f01e321ea8` (Apache-2.0). EGM is a spec/review plugin, **not** a medical model. No upstream code is vendored into MedOrigin and no Google endorsement is implied. The actual plugin and truly isolated reviewers have **not** been run in this session; review status is correctly **NOT RUN**.
 
 Canonical evidence: [#662](https://github.com/AbdulazizShehri/MedOrigin/issues/662), [#603](https://github.com/AbdulazizShehri/MedOrigin/issues/603), [#574](https://github.com/AbdulazizShehri/MedOrigin/issues/574), [#622](https://github.com/AbdulazizShehri/MedOrigin/issues/622); [real Red/Green and GUI evidence](../../experiments/desktop-d1-tauri/evidence/windows-d1-networkloopback-red-green-20261101.md); [native UIA source](../../experiments/desktop-d1-tauri/tests/windows-mxc-d1-real-app-qualification.mjs); [endpoint guard](../../experiments/desktop-d1-tauri/tests/windows-mxc-d1-network-endpoint-guard.ps1); [primary-token SID guard](../../experiments/desktop-d1-tauri/windows-token-gate/src/lib.rs).
+
+## 10. 2026-11-01 execution-plan v2: source drift and readiness split
+
+The separate [EGM v2 execution plan](D1_EGM_EXECUTION_PLAN_V2.md) is
+the **current task-level successor** to section 7 of this concept-level
+design. Both documents remain **DRAFT / NOT APPROVED**. In particular:
+
+- The exact [#807 native two-cold-start evidence](../../experiments/desktop-d1-tauri/evidence/windows-d1-pr807-native-guarded-two-cold-starts-20261101.md)
+  belongs to source `03498d7856cf15e32e3a5f627a778000365a08cc` only.
+  It is evidence of bounded UIA/process lifecycle, **not OS packet denial**.
+- The newer [#808](https://github.com/AbdulazizShehri/MedOrigin/pull/808)
+  head `a7cdbdf4d498f1a75017333a20f6ae1db4a476b1`
+  rejects hidden observer stdout/stderr with 25/25 source tests, but no
+  native GUI/MXC replay has been qualified for that newer source.
+- The v2 readiness split permits **T0–T2 source-only work**. Privileged
+  network controls, full WFP/ETW capture, architecture selection and release
+  claims (**T3–T6**) are explicitly **HOLD / NOT implementation-ready**.
+- The v2 **G0–G7** gate matrix separates build identity, GUI functionality,
+  native process admission, independent observer sensitivity, broker/flow
+  attribution, protocol coverage, lifecycle and security/release approval.
+  All required gates must pass on the same exact source and policy lineage.
+- A request-specific MXC capture probe reporting support does not resolve
+  native `E_NOTIMPL`, and `UDP SENT23` is neither packet delivery nor
+  verified OS denial. These findings retain issue #662 **OPEN / NO-GO**.
+- Independent Goldfish review has **NOT RUN**, and this author-side addendum
+  is not a new approval or substitute for a signed owner/security decision.
+
+The [fresh-context reviewer packet](D1_EGM_COLD_REVIEW_PACKET.md) now
+requires the v2 plan and the old/new evidence split. Do not execute
+privileged work or merge into protected main from this design document.
