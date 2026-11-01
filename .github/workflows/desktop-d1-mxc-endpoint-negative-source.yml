@@ -86,6 +86,17 @@ jobs:
           cargo test --offline --manifest-path 'experiments/desktop-d1-tauri/windows-token-gate/Cargo.toml'
           if ($LASTEXITCODE -ne 0) { throw 'AppContainer token-gate crate unit tests NO-GO' }
           Write-Output 'D1_WINDOWS_TOKEN_GATE_SOURCE_ONLY_NO_SIGNED_MXC_OR_PACKET_PROOF'
+      - name: Qualify source of native MXC permissive network policy rejection
+        shell: pwsh
+        run: |
+          $tests='experiments/desktop-d1-tauri/tests'
+          node --check "$tests/windows-mxc-d1-native-token-policy-differential.mjs"
+          if ($LASTEXITCODE -ne 0) { throw 'Token policy differential syntax NO-GO' }
+          node --test "$tests/windows-mxc-d1-native-token-policy-source.test.mjs"
+          if ($LASTEXITCODE -ne 0) { throw 'Runtime-linked token policy source contract NO-GO' }
+          rustc --edition 2024 --emit metadata -Dwarnings -o "$env:RUNNER_TEMP/d1-token-policy.rmeta" "$tests/windows-mxc-d1-native-token-policy-probe.rs"
+          if ($LASTEXITCODE -ne 0) { throw 'Runtime-linked native token probe compile NO-GO' }
+          Write-Output 'D1_TOKEN_ALLOW_DENY_DIFFERENTIAL_SOURCE_ONLY_NO_NATIVE_MXC_OR_WFP_PROOF'
       - name: Qualification boundary
         shell: pwsh
         run: |
