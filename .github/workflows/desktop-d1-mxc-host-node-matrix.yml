@@ -1,0 +1,62 @@
+# Nonpublishing source-only qualification: actual Windows host Node below MXC SDK minimum.
+# No native MXC SDK, WFP, WebView2, real GUI, PHI, publication or release.
+name: D1 MXC actual unsupported Windows Node admission matrix
+on:
+  push:
+    branches: [test/medorigin-d1-mxc-host-node-matrix-20261101]
+  pull_request:
+    branches: [test/medorigin-d1-mxc-sdk-admission-integration-20261101]
+    paths:
+      - '.github/workflows/desktop-d1-mxc-host-node-matrix.yml'
+      - 'experiments/desktop-d1-tauri/tests/windows-mxc-d1-*.mjs'
+permissions:
+  contents: read
+jobs:
+  windows-host-node:
+    runs-on: windows-2025
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - node: '24.19.0'
+            expected_pass: 2
+            expected_skipped: 0
+          - node: '26.12.1'
+            expected_pass: 1
+            expected_skipped: 1
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+          fetch-tags: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '${{ matrix.node }}'
+          package-manager-cache: false
+      - name: Require exact real Windows host Node version
+        shell: pwsh
+        run: |
+          if (-not $IsWindows) { throw 'Windows host required' }
+          $actual = (& node -p 'process.versions.node').Trim()
+          if ($actual -ne '${{ matrix.node }}') { throw "Expected exact Node ${{ matrix.node }}, got $actual" }
+          Write-Output "D1_MXC_REAL_HOST_NODE=$actual"
+      - name: Prove actual unsupported host admission and fail on unexpected skip
+        shell: pwsh
+        run: |
+          $test = 'experiments/desktop-d1-tauri/tests/windows-mxc-d1-sdk-child-process.test.mjs'
+          $output = & node --test --test-reporter=tap $test 2>&1
+          $status = $LASTEXITCODE
+          $tap = ($output | Out-String)
+          Write-Output $tap
+          if ($status -ne 0) { throw 'Actual-host MXC admission test failed' }
+          foreach ($pair in @(@('tests',2),@('pass',${{ matrix.expected_pass }}),@('fail',0),@('skipped',${{ matrix.expected_skipped }}))) {
+            $match = [regex]::Match($tap, '(?m)^# ' + $pair[0] + ' (\d+)\s*$')
+            if (-not $match.Success -or [int]$match.Groups[1].Value -ne [int]$pair[1]) {
+              throw ('Unexpected TAP '+$pair[0]+' count: expected '+$pair[1])
+            }
+          }
+          & node --check experiments/desktop-d1-tauri/tests/windows-mxc-d1-real-app-qualification.mjs
+          if ($LASTEXITCODE -ne 0) { throw 'D1 MXC source syntax failed' }
+          Write-Output 'ACTUAL_WINDOWS_HOST_NODE_ADMISSION_SOURCE_ONLY_NO_MXC_NO_WFP_NO_RELEASE'
