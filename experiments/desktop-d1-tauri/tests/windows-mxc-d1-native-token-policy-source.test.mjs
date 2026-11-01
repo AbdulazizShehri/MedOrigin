@@ -17,10 +17,13 @@ test('same SHA-pinned binary is required to reject direct and permissive MXC lau
  assert.match(js,/host\.status===76/);
  assert.match(js,/label:'deny',egress:'deny',ingress:'deny'/);
  assert.match(js,/label:'allow-egress',egress:'allow',ingress:'deny'/);
+ assert.match(js,/label:'allow-ingress',egress:'deny',ingress:'allow'/);
+ assert.match(js,/label:'allow-both',egress:'allow',ingress:'allow'/);
+ assert.match(js,/D1_PRIMARY_TOKEN_PERMISSIVE_NETWORK_POLICY_NEGATIVE_PASS/);
  assert.match(js,/network:\{egress:\{default:config\.egress\},ingress:\{default:config\.ingress,hostLoopback:'deny'\}\}/);
  assert.match(js,/result\.exitCode===0/);
  assert.match(js,/result\.exitCode===76&&result\.stderr\?\.includes\('primary_token_has_network_capability'\)/);
  assert.match(js,/warnings\|\|\[\]\)\.length===0/);
- assert.match(js,/D1_EXACT_RUNTIME_TOKEN_GATE_DENY_ALLOW_DIFFERENTIAL_PASS_NO_WFP_ATTESTATION/);
+ assert.match(js,/D1_EXACT_RUNTIME_TOKEN_GATE_FOUR_POLICY_MATRIX_PASS_NO_WFP_ATTESTATION/);
  assert.doesNotMatch(js,/https?:\/\/|fetch\(|createConnection\(|\.connect\(/);
 });
