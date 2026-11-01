@@ -117,3 +117,77 @@ Security event auditing without separately authorized elevation.
 
 Keep #662 and #603 open, Draft PR #797 unmerged, and **NO-GO**
 for publishing, PHI, real patient data, installer and clinical use.
+
+
+## Follow-up: exact-current-source full Tauri binary on Windows — PASS
+
+Unlike the standalone helper probe above, this is an **actual new D1
+Windows native application**, built from a detached, exact GitHub product
+source worktree at commit
+`c0fa3274a90096b948257c283c42102f2b8bba2b`, after the full
+networkLoopback denial and rustfmt. Subsequent repository changes up to
+this evidence-report commit only concern documentation/evidence, not
+the executable source.
+
+- `cargo fmt --manifest-path windows-token-gate/Cargo.toml -- --check`
+  **PASS**.
+- `node --test tests/windows-d1-appcontainer-startup-source.test.mjs`
+  **5/5 PASS**, covering the new host-loopback SID.
+- Offline, dependency-free Windows token helper unit tests:
+  **2/2 PASS**.
+- `npm ci --offline` with existing npm cache and official
+  `npm run tauri build -- --debug --no-bundle`:
+  **PASS**, including TypeScript/Vite and native Tauri/Rust.
+- Newly built, **unpublished** native D1 EXE size **13,236,224 bytes**,
+  SHA-256
+  `a2ed08c4acb0aca6b06ba495b0060fdda4f5916f562eec2076d1535fc742c705`.
+- Same exact SHA under **ordinary direct Windows execution**:
+  2/2 negative cases (plain and multiple environment-spoofed
+  variables) **correctly refused**, exit **76** and
+  `D1_WINDOWS_APPCONTAINER_REQUIRED_NO_GO`.
+- Same exact SHA under native MXC ProcessContainer with
+  `egress=deny`, `ingress=deny`, **`hostLoopback=allow`**,
+  `ui.disable=false`, `ui.isolation=container`:
+  **correctly refused**, exit **76**, with the exact
+  `primary_token_has_network_capability` gate reason, SDK
+  `warnings=[]` and no timeout. The test harness itself exited
+  **0** only after validating this negative result.
+- **Important harness qualification:** An initial attempt to launch the
+  GUI binary under `ui.disable=true` exited with Windows
+  `0xC0000142` (DLL initialization failure), without reaching the
+  requested gate verdict. It was explicitly **not** counted as
+  security success or policy acceptance. Retesting with the previously
+  qualified interactive GUI UI isolation settings produced the
+  definitive exit-76 negative result above.
+- Same exact new SHA under native MXC ProcessContainer with
+  `egress=deny`, `ingress=deny`, **`hostLoopback=deny`** and
+  interactive GUI isolation:
+  real UIAutomation **4/4 synthetic SHA/Tauri IPC/Rust journeys PASS**,
+  actual process tree **8** including **6 WebView2** descendants,
+  initial owned TCP/nonloopback TCP/UDP endpoint counts **0/0/0**,
+  **12** identity-bracketed socket samples reporting max owned
+  TCP **0** and UDP **0**.
+  MXC `warnings=[]`, intended bounded timeout, final
+  `D1_MXC_REAL_TAURI_UIA_4_OF_4_PASS_NETWORK_STILL_NO_GO`
+  marker and qualifying launcher **exit 0**.
+- Finally, `cargo test --locked --offline` on the full Tauri
+  application crate **PASS: 2 unit tests / 0 failures**, exit **0**.
+  Direct built-EXE SHA was reverified after the MXC test. No
+  source-built D1 root processes or test-owned MXC temporary
+  directories remained following the completed qualification.
+- Source-only hosted Windows Actions
+  [run #41309621162](https://github.com/AbdulazizShehri/MedOrigin/actions/runs/41309621162)
+  completed **SUCCESS**, all CI job steps verified. CI is separate from,
+  and does not automatically reproduce, the actual above native GUI
+  trials.
+
+The source-built EXE and all local npm/Rust build targets are disposable
+and **not** intended for upload, deployment or release. Store the evidence
+in the GitHub Draft branch; remove temporary local worktrees afterwards.
+
+**Release decision unchanged: NO-GO.** The Windows primary-token gate
+now rejects host-loopback-capability escalation in the tested backend,
+but neither that check nor zero sampled sockets proves packet-level WFP
+denial, OS broker/service networking, DNS/IPv4/IPv6 egress guarantees,
+a signed/authenticated MXC launcher, restart/install/upgrade coverage,
+or independent security approval.
