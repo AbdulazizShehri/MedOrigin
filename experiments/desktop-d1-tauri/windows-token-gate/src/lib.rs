@@ -81,8 +81,8 @@ mod windows {
         sub_authority_count: 10,
         identifier_authority: [0, 0, 0, 0, 0, 15],
         sub_authorities: [
-            3, 1024, 820624432, 2503302554, 1536879699, 4049119443,
-            112573677, 3799174643, 950279649, 4267032225,
+            3, 1024, 820624432, 2503302554, 1536879699, 4049119443, 112573677, 3799174643,
+            950279649, 4267032225,
         ],
     };
 
@@ -182,7 +182,13 @@ mod windows {
                     network_bits |= 1u8 << j;
                 }
             }
-            if unsafe { EqualSid(sid, (&HOST_LOOPBACK as *const SidWithTenSubAuthorities).cast()) } != 0 {
+            if unsafe {
+                EqualSid(
+                    sid,
+                    (&HOST_LOOPBACK as *const SidWithTenSubAuthorities).cast(),
+                )
+            } != 0
+            {
                 network_bits |= 1u8 << 3;
             }
         }
