@@ -95,9 +95,7 @@ def _commit_private_staging(staging: Path, destination: Path) -> None:
             )
             rename_noreplace.restype = ctypes.c_int
             # AT_FDCWD=-100, RENAME_NOREPLACE=1; no Linux rename fallback.
-            result = rename_noreplace(
-                -100, os.fsencode(staging), -100, os.fsencode(destination), 1
-            )
+            result = rename_noreplace(-100, os.fsencode(staging), -100, os.fsencode(destination), 1)
             if result != 0:
                 raise OSError(ctypes.get_errno(), "destination no-replace failed")
         else:
@@ -112,10 +110,7 @@ def _cleanup_owned_stage(staging: Path, identity: tuple[int, int]) -> None:
         current = staging.lstat()
     except FileNotFoundError:
         return
-    if (
-        not stat.S_ISDIR(current.st_mode)
-        or (current.st_dev, current.st_ino) != identity
-    ):
+    if not stat.S_ISDIR(current.st_mode) or (current.st_dev, current.st_ino) != identity:
         # Never follow an unexpected substitution or remove others' files.
         return
     shutil.rmtree(staging)
@@ -160,9 +155,7 @@ def handoff(builder: Path, destination: Path) -> dict[str, object]:
         # Do not write any payload into the caller-visible destination.
         # The only names opened below belong to our unpredictable private
         # sibling directory; one atomic no-replace rename commits them.
-        staging = Path(
-            tempfile.mkdtemp(prefix="medorigin-adr45-owned-", dir=destination.parent)
-        )
+        staging = Path(tempfile.mkdtemp(prefix="medorigin-adr45-owned-", dir=destination.parent))
         st = staging.lstat()
         stage_identity = (st.st_dev, st.st_ino)
         try:
