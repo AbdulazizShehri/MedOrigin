@@ -15,9 +15,22 @@ function Assert-MxcD1ObservedEndpoints {
     if($null -eq $endpoint) { throw ('D1_MXC_ENDPOINT_NO_GO '+$Phase+' null TCP record') }
     $state=[string]$endpoint.State
     $remote=[string]$endpoint.RemoteAddress
-    # Listener/bound TCP sockets are not evidence of an outbound connection.
-    if($state -in @('Listen','Bound')) { continue }
-    # Fail closed on missing, wildcard, IPv4/IPv6 external, or ambiguous address.
+    $local=[string]$endpoint.LocalAddress
+    # Unrecognized TCP states must not bypass the snapshot policy.
+    if($state -notin @('Listen','Bound','Established','SynSent','SynReceived',
+        'FinWait1','FinWait2','CloseWait','Closing','LastAck','TimeWait',
+        'DeleteTcb','Closed')) {
+      throw ('D1_MXC_ENDPOINT_NO_GO '+$Phase+' unclassified TCP state')
+    }
+    # A public/wildcard listener is an inbound exposure, not proof of egress.
+    # Fail conservatively unless it is explicitly bound to loopback.
+    if($state -in @('Listen','Bound')) {
+      if($local -notin @('127.0.0.1','::1')) {
+        throw ('D1_MXC_ENDPOINT_NO_GO '+$Phase+' nonloopback or unknown TCP listener')
+      }
+      continue
+    }
+    # An active nonloopback or unclassified connection is not admitted.
     if($remote -notin @('127.0.0.1','::1')) {
       throw ('D1_MXC_ENDPOINT_NO_GO '+$Phase+' nonloopback or unclassified TCP endpoint')
     }
