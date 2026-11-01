@@ -10,7 +10,7 @@ const keys=[
 const sentinel='D1_MXC_ALL_8_NATIVE_SOCKETS_WSA10013_PASS';
 const clean=()=>[...keys.map(k=>'D1_MXC_'+k+'=WSA10013'),sentinel].join('\n')+'\n';
 const assess=(stdout)=>assessNativeProtocolMatrix({
- result:{stdout,timedOut:false,warnings:[],exitCode:0},delivered4:0,delivered6:0
+ result:{stdout,timedOut:false,warnings:[],exitCode:0,stderr:''},delivered4:0,delivered6:0
 });
 
 test('strict native probe stdout accepts only the canonical eight rows and final sentinel',()=>{
