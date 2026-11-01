@@ -1,0 +1,37 @@
+# Synthetic-only source receipt hardening; hosted CI is NOT native MXC,
+# WebView2 packet, DNS/WFP, installer, clinical, or release qualification.
+name: D1 guarded exact stdout and child exit source contracts
+on:
+  push:
+    branches:
+      - test/medorigin-d1-guarded-exact-stdout-20261101
+  pull_request:
+    branches:
+      - test/medorigin-d1-guarded-cold-restart-20261101
+    paths:
+      - 'experiments/desktop-d1-tauri/tests/windows-mxc-d1-lifecycle-proof.mjs'
+      - 'experiments/desktop-d1-tauri/tests/windows-mxc-d1-cold-restart-qualification.mjs'
+      - 'experiments/desktop-d1-tauri/tests/windows-mxc-d1-guarded-cold-restart.test.mjs'
+      - '.github/workflows/medorigin-d1-guarded-exact-stdout.yml'
+permissions:
+  contents: read
+jobs:
+  exact-transcript-source:
+    runs-on: windows-2025
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+      - name: Parse-check receipt and replay/source mutations
+        shell: pwsh
+        run: |
+          $t='experiments/desktop-d1-tauri/tests'
+          node --check "$t/windows-mxc-d1-lifecycle-proof.mjs"
+          if($LASTEXITCODE -ne 0){throw 'Lifecycle parser syntax NO-GO'}
+          node --check "$t/windows-mxc-d1-cold-restart-qualification.mjs"
+          if($LASTEXITCODE -ne 0){throw 'Cold restart runner syntax NO-GO'}
+          node --test "$t/windows-mxc-d1-guarded-cold-restart.test.mjs" "$t/windows-mxc-d1-lifecycle-proof.test.mjs" "$t/windows-mxc-d1-guarded-launch.test.mjs" "$t/windows-mxc-d1-guarded-uia-observer.test.mjs"
+          if($LASTEXITCODE -ne 0){throw 'Exact guarded transcript source tests NO-GO'}
+          Write-Output 'D1_GUARDED_EXACT_STDOUT_SOURCE_ONLY_NETWORK_WFP_DNS_RELEASE_NO_GO'

@@ -41,20 +41,26 @@ export function requireQualifiedRun({status,stdout}) {
 // after its full native MXC GUI/UIA + bounded socket-sample qualification.
 // A legacy runner's free-form success substrings cannot pass this contract.
 // This proves process identity lifecycle observations, NOT packet/DNS denial.
-export function requireGuardedQualifiedRun({status,stdout,sha256}) {
+export function requireGuardedQualifiedRun({status,stdout,stderr,signal,sha256}) {
  if(status!==0||typeof stdout!=='string'||stdout.length>2*1024*1024||
+   typeof stderr!=='string'||stderr.trim()!==''||signal!==null||
    typeof sha256!=='string'||!/^[a-f0-9]{64}$/i.test(sha256))
-  throw Error('D1_LIFECYCLE_NO_GO: guarded runner status, output or hash invalid');
- const rows=stdout.split(/\r?\n/).map(x=>x.trim()).filter(Boolean);
+  throw Error('D1_LIFECYCLE_NO_GO: guarded runner status, stdout, stderr, signal or hash invalid');
+ // This launcher is the sole stdout receipt producer: accept only its three
+ // complete, ordered records. Filtering by prefix (or trimming) could silently
+ // ignore warning/failure text, blank lines, or tampered record boundaries.
+ const rows=stdout.split(/\r?\n/);
+ if(rows.at(-1)==='')rows.pop(); // Node console.log emits one final newline.
+ if(rows.length!==3||rows.some(x=>!x||x.trim()!==x))
+  throw Error('D1_LIFECYCLE_NO_GO: extraneous, blank or altered stdout record');
  const prefix='D1_GUARDED_PROCESS_SNAPSHOT_JSON=';
  const digest='D1_GUARDED_EXECUTABLE_SHA256='+sha256.toLowerCase();
  const marker='D1_GUARDED_REAL_UIA_4_OF_4_AND_SOCKETS_PASS_NETWORK_STILL_NO_GO';
- const records=rows.filter(x=>x.startsWith('D1_GUARDED_'));
- if(records.length!==3||records[0].startsWith(prefix)===false||
-   records[1]!==digest||records[2]!==marker)
+ if(rows[0].startsWith(prefix)===false||
+   rows[1]!==digest||rows[2]!==marker)
   throw Error('D1_LIFECYCLE_NO_GO: missing, repeated, unordered or mismatched guarded receipt');
  let parsed;
- try{parsed=JSON.parse(records[0].slice(prefix.length))}
+ try{parsed=JSON.parse(rows[0].slice(prefix.length))}
  catch{throw Error('D1_LIFECYCLE_NO_GO: invalid guarded identity JSON')}
  return validate(parsed,true);
 }

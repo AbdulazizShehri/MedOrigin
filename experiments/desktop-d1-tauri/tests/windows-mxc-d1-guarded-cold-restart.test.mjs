@@ -22,7 +22,8 @@ const digest='D1_GUARDED_EXECUTABLE_SHA256='+sha;
 const final='D1_GUARDED_REAL_UIA_4_OF_4_AND_SOCKETS_PASS_NETWORK_STILL_NO_GO';
 const rows=[prefix+JSON.stringify(inventory),digest,final];
 const good=rows.join('\r\n')+'\r\n';
-const parse=(stdout=good,status=0,sha256=sha)=>requireGuardedQualifiedRun({status,stdout,sha256});
+const parse=(stdout=good,status=0,sha256=sha,stderr='',signal=null)=>
+ requireGuardedQualifiedRun({status,stdout,sha256,stderr,signal});
 test('one source-bound guarded transcript parses actual snapshot',()=>{
  assert.deepEqual(parse(),inventory);
  assert.deepEqual(parse(rows.join('\n')),inventory);
@@ -43,6 +44,12 @@ test('reject wrong sha, nonzero status and oversized output',()=>{
  assert.throws(()=>parse(good,0,'not-sha'),/D1_LIFECYCLE_NO_GO/);
  assert.throws(()=>parse(good+'x'.repeat(2*1024*1024)),/D1_LIFECYCLE_NO_GO/);
 });
+test('reject stderr, termination signal, or omitted child diagnostic metadata',()=>{
+ assert.throws(()=>parse(good,0,sha,'WARNING: native SDK diagnostic'),/D1_LIFECYCLE_NO_GO/);
+ assert.throws(()=>parse(good,0,sha,'D1_MXC_GUARDED_LAUNCH_NO_GO: failure'),/D1_LIFECYCLE_NO_GO/);
+ assert.throws(()=>parse(good,0,sha,'','SIGTERM'),/D1_LIFECYCLE_NO_GO/);
+ assert.throws(()=>requireGuardedQualifiedRun({status:0,stdout:good,sha256:sha}),/D1_LIFECYCLE_NO_GO/);
+});
 test('reject duplicate, reordered, forged, or injected guarded receipts',()=>{
  for(const output of [
   good+final+'\n',good+digest+'\n',good+rows[0]+'\n',
@@ -52,6 +59,29 @@ test('reject duplicate, reordered, forged, or injected guarded receipts',()=>{
   good.replace(digest,digest+' injected'),
   good.replace(final,'prefix-'+final),
   good.replace(prefix,prefix+'false'),
+ ])assert.throws(()=>parse(output),/D1_LIFECYCLE_NO_GO/);
+});
+test('reject any unrecognized stdout, including failure lines hidden beside valid receipts',()=>{
+ for(const output of [
+  good+'unrelated line\n',
+  'unrelated line\n'+good,
+  good+'D1_MXC_GUARDED_LAUNCH_NO_GO: injected failure\n',
+  good+'MXC_D1_REAL_APP_UIA_4_OF_4_PASS_NONPUBLISHING_NETWORK_STILL_NO_GO\n',
+  good+'WARNING: unexpected SDK diagnostic\n',
+  good+'\n',
+  good+'\r\n',
+  '\n'+good,
+  rows.join('\n')+'\n\n'+rows[2]+'\n'
+ ])assert.throws(()=>parse(output),/D1_LIFECYCLE_NO_GO/);
+});
+test('reject whitespace, blank-line and record-boundary camouflage',()=>{
+ for(const output of [
+  ' '+rows.join('\n'),
+  rows.join('\n ')+'\n',
+  rows.join('\n')+' \n',
+  rows[0]+'\n\n'+rows[1]+'\n'+rows[2],
+  '\ufeff'+rows.join('\n'),
+  rows[0]+'\r'+rows[1]+'\n'+rows[2]
  ])assert.throws(()=>parse(output),/D1_LIFECYCLE_NO_GO/);
 });
 test('reject invalid or duplicate process identities and absent WebView2',()=>{
@@ -73,7 +103,7 @@ test('cold restart code invokes guarded launcher twice and pins source SHA acros
  assert.match(runner,/requirePinnedD1Executable\(rawExe,expected\)/);
  assert.match(runner,/for\(let iteration=1;iteration<=2;iteration\+\+\)/);
  assert.match(runner,/requirePinnedD1Executable\(exe,expected\)/);
- assert.match(runner,/requireGuardedQualifiedRun\(\{status:r\.status,stdout,sha256:expected\}\)/);
+ assert.match(runner,/requireGuardedQualifiedRun\(\{status:r\.status,stdout,stderr:r\.stderr\|\|'',signal:r\.signal,sha256:expected\}\)/);
  assert.match(runner,/assertNoResidual\(snapshot,currentIdentities\(snapshot\)\)/);
  assert.match(runner,/requireNoPreexistingRoot\(\)/);
  assert.match(runner,/D1_MXC_TWO_GUARDED_COLD_STARTS_GUI_8_OF_8_NO_RESIDUAL_PASS_PACKET_WFP_STILL_NO_GO/);
