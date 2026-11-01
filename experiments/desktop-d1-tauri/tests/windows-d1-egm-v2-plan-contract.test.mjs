@@ -39,7 +39,7 @@ function requireFailClosedPlan(plan){
   'T3 — Independent Goldfish and owner architecture decision',
   'T4 — Approved disposable-host packet/OS experiment',
   'T5 — Verified policy bound to mandatory launcher',
-  'T6 — Cross-platform and release governance',
+  'T6 — Release governance handoff',
   'NOT implementation-ready','HOLD-A','HOLD-B',
   'positive control','blocked-control','dropped',
   'broker','DNS','UDP','IPv6','Source drift triggers',
