@@ -178,7 +178,14 @@ def _open_windows_report_noreparse(target_path: Path) -> int:
 
 def _read_bounded_regular_descriptor(descriptor: int) -> str:
     """Consume and close an already-open regular-file FD under the size bound."""
-    with os.fdopen(descriptor, "rb") as source:
+    try:
+        source = os.fdopen(descriptor, "rb")
+    except BaseException:
+        # fdopen may fail before taking ownership of the adopted descriptor.
+        # Close it explicitly so failed report reads do not leak a CRT FD.
+        os.close(descriptor)
+        raise
+    with source:
         metadata = os.fstat(source.fileno())
         if not stat.S_ISREG(metadata.st_mode):
             raise FhirStorageError("FHIR report artifact is not a regular file")
