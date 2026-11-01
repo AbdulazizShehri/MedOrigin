@@ -313,7 +313,13 @@ def store(
                             existing_handle = native.open(
                                 "report.json", parent=pinned, directory=False
                             )
-                            existing_fd = msvcrt.open_osfhandle(existing_handle, os.O_RDONLY)
+                            try:
+                                existing_fd = msvcrt.open_osfhandle(existing_handle, os.O_RDONLY)
+                            except BaseException:
+                                # CRT adoption failed; Python never owned the native HANDLE.
+                                # Close it directly, without a pathname fallback.
+                                native.close(existing_handle)
+                                raise
                             existing = bounded_reader(existing_fd)
                         except (OSError, UnicodeError) as read_exc:
                             raise FhirStorageError(
