@@ -109,11 +109,12 @@ runtime or token helper.
   crate's 1/1 Rust unit test, plus existing network/UIA source gates.
   Hosted CI itself did **not** execute native MXC or GUI.
 
-The latest product Rust `cargo test --locked --offline` (Tauri
-crate, distinct from the token crate) is separately checked after
-this report and should not be marked PASS without its actual result.
-Temporary build and QA files are to be removed from Windows once
-all execution evidence is collected.
+- Product Tauri Rust `cargo test --locked --offline` also **PASS,
+  2/2 actual application unit tests**, with 0 failures and exit 0;
+  this is separate from the 1/1 token-gate crate test.
+
+Temporary source, build and QA files are removed from the Windows host
+after recording execution evidence; original owner worktrees remain intact.
 
 ## Remaining NO-GO gates
 
