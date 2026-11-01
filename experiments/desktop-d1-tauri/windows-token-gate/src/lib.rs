@@ -203,5 +203,3 @@ mod tests {
         assert!(super::reject_network_capability_bits(0).is_ok());
     }
 }
-
-[executed on device: Abdulaziz (1e5f67ae-323f-4706-b7a0-3dca9146e2a7)]
