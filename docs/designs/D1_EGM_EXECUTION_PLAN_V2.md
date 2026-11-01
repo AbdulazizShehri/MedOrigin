@@ -148,14 +148,13 @@ a compatible backend. Never log identifying host configuration or secrets.
 reported privileges inconsistent with actual probe, stale SHA, unsupported
 OS version, partial result and nonzero subprocess exit.
 **Done when:** source tests pass and an attributable *read-only*
-feasibility receipt is filed, clearly NOT G3 observer proof. No system
-settings changed.
+feasibility receipt is filed, clearly NOT G3 observer proof. No system settings changed.
 
 ### T2 — Offline evidence-schema/adversarial verdict (source-only; READY after T0)
 
 **Files (new, separate next Draft):**
 `experiments/desktop-d1-tauri/tests/windows-d1-egm-evidence-verdict.mjs`
-and its `.test.mjs`. Keep this free of native OS probes.
+and `experiments/desktop-d1-tauri/tests/windows-d1-egm-evidence-verdict.test.mjs`. Keep this free of native OS probes.
 **Work:** implement a pure parser that **fails closed** for the following
 fields in an eventual independent observer receipt: `sourceSha`,
 `exeSha256`, `policySha256`, `osBuild`, `observerIdentity`,
