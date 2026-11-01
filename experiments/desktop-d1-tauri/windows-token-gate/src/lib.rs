@@ -65,6 +65,27 @@ mod windows {
     static PRIVATE_NETWORK_CLIENT_SERVER: SidBytes =
         SidBytes([1, 2, 0, 0, 0, 0, 0, 15, 3, 0, 0, 0, 3, 0, 0, 0]);
 
+    // Windows DeriveCapabilitySidsFromName("networkLoopback") returns
+    // S-1-15-3-1024 plus eight SHA256(UTF16LE(uppercase name)) RIDs.
+    // MXC hostLoopback:'allow' adds this SID even when public/private
+    // network capability bits are zero. Refuse it for synthetic-only D1.
+    #[repr(C)]
+    struct SidWithTenSubAuthorities {
+        revision: u8,
+        sub_authority_count: u8,
+        identifier_authority: [u8; 6],
+        sub_authorities: [u32; 10],
+    }
+    static HOST_LOOPBACK: SidWithTenSubAuthorities = SidWithTenSubAuthorities {
+        revision: 1,
+        sub_authority_count: 10,
+        identifier_authority: [0, 0, 0, 0, 0, 15],
+        sub_authorities: [
+            3, 1024, 820624432, 2503302554, 1536879699, 4049119443,
+            112573677, 3799174643, 950279649, 4267032225,
+        ],
+    };
+
     struct OwnedToken(isize);
     impl Drop for OwnedToken {
         fn drop(&mut self) {
@@ -161,6 +182,9 @@ mod windows {
                     network_bits |= 1u8 << j;
                 }
             }
+            if unsafe { EqualSid(sid, (&HOST_LOOPBACK as *const SidWithTenSubAuthorities).cast()) } != 0 {
+                network_bits |= 1u8 << 3;
+            }
         }
         super::reject_network_capability_bits(network_bits)
     }
@@ -194,7 +218,7 @@ mod tests {
 
     #[test]
     fn known_internet_and_private_network_capabilities_each_fail_closed() {
-        for bits in [1u8, 2, 4, 3, 5, 6, 7] {
+        for bits in 1u8..16 {
             assert_eq!(
                 super::reject_network_capability_bits(bits),
                 Err("primary_token_has_network_capability")
