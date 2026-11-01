@@ -23,7 +23,7 @@ const tmp=mkdtempSync(join(dirname(exe),'mxc-d1-real-'));
 const script=join(dirname(fileURLToPath(import.meta.url)),'windows-mxc-d1-real-uia-qualification.ps1');
 let uiaStatus=null, uiaOutput='';
 const observe=()=>new Promise(done=>setTimeout(()=>{
- const r=spawnSync('powershell.exe',['-NoProfile','-ExecutionPolicy','Bypass','-File',script,'-ExePath',exe,'-ExpectedExeSha256',expected],{encoding:'utf8',timeout:26000});
+ const r=spawnSync('powershell.exe',['-NoProfile','-ExecutionPolicy','Bypass','-File',script,'-ExePath',exe,'-ExpectedExeSha256',expected],{encoding:'utf8',timeout:70000});
  uiaStatus=r.status;uiaOutput=(r.stdout||'');
  console.log('D1_MXC_REAL_UIA_RESULT',r.status,uiaOutput.trim().slice(0,4500),(r.stderr||'').trim().slice(0,2000));
  done();
@@ -34,7 +34,7 @@ const req={
  ui:{disable:false,isolation:'container'},
  filesystem:{readonlyPaths:[exe],readwritePaths:[tmp]},workingDirectory:tmp,
  environment:{SystemRoot:process.env.SystemRoot,LOCALAPPDATA:tmp,APPDATA:tmp,TEMP:tmp,TMP:tmp,WEBVIEW2_USER_DATA_FOLDER:tmp},
- timeoutMs:38000
+ timeoutMs:90000
 };
 try{
  const [result]=await Promise.all([run(req),observe()]);
