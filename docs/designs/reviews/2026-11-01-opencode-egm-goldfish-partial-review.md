@@ -207,11 +207,67 @@ a design approval.
   Do not promote author corrections to reviewer approval. Re-run
   relevant stages on exact latest SHA before declaring EGM ready.
 
+## Stage 9 — Diagnostic readiness/codebase Goldfish (two genuine child runs; NO APPROVAL)
+
+Both children reviewed the current source at
+`8cf0666577a9a6274cc08fadcacab14ea5ef918e`,
+**even though Stage-8 verdict had been FAIL**. These are legitimate
+out-of-sequence **diagnostic** reviews, *not* a valid full EGM readiness
+PASS or release approval.
+
+**Implementation-readiness persona:**
+- Parent `ses_e67f0085effeV6oG5MI5NuThok`;
+  child `ses_e67eff817ffecyHNpnCaserm2s`.
+- Native subagent metadata `completed`, child `succeeded`,
+  **15 actual read calls**, including
+  `EGM/agents/implementation_readiness.md`, the upstream
+  implementation-readiness standard and the current v2 plan.
+- **Review verdict INCOMPLETE / no PASS**: T1 lacks exact read-only
+  OS query/probe and typed result contract; T2 lacks fully specified
+  receiptId/schema/version/status/scope, normalization and API rules;
+  source-only T0–T2 may still require implementer design decisions.
+- **Reviewer false-positive, independently corrected by actual Windows
+  filesystem check:** the reviewer claimed
+  `.github/workflows/medorigin-d1-egm-v2-plan-contract.yml`,
+  `.agents/skills/medorigin-elephant/SKILL.md` and the v2
+  contract test did not exist. All **three DO exist** at the exact
+  frozen local checkout, confirmed by `Test-Path -LiteralPath`.
+  Likely dotfile/glob visibility limitation; do NOT treat absent
+  listing as filesystem nonexistence.
+
+**Codebase-details persona:**
+- Parent `ses_e67eff212ffenREZXoCU0Awlw1`;
+  child `ses_e67efe4f9ffeLpwkLfYFDFWT5F`.
+- Native subagent metadata `completed`, child `succeeded`,
+  **14 actual read calls** including
+  `EGM/agents/codebase_details.md`, the upstream implementation
+  standard, current plan, original design, contract tests and
+  existing capture/protocol report verifiers.
+- **Review verdict PASS (diagnostic source-path check only)**; no
+  missing T0–T2 referenced existing files and proposed new files
+  were properly distinguished. But four recommendations remain:
+  (1) cite exact existing function exports
+  `assessCaptureResult`, `selectActionableCaptureFiles`,
+  `requireNativeCapturePreflight`,
+  `assessNativeProtocolMatrix`;
+  (2) name exact T0 working directory, Node runtime/command;
+  (3) define minimal T1 result example/enums;
+  (4) define T2 exported function, input and
+  `SOURCE_SCHEMA_VALID_ONLY` return contract.
+- Verdicts **conflict** on T0 file existence and T1/T2 readiness;
+  actual filesystem observations override claims that files are
+  absent. However the unresolved T1/T2 ambiguity remains a valid
+  implementation-readiness blocker until an exact contract is reviewed.
+
+**Stage 9 result: NOT APPROVED.** The two actual child reviews do
+not overrule Stage-8 FAIL, independent security review or the
+unimplemented G3–G7 OS evidence. Keep #662 OPEN and RELEASE NO-GO.
+
 ## Incomplete stages and evidence boundaries
 
 - **Stage 7 Design critique: THREE personas COMPLETED, findings OPEN** (not design approval).
 - **Stage 8 Second zoom-out: RUN; latest independent verdict FAIL** (author repairs pending fresh review).
-- **Stage 9 Implementation readiness: NOT RUN.**
+- **Stage 9 Implementation readiness: TWO diagnostics RUN (one INCOMPLETE, one source-path PASS); protocol NOT APPROVED**.
 - Independent human security review, owner choice A/B, packet/WFP/DNS/
   IPv4/IPv6/UDP and Windows broker attribution: **NOT APPROVED /
   NOT VERIFIED**. `captureDenials` still returned `E_NOTIMPL`
