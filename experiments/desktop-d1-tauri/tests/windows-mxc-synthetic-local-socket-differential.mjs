@@ -74,6 +74,7 @@ async function check(family,host) {
    admit(result.exitCode===0&&!result.timedOut&&(result.warnings||[]).length===0&&
       result.stdout.includes('D1_SYNTHETIC_PROBE_STARTED')&&
       result.stdout.includes('D1_TCP_CONNECT_DENIED_OR_FAILED')&&
+      result.stdout.includes('D1_TCP_WSAEACCES_10013')&&
       result.stdout.includes('D1_SYNTHETIC_PROBE_FINISHED'),
       family+' MXC probe execution or TCP differential failed');
    admit(tcpCount===0&&udpCount===0,family+' host TCP/UDP listener observed a contained connection');
