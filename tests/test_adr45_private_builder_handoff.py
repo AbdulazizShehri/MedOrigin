@@ -252,7 +252,7 @@ def test_error_after_concurrent_target_creation_never_deletes_foreign_directory(
         path: str | os.PathLike[str], flags: int, *args: Any, **kwargs: Any
     ) -> int:
         nonlocal injected
-        if Path(path).name == WHEEL and not injected:
+        if Path(path).name == WHEEL and Path(path).parent != source and not injected:
             injected = True
             dest.mkdir()
             (dest / "foreign").write_bytes(b"STILL_HERE")
