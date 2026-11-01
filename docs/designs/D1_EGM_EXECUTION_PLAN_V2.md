@@ -31,6 +31,20 @@ native receipt to qualify #808 or this documentation branch. This plan is based 
 [the original D1 EGM concept and design](D1_NETWORK_CONFINEMENT_EGM.md) and
 [the existing cold-review packet](D1_EGM_COLD_REVIEW_PACKET.md).
 
+### Fresh-engineer glossary (EGM Step 6 finding)
+
+- **D1:** unpublished Windows developer preview of MedOrigin, not a clinical product.
+- **MXC:** Windows ProcessContainer/containment SDK used for this experimental guarded launch; a requested deny policy is **not** an independently audited kernel denial.
+- **WFP / ETW:** Windows Filtering Platform policy/flow observability and Event Tracing for Windows telemetry; neither is proven available merely because its API is discoverable.
+- **UIA:** Windows UI Automation; checks real graphical journeys and Tauri IPC, not network packets.
+- **WebView2:** Microsoft embedded browser runtime; its utility/network workers may involve brokers or services outside the obvious app process.
+- **AppContainer / SID:** Windows restricted application security identity and security identifier. Token-capability denial is defense-in-depth, not packet-level confinement.
+- **PID / process creation time:** process identifier paired with a start timestamp to avoid mistaking a recycled PID for a persistent descendant.
+- **CSP:** content-security policy for app web content, not a universal WebView2 network firewall.
+- **`E_NOTIMPL` / `WSA10013`:** reported not-implemented native capture mechanism / socket access denied; neither alone proves complete DNS, UDP, broker or packet isolation.
+- **`TEST-NET`:** reserved documentation IP ranges used only in controlled synthetic probes, not a real internet allowlist.
+
+This glossary is informational. The approved observer and OS enforcement backend are still **UNDECIDED**.
 ## 2. Goal, non-goals and observer scope
 
 **Goal:** make a defensible, falsifiable, zero-cost *experiment* demonstrating
@@ -104,6 +118,40 @@ The earlier native #807 success is valid G1/G2 evidence for its **older**
 source only; it is not a G3–G7 pass. #808 remains G1/G2 **NOT_RUN** until
 real native replay is completed and recorded.
 
+### Gate evidence location, state authority and transitions
+
+For this D1 experiment, sanitized **append-only factual** evidence belongs under
+`experiments/desktop-d1-tauri/evidence/`; independently executed EGM
+read receipts and findings belong under `docs/designs/reviews/`. The
+[real OpenCode stages 5–6 partial review](reviews/2026-11-01-opencode-egm-goldfish-partial-review.md)
+is a **partial finding report**, not a final stage-9 readiness receipt.
+
+A source engineer may only record `NOT_RUN`, `BLOCKED`, or verified
+source-only observations for G0–G2. Source CI can check format/lineage but
+**cannot mark G3–G7 PASS**. A transition to network-security PASS requires an
+independent observer with a verified positive control and complete denied-flow
+evidence, followed by independent human security reviewer approval; release
+status requires the separately documented owner/governance authorization for
+#603/#574/#622. No single author-side signature or OpenCode subagent grants
+release approval. Each gate transition must record exact source SHA,
+artifact digest, policy/observer identity where applicable, actual verifier,
+time window, result and unresolved exceptions; prior receipts are immutable.
+
+### Zero-decision boundary and current readiness
+
+| Stage | Present state | Permitted without architectural choice |
+| --- | --- | --- |
+| T0 | **READY, documentation-only** | Reconcile exact evidence and enforce existing tests |
+| T1 | **READY, read-only inventory** | Read Windows facts and already documented SDK probe fields; never choose or activate an audit backend |
+| T2 | **READY only for backend-neutral source schema** | Pure syntax/negative tests; defer observer-specific fields and live verdict until T3 |
+| T3–T6 | **HOLD** | No privileged capture, security policy, packaging, cross-platform approval or release |
+
+**Existing paths** are below under `docs/designs/` and
+`experiments/desktop-d1-tauri/tests/`. Every path explicitly marked
+**new (proposed)** is to be created in a separate Draft after review.
+Reading existing Windows edition/privilege metadata is fact gathering,
+**not** permission to choose WFP API, ETW provider, VM design, broker
+exemption, policy identity or release authority.
 ## 5. Implementation plan: permitted zero-decision work vs HOLD work
 
 The upstream EGM
@@ -112,6 +160,18 @@ requires a zero-decision plan: exact files, steps, tests and stable checkpoints.
 **T0–T2 below are ready as source-only tasks. T3–T6 are intentionally
 NOT implementation-ready until the decision and review are accepted.**
 
+**EGM Step 5 correction:** this work is source-only, not strictly
+documentation-only: the v2 plan-contract test and its Windows CI workflow
+are **already existing on Draft #809** at
+`experiments/desktop-d1-tauri/tests/windows-d1-egm-v2-plan-contract.test.mjs`
+and
+`.github/workflows/medorigin-d1-egm-v2-plan-contract.yml`.
+T0 may update those exact two existing author-side files as needed, in the
+same atomic Draft PR. It may not alter Tauri/Rust runtime, SDK, token gate,
+installer or OS policy. Existing `docs/designs/reviews/` reports remain
+separate append-only factual evidence (Stage T3 review process), never
+fabricated or deleted. If a shared doc has moved since branch cut, stop,
+reconcile the diff, and re-run the exact-head checks.
 ### T0 — Evidence reconciliation (source-only; READY)
 
 **Files:** update this plan, `D1_NETWORK_CONFINEMENT_EGM.md`,
@@ -126,6 +186,14 @@ negative-capture evidence.
 **Done when:** source-only tests pass on exact planning commit; no code or
 dependency graph changes. This documentation PR remains Draft.
 
+**Reuse requirement:** before writing the proposed inventory, read the
+**existing** `experiments/desktop-d1-tauri/tests/windows-mxc-capture-report-verdict.mjs`,
+`windows-mxc-capture-denials-experiment.mjs`, existing source-only
+`windows-d1-egm-design-contract.test.mjs`, and
+`docs/designs/2026-11-01_DRIFT_REPORT.md`. Reuse exact provenance,
+source SHA and fail-closed metadata checks; do **not** rerun the native
+capture experiment as part of read-only inventory. Changes to those
+existing files require a separately reviewed minimal diff.
 ### T1 — Observer capability inventory (nonprivileged read-only; READY after T0)
 
 **Files (new, proposed next Draft):**
@@ -150,6 +218,17 @@ OS version, partial result and nonzero subprocess exit.
 **Done when:** source tests pass and an attributable *read-only*
 feasibility receipt is filed, clearly NOT G3 observer proof. No system settings changed.
 
+**EGM Step 5 correction:** T2 is limited to a **backend-neutral**
+source-verdict for immutable identity, internal consistency, and negative
+mutations. The following observer-specific fields are **provisional
+examples**, not a frozen API, packet capture format or selected WFP
+identity. T2 must NOT hard-code any OS backend, privilege model, broker
+ownership heuristic or expected network observations; schema approval
+belongs to T3 after architecture selection. Reuse the existing
+`experiments/desktop-d1-tauri/tests/windows-mxc-capture-report-verdict.mjs`
+and `windows-mxc-protocol-matrix-verdict.mjs` error classifications
+where their behavior already applies; add a new parser only for the
+missing abstract proof/lineage boundary.
 ### T2 — Offline evidence-schema/adversarial verdict (source-only; READY after T0)
 
 **Files (new, separate next Draft):**
@@ -206,6 +285,12 @@ token, descendants, brokers, errors, recovery and signing are bound
 **only after** T4 produces accepted evidence and a new architecture ADR.
 No uncontained fallback; installer/update changes need separate review.
 
+**Scope correction (EGM Zoom Out):** Windows D1 work **does not**
+include implementing macOS/Linux qualification. That is a separate
+platform roadmap with its own owner authorization and evidence.
+This stage only tracks release blockers and hands off platform plans
+without executing them inside D1. No new cross-platform code is
+authorized by this document.
 ### T6 — Cross-platform and release governance (HOLD)
 
 Independently qualify macOS/Linux native APIs; Windows evidence does
@@ -239,6 +324,12 @@ At every step, a deliberately observed allowed-control packet establishes
 sensitivity; an explicit attributed blocked-control record establishes
 visibility into denial. Both are necessary, neither alone sufficient.
 
+The envelope in this section is a **NON-NORMATIVE PLACEHOLDER**.
+It is not a receipt from OpenCode, MXC, WFP, DNS or a source test. Any
+event schema or observer-specific field becomes normative only through
+a separately reviewed, owner-approved T3 architecture decision and T4
+observed controls. T2 may validate abstract consistency and fail closed
+without asserting OS packet denial.
 ## 7. Machine-readable evidence discipline
 
 Suggested **future** sanitized envelope (example fields, not observed values):
@@ -275,6 +366,23 @@ bounded timing, drop counters, control destinations/ownership without PHI,
 and independent review decisions. Keep raw privacy-sensitive captures
 out of the repository; commit only sanitized reproducible metadata.
 
+### Verified partial Goldfish invocation, not a completed EGM approval
+
+Two actual native OpenCode `subagent` reviews were completed on the
+original v2 document source at `cf23239e59c7cf3e8e5966bb8723c05fe46d31b3`.
+The [append-only partial read receipt](reviews/2026-11-01-opencode-egm-goldfish-partial-review.md)
+records observed tool sessions, upstream persona/standard reads and
+stage-5 zoom-out plus stage-6 comprehension findings. These prompted
+this **author-side revision**. Stage-7 design critique, stage-8 second
+zoom-out and stage-9 implementation readiness are **NOT PASS**; if a
+stage fails or does not complete, the full five-stage Goldfish review
+remains **NOT RUN / INCOMPLETE**. A changed plan requires a new
+source-bound review of changed sections; no carry-forward approval.
+
+The full review remains NO-GO. This partial receipt does not override
+the original `Review state: NOT RUN` marker used for complete five-stage
+acceptance, and never substitutes independently approved OS packet
+proof or owner/security release decisions.
 ## 8. Fresh-context EGM Goldfish handoff and drift policy
 
 Upstream source: Google
