@@ -69,3 +69,42 @@ packet payloads or personal data were copied into the repository.
 
 No global firewall/audit setting, installer, tag, protected-main merge,
 public release, clinical data or monetized service was changed.
+
+
+## 2026-11-01 continuation: stable process-identity bracketing
+
+A source-level attribution gap remained: `Get-CimInstance Win32_Process`
+listed descendants **before** the TCP/UDP lookup, but the harness did not
+revalidate the tree **after** the socket read. A departing or arriving child,
+or PID substitution, could produce an incomplete or misattributed observation.
+
+At test-first head `4c726ded4a3dc72402fc628bd99470387e287944`,
+the synthetic regression failed RED because
+`Assert-MxcD1StableSocketWindow` was absent. The new helper and live UIA
+source integration subsequently added fail-closed checks bracketing both
+initial and each of 12 sampled socket windows. A second native process census
+is compared against the first by PID, start ticks, parent, process name and
+preserved executable path; changed membership or unexpected socket ownership
+is rejected.
+
+At exact source head `3c57f4f6c5e4bf78a1f9294563e0a213d75f8ec1`:
+- PowerShell 5.1 and 7 on the authorized Windows machine: synthetic negative
+  cases PASS, including new child, departed child, PID reuse, changed parent,
+  unattributed TCP/UDP owner and empty pre-snapshot.
+- `[System.Management.Automation.Language.Parser]::ParseFile` on the
+  guard, test and real UIA script: **0 parser errors** on PowerShell 5.1.
+- [Windows 2025 Actions run 41294438061](https://github.com/AbdulazizShehri/MedOrigin/actions/runs/41294438061)
+  completed SUCCESS; reviewed job 124812213745 and its negative-case log.
+- Added workflow syntax-parsing gate in subsequent commit
+  `c0f964e82964428a09e322003eecaf3b71a54058`.
+  Its own exact-head hosted result must be separately verified.
+
+**Limits:** This is a fail-closed observer for two inventories that
+surround each socket snapshot. A process that starts and exits between
+both inventories, a broker/system-service flow, a very brief TCP/UDP
+exchange, DNS, or packets not represented as endpoint snapshots
+could still escape observation. Nothing here is kernel packet-denial
+or system policy evidence. The previously documented D1 binary and
+portable supported MXC Node runtime are no longer present in the
+original recorded locations on this Windows machine, so this continuation
+did **not** rerun native MXC/WebView2 GUI. Full #662 remains NO-GO.
