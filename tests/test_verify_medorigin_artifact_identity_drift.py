@@ -94,7 +94,7 @@ def test_windows_readonly_mode_drift_after_read_is_refused(
     def change_mode(path: Path, directory_identity: tuple[int, int]) -> bytes:
         raw = original(path, directory_identity)
         if path == target:
-            os.chmod(target, stat.S_IREAD)
+            target.chmod(stat.S_IREAD)
         return raw
 
     monkeypatch.setattr(gate, "_read_pinned_regular_bytes", change_mode)
@@ -102,4 +102,4 @@ def test_windows_readonly_mode_drift_after_read_is_refused(
         with pytest.raises(gate.ProposalVerificationError, match=r"changed|mode|identity"):
             gate.read_stable_dist_bytes(fake_dist)
     finally:
-        os.chmod(target, stat.S_IWRITE | stat.S_IREAD)
+        target.chmod(stat.S_IWRITE | stat.S_IREAD)
