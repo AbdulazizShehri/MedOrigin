@@ -34,14 +34,14 @@ export function findD1SecurityDrift(s) {
   // hostLoopback hashed SID. Lexical checks do not prove FFI semantics.
   addUnless(gate.includes('OpenProcessToken(process, 0x0008, &mut handle)') &&
     gate.includes('GetTokenInformation(handle, 30,') &&
-    /GetTokenInformation\\(\\s*handle,\\s*29,/m.test(gate) &&
+    /GetTokenInformation\(\s*handle,\s*29,/m.test(gate) &&
     gate.includes('primary_token_not_appcontainer') &&
     gate.includes('primary_token_capability_query_failed'),
     'missing_primary_token_admission');
   addUnless(['INTERNET_CLIENT','INTERNET_CLIENT_SERVER',
     'PRIVATE_NETWORK_CLIENT_SERVER','HOST_LOOPBACK'].every(x=>gate.includes(x)) &&
     gate.includes('2503302554') &&
-    /EqualSid\\(\\s*sid,\\s*\\(&HOST_LOOPBACK as \\*const SidWithTenSubAuthorities\\)\\.cast\\(\\)/m.test(gate) &&
+    /EqualSid\(\s*sid,\s*\(&HOST_LOOPBACK as \*const SidWithTenSubAuthorities\)\.cast\(\)/m.test(gate) &&
     gate.includes('network_bits |= 1u8 << 3') &&
     gate.includes('reject_network_capability_bits(network_bits)'),
     'network_or_loopback_capability_not_denied');
