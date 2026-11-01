@@ -70,8 +70,10 @@ jobs:
           $tests='experiments/desktop-d1-tauri/tests'
           node --check "$tests/windows-mxc-d1-guarded-preview-launch.mjs"
           if ($LASTEXITCODE -ne 0) { throw 'Guarded MXC launcher syntax NO-GO' }
-          node --test "$tests/windows-mxc-d1-guarded-launch.test.mjs"
-          if ($LASTEXITCODE -ne 0) { throw 'Guarded MXC launcher source/preflight NO-GO' }
+          node --check "$tests/windows-mxc-d1-guarded-uia-observer.mjs"
+          if ($LASTEXITCODE -ne 0) { throw 'Guarded UIA observer syntax NO-GO' }
+          node --test "$tests/windows-mxc-d1-guarded-launch.test.mjs" "$tests/windows-mxc-d1-guarded-uia-observer.test.mjs"
+          if ($LASTEXITCODE -ne 0) { throw 'Guarded MXC launcher and four-journey GUI observer contract NO-GO' }
           Write-Output 'D1_GUARDED_PREVIEW_SOURCE_ONLY_NO_PRODUCT_ENFORCEMENT_NO_RELEASE'
       - name: Qualification boundary
         shell: pwsh
