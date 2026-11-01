@@ -11,7 +11,7 @@ requireSupportedWindowsMxcNode(process.versions.node,process.platform);
 if(process.argv.length!==4)fail('exact exe and SHA-256 required');
 const exe=resolve(process.argv[2]),sha=process.argv[3];
 if(!/^[0-9a-f]{64}$/i.test(sha)||createHash('sha256').update(readFileSync(exe)).digest('hex')!==sha.toLowerCase())fail('binary not SHA pinned');
-const pattern=/^D1_CAPABILITY_PROBE_COMPLETE APPCONTAINER=([01]) TOKEN_CAPABILITIES_COUNT=(\d+)\s*$/;
+const pattern=/^D1_CAPABILITY_PROBE_COMPLETE APPCONTAINER=([01]) TOKEN_CAPABILITIES_COUNT=(\d+) NETWORK_CAPABILITY_MASK=([0-7])\s*$/;
 const host=spawnSync(exe,[],{encoding:'utf8',timeout:8000,windowsHide:true});
 if(host.status!==0||!pattern.test(host.stdout||''))fail('host capability-count control failed');
 console.log('D1_HOST_TOKEN_CAPABILITY',host.stdout.trim());
@@ -35,5 +35,5 @@ try {
  // This probe records observations. Don't interpret a nonzero count as
  // network permission absent; any future production guard requires review.
  console.log('D1_TOKEN_CAPABILITY_DIFFERENTIAL_RECORDED',
-  'APPCONTAINER='+match[1],'COUNT='+match[2], 'NO_WFP_OR_PACKET_PROOF');
+  'APPCONTAINER='+match[1],'COUNT='+match[2],'NETWORK_MASK='+match[3], 'NO_WFP_OR_PACKET_PROOF');
 } finally{rmSync(tmp,{force:true,recursive:true,maxRetries:10,retryDelay:100})}
