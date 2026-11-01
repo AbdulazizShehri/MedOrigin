@@ -25,7 +25,15 @@ export function assertGuardedUiaEvidence(status,output,sha256) {
  if(status!==0||typeof output!=='string'||output.length>1024*1024||
     !(/^[0-9a-fA-F]{64}$/).test(sha256))
   fail('missing qualified observer exit, bounded output or expected SHA-256');
- const lines=output.split(/\r?\n/).map(line=>line.trim()).filter(Boolean);
+ // The real PowerShell observer emits exactly four fixture receipts, one
+ // identity census, one socket summary, one bounded sampler and one final
+ // marker. Never discard blank lines or unknown diagnostics: a source-level
+ // PASS accompanied by extra output is ambiguous and must fail closed.
+ const lines=output.split(/\r?\n/);
+ if(lines.at(-1)==='')lines.pop(); // One optional terminal newline only.
+ if(lines.length!==8||lines.some(line=>!line||line.trim()!==line||
+    /[\r\0\u2028\u2029]/.test(line)))
+  fail('extraneous, blank or altered observer stdout record');
  function exactOnce(marker) {
   const found=lines.filter(line=>line===marker);
   if(found.length!==1)fail('missing or duplicated exact evidence marker: '+marker);

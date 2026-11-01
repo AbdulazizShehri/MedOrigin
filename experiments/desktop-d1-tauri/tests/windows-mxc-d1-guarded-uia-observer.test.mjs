@@ -121,3 +121,26 @@ test('fail closed on oversized output and unknown observer exit',()=>{
  deny(good+'x'.repeat(1024*1024));
  deny(good,null);
 });
+
+test('fail closed on extra observer stdout, warnings, blank lines and whitespace',()=>{
+ for(const transcript of [
+  'WARNING: PowerShell native diagnostic\n'+good,
+  good+'D1_MXC_GUARDED_UIA_NO_GO: hidden failure\n',
+  good+'unrecognized observer record\n',
+  good+'\n',
+  '\n'+good,
+  good.replace(journeys[0],journeys[0]+' '),
+  good.replace(journeys[1],journeys[1]+'\n\n'),
+  good.replace(summary,' '+summary),
+  good.replace(final,final+' trailing'),
+  good.replace(final,final+'\rpartial')
+ ])deny(transcript);
+});
+
+test('guarded launcher must reject nonempty observer stderr even with exit zero',async()=>{
+ const {readFileSync}=await import('node:fs');
+ const launcher=readFileSync(new URL('./windows-mxc-d1-guarded-preview-launch.mjs',
+  import.meta.url),'utf8');
+ assert.match(launcher,/stderr:uiaStderr/);
+ assert.match(launcher,/uiaStderr\.trim\(\)!==''/);
+});

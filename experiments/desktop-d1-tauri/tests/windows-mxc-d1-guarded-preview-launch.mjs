@@ -44,7 +44,11 @@ try {
  // Real GUI/IPC and process-tree observation must complete *during* MXC run.
  // A container that merely reaches its timeout must never qualify on its own.
  const [result,evidence]=await Promise.all([run(request),observeGuardedUia(admitted.path,admitted.sha256)]);
- const {status:uiaStatus,stdout:uiaOutput,errorCode:uiaSpawnError}=evidence;
+ const {status:uiaStatus,stdout:uiaOutput,stderr:uiaStderr,errorCode:uiaSpawnError}=evidence;
+ // PowerShell can write a nonterminating error/warning to stderr while
+ // returning exit 0 and valid-looking UIA markers. Never silently drop it.
+ if(typeof uiaStderr!=='string'||uiaStderr.trim()!=='')
+   reject('Windows UIA observer emitted stderr diagnostics');
  const afterHash=createHash('sha256').update(readFileSync(admitted.path)).digest('hex');
  if(afterHash!==admitted.sha256)reject('executable changed during contained run');
  if((result.warnings||[]).length!==0||result.timedOut!==true)
