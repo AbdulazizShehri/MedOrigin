@@ -1,10 +1,11 @@
 // NONPUBLISHING candidate guarded-entrypoint UIA evidence contract.
 // UIA runs on the trusted host, targeting the exact SHA-pinned contained
-// D1 process tree. It is sampled evidence, not WFP/kernel packet proof.
+// D1 process tree. This is sampled evidence, NOT WFP/kernel packet proof.
 import {spawnSync} from 'node:child_process';
 import {setTimeout as delay} from 'node:timers/promises';
 import {join,dirname} from 'node:path';
 import {fileURLToPath} from 'node:url';
+import {parseD1Snapshot} from './windows-mxc-d1-lifecycle-proof.mjs';
 
 const script=join(dirname(fileURLToPath(import.meta.url)),
  'windows-mxc-d1-real-uia-qualification.ps1');
@@ -21,22 +22,57 @@ export async function observeGuardedUia(executable,sha256) {
    errorCode:r.error?.code||null};
 }
 export function assertGuardedUiaEvidence(status,output,sha256) {
- if(status!==0||typeof output!=='string'||!(/^[0-9a-fA-F]{64}$/).test(sha256))
-  fail('missing qualified observer exit or expected SHA-256');
- const lines=output.split(/\r?\n/).map(line=>line.trim());
- for(const id of cases) {
-  const marker='MXC_D1_UIA_PASS '+id;
-  // Each journey is bound to a complete line, not a partial identifier.
-  if(!lines.includes(marker))
-   fail('missing verified journey '+id);
+ if(status!==0||typeof output!=='string'||output.length>1024*1024||
+    !(/^[0-9a-fA-F]{64}$/).test(sha256))
+  fail('missing qualified observer exit, bounded output or expected SHA-256');
+ const lines=output.split(/\r?\n/).map(line=>line.trim()).filter(Boolean);
+ function exactOnce(marker) {
+  const found=lines.filter(line=>line===marker);
+  if(found.length!==1)fail('missing or duplicated exact evidence marker: '+marker);
+  return lines.indexOf(marker);
  }
- const snapshot=output.match(/MXC_D1_PROCESS_TREE=(\d+) WEBVIEW2=(\d+) OWNED_TCP=(\d+) NONLOOP_TCP=(\d+) UDP_ENDPOINTS=(\d+) ROOT_SHA256=([0-9a-fA-F]{64})/);
- if(!snapshot||Number(snapshot[1])<2||Number(snapshot[2])<1||
-    Number(snapshot[3])!==0||Number(snapshot[4])!==0||Number(snapshot[5])!==0||
-    snapshot[6].toLowerCase()!==sha256.toLowerCase())
+ function prefixOnce(prefix) {
+  const found=lines.filter(line=>line.startsWith(prefix));
+  if(found.length!==1)fail('missing or repeated evidence record: '+prefix);
+  return {line:found[0],index:lines.indexOf(found[0])};
+ }
+ const observedJourneys=lines.filter(line=>line.startsWith('MXC_D1_UIA_PASS'));
+ if(observedJourneys.length!==cases.length||
+    observedJourneys.some(line=>!cases.some(id=>line==='MXC_D1_UIA_PASS '+id)))
+  fail('extra or unrecognized UIA journey marker');
+ const journeyOrder=cases.map(id=>exactOnce('MXC_D1_UIA_PASS '+id));
+ // The PowerShell UIA script produces this chronological sequence.
+ // A replayed transcript with duplicate or out-of-order markers is NO-GO.
+ for(let i=1;i<journeyOrder.length;i++)
+  if(journeyOrder[i]<=journeyOrder[i-1])
+   fail('UIA fixture markers replayed out of order');
+
+ const snapshotRecord=prefixOnce('MXC_D1_PROCESS_SNAPSHOT_JSON=');
+ let inventory;
+ try{inventory=parseD1Snapshot(output)}
+ catch{fail('real process identity inventory missing or invalid')}
+ const summaryRecord=prefixOnce('MXC_D1_PROCESS_TREE=');
+ const summary=/^MXC_D1_PROCESS_TREE=(\d+) WEBVIEW2=(\d+) OWNED_TCP=(\d+) NONLOOP_TCP=(\d+) UDP_ENDPOINTS=(\d+) ROOT_SHA256=([0-9a-fA-F]{64})$/
+   .exec(summaryRecord.line);
+ if(!summary)fail('exact process-tree and socket summary malformed');
+ const [tree,webview,tcp,nonloop,udp]=summary.slice(1,6).map(Number);
+ if(![tree,webview,tcp,nonloop,udp].every(Number.isSafeInteger)||
+    tree<2||tree>128||webview<1||webview>tree-1||
+    tcp!==0||nonloop!==0||udp!==0||
+    summary[6].toLowerCase()!==sha256.toLowerCase())
   fail('process-tree identity or socket snapshot not verified');
- if(!lines.includes('MXC_D1_TIME_WINDOWED_TCP_SAMPLER_PASS samples=12 max_owned_tcp=0 max_udp_endpoints=0 NO_PACKET_LEVEL_ATTESTATION'))
-  fail('12 identity-bracketed TCP UDP samples missing or nonzero');
- if(!lines.includes('MXC_D1_REAL_APP_UIA_4_OF_4_PASS_NONPUBLISHING_NETWORK_STILL_NO_GO'))
-  fail('real UIA script did not print final source-bound PASS marker');
+ const webviewEntries=inventory.filter(x=>x.name.toLowerCase()==='msedgewebview2.exe');
+ if(inventory.length!==tree||webviewEntries.length!==webview)
+  fail('independent process identity inventory disagrees with summary');
+
+ const sampler='MXC_D1_TIME_WINDOWED_TCP_SAMPLER_PASS samples=12 max_owned_tcp=0 max_udp_endpoints=0 NO_PACKET_LEVEL_ATTESTATION';
+ const finalMarker='MXC_D1_REAL_APP_UIA_4_OF_4_PASS_NONPUBLISHING_NETWORK_STILL_NO_GO';
+ const samplerIndex=exactOnce(sampler);
+ const finalIndex=exactOnce(finalMarker);
+ if(!(journeyOrder.at(-1)<snapshotRecord.index &&
+      snapshotRecord.index<summaryRecord.index &&
+      summaryRecord.index<samplerIndex&&samplerIndex<finalIndex))
+  fail('source-bound UIA, process tree and samples appear in wrong order');
+ // This transcript validates what the real Windows UIA script *reported*.
+ // Samples remain incomplete for short-lived packets, DNS or OS brokers.
 }

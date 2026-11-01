@@ -1,0 +1,36 @@
+# Guarded-entrypoint evidence source tests only: NOT native MXC,
+# WebView2 GUI execution, WFP packet-level proof or approval.
+name: D1 guarded UIA transcript integrity source contracts
+on:
+  push:
+    branches:
+      - test/medorigin-d1-guarded-uia-transcript-integrity-20261101
+  pull_request:
+    branches:
+      - test/medorigin-d1-udp-softaccept-negative-20261101
+    paths:
+      - 'experiments/desktop-d1-tauri/tests/windows-mxc-d1-guarded-*'
+      - 'experiments/desktop-d1-tauri/tests/windows-mxc-d1-lifecycle-proof*'
+      - '.github/workflows/medorigin-d1-guarded-uia-transcript.yml'
+permissions:
+  contents: read
+jobs:
+  guarded-transcript-source:
+    runs-on: windows-2025
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+      - name: Test pinned launcher and strict UIA transcript evidence
+        shell: pwsh
+        run: |
+          $tests='experiments/desktop-d1-tauri/tests'
+          node --check "$tests/windows-mxc-d1-guarded-uia-observer.mjs"
+          if($LASTEXITCODE -ne 0){throw 'Strict UIA observer syntax NO-GO'}
+          node --check "$tests/windows-mxc-d1-guarded-preview-launch.mjs"
+          if($LASTEXITCODE -ne 0){throw 'Guarded launcher syntax NO-GO'}
+          node --test "$tests/windows-mxc-d1-guarded-uia-observer.test.mjs" "$tests/windows-mxc-d1-guarded-launch.test.mjs" "$tests/windows-mxc-d1-lifecycle-proof.test.mjs"
+          if($LASTEXITCODE -ne 0){throw 'Guarded D1 source/receipt integrity test NO-GO'}
+          Write-Output 'D1_STRICT_UIA_SOURCE_ONLY_NO_MXC_WFP_PACKET_RELEASE_ATTESTATION'
