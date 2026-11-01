@@ -7,14 +7,22 @@
 
 #[inline]
 fn classify_appcontainer_bit(is_appcontainer: bool) -> Result<(), &'static str> {
-    if is_appcontainer { Ok(()) } else { Err("primary_token_not_appcontainer") }
+    if is_appcontainer {
+        Ok(())
+    } else {
+        Err("primary_token_not_appcontainer")
+    }
 }
 
 /// The three well-known Windows network capability SIDs must all be absent.
 /// Other capabilities may be required for desktop UI integration.
 #[inline]
 fn reject_network_capability_bits(bits: u8) -> Result<(), &'static str> {
-    if bits == 0 { Ok(()) } else { Err("primary_token_has_network_capability") }
+    if bits == 0 {
+        Ok(())
+    } else {
+        Err("primary_token_has_network_capability")
+    }
 }
 
 #[cfg(windows)]
@@ -39,21 +47,31 @@ mod windows {
     }
 
     #[repr(C)]
-    struct SidAndAttributes { sid: *mut c_void, attributes: u32 }
+    struct SidAndAttributes {
+        sid: *mut c_void,
+        attributes: u32,
+    }
     #[repr(C)]
-    struct TokenGroups { count: u32, groups: [SidAndAttributes; 1] }
+    struct TokenGroups {
+        count: u32,
+        groups: [SidAndAttributes; 1],
+    }
     #[repr(C, align(4))]
-    struct SidBytes([u8;16]);
+    struct SidBytes([u8; 16]);
     // Source: Microsoft capability SIDs S-1-15-3-1/-2/-3.
-    static INTERNET_CLIENT: SidBytes = SidBytes([1,2,0,0,0,0,0,15,3,0,0,0,1,0,0,0]);
-    static INTERNET_CLIENT_SERVER: SidBytes = SidBytes([1,2,0,0,0,0,0,15,3,0,0,0,2,0,0,0]);
-    static PRIVATE_NETWORK_CLIENT_SERVER: SidBytes = SidBytes([1,2,0,0,0,0,0,15,3,0,0,0,3,0,0,0]);
+    static INTERNET_CLIENT: SidBytes = SidBytes([1, 2, 0, 0, 0, 0, 0, 15, 3, 0, 0, 0, 1, 0, 0, 0]);
+    static INTERNET_CLIENT_SERVER: SidBytes =
+        SidBytes([1, 2, 0, 0, 0, 0, 0, 15, 3, 0, 0, 0, 2, 0, 0, 0]);
+    static PRIVATE_NETWORK_CLIENT_SERVER: SidBytes =
+        SidBytes([1, 2, 0, 0, 0, 0, 0, 15, 3, 0, 0, 0, 3, 0, 0, 0]);
 
     struct OwnedToken(isize);
     impl Drop for OwnedToken {
         fn drop(&mut self) {
             // Handle obtained only from successful OpenProcessToken.
-            unsafe { CloseHandle(self.0); }
+            unsafe {
+                CloseHandle(self.0);
+            }
         }
     }
     pub(super) fn check() -> Result<(), &'static str> {
@@ -76,14 +94,18 @@ mod windows {
                 core::mem::size_of::<u32>() as u32,
                 &mut returned,
             )
-        } == 0 || returned != core::mem::size_of::<u32>() as u32 {
+        } == 0
+            || returned != core::mem::size_of::<u32>() as u32
+        {
             return Err("primary_token_appcontainer_query_failed");
         }
         super::classify_appcontainer_bit(value != 0)?;
         // TokenCapabilities = 30. Query the primary token's TOKEN_GROUPS
         // from the Windows kernel; never trust launch arguments or env vars.
         let mut required = 0u32;
-        unsafe { GetTokenInformation(handle, 30, core::ptr::null_mut(), 0, &mut required); }
+        unsafe {
+            GetTokenInformation(handle, 30, core::ptr::null_mut(), 0, &mut required);
+        }
         if !(4..=65536).contains(&required) {
             return Err("primary_token_capability_size_invalid");
         }
@@ -92,26 +114,42 @@ mod windows {
         let mut got = 0u32;
         if unsafe {
             GetTokenInformation(handle, 30, buffer.as_mut_ptr().cast(), required, &mut got)
-        } == 0 || got < 4 || got > required {
+        } == 0
+            || got < 4
+            || got > required
+        {
             return Err("primary_token_capability_query_failed");
         }
-        let count = u32::from_ne_bytes(buffer[0].to_ne_bytes()[..4].try_into()
-            .map_err(|_| "primary_token_capability_count_invalid")?) as usize;
+        let count = u32::from_ne_bytes(
+            buffer[0].to_ne_bytes()[..4]
+                .try_into()
+                .map_err(|_| "primary_token_capability_count_invalid")?,
+        ) as usize;
         if count > 1024 {
             return Err("primary_token_capability_count_invalid");
         }
         let offset = core::mem::offset_of!(TokenGroups, groups);
         let item = core::mem::size_of::<SidAndAttributes>();
-        let needed = offset.checked_add(count.checked_mul(item)
-            .ok_or("primary_token_capability_buffer_invalid")?)
+        let needed = offset
+            .checked_add(
+                count
+                    .checked_mul(item)
+                    .ok_or("primary_token_capability_buffer_invalid")?,
+            )
             .ok_or("primary_token_capability_buffer_invalid")?;
         if needed > got as usize {
             return Err("primary_token_capability_buffer_invalid");
         }
-        let entries = unsafe { (buffer.as_ptr() as *const u8).add(offset)
-            .cast::<SidAndAttributes>() };
-        let network = [&INTERNET_CLIENT, &INTERNET_CLIENT_SERVER,
-            &PRIVATE_NETWORK_CLIENT_SERVER];
+        let entries = unsafe {
+            (buffer.as_ptr() as *const u8)
+                .add(offset)
+                .cast::<SidAndAttributes>()
+        };
+        let network = [
+            &INTERNET_CLIENT,
+            &INTERNET_CLIENT_SERVER,
+            &PRIVATE_NETWORK_CLIENT_SERVER,
+        ];
         let mut network_bits = 0u8;
         for i in 0..count {
             let sid = unsafe { (*entries.add(i)).sid };
@@ -134,9 +172,13 @@ mod windows {
 /// No environment variables or user-provided sentinel can bypass this check.
 pub fn require_windows_appcontainer_primary_token() -> Result<(), &'static str> {
     #[cfg(windows)]
-    { windows::check() }
+    {
+        windows::check()
+    }
     #[cfg(not(windows))]
-    { Err("windows_only") }
+    {
+        Err("windows_only")
+    }
 }
 
 #[cfg(test)]
@@ -153,9 +195,13 @@ mod tests {
     #[test]
     fn known_internet_and_private_network_capabilities_each_fail_closed() {
         for bits in [1u8, 2, 4, 3, 5, 6, 7] {
-            assert_eq!(super::reject_network_capability_bits(bits),
-                Err("primary_token_has_network_capability"));
+            assert_eq!(
+                super::reject_network_capability_bits(bits),
+                Err("primary_token_has_network_capability")
+            );
         }
         assert!(super::reject_network_capability_bits(0).is_ok());
     }
 }
+
+[executed on device: Abdulaziz (1e5f67ae-323f-4706-b7a0-3dca9146e2a7)]
