@@ -19,6 +19,7 @@ function requireCondition(condition,reason){if(!condition)failure(reason)}
 // datagram to each. This does not attest MXC, WFP or product egress.
 export function assessNativePositiveControl({
  control,udp4Receipts,udp6Receipts,tcp4Accepts,tcp6Accepts,
+ tcp4Peers,tcp6Peers,expectedTcp4Port,expectedTcp6Port,
  udp4Packets,udp6Packets
 }) {
  requireCondition(control&&typeof control==='object',
@@ -49,6 +50,22 @@ export function assessNativePositiveControl({
  // one expected local UDP payload per address family.
  requireCondition(tcp4Accepts===1&&tcp6Accepts===1,
   'unrestricted native TCP listeners did not accept exactly one connection each');
+ const validLocalPort=port=>Number.isSafeInteger(port)&&port>=1025&&port<=65535;
+ const validSourcePort=port=>Number.isSafeInteger(port)&&port>=1&&port<=65535;
+ const requirePeer=(peers,expectedPort,family,address)=>{
+  requireCondition(validLocalPort(expectedPort),
+   'unrestricted TCP listener expected port absent or invalid');
+  requireCondition(Array.isArray(peers)&&peers.length===1,
+   'unrestricted TCP peer receipt missing, forged or repeated');
+  const peer=peers[0];
+  requireCondition(peer&&typeof peer==='object'&&!Array.isArray(peer)&&
+   peer.remoteAddress===address&&peer.remoteFamily===family&&
+   peer.localAddress===address&&peer.localPort===expectedPort&&
+   validSourcePort(peer.remotePort),
+   'unrestricted TCP peer identity differs from expected local listener');
+ };
+ requirePeer(tcp4Peers,expectedTcp4Port,'IPv4','127.0.0.1');
+ requirePeer(tcp6Peers,expectedTcp6Port,'IPv6','::1');
  const payload=Buffer.from('synthetic-mxc-udp-probe','utf8');
  const validPacket=(packet,family,address)=>
   packet&&typeof packet==='object'&&
