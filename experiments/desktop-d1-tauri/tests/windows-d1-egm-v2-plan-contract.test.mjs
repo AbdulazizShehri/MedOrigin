@@ -50,7 +50,7 @@ function requireFailClosedPlan(plan){
  assert.match(plan,/Goldfish review: NOT RUN/);
  assert.match(plan,/one NOT_RUN or BLOCKED release-critical gate keeps \*\*RELEASE NO-GO\*\*/);
  assert.match(plan,/No observer can declare a pass unless it demonstrates visibility/);
- assert.match(plan,/not\*\* populate observational fields/i);
+ assert.match(plan,/must \*\*never\*\* populate observational fields/i);
 }
 test('v2 source-bound plan explicitly retains NO-GO, immutable lineage and stage split',()=>{
  assert.doesNotThrow(()=>requireFailClosedPlan(d.plan));
