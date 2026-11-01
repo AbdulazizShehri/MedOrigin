@@ -25,10 +25,17 @@ unapproved design does not authorize filling them on the owner host.
   covers the D1 GUI process tree, independent DNS/UDP, or broker
   attribution. The living design now links these sources so future
   implementation cannot assume the mechanisms are missing or sufficient.
-- **Partial lifecycle source only:** `windows-mxc-d1-cold-restart-qualification.mjs`
-  already runs two exact-SHA MXC GUI sessions and checks process identity
-  cleanup. It does not establish installer/upgrade, crash-recovery or
-  independently verified broker/network packet continuity.
+- **Bounded guarded lifecycle now independently executed, not packet-approved:**
+  `windows-mxc-d1-cold-restart-qualification.mjs` now invokes the
+  SHA-pinned guarded MXC launcher twice and requires strict source-bound
+  UIA/process-census receipts and zero exact PID/start-time survivors.
+  [Actual current-source Windows evidence](../../experiments/desktop-d1-tauri/evidence/windows-mxc-d1-two-guarded-cold-starts-20261101.md)
+  shows **8/8** actual synthetic UIA journeys across 2 separate cold starts,
+  source SHA matched on recheck and direct app launch refused 2/2.
+  This closes the *older loose-parser lifecycle test gap*, but still does
+  **not** prove installer/upgrade, crash recovery, signed mandatory launch,
+  independently verified WFP/DNS/IPv4/IPv6/WebView2 broker traffic or a
+  complete packet-level lifecycle.
 - **Native capture preflight/runtime divergence (new actual negative):**
   A Windows 26300 request-specific `probe` for block-mode MXC
   `captureDenials` returned native `base-container` available, yet
