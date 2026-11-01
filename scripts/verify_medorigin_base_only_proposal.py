@@ -15,6 +15,8 @@ import io
 import itertools
 import json
 import os
+import stat
+import tempfile
 import subprocess
 import sys
 import tarfile
@@ -288,11 +290,94 @@ def qualified_dist_paths(dist: Path) -> tuple[Path, Path]:
     return wheel, sdist
 
 
+def _stat_identity(info: os.stat_result) -> tuple[int, int, int, int, int]:
+    """Bind one concrete file identity and data-stability snapshot."""
+    return (info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns, info.st_ctime_ns)
+
+
+def _read_pinned_regular_bytes(
+    path: Path, directory_identity: tuple[int, int]
+) -> bytes:
+    """Bound a single fd read to a real regular file, refusing path retargeting.
+
+    The same open descriptor is used for the bounded read. Reject inode
+    substitution, symlinks, hardlinked artifacts, and concurrent writes.
+    This is still NOT a publisher-side post-verification immutability lock.
+    """
+    try:
+        root_stat = os.stat(path.parent, follow_symlinks=False)
+        if (root_stat.st_dev, root_stat.st_ino) != directory_identity:
+            raise ProposalVerificationError("artifact directory changed during inspection")
+        before = os.stat(path, follow_symlinks=False)
+        if (
+            not stat.S_ISREG(before.st_mode)
+            or before.st_nlink != 1
+            or before.st_ino == 0
+            or before.st_size > MAX_TOTAL
+        ):
+            raise ProposalVerificationError("artifact is not an ordinary bounded regular file")
+        flags = os.O_RDONLY | getattr(os, "O_BINARY", 0) | getattr(os, "O_NOFOLLOW", 0)
+        fd = os.open(path, flags)
+        with os.fdopen(fd, "rb") as handle:
+            opened = os.fstat(handle.fileno())
+            if _stat_identity(opened) != _stat_identity(before):
+                raise ProposalVerificationError("artifact changed before pinned open")
+            raw = handle.read(MAX_TOTAL + 1)
+            after = os.fstat(handle.fileno())
+            if len(raw) != before.st_size or len(raw) > MAX_TOTAL:
+                raise ProposalVerificationError("artifact payload exceeds snapshot budget")
+            if _stat_identity(after) != _stat_identity(before):
+                raise ProposalVerificationError("artifact changed during pinned read")
+        if _stat_identity(os.stat(path, follow_symlinks=False)) != _stat_identity(before):
+            raise ProposalVerificationError("artifact pathname changed during pinned read")
+        return raw
+    except OSError as exc:
+        raise ProposalVerificationError("artifact changed or unreadable during pinned read") from exc
+
+
+def read_stable_dist_bytes(dist: Path) -> tuple[bytes, bytes]:
+    """Snapshot exactly two qualified files before parsing any ZIP or TAR bytes.
+
+    The private archive parsers must never independently reopen the untrusted
+    caller-owned paths after directory qualification.
+    """
+    wheel, sdist = qualified_dist_paths(dist)
+    try:
+        info = os.stat(dist, follow_symlinks=False)
+        if not stat.S_ISDIR(info.st_mode) or info.st_ino == 0:
+            raise ProposalVerificationError("artifact directory changed during inspection")
+        directory_identity = (info.st_dev, info.st_ino)
+        def file_identity(path: Path) -> tuple[int, int, int, int, int]:
+            return _stat_identity(os.stat(path, follow_symlinks=False))
+        before = (file_identity(wheel), file_identity(sdist))
+        wheel_bytes = _read_pinned_regular_bytes(wheel, directory_identity)
+        sdist_bytes = _read_pinned_regular_bytes(sdist, directory_identity)
+        if (
+            (os.stat(dist, follow_symlinks=False).st_dev,
+             os.stat(dist, follow_symlinks=False).st_ino) != directory_identity
+            or (file_identity(wheel), file_identity(sdist)) != before
+        ):
+            raise ProposalVerificationError("artifact source changed between stable snapshots")
+        # Also refuse new top-level artifacts introduced during the read.
+        qualified_dist_paths(dist)
+        return wheel_bytes, sdist_bytes
+    except OSError as exc:
+        raise ProposalVerificationError("artifact directory or source changed") from exc
+
+
 def verify(repository: Path, dist: Path) -> dict[str, object]:
     commit, sources, original, _lock, _mrl = trusted_source(repository)
     parent, changed = exact_removed_projected_root(original)
-    wd, sd = qualified_dist_paths(dist)
-    wheel, sdist = load_wheel(wd), load_sdist(sd)
+    wheel_raw, sdist_raw = read_stable_dist_bytes(dist)
+    # The original mutable dist entries are NEVER reopened by the archive
+    # parsers: inspect private exact bytes in an automatically deleted scratch
+    # directory (not a publisher upload path).
+    with tempfile.TemporaryDirectory(prefix="medorigin-adr45-unpublished-audit-") as scratch:
+        wd = Path(scratch) / "medscale-0.3.0-py3-none-any.whl"
+        sd = Path(scratch) / "medscale-0.3.0.tar.gz"
+        wd.write_bytes(wheel_raw)
+        sd.write_bytes(sdist_raw)
+        wheel, sdist = load_wheel(wd), load_sdist(sd)
     expected_sdist = {SD + name: contents for name, contents in sources.items()}
     expected_sdist[SD + "pyproject.toml"] = changed
     expected_sdist[SD + ".gitignore"] = b""
@@ -349,8 +434,8 @@ def verify(repository: Path, dist: Path) -> dict[str, object]:
     return {
         "status": "BASE_ONLY_PROPOSAL_SOURCE_BOUND_VERIFIED",
         "source_git_commit": commit,
-        "wheel_sha256": digest(wd.read_bytes()),
-        "sdist_sha256": digest(sd.read_bytes()),
+        "wheel_sha256": digest(wheel_raw),
+        "sdist_sha256": digest(sdist_raw),
         "wheel_members": len(wheel),
         "sdist_members": len(sdist),
         "committed_source_files": len(sources),
