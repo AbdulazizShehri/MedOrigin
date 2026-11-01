@@ -63,3 +63,70 @@ test('collector fails closed on privileged, unsupported, mismatched and errored 
  const old=collectReadOnlyInventory(sha,'UNAVAILABLE',()=>({status:0,stdout:'19045|10.0.19045|False',stderr:'',signal:null}));
  assert.equal(old.reason,'UNSUPPORTED');assert.equal(old.observerAvailable,false);
 });
+
+
+// Source SHA alone is not evidence of the executed tree: reject dirty or
+// drifting checkouts before/after the read-only OS query. No real OS access.
+import * as provenance from './windows-d1-observer-capability-inventory.mjs';
+const gitReply=(stdout,status=0,stderr='')=>({status,stdout,stderr,signal:null,error:null});
+const mockGit=(responses,calls=[])=> (bin,args,options)=>{
+ assert.equal(bin,'git');
+ assert.equal(args[0],'--no-optional-locks');
+ assert.equal(options.windowsHide,true);
+ assert.equal(options.encoding,'utf8');
+ const kind=args[1]==='status'?'status':'head';
+ calls.push(kind);
+ const response=responses.shift();
+ assert.ok(response,'unexpected Git call');
+ return response;
+};
+test('T1 source identity requires a clean Git tree before claiming an exact SHA',()=>{
+ assert.equal(typeof provenance.readCleanGitSourceIdentity,'function');
+ const calls=[];
+ const git=mockGit([gitReply(sha+'\n'),gitReply('')],calls);
+ assert.equal(provenance.readCleanGitSourceIdentity('C:\\synthetic-repo',git),sha);
+ assert.deepEqual(calls,['head','status']);
+});
+test('T1 rejects dirty, untracked, failed, noisy or malformed Git provenance',()=>{
+ const scenarios=[
+  [gitReply(sha+'\n'),gitReply(' M tests/file.mjs\n')],
+  [gitReply(sha+'\n'),gitReply('?? scratch.txt\n')],
+  [gitReply(sha+'\n'),gitReply('',1)],
+  [gitReply(sha+'\n'),gitReply('','', 'warning')],
+  [gitReply('A'.repeat(40)+'\n'),gitReply('')],
+  [gitReply(sha+'\nEXTRA\n'),gitReply('')],
+  [gitReply(sha+'\n',1),gitReply('')],
+  [gitReply(sha+'\n',0,'warning'),gitReply('')]
+ ];
+ for(const pair of scenarios){
+  const actual=pair.map(x=>x);
+  // Explicit stderr warning case must fail even if command exits zero.
+  if(actual[1]?.length===4)actual[1]=gitReply('',0,'warning');
+  reject(()=>provenance.readCleanGitSourceIdentity('C:\\synthetic-repo',mockGit(actual)));
+ }
+});
+test('T1 binds the OS query between two clean identical source snapshots',()=>{
+ assert.equal(typeof provenance.collectSourceBoundInventory,'function');
+ const calls=[];
+ const git=mockGit([gitReply(sha+'\n'),gitReply(''),gitReply(sha+'\n'),gitReply('')],calls);
+ let hostCalls=0;
+ const host=()=>{hostCalls++;return {status:0,stdout:raw,stderr:'',signal:null};};
+ const receipt=provenance.collectSourceBoundInventory('C:\\synthetic-repo',git,host);
+ assert.equal(receipt.sourceSha,sha);
+ assert.equal(receipt.observerAvailable,false);
+ assert.deepEqual(calls,['head','status','head','status']);
+ assert.equal(hostCalls,1);
+});
+test('T1 rejects mid-query HEAD drift or post-query uncommitted edits',()=>{
+ for(const post of [
+  [gitReply('b'.repeat(40)+'\n'),gitReply('')],
+  [gitReply(sha+'\n'),gitReply('?? after-query.txt\n')]
+ ]){
+  const git=mockGit([gitReply(sha+'\n'),gitReply(''),...post]);
+  let hostCalls=0;
+  reject(()=>provenance.collectSourceBoundInventory('C:\\synthetic-repo',git,()=>{
+   hostCalls++;return {status:0,stdout:raw,stderr:'',signal:null};
+  }));
+  assert.equal(hostCalls,1);
+ }
+});
