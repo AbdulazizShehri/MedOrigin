@@ -4,13 +4,17 @@ on:
   push:
     branches:
       - test/medorigin-adr45-compare-stable-archives-20261102
+      - test/medorigin-adr45-windows-real-installed-20261102
   pull_request:
     branches:
       - test/medorigin-adr45-artifact-stable-snapshot-20261102
+      - test/medorigin-adr45-compare-stable-archives-20261102
     paths:
       - '.github/workflows/medorigin-adr45-compare-stable-archives.yml'
       - 'scripts/compare_medorigin_base_only_archives.py'
       - 'tests/test_compare_medorigin_base_only_archives.py'
+      - 'tests/test_adr45_private_builder_handoff.py'
+      - 'scripts/qa/adr45_private_builder_handoff.py'
       - 'scripts/verify_medorigin_base_only_proposal.py'
 permissions:
   contents: read
@@ -41,15 +45,18 @@ jobs:
             [IO.Path]::PathSeparator,
             @((Join-Path (Get-Location) 'src'), (Join-Path (Get-Location) 'scripts'), (Join-Path (Get-Location) 'tests'))
           )
-          uv run --no-project --python "${{ matrix.python }}" --with pytest==8.4.2 python -m pytest -q -o addopts= --basetemp "$env:RUNNER_TEMP/adr45-compare" tests/test_compare_medorigin_base_only_archives.py tests/test_verify_medorigin_base_only_proposal.py
+          uv run --no-project --python "${{ matrix.python }}" --with pytest==8.4.2 python -m pytest -q -o addopts= --basetemp "$env:RUNNER_TEMP/adr45-compare" tests/test_compare_medorigin_base_only_archives.py tests/test_verify_medorigin_base_only_proposal.py tests/test_adr45_private_builder_handoff.py
           if ($LASTEXITCODE -ne 0) { throw 'ADR45 comparator source tests NO-GO' }
       - name: Pin Ruff syntax, import safety and formatting
         shell: pwsh
         run: |
-          uvx --from ruff==0.14.4 ruff check scripts/compare_medorigin_base_only_archives.py tests/test_compare_medorigin_base_only_archives.py
+          uvx --from ruff==0.14.4 ruff check scripts/compare_medorigin_base_only_archives.py tests/test_compare_medorigin_base_only_archives.py scripts/qa/adr45_private_builder_handoff.py tests/test_adr45_private_builder_handoff.py
           if ($LASTEXITCODE -ne 0) { throw 'ADR45 comparator Ruff lint NO-GO' }
-          uvx --from ruff==0.14.4 ruff format --check scripts/compare_medorigin_base_only_archives.py tests/test_compare_medorigin_base_only_archives.py
-          if ($LASTEXITCODE -ne 0) { throw 'ADR45 comparator Ruff format NO-GO' }
+          uvx --from ruff==0.14.4 ruff format --check scripts/compare_medorigin_base_only_archives.py tests/test_compare_medorigin_base_only_archives.py scripts/qa/adr45_private_builder_handoff.py tests/test_adr45_private_builder_handoff.py
+          if ($LASTEXITCODE -ne 0) {
+            uvx --from ruff==0.14.4 ruff format --diff scripts/qa/adr45_private_builder_handoff.py tests/test_adr45_private_builder_handoff.py
+            throw 'ADR45 comparator Ruff format NO-GO'
+          }
       - name: Explicit NO-GO
         shell: pwsh
         run: |
