@@ -34,9 +34,7 @@ test('design has mandatory alternatives, critical boundaries and testable OS con
   for(const term of ['MXC ProcessContainer','WebView2','WFP','DNS','TCP','UDP',
     'IPv4','IPv6','hostLoopback','kernel-level','broker','positive control',
     'permissive','NO-GO','DRAFT / NOT APPROVED','Goldfish review: NOT RUN',
-    '#662','#603','#574','#622','disposable','four synthetic','No-GO',
-    '404-not-needed']) {
-     if(term==='No-GO'||term==='404-not-needed')continue;
+    '#662','#603','#574','#622','disposable','four synthetic']) {
      assert.ok(design.includes(term),'Missing control/boundary: '+term);
   }
   for(const rejected of ['A: MXC ProcessContainer','B: Disposable Windows VM',
@@ -72,8 +70,8 @@ test('design and cold packet local Markdown links resolve to checked-in source',
 });
 
 test('no production gate, PHI, release status or reviewer completion can be inferred from doc lint',()=>{
-  assert.match(design,/not authenticated kernel confinement evidence/);
-  assert.match(design,/No-GO if just one necessary step lacks evidence/);
+  assert.match(design,/\*\*not\*\* authenticated kernel confinement evidence/);
+  assert.match(design,/\*\*No-GO\*\* if just one necessary step lacks evidence/);
   assert.match(design,/human security reviewer have \*\*not\*\* reviewed/);
   assert.match(packet,/not a review receipt/);
   assert.match(packet,/Owner authorization for privileged WFP work:\*\* none/);
