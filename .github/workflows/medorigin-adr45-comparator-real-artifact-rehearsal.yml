@@ -86,6 +86,10 @@ jobs:
           print("ADR45_SECOND_TWO_ARCHIVES_PRIVATE_STAGING_ONLY")
           PY
           python3 scripts/verify_medorigin_base_only_proposal.py --repo . --dist "$second/dist"
+          echo 'ADR45_FIRST_SECOND_ARCHIVE_SHA256_BEGIN'
+          sha256sum "$first/dist/medscale-0.3.0-py3-none-any.whl" "$second/dist/medscale-0.3.0-py3-none-any.whl"
+          sha256sum "$first/dist/medscale-0.3.0.tar.gz" "$second/dist/medscale-0.3.0.tar.gz"
+          echo 'ADR45_FIRST_SECOND_ARCHIVE_SHA256_END'
           python3 scripts/compare_medorigin_base_only_archives.py --repo . --left "$first/dist" --right "$second/dist" --require-identical
           echo 'ADR45_TWO_REAL_BUILT_ARCHIVES_SOURCE_BOUND_IDENTICAL_UNPUBLISHED'
       - name: Actually execute the previously skipped built-artifact verifier fixture
