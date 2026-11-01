@@ -36,6 +36,10 @@ export function assertGuardedUiaEvidence(status,output,sha256) {
   if(found.length!==1)fail('missing or repeated evidence record: '+prefix);
   return {line:found[0],index:lines.indexOf(found[0])};
  }
+ const observedJourneys=lines.filter(line=>line.startsWith('MXC_D1_UIA_PASS'));
+ if(observedJourneys.length!==cases.length||
+    observedJourneys.some(line=>!cases.some(id=>line==='MXC_D1_UIA_PASS '+id)))
+  fail('extra or unrecognized UIA journey marker');
  const journeyOrder=cases.map(id=>exactOnce('MXC_D1_UIA_PASS '+id));
  // The PowerShell UIA script produces this chronological sequence.
  // A replayed transcript with duplicate or out-of-order markers is NO-GO.
