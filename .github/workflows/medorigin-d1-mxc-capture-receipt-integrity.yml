@@ -31,4 +31,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Capture runner JS parser NO-GO' }
           node --test "$d/windows-mxc-capture-contract.test.mjs"
           if ($LASTEXITCODE -ne 0) { throw 'Capture receipt integrity negative contracts NO-GO' }
+          # EGM design remains an unreviewed NO-GO, including this failed
+          # native-capture experiment and independent OS-proof blockers.
+          node --test "$d/windows-d1-egm-design-contract.test.mjs" "$d/windows-d1-egm-source-drift.test.mjs"
+          if ($LASTEXITCODE -ne 0) { throw 'EGM source/design NO-GO contract failed' }
           Write-Output 'CAPTURE_RECEIPT_SOURCE_ONLY_NO_WFP_NO_PACKET_NO_MXC_NO_RELEASE'
