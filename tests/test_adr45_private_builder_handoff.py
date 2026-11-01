@@ -141,3 +141,48 @@ def test_handoff_never_issues_publication_claim(gate: Any, tmp_path: Path) -> No
     assert receipt.get("publication_authorized") is False
     assert receipt.get("adr_0045_accepted") is False
     assert receipt.get("status") != "RELEASE_READY"
+
+
+def test_pinned_identity_detects_file_mode_and_hardlink_count_change(
+    gate: Any, tmp_path: Path
+) -> None:
+    from types import SimpleNamespace
+
+    file = tmp_path / "regular"
+    file.write_bytes(b"STABLE")
+    original = file.stat()
+    fields = {
+        name: getattr(original, name)
+        for name in (
+            "st_dev", "st_ino", "st_size", "st_mtime_ns", "st_ctime_ns",
+            "st_mode", "st_nlink",
+        )
+    }
+    changed_mode = SimpleNamespace(**{**fields, "st_mode": fields["st_mode"] ^ 0o200})
+    changed_links = SimpleNamespace(**{**fields, "st_nlink": fields["st_nlink"] + 1})
+    assert gate._identity(original) != gate._identity(changed_mode)
+    assert gate._identity(original) != gate._identity(changed_links)
+
+
+def test_handoff_detects_hardlink_alias_created_after_wheel_snapshot(
+    gate: Any, monkeypatch: Any, tmp_path: Path
+) -> None:
+    src = make_builder(tmp_path / "builder")
+    outside = tmp_path / "new_external_hardlink"
+    original = gate._pinned_bytes
+
+    def raced(path: Path, *, limit: int, parent_id: tuple[int, int]) -> bytes:
+        data = original(path, limit=limit, parent_id=parent_id)
+        if path.name == WHEEL:
+            try:
+                os.link(path, outside)
+            except (OSError, NotImplementedError):
+                pytest.skip("Unable to create controlled hardlink race on this filesystem")
+        return data
+
+    monkeypatch.setattr(gate, "_pinned_bytes", raced)
+    with pytest.raises(gate.HandoffError, match=r"changed|hardlink|identity"):
+        gate.handoff(src, tmp_path / "dist")
+    assert not (tmp_path / "dist").exists()
+    if outside.exists():
+        outside.unlink()
