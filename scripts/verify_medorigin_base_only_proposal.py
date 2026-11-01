@@ -300,9 +300,7 @@ def _stat_identity(info: os.stat_result) -> tuple[int, int, int, int, int]:
     return (info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns, ctime)
 
 
-def _read_pinned_regular_bytes(
-    path: Path, directory_identity: tuple[int, int]
-) -> bytes:
+def _read_pinned_regular_bytes(path: Path, directory_identity: tuple[int, int]) -> bytes:
     """Bound a single fd read to a real regular file, refusing path retargeting.
 
     The same open descriptor is used for the bounded read. Reject inode
@@ -354,6 +352,7 @@ def read_stable_dist_bytes(dist: Path) -> tuple[bytes, bytes]:
         if not stat.S_ISDIR(info.st_mode) or info.st_ino == 0:
             raise ProposalVerificationError("artifact directory changed during inspection")
         directory_identity = (info.st_dev, info.st_ino)
+
         def file_identity(path: Path) -> tuple[int, int, int, int, int]:
             return _stat_identity(path.stat(follow_symlinks=False))
 
@@ -361,10 +360,10 @@ def read_stable_dist_bytes(dist: Path) -> tuple[bytes, bytes]:
         wheel_bytes = _read_pinned_regular_bytes(wheel, directory_identity)
         sdist_bytes = _read_pinned_regular_bytes(sdist, directory_identity)
         current_dir = dist.stat(follow_symlinks=False)
-        if (
-            (current_dir.st_dev, current_dir.st_ino) != directory_identity
-            or (file_identity(wheel), file_identity(sdist)) != before
-        ):
+        if (current_dir.st_dev, current_dir.st_ino) != directory_identity or (
+            file_identity(wheel),
+            file_identity(sdist),
+        ) != before:
             raise ProposalVerificationError("artifact source changed between stable snapshots")
         # Also refuse new top-level artifacts introduced during the read.
         qualified_dist_paths(dist)
