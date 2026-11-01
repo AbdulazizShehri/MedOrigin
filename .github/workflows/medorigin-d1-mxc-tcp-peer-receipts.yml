@@ -15,6 +15,7 @@ on:
       - 'experiments/desktop-d1-tauri/tests/windows-mxc-protocol-matrix-negative.mjs'
       - 'experiments/desktop-d1-tauri/tests/windows-mxc-positive-control-integrity.test.mjs'
       - 'experiments/desktop-d1-tauri/tests/windows-mxc-listener-evidence.test.mjs'
+      - 'experiments/desktop-d1-tauri/tests/windows-mxc-unconfined-loopback-qualification.mjs'
 permissions:
   contents: read
 jobs:
@@ -34,6 +35,8 @@ jobs:
           if($LASTEXITCODE -ne 0){throw 'Verifier syntax NO-GO'}
           node --check "$p/windows-mxc-protocol-matrix-negative.mjs"
           if($LASTEXITCODE -ne 0){throw 'Runner syntax NO-GO'}
+          node --check "$p/windows-mxc-unconfined-loopback-qualification.mjs"
+          if($LASTEXITCODE -ne 0){throw 'Local-only native-control syntax NO-GO'}
           node --test "$p/windows-mxc-tcp-peer-receipts.test.mjs" "$p/windows-mxc-listener-evidence.test.mjs" "$p/windows-mxc-positive-control-integrity.test.mjs" "$p/windows-mxc-protocol-matrix-verdict.test.mjs" "$p/windows-mxc-protocol-matrix-stdio.test.mjs" "$p/windows-mxc-protocol-matrix-contract.test.mjs"
           if($LASTEXITCODE -ne 0){throw 'Source-only TCP peer provenance NO-GO'}
           Write-Output 'D1_MXC_TCP_PEER_SOURCE_ONLY_NOT_NATIVE_OR_OS_PACKET_ATTESTATION'
