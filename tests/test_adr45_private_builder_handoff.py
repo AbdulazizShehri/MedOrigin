@@ -154,8 +154,13 @@ def test_pinned_identity_detects_file_mode_and_hardlink_count_change(
     fields = {
         name: getattr(original, name)
         for name in (
-            "st_dev", "st_ino", "st_size", "st_mtime_ns", "st_ctime_ns",
-            "st_mode", "st_nlink",
+            "st_dev",
+            "st_ino",
+            "st_size",
+            "st_mtime_ns",
+            "st_ctime_ns",
+            "st_mode",
+            "st_nlink",
         )
     }
     changed_mode = SimpleNamespace(**{**fields, "st_mode": fields["st_mode"] ^ 0o200})
