@@ -23,12 +23,16 @@ test('explicit network deny in all directions without loopback exception',()=>{
   assert.doesNotMatch(policy,/hostLoopback:\s*['"]allow['"]/);
 });
 test('exact test-only native executable used for unrestricted and contained attempt',()=>{
-  assert.match(policy,/spawnSync\(probe,\s*\[String\(port\)\]/);
-  assert.match(policy,/command:\s*`"\$\{probe\}" \$\{port\}`/);
-  assert.match(policy,/D1_MXC_SAME_BINARY_UNCONFINED_LOOPBACK_CONNECTED_PASS/);
+  assert.match(policy,/spawnSync\(probe,\s*ports,/);
+  assert.match(policy,/command:\s*`"\$\{probe\}" \$\{ports\.join\(' '\)\}`/);
+  assert.match(policy,/D1_MXC_SAME_BINARY_UNCONFINED_TCP_UDP_IPV4_IPV6_LOOPBACK_PASS/);
 });
 test('network rejection requires WSAEACCES, not timeout or routing error',()=>{
-  assert.match(probe,/local == "WSA10013" && reserved == "WSA10013"/);
+  assert.match(probe,/local == "WSA10013"/);
+  assert.match(probe,/reserved == "WSA10013"/);
+  assert.match(probe,/ipv6 == "WSA10013"/);
+  assert.match(probe,/udp4 == "WSA10013"/);
+  assert.match(probe,/udp6 == "WSA10013"/);
   assert.match(policy,/D1_MXC_SYNTHETIC_LOCALHOST=WSA10013/);
   assert.match(policy,/D1_MXC_SYNTHETIC_TEST_NET_2=WSA10013/);
   assert.match(policy,/result\.exitCode === 0/);
