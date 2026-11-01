@@ -56,6 +56,13 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Synthetic comparison source contract NO-GO' }
           rustc --edition 2024 --emit metadata -o "$env:RUNNER_TEMP/d1-synthetic-probe.rmeta" "$tests/windows-mxc-synthetic-local-socket-probe.rs"
           if ($LASTEXITCODE -ne 0) { throw 'Synthetic Rust probe compile NO-GO' }
+          node --check "$tests/windows-mxc-synthetic-private-interface-differential.mjs"
+          if ($LASTEXITCODE -ne 0) { throw 'Private host-interface differential syntax NO-GO' }
+          node --test "$tests/windows-mxc-synthetic-private-interface-source-contract.test.mjs"
+          if ($LASTEXITCODE -ne 0) { throw 'Private host-interface source contract NO-GO' }
+          rustc --edition 2024 --emit metadata -o "$env:RUNNER_TEMP/d1-private-probe.rmeta" "$tests/windows-mxc-synthetic-private-interface-probe.rs"
+          if ($LASTEXITCODE -ne 0) { throw 'Private host-interface Rust probe compile NO-GO' }
+          Write-Output 'D1_MXC_HOST_OWNED_PRIVATE_INTERFACE_SOURCE_PASS_NO_REMOTE_PACKET_PROOF'
           Write-Output 'D1_MXC_LOCAL_DIFFERENTIAL_SOURCE_ONLY_NO_PACKET_OR_DNS_PROOF'
       - name: Qualification boundary
         shell: pwsh
