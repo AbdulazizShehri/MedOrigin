@@ -101,12 +101,12 @@ export function assessNativeProtocolMatrix({result,delivered4,delivered6}) {
   requireCondition(value==='WSA10013',
    key+' lacks explicit UDP WSAEACCES refusal');
  }
- requireCondition(lines.length===keys.length+1 &&
-  keys.every((key,index)=>lines[index].startsWith('D1_MXC_'+key+'=')),
-  'native socket rows not in canonical order');
  requireCondition(sentinelPositions.length===1 &&
   sentinelPositions[0]===lines.length-1,
   'native Rust eight-socket success sentinel missing, duplicated or out of order');
+ requireCondition(lines.length===keys.length+1 &&
+  keys.every((key,index)=>lines[index].startsWith('D1_MXC_'+key+'=')),
+  'native socket rows not in canonical order');
  requireCondition(result.exitCode===0,'native probe exit not zero');
  requireCondition(stdout.split(/\r?\n/).includes(
   'D1_MXC_ALL_8_NATIVE_SOCKETS_WSA10013_PASS'),
