@@ -93,20 +93,25 @@ test('all local Markdown targets in v2 plan and edited context files resolve',()
  }
 });
 test('reject plan mutations that erase the fail-closed decision and evidence boundaries',()=>{
- for(const changed of [
-  d.plan.replace('Goldfish review: NOT RUN','Goldfish review: PASS'),
-  d.plan.replace('Release: NO-GO','Release: GO'),
-  d.plan.replace(source808,'8'.repeat(40)),
-  d.plan.replace(source807,'7'.repeat(40)),
-  d.plan.replace('G3 Independent observer sensitivity','G3 No observer needed'),
-  d.plan.replace('T3–T6 remain','T3–T6 are completed'),
-  d.plan.replace('HOLD-A','READY-A'),
-  d.plan.replace('E_NOTIMPL','CAPTURE_PASSED')
- ])assert.throws(()=>requireFailClosedPlan(changed));
+ for(const [needle,replacement] of [
+  ['Goldfish review: NOT RUN','Goldfish review: PASS'],
+  ['Release: NO-GO','Release: GO'],
+  [source808,'8'.repeat(40)],
+  [source807,'7'.repeat(40)],
+  ['G3 Independent observer sensitivity','G3 No observer needed'],
+  ['T3–T6 remain','T3–T6 are completed'],
+  ['HOLD-A','READY-A'],
+  ['E_NOTIMPL','CAPTURE_PASSED']
+ ]){
+  assert.ok(d.plan.includes(needle),'Missing mutation anchor: '+needle);
+  const changed=d.plan.replaceAll(needle,replacement);
+  assert.throws(()=>requireFailClosedPlan(changed),
+    {name:'AssertionError'},'Mutation failed to reject: '+needle);
+ }
 });
 test('documentation cannot be mistaken for actual Goldfish or independent OS proof',()=>{
  assert.match(d.plan,/This document improves the plan, not the security status/);
- assert.match(d.plan,/not an EGM\s*independent review receipt or proof/i);
+ assert.match(d.plan,/not an EGM\s*>?\s*independent review receipt or proof/i);
  assert.match(d.concept,/Both documents remain \*\*DRAFT \/ NOT APPROVED\*\*/);
  assert.match(d.packet,/No source lint, self-review or historical unrelated report grants approval/);
 });
