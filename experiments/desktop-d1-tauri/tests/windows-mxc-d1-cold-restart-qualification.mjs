@@ -2,20 +2,17 @@
 // then fail closed if the same Windows process identities survive sandbox shutdown.
 // Not packet capture, DNS/UDP proof, signed-app qualification or release authority.
 import {spawnSync} from 'node:child_process';
-import {createHash} from 'node:crypto';
-import {readFileSync, existsSync} from 'node:fs';
-import {dirname, join, resolve} from 'node:path';
+import {dirname, join} from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {assertNoResidual, requireQualifiedRun} from './windows-mxc-d1-lifecycle-proof.mjs';
+import {assertNoResidual, requireGuardedQualifiedRun} from './windows-mxc-d1-lifecycle-proof.mjs';
+import {requirePinnedD1Executable} from './windows-mxc-d1-guarded-launch-preflight.mjs';
 
-const exe=resolve(process.argv[2]||'');
+const rawExe=process.argv[2]||'';
 const expected=(process.argv[3]||'').toLowerCase();
 function requireCondition(ok,why){if(!ok)throw Error('D1_MXC_COLD_RESTART_NO_GO: '+why)}
-requireCondition(process.platform==='win32' && existsSync(exe),'built D1 executable required');
-requireCondition(/^[0-9a-f]{64}$/.test(expected),'exact executable SHA required');
-const actual=createHash('sha256').update(readFileSync(exe)).digest('hex');
-requireCondition(actual===expected,'source-built D1 SHA mismatch');
-const runner=join(dirname(fileURLToPath(import.meta.url)),'windows-mxc-d1-real-app-qualification.mjs');
+requireCondition(process.platform==='win32','Windows native ProcessContainer required');
+const exe=requirePinnedD1Executable(rawExe,expected).path;
+const runner=join(dirname(fileURLToPath(import.meta.url)),'windows-mxc-d1-guarded-preview-launch.mjs');
 
 function powershell(script){
  const r=spawnSync('powershell.exe',['-NoProfile','-NonInteractive','-Command',script],
@@ -42,24 +39,23 @@ const observedRoots=[];
 try{
  for(let iteration=1;iteration<=2;iteration++){
   requireNoPreexistingRoot();
-  requireCondition(createHash('sha256').update(readFileSync(exe)).digest('hex')===expected,
-    'binary changed between cold starts');
+  requirePinnedD1Executable(exe,expected);
   const r=spawnSync(process.execPath,[runner,exe,expected],
     {encoding:'utf8',timeout:115000,maxBuffer:2*1024*1024});
   if(r.error) throw r.error;
   const stdout=r.stdout||'';
-  console.log('D1_MXC_COLD_START_'+iteration+'_RUNNER_EXIT='+r.status);
+  console.log('D1_MXC_GUARDED_COLD_START_'+iteration+'_RUNNER_EXIT='+r.status);
   if(r.status!==0) console.error((r.stderr||'').slice(0,2500),stdout.slice(-2500));
-  const snapshot=requireQualifiedRun({status:r.status,stdout});
+  const snapshot=requireGuardedQualifiedRun({status:r.status,stdout,sha256:expected});
   const root=snapshot.find(x=>x.name.toLowerCase()==='medorigin-desktop-d1-preview.exe');
   const identity=root.pid+'@'+root.startTicks;
   requireCondition(!observedRoots.includes(identity),'same process identity reused across cold starts');
   observedRoots.push(identity);
   assertNoResidual(snapshot,currentIdentities(snapshot));
   requireNoPreexistingRoot();
-  console.log('D1_MXC_COLD_START_'+iteration+'_GUI_4_OF_4_AND_NO_RESIDUAL_PROCESS_IDENTITIES_PASS');
+  console.log('D1_MXC_GUARDED_COLD_START_'+iteration+'_GUI_4_OF_4_AND_NO_RESIDUAL_PROCESS_IDENTITIES_PASS');
  }
- console.log('D1_MXC_TWO_COLD_STARTS_GUI_8_OF_8_NO_RESIDUAL_PASS_NETWORK_PACKET_ATTESTATION_STILL_NO_GO');
+ console.log('D1_MXC_TWO_GUARDED_COLD_STARTS_GUI_8_OF_8_NO_RESIDUAL_PASS_PACKET_WFP_STILL_NO_GO');
 }catch(error){
  console.error('D1_MXC_COLD_RESTART_NO_GO',error?.message||String(error));
  process.exitCode=1;
