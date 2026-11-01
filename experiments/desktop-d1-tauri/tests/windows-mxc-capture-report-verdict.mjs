@@ -28,6 +28,18 @@ export function selectActionableCaptureFiles(entries,outputPath) {
   return [reported];
 }
 
+// SDK probe is read-only. Guarded AppContainer/WPR capture can prompt for
+// UAC or change the isolation tier; this nonprivileged synthetic experiment
+// MUST NOT silently trigger elevation or claim production-policy parity.
+export function requireNativeCapturePreflight(probeResult) {
+  requireCondition(probeResult&&typeof probeResult==='object'&&
+    !probeResult.error&&probeResult.tier==='base-container'&&
+    probeResult.probes?.nativeCaptureAvailable===true&&
+    Array.isArray(probeResult.warnings)&&probeResult.warnings.length===0,
+    'native BaseContainer capture unavailable or would change tier/elevate');
+  return {tier:'base-container',classification:'PROBE_ONLY_NOT_EXECUTION_PROOF'};
+}
+
 export function assessCaptureResult(result,files,readReport) {
   requireCondition(result&&result.timedOut===false&&result.exitCode===0,
     'native contained probe did not exit successfully');
