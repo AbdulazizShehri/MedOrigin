@@ -69,7 +69,7 @@ test('privileged host, invented OS proof, mismatched SHA or OS version cannot pa
  reject(()=>validatePassiveEvidence({...native(),osBuild:'10.0.19045'},sha));
  reject(()=>validatePassiveEvidence({...native(),osBuild:'10.0.26300\nsecret'},sha));
  reject(()=>validatePassiveEvidence(native(),'A'.repeat(40)));
- reject(()=>validatePassiveEvidence(native(),'b'.repeat(40)).status==='READ_ONLY_METADATA_ONLY');
+ assert.equal(validatePassiveEvidence(native(),'b'.repeat(40)).sourceSha,'b'.repeat(40));
 });
 test('native tool/channel absence is recorded as absence, never overclaimed',()=>{
  const v=validatePassiveEvidence({
