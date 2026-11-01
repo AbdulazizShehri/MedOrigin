@@ -1,6 +1,6 @@
 // EGM T1 read-only Windows capability inventory. NEVER a WFP/ETW/MXC proof.
 // No network calls, capture, SDK execution, policy changes or host identifiers.
-import {spawnSync,execFileSync} from 'node:child_process';
+import {spawnSync} from 'node:child_process';
 import {readFileSync} from 'node:fs';
 import {dirname,resolve} from 'node:path';
 import {fileURLToPath,pathToFileURL} from 'node:url';
@@ -90,6 +90,36 @@ export function collectReadOnlyInventory(sourceSha,sdkVersion='UNAVAILABLE',runn
   reason:host.build<26300?'UNSUPPORTED':sdkVersion==='UNAVAILABLE'?'SDK_UNAVAILABLE':'UNVERIFIED'
  },sourceSha);
 }
+// Fail closed if HEAD is not the exact tree being executed. Git porcelain
+// output is inspected only in memory: never serialize dirty pathnames.
+export function readCleanGitSourceIdentity(repoDir,runner=spawnSync){
+ const git=(args)=>{
+  let result;
+  try{
+   result=runner('git',['--no-optional-locks',...args],{
+    cwd:repoDir,encoding:'utf8',timeout:5000,maxBuffer:4096,windowsHide:true
+   });
+  }catch{deny('Git provenance query failed')}
+  if(!result||result.status!==0||result.signal!=null||result.error!=null||
+     result.stderr!==''||typeof result.stdout!=='string'||
+     Buffer.byteLength(result.stdout,'utf8')>4096)
+   deny('Git provenance query failed');
+  return result.stdout;
+ };
+ const head=git(['rev-parse','--verify','HEAD']);
+ if(!/^[0-9a-f]{40}\r?\n$/.test(head))deny('Git HEAD not canonical');
+ const dirty=git(['status','--porcelain=v1','--untracked-files=all']);
+ if(dirty!=='')deny('Git source tree is dirty');
+ return head.trim();
+}
+export function collectSourceBoundInventory(repoDir,gitRunner=spawnSync,hostRunner=spawnSync){
+ const before=readCleanGitSourceIdentity(repoDir,gitRunner);
+ const receipt=collectReadOnlyInventory(before,pinnedSdkVersion(),hostRunner);
+ const after=readCleanGitSourceIdentity(repoDir,gitRunner);
+ if(before!==after)deny('Git HEAD changed during OS query');
+ return receipt;
+}
+
 function pinnedSdkVersion(){
  // Lockfile metadata only. Do not install/import SDK or activate a capture probe.
  try{
@@ -103,10 +133,7 @@ function pinnedSdkVersion(){
 function cli(){
  if(process.platform!=='win32')deny('Windows only');
  const dir=resolve(dirname(fileURLToPath(import.meta.url)),'../../..');
- let sha;
- try{sha=execFileSync('git',['rev-parse','HEAD'],{cwd:dir,encoding:'utf8',timeout:5000,windowsHide:true}).trim()}
- catch{deny('Git source SHA unavailable')}
- const receipt=collectReadOnlyInventory(sha,pinnedSdkVersion());
+ const receipt=collectSourceBoundInventory(dir);
  process.stdout.write(JSON.stringify(receipt)+'\n');
 }
 if(process.argv[1]&&pathToFileURL(resolve(process.argv[1])).href===import.meta.url){
