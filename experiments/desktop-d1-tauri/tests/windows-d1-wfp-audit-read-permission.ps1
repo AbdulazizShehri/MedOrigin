@@ -1,4 +1,4 @@
-# Read-only nonadmin WFP AUDIT POLICY visibility. NO auditpol /set; no Security event reads.
+# Read-only nonadmin WFP audit visibility. No audit-policy mutation, no event reads.
 # GUIDs per Microsoft Learn WFP auditing-and-logging: connection/packet-drop.
 # Output only an anonymous bounded field inventory, never raw command output.
 $ErrorActionPreference='Stop'
