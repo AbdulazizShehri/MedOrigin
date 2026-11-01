@@ -22,6 +22,11 @@ const good=()=>({
    'D1_MXC_UDP6_LOOPBACK=SENT23'
   ].join('\n')+'\n'
  },
+ tcp4Peers:[{remoteAddress:'127.0.0.1',remoteFamily:'IPv4',remotePort:45001,
+  localAddress:'127.0.0.1',localPort:43001}],
+ tcp6Peers:[{remoteAddress:'::1',remoteFamily:'IPv6',remotePort:45002,
+  localAddress:'::1',localPort:43002}],
+ expectedTcp4Port:43001,expectedTcp6Port:43002,
  udp4Receipts:1,udp6Receipts:1,
  tcp4Accepts:1,tcp6Accepts:1,
  udp4Packets:[packet('IPv4')],udp6Packets:[packet('IPv6')]
