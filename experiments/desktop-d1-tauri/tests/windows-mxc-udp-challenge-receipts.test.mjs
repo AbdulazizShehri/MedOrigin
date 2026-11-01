@@ -35,6 +35,12 @@ test('new per-family UDP nonce payload is a valid local-only positive control',(
  assert.equal(assessNativePositiveControl(good()).classification,
   'UNCONFINED_LOCAL_POSITIVE_CONTROL_ONLY');
 });
+test('legacy static UDP packets must not impersonate a fresh two-family receipt',()=>{
+ const r=good();
+ r.udp4Packets[0].payload=Buffer.from('synthetic-mxc-udp-probe');
+ r.udp6Packets[0].payload=Buffer.from('synthetic-mxc-udp-probe');
+ assert.throws(()=>assessNativePositiveControl(r),/D1_MXC_PROTOCOL_NO_GO/);
+});
 for(const [name,mutate] of [
  ['legacy static replay UDP4',r=>r.udp4Packets[0].payload=Buffer.from('synthetic-mxc-udp-probe')],
  ['legacy static replay UDP6',r=>r.udp6Packets[0].payload=Buffer.from('synthetic-mxc-udp-probe')],
