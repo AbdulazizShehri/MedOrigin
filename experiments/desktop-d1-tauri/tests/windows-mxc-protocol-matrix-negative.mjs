@@ -6,12 +6,12 @@
  * and then node windows-mxc-protocol-matrix-negative.mjs.
  */
 import { getPlatformSupport, run } from '@microsoft/mxc-sdk/v1';
-import {assessNativeProtocolMatrix,assessNativePositiveControl} from './windows-mxc-protocol-matrix-verdict.mjs';
+import {assessNativeProtocolMatrix,assessNativePositiveControl,assessTcpNonceBinding} from './windows-mxc-protocol-matrix-verdict.mjs';
 import { createServer } from 'node:net';
 import { createSocket } from 'node:dgram';
-import { spawnSync } from 'node:child_process';
+import { spawnSync,execFile } from 'node:child_process';
 import { mkdtempSync, mkdirSync, rmSync, readFileSync } from 'node:fs';
-import { createHash } from 'node:crypto';
+import { createHash,randomBytes } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -32,15 +32,50 @@ mkdirSync(output);
 let tcp4Accepts=0;
 let tcp6Accepts=0;
 // This captures where the actual host listener accepted each connection.
-// It is NOT a challenge/response binding to the child probe executable.
+// A separate per-run nonce/challenge receipt now supplements this metadata;
+// it is NOT independent PID authentication or WFP/packet evidence.
 const tcp4Peers=[];
 const tcp6Peers=[];
+
+const nonce4=randomBytes(32).toString('hex');
+const nonce6=randomBytes(32).toString('hex');
+const challenge4=randomBytes(32),challenge6=randomBytes(32);
+const tcp4Proofs=[],tcp6Proofs=[],proofClosures=[];
+const bindProof=(socket,proofs,challenge)=>{
+ const proof={reply:Buffer.alloc(0),completed:false,errored:false,overflow:false};
+ proofs.push(proof);
+ proofClosures.push(new Promise(done=>socket.once('close',()=>{
+  proof.completed=proof.reply.length===96&&!proof.errored&&!proof.overflow;done();
+ })));
+ socket.on('data',chunk=>{
+  if(proof.reply.length+chunk.length>96){proof.overflow=true;socket.destroy();return;}
+  proof.reply=Buffer.concat([proof.reply,chunk]);
+  if(proof.reply.length===96)socket.end();
+ });
+ socket.on('error',()=>{proof.errored=true;});
+ socket.write(challenge);
+};
+const runControl=(exe,args)=>new Promise(resolve=>{
+ execFile(exe,args,{encoding:'utf8',timeout:12000,maxBuffer:32768,windowsHide:true},
+  (error,stdout,stderr)=>resolve({
+   status:error?(Number.isInteger(error.code)?error.code:null):0,
+   signal:error?.signal??null,
+   error:error&&!Number.isInteger(error.code)?error:undefined,stdout,stderr
+  }));
+});
+const awaitProofs=async()=>{
+ let timer;
+ try{await Promise.race([Promise.all(proofClosures),
+  new Promise((_,reject)=>{timer=setTimeout(()=>reject(Error('TCP proof close timeout')),2500);})]);}
+ finally{clearTimeout(timer);}
+};
+
 const peerOf=s=>({
  remoteAddress:s.remoteAddress,remoteFamily:s.remoteFamily,
  remotePort:s.remotePort,localAddress:s.localAddress,localPort:s.localPort
 });
-const tcp4 = createServer(s => {tcp4Accepts+=1;tcp4Peers.push(peerOf(s));s.end();});
-const tcp6 = createServer(s => {tcp6Accepts+=1;tcp6Peers.push(peerOf(s));s.end();});
+const tcp4 = createServer(s => {tcp4Accepts+=1;tcp4Peers.push(peerOf(s));bindProof(s,tcp4Proofs,challenge4);});
+const tcp6 = createServer(s => {tcp6Accepts+=1;tcp6Peers.push(peerOf(s));bindProof(s,tcp6Proofs,challenge6);});
 const udp4 = createSocket('udp4');
 const udp6 = createSocket('udp6');
 let udp4Receipts = 0;
@@ -82,8 +117,8 @@ try {
   await listenUdp(udp6,'::1',Number(port6));
   started = true;
   const ports = [port4,port6];
-  const control = spawnSync(probe,[...ports,'control'],{encoding:'utf8',timeout:12000});
-  await new Promise(done=>setTimeout(done,200));
+  const control = await runControl(probe,[...ports,'control',nonce4,nonce6]);
+  await awaitProofs();
   requireGate(udp4Receipts === 1 && udp6Receipts === 1,
     'unrestricted positive control UDP packets not observed by both local listeners');
   const controlReceipt=assessNativePositiveControl({
@@ -92,6 +127,8 @@ try {
     expectedTcp4Port:Number(port4),expectedTcp6Port:Number(port6),
     udp4Packets,udp6Packets
   });
+  const proof=assessTcpNonceBinding({expectedNonce4:Buffer.from(nonce4,'ascii'),expectedNonce6:Buffer.from(nonce6,'ascii'),challenge4,challenge6,tcp4Proofs,tcp6Proofs});
+  requireGate(proof.classification==='LOCAL_TCP_NONCE_ECHO_ONLY','unrestricted nonce proof invalid');
   requireGate(probeDigest()===pinnedDigest,
     'native probe bytes changed between control and containment');
   console.log('D1_MXC_NATIVE_UNRESTRICTED_IPV4_IPV6_TCP_UDP_LOCAL_CONTROL_PASS',

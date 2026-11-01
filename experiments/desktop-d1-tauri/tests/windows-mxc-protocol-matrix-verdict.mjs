@@ -155,3 +155,37 @@ export function assessNativeProtocolMatrix({result,delivered4,delivered6}) {
   classification:'SOCKET_API_DENIAL_ONLY_NOT_WEBVIEW2_OR_WFP_PACKET_PROOF'
  });
 }
+
+
+// A per-run random nonce plus independent server challenge is an additional
+// LOCAL receipt binding, not cryptographic PID authentication or OS isolation.
+// Secrets remain in memory and must never be logged or persisted.
+export function assessTcpNonceBinding({
+ expectedNonce4,expectedNonce6,challenge4,challenge6,tcp4Proofs,tcp6Proofs
+}) {
+ const nonceOk=n=>Buffer.isBuffer(n)&&n.length===64&&
+  /^[0-9a-f]{64}$/.test(n.toString('ascii'));
+ const challengeOk=c=>Buffer.isBuffer(c)&&c.length===32;
+ requireCondition(nonceOk(expectedNonce4)&&nonceOk(expectedNonce6)&&
+  !expectedNonce4.equals(expectedNonce6),
+  'distinct valid per-run TCP nonces required');
+ requireCondition(challengeOk(challenge4)&&challengeOk(challenge6)&&
+  !challenge4.equals(challenge6),
+  'distinct valid server TCP challenges required');
+ for(const [proofs,nonce,challenge,family] of [
+  [tcp4Proofs,expectedNonce4,challenge4,'TCP4'],
+  [tcp6Proofs,expectedNonce6,challenge6,'TCP6']
+ ]){
+  requireCondition(Array.isArray(proofs)&&proofs.length===1,
+   family+' nonce response missing or duplicated');
+  const proof=proofs[0];
+  requireCondition(proof&&typeof proof==='object'&&!Array.isArray(proof)&&
+   proof.completed===true&&proof.errored===false&&proof.overflow===false&&
+   Buffer.isBuffer(proof.reply)&&proof.reply.length===96,
+   family+' nonce response incomplete, oversized or malformed');
+  requireCondition(proof.reply.subarray(0,64).equals(nonce)&&
+   proof.reply.subarray(64).equals(challenge),
+   family+' nonce/challenge response not bound to this run');
+ }
+ return Object.freeze({classification:'LOCAL_TCP_NONCE_ECHO_ONLY'});
+}

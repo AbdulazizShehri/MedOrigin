@@ -1,0 +1,47 @@
+# Nonpublishing synthetic-only source/contract CI. No native MXC runtime,
+# WFP/ETW packet evidence, D1 WebView2 isolation or security acceptance.
+name: D1 MXC per-run TCP nonce receipt (source-only)
+on:
+  push:
+    branches:
+      - test/medorigin-d1-mxc-tcp-nonce-20261102
+  pull_request:
+    branches:
+      - test/medorigin-d1-mxc-tcp-peer-receipts-20261102
+    paths:
+      - '.github/workflows/medorigin-d1-mxc-tcp-nonce-source.yml'
+      - 'experiments/desktop-d1-tauri/tests/windows-mxc-*.mjs'
+      - 'experiments/desktop-d1-tauri/tests/windows-mxc-protocol-matrix-probe.rs'
+permissions:
+  contents: read
+jobs:
+  windows-source-only:
+    runs-on: windows-2025
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+      - name: Fail-closed nonce and inherited source regression
+        shell: pwsh
+        run: |
+          $p='experiments/desktop-d1-tauri/tests'
+          foreach($file in @('windows-mxc-protocol-matrix-verdict.mjs','windows-mxc-protocol-matrix-negative.mjs','windows-mxc-unconfined-loopback-qualification.mjs')){
+            node --check "$p/$file"
+            if($LASTEXITCODE -ne 0){throw "Syntax NO-GO $file"}
+          }
+          node --test "$p/windows-mxc-tcp-nonce.test.mjs" "$p/windows-mxc-tcp-peer-receipts.test.mjs" "$p/windows-mxc-listener-evidence.test.mjs" "$p/windows-mxc-positive-control-integrity.test.mjs" "$p/windows-mxc-protocol-matrix-verdict.test.mjs" "$p/windows-mxc-protocol-matrix-stdio.test.mjs" "$p/windows-mxc-protocol-matrix-contract.test.mjs"
+          if($LASTEXITCODE -ne 0){throw 'Nonce source regression NO-GO'}
+          Write-Output 'D1_MXC_NONCE_SOURCE_ONLY_NOT_NATIVE_MXC_OR_PACKET_PROOF'
+      - name: Pinned Rust probe formatting and metadata only
+        shell: pwsh
+        run: |
+          rustup toolchain install 1.97.1 --profile minimal --component rustfmt
+          if($LASTEXITCODE -ne 0){throw 'Pinned Rust toolchain unavailable'}
+          $p='experiments/desktop-d1-tauri/tests/windows-mxc-protocol-matrix-probe.rs'
+          rustfmt +1.97.1 --check $p
+          if($LASTEXITCODE -ne 0){throw 'Rustfmt NO-GO'}
+          rustc +1.97.1 --edition 2021 --emit metadata -o "$env:RUNNER_TEMP/medorigin-nonce-probe.rmeta" $p
+          if($LASTEXITCODE -ne 0){throw 'Rust source metadata NO-GO'}
+          Write-Output 'RUST_METADATA_ONLY_NO_BINARY_OR_RELEASE'
