@@ -137,9 +137,51 @@ style subagents must be independently verified, and stages 8 and 9
 are not satisfied by it. Child findings are adversarial hypotheses
 requiring triage and source confirmation, not security proof.
 
+## Stage 7 — Structural and Style — TWO additional personas COMPLETE
+
+**Structural independent reviewer:**
+- Parent `ses_e67f9af31ffe6sCbpHTNUpxe5I`;
+  child `ses_e67f98e54ffeq7PnNhM6o3VGmw`.
+- Verified real native `subagent` metadata `completed`,
+  `truncated=false`; child finished `succeeded` with **10 real
+  read calls**, including `EGM/agents/structural.md`, the
+  feature-spec and readiness standards, original v2 plan,
+  original design, reviewer packet and existing contract tests.
+- Verdict **PASS WITH NOTES** for formatting alone, with **4 Major**
+  and **4 Nit** source-structure findings:
+  missing separate **Proposed Architecture** and **Risks &
+  Mitigations** sections, T5/T6 lacking even explicitly-deferred file
+  and test boundaries, and reviewer reading list missing four
+  required source paths. Clarify which requirements are deferred to
+  owner ADR and do not let format PASS become readiness approval.
+  Existing local links, fences and tables were acceptable.
+
+**Style independent reviewer:**
+- Parent `ses_e67f99a53ffenAZnSOYugg0cT8`;
+  child `ses_e67f9795bffenLcUpnCIMp4P4p`.
+- Verified `completed`, `truncated=false`, child `succeeded` with
+  **3 actual reads**: `EGM/agents/style.md`, the full feature-spec
+  standard, and the complete v2 target plan.
+- Reviewer reported **15 readability defects**, including inconsistent
+  state tokens `NOT_RUN` vs prose `NOT RUN`, synthetic/fictional
+  fixture terminology, unexpanded MXC/WFP/ETW/UIA acronyms, mixed
+  punctuation and slash-separated statuses.
+- These are suggestions subject to author disposition; this review
+  did not modify source, run code, or grant security approval.
+
+**Stage 7 status: all three actual child personas invoked and
+completed (design critic, structural, style), but their Major and
+Blocker findings are OPEN; this does NOT mean design PASS.**
+Reviewers evaluated the original v2 source
+`cf23239e59c7cf3e8e5966bb8723c05fe46d31b3`.
+An author-side v2 revision subsequently began resolving stage-5/6
+findings on a later commit. Independent stage-8 and stage-9 checks
+must explicitly name that newer source rather than carry forward
+a design approval.
+
 ## Incomplete stages and evidence boundaries
 
-- **Stage 7 Design critique: PARTIAL** (design_critic verified; structural and style pending).
+- **Stage 7 Design critique: THREE personas COMPLETED, findings OPEN** (not design approval).
 - **Stage 8 Second zoom-out: NOT RUN.**
 - **Stage 9 Implementation readiness: NOT RUN.**
 - Independent human security review, owner choice A/B, packet/WFP/DNS/
