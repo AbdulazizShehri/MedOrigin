@@ -325,8 +325,10 @@ def test_full_verifier_must_use_stable_snapshot_not_unsafe_reopened_original_pat
     dist.mkdir()
     (dist / "medscale-0.3.0-py3-none-any.whl").write_bytes(b"FAKE")
     (dist / "medscale-0.3.0.tar.gz").write_bytes(b"FAKE")
+
     def sentinel(_dist: Path) -> tuple[bytes, bytes]:
         raise gate.ProposalVerificationError("STABLE_SNAPSHOT_REQUIRED")
+
     monkeypatch.setattr(gate, "read_stable_dist_bytes", sentinel, raising=False)
     with pytest.raises(gate.ProposalVerificationError, match="STABLE_SNAPSHOT_REQUIRED"):
         gate.verify(ROOT, dist)
