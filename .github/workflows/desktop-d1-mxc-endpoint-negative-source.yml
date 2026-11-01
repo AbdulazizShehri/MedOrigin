@@ -26,6 +26,21 @@ jobs:
         shell: pwsh
         run: |
           & experiments/desktop-d1-tauri/tests/windows-mxc-d1-network-endpoint-guard.test.ps1
+      - name: Check PowerShell syntax for tested observer and guards
+        shell: pwsh
+        run: |
+          $paths = @(
+            'experiments/desktop-d1-tauri/tests/windows-mxc-d1-network-endpoint-guard.ps1',
+            'experiments/desktop-d1-tauri/tests/windows-mxc-d1-network-endpoint-guard.test.ps1',
+            'experiments/desktop-d1-tauri/tests/windows-mxc-d1-real-uia-qualification.ps1'
+          )
+          foreach ($path in $paths) {
+            $tokens = $null
+            $errors = $null
+            [System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path -LiteralPath $path).Path, [ref]$tokens, [ref]$errors) | Out-Null
+            if ($errors.Count -ne 0) { throw ('D1 PowerShell parser NO-GO: ' + $path) }
+          }
+          Write-Output 'D1_MXC_POWERSHELL_SOURCE_PARSE_PASS_NO_NATIVE_ATTESTATION'
       - name: Qualification boundary
         shell: pwsh
         run: |
