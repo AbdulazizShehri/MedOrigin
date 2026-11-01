@@ -17,9 +17,9 @@ import json
 import os
 import stat
 import subprocess
-import tempfile
 import sys
 import tarfile
+import tempfile
 import tomllib
 import zipfile
 import zlib
