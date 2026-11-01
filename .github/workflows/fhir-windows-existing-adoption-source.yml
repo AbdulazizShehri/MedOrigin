@@ -30,8 +30,8 @@ jobs:
       - run: uv python install ${{ matrix.python }}
       - name: Pinned Ruff
         run: |
-          uvx --python ${{ matrix.python }} ruff==0.14.4 check src/medscale/fhirkit/_windows_native_store.py tests/test_fhir_windows_existing_adoption_cleanup.py
-          uvx --python ${{ matrix.python }} ruff==0.14.4 format --check --diff src/medscale/fhirkit/_windows_native_store.py tests/test_fhir_windows_existing_adoption_cleanup.py
+          uvx --python ${{ matrix.python }} ruff==0.14.4 check src/medscale/fhirkit/_windows_native_store.py src/medscale/fhirkit/storage.py tests/test_fhir_windows_existing_adoption_cleanup.py
+          uvx --python ${{ matrix.python }} ruff==0.14.4 format --check --diff src/medscale/fhirkit/_windows_native_store.py src/medscale/fhirkit/storage.py tests/test_fhir_windows_existing_adoption_cleanup.py
       - name: Real Windows synthetic failure and retained native regressions
         env:
           PYTHONPATH: src
