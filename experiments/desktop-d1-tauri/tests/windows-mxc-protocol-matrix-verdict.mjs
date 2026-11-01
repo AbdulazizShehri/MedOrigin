@@ -14,6 +14,36 @@ function requireCondition(condition,reason){if(!condition)failure(reason)}
 // Return a narrowly scoped OS socket-API result, NEVER a global network
 // confinement attestation. Throw on any uncertainty, UDP send completion,
 // malformed/duplicate evidence, absent warnings or incomplete process exit.
+// A positive control must prove the SAME unrestricted test binary could
+// connect to both local TCP listeners and send exactly one 23-byte UDP
+// datagram to each. This does not attest MXC, WFP or product egress.
+export function assessNativePositiveControl({control,udp4Receipts,udp6Receipts}) {
+ requireCondition(control&&typeof control==='object',
+  'unrestricted native control result missing');
+ requireCondition(control.status===0&&control.signal===null&&control.error==null,
+  'unrestricted native control did not exit normally');
+ requireCondition(typeof control.stderr==='string'&&control.stderr==='',
+  'unrestricted native control stderr missing or nonempty');
+ requireCondition(typeof control.stdout==='string'&&
+  control.stdout.length>0&&control.stdout.length<=4096&&
+  control.stdout.endsWith('\n'),
+  'unrestricted native control stdout missing or malformed');
+ const expected=[
+  'D1_MXC_TCP4_LOOPBACK=CONNECTED',
+  'D1_MXC_TCP6_LOOPBACK=CONNECTED',
+  'D1_MXC_UDP4_LOOPBACK=SENT23',
+  'D1_MXC_UDP6_LOOPBACK=SENT23'
+ ];
+ const lines=control.stdout.split(/\r?\n/);
+ lines.pop();
+ requireCondition(lines.length===expected.length&&
+  expected.every((row,index)=>lines[index]===row),
+  'unrestricted native control transcript is not exact and ordered');
+ requireCondition(udp4Receipts===1&&udp6Receipts===1,
+  'unrestricted native UDP listener receipts not exactly one each');
+ return Object.freeze({classification:'UNCONFINED_LOCAL_POSITIVE_CONTROL_ONLY'});
+}
+
 export function assessNativeProtocolMatrix({result,delivered4,delivered6}) {
  requireCondition(result&&typeof result==='object',
   'native sandbox execution result missing');
@@ -21,6 +51,8 @@ export function assessNativeProtocolMatrix({result,delivered4,delivered6}) {
   'contained network probe timed out');
  requireCondition(Array.isArray(result.warnings)&&result.warnings.length===0,
   'native sandbox returned warnings or no warning receipt');
+ requireCondition(typeof result.stderr==='string'&&result.stderr==='',
+  'contained native stderr missing or nonempty');
  requireCondition(Number.isSafeInteger(delivered4)&&delivered4>=0 &&
   Number.isSafeInteger(delivered6)&&delivered6>=0,
   'local UDP receipt counts unavailable');
@@ -72,6 +104,9 @@ export function assessNativeProtocolMatrix({result,delivered4,delivered6}) {
  requireCondition(sentinelPositions.length===1 &&
   sentinelPositions[0]===lines.length-1,
   'native Rust eight-socket success sentinel missing, duplicated or out of order');
+ requireCondition(lines.length===keys.length+1 &&
+  keys.every((key,index)=>lines[index].startsWith('D1_MXC_'+key+'=')),
+  'native socket rows not in canonical order');
  requireCondition(result.exitCode===0,'native probe exit not zero');
  requireCondition(stdout.split(/\r?\n/).includes(
   'D1_MXC_ALL_8_NATIVE_SOCKETS_WSA10013_PASS'),

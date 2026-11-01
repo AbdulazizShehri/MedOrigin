@@ -1,0 +1,40 @@
+# Nonpublishing, source-only native MXC positive-control integrity tests.
+# Does not run OS MXC, WebView2, WFP/ETW, sockets, DNS or release operations.
+name: D1 MXC positive-control integrity (source-only)
+on:
+  push:
+    branches:
+      - test/medorigin-d1-mxc-positive-control-integrity-20261102
+  pull_request:
+    branches:
+      - test/medorigin-d1-mxc-matrix-stdio-20261101
+    paths:
+      - '.github/workflows/medorigin-d1-mxc-positive-control.yml'
+      - 'experiments/desktop-d1-tauri/tests/windows-mxc-protocol-matrix-verdict.mjs'
+      - 'experiments/desktop-d1-tauri/tests/windows-mxc-protocol-matrix-negative.mjs'
+      - 'experiments/desktop-d1-tauri/tests/windows-mxc-positive-control-integrity.test.mjs'
+permissions:
+  contents: read
+jobs:
+  windows-source-only:
+    runs-on: windows-2025
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 1
+          fetch-tags: false
+          persist-credentials: false
+      - name: Strict positive-control and eight-socket negative tests
+        shell: pwsh
+        run: |
+          $p='experiments/desktop-d1-tauri/tests'
+          node --check "$p/windows-mxc-protocol-matrix-verdict.mjs"
+          if($LASTEXITCODE -ne 0){throw 'native verifier parse failed'}
+          node --check "$p/windows-mxc-protocol-matrix-negative.mjs"
+          if($LASTEXITCODE -ne 0){throw 'native harness parse failed'}
+          node --check "$p/windows-mxc-positive-control-integrity.test.mjs"
+          if($LASTEXITCODE -ne 0){throw 'adversarial test parse failed'}
+          node --test "$p/windows-mxc-protocol-matrix-verdict.test.mjs" "$p/windows-mxc-protocol-matrix-contract.test.mjs" "$p/windows-mxc-protocol-matrix-stdio.test.mjs" "$p/windows-mxc-positive-control-integrity.test.mjs"
+          if($LASTEXITCODE -ne 0){throw 'D1 MXC source-only integrity NO-GO'}
+          Write-Output 'D1_MXC_POSITIVE_CONTROL_SOURCE_ONLY_NOT_OS_WFP_PACKET_PROOF'

@@ -11,7 +11,7 @@ const keys=[
 const marker='D1_MXC_ALL_8_NATIVE_SOCKETS_WSA10013_PASS';
 const body=(values={})=>[...keys.map(k=>'D1_MXC_'+k+'='+(values[k]??'WSA10013')),marker].join('\n')+'\n';
 const good=()=>({
- result:{stdout:body(),timedOut:false,warnings:[],exitCode:0},
+ result:{stdout:body(),timedOut:false,warnings:[],exitCode:0,stderr:''},
  delivered4:0,delivered6:0
 });
 const verdict=x=>assessNativeProtocolMatrix(x);
