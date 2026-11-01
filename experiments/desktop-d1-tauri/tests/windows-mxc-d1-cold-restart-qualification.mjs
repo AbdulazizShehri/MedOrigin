@@ -46,7 +46,7 @@ try{
   const stdout=r.stdout||'';
   console.log('D1_MXC_GUARDED_COLD_START_'+iteration+'_RUNNER_EXIT='+r.status);
   if(r.status!==0) console.error((r.stderr||'').slice(0,2500),stdout.slice(-2500));
-  const snapshot=requireGuardedQualifiedRun({status:r.status,stdout,sha256:expected});
+  const snapshot=requireGuardedQualifiedRun({status:r.status,stdout,stderr:r.stderr||'',signal:r.signal,sha256:expected});
   const root=snapshot.find(x=>x.name.toLowerCase()==='medorigin-desktop-d1-preview.exe');
   const identity=root.pid+'@'+root.startTicks;
   requireCondition(!observedRoots.includes(identity),'same process identity reused across cold starts');
