@@ -6,6 +6,8 @@ import {mkdtempSync,mkdirSync,rmSync,writeFileSync,symlinkSync,readFileSync} fro
 import {createHash} from 'node:crypto';
 import {join} from 'node:path';
 import {tmpdir} from 'node:os';
+import {spawnSync} from 'node:child_process';
+import {fileURLToPath} from 'node:url';
 import {requirePinnedD1Executable} from './windows-mxc-d1-guarded-launch-preflight.mjs';
 const launcher=readFileSync(new URL('./windows-mxc-d1-guarded-preview-launch.mjs',import.meta.url),'utf8');
 function fixture(){
@@ -51,4 +53,18 @@ test('candidate entrypoint never falls back to direct child spawn and keeps expl
  assert.match(launcher,/result\.timedOut!==true/);
  assert.match(launcher,/D1_GUARDED_UNPUBLISHED_MXC_TIMEOUT_OBSERVED_RELEASE_STILL_NO_GO/);
  assert.doesNotMatch(launcher,/spawnSync\(|spawn\(|execSync\(|execFileSync\(/);
+});
+
+test('negative executable admission rejects before optional native SDK can evaluate',()=>{
+ const f=fixture();
+ try {
+  const runner=fileURLToPath(new URL('./windows-mxc-d1-guarded-preview-launch.mjs',import.meta.url));
+  const result=spawnSync(process.execPath,[runner,f.exe,'0'.repeat(64)],{
+   encoding:'utf8',timeout:8000
+  });
+  assert.notEqual(result.status,0);
+  assert.match(result.stderr,/D1_MXC_GUARDED_LAUNCH_NO_GO/);
+  assert.doesNotMatch(result.stderr,/ERR_MODULE_NOT_FOUND|Cannot find package '@microsoft\/mxc-sdk'/);
+  assert.doesNotMatch(result.stdout,/D1_GUARDED_UNPUBLISHED_MXC_TIMEOUT_OBSERVED/);
+ } finally {rmSync(f.dir,{force:true,recursive:true})}
 });
