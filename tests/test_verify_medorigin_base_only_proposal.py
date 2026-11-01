@@ -264,7 +264,7 @@ def test_artifact_snapshot_rejects_file_over_budget_before_parsing(
     (dist / "medscale-0.3.0.tar.gz").write_bytes(b"B" * 16)
     # Do not allocate a giant file; alter the verifier's per-member bound.
     monkeypatch.setattr(gate, "MAX_TOTAL", 8)
-    with pytest.raises(gate.ProposalVerificationError, match="oversized|budget"):
+    with pytest.raises(gate.ProposalVerificationError, match=r"oversized|budget"):
         gate.read_stable_dist_bytes(dist)
 
 
@@ -293,7 +293,7 @@ def test_artifact_snapshot_rejects_link_retargeted_after_inventory(
         return paths
 
     monkeypatch.setattr(gate, "qualified_dist_paths", race)
-    with pytest.raises(gate.ProposalVerificationError, match="changed|regular|symlink"):
+    with pytest.raises(gate.ProposalVerificationError, match=r"changed|regular|symlink"):
         gate.read_stable_dist_bytes(dist)
 
 
@@ -314,7 +314,7 @@ def test_artifact_snapshot_refuses_in_place_file_change_between_snapshots(
         return contents
 
     monkeypatch.setattr(gate, "_read_pinned_regular_bytes", mutate)
-    with pytest.raises(gate.ProposalVerificationError, match="changed|unstable"):
+    with pytest.raises(gate.ProposalVerificationError, match=r"changed|unstable"):
         gate.read_stable_dist_bytes(dist)
 
 
