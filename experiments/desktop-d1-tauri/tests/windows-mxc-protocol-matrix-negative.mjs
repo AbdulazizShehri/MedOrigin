@@ -11,7 +11,7 @@ import { createServer } from 'node:net';
 import { createSocket } from 'node:dgram';
 import { spawnSync } from 'node:child_process';
 import { mkdtempSync, mkdirSync, rmSync, readFileSync } from 'node:fs';
-import { createHash } from 'node:crypto';
+import { createHash,randomBytes } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -32,15 +32,28 @@ mkdirSync(output);
 let tcp4Accepts=0;
 let tcp6Accepts=0;
 // This captures where the actual host listener accepted each connection.
-// It is NOT a challenge/response binding to the child probe executable.
+// Challenge bytes correlate this local receipt to the invoked control,
+// but do NOT authenticate a process identity, signed binary or OS egress.
 const tcp4Peers=[];
 const tcp6Peers=[];
 const peerOf=s=>({
  remoteAddress:s.remoteAddress,remoteFamily:s.remoteFamily,
- remotePort:s.remotePort,localAddress:s.localAddress,localPort:s.localPort
+ remotePort:s.remotePort,localAddress:s.localAddress,localPort:s.localPort,
+ proof:Buffer.alloc(0),invalid:false
 });
-const tcp4 = createServer(s => {tcp4Accepts+=1;tcp4Peers.push(peerOf(s));s.end();});
-const tcp6 = createServer(s => {tcp6Accepts+=1;tcp6Peers.push(peerOf(s));s.end();});
+const recordTcp=(s,peers)=>{
+ const peer=peerOf(s);peers.push(peer);
+ s.on('data',chunk=>{
+  if(!Buffer.isBuffer(chunk)||peer.proof.length+chunk.length>128){
+   peer.invalid=true;s.destroy();return;
+  }
+  peer.proof=Buffer.concat([peer.proof,chunk]);
+ });
+ s.on('error',()=>{peer.invalid=true});
+ s.on('end',()=>s.end());
+};
+const tcp4 = createServer(s => {tcp4Accepts+=1;recordTcp(s,tcp4Peers);});
+const tcp6 = createServer(s => {tcp6Accepts+=1;recordTcp(s,tcp6Peers);});
 const udp4 = createSocket('udp4');
 const udp6 = createSocket('udp6');
 let udp4Receipts = 0;
@@ -82,7 +95,11 @@ try {
   await listenUdp(udp6,'::1',Number(port6));
   started = true;
   const ports = [port4,port6];
-  const control = spawnSync(probe,[...ports,'control'],{encoding:'utf8',timeout:12000});
+  const expectedTcp4Nonce=randomBytes(16).toString('hex');
+  const expectedTcp6Nonce=randomBytes(16).toString('hex');
+  requireGate(expectedTcp4Nonce!==expectedTcp6Nonce,'duplicate TCP proof challenges');
+  const control = spawnSync(probe,[...ports,'control',expectedTcp4Nonce,expectedTcp6Nonce],
+    {encoding:'utf8',timeout:12000});
   await new Promise(done=>setTimeout(done,200));
   requireGate(udp4Receipts === 1 && udp6Receipts === 1,
     'unrestricted positive control UDP packets not observed by both local listeners');
@@ -90,7 +107,7 @@ try {
     control,udp4Receipts,udp6Receipts,tcp4Accepts,tcp6Accepts,
     tcp4Peers,tcp6Peers,
     expectedTcp4Port:Number(port4),expectedTcp6Port:Number(port6),
-    udp4Packets,udp6Packets
+    expectedTcp4Nonce,expectedTcp6Nonce,udp4Packets,udp6Packets
   });
   requireGate(probeDigest()===pinnedDigest,
     'native probe bytes changed between control and containment');

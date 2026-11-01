@@ -24,10 +24,13 @@ const positive=()=>({
  control:{status:0,signal:null,error:undefined,stderr:'',
   stdout:positiveRows.join('\n')+'\n'},
  tcp4Peers:[{remoteAddress:'127.0.0.1',remoteFamily:'IPv4',remotePort:45001,
-  localAddress:'127.0.0.1',localPort:43001}],
+  localAddress:'127.0.0.1',localPort:43001,
+  proof:Buffer.from('D1_MXC_TCP4_PROOF='+'a'.repeat(32))}],
  tcp6Peers:[{remoteAddress:'::1',remoteFamily:'IPv6',remotePort:45002,
-  localAddress:'::1',localPort:43002}],
+  localAddress:'::1',localPort:43002,
+  proof:Buffer.from('D1_MXC_TCP6_PROOF='+'b'.repeat(32))}],
  expectedTcp4Port:43001,expectedTcp6Port:43002,
+ expectedTcp4Nonce:'a'.repeat(32),expectedTcp6Nonce:'b'.repeat(32),
  udp4Receipts:1,udp6Receipts:1,tcp4Accepts:1,tcp6Accepts:1,
  udp4Packets:[positivePacket('IPv4')],udp6Packets:[positivePacket('IPv6')]
 });

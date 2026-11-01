@@ -17,7 +17,10 @@ test('real native process containment is required; no policy fallback',()=>{
   assert.doesNotMatch(runner,/default:\s*['"]allow['"]/);
 });
 test('same Rust binary has positive control with verified UDP receipt',()=>{
-  assert.match(runner,/spawnSync\(probe,\[\.\.\.ports,'control'\]/);
+  assert.ok(runner.includes("spawnSync(probe,[...ports,'control',expectedTcp4Nonce,expectedTcp6Nonce]"));
+  assert.ok(runner.includes("const expectedTcp4Nonce=randomBytes(16).toString('hex')"));
+  assert.ok(runner.includes("const expectedTcp6Nonce=randomBytes(16).toString('hex')"));
+  assert.match(runner,/expectedTcp4Nonce!==expectedTcp6Nonce/);
   assert.match(runner,/command:\s*\x60"\$\{probe\}"/);
   assert.match(runner,/udp4Receipts === 1 && udp6Receipts === 1/);
 });

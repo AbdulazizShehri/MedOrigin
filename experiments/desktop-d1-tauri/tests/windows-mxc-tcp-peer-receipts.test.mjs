@@ -15,7 +15,9 @@ const peer=(family)=>({
  remoteAddress:family==='IPv4'?'127.0.0.1':'::1',
  remoteFamily:family,remotePort:family==='IPv4'?45001:45002,
  localAddress:family==='IPv4'?'127.0.0.1':'::1',
- localPort:family==='IPv4'?43001:43002
+ localPort:family==='IPv4'?43001:43002,
+ proof:Buffer.from('D1_MXC_TCP'+(family==='IPv4'?'4':'6')+'_PROOF='+
+  (family==='IPv4'?'a':'b').repeat(32))
 });
 const good=()=>({
  control:{status:0,signal:null,error:undefined,stderr:'',
@@ -25,6 +27,7 @@ const good=()=>({
   ].join('\n')+'\n'},
  tcp4Accepts:1,tcp6Accepts:1,tcp4Peers:[peer('IPv4')],tcp6Peers:[peer('IPv6')],
  expectedTcp4Port:43001,expectedTcp6Port:43002,
+ expectedTcp4Nonce:'a'.repeat(32),expectedTcp6Nonce:'b'.repeat(32),
  udp4Receipts:1,udp6Receipts:1,
  udp4Packets:[packet('IPv4')],udp6Packets:[packet('IPv6')]
 });

@@ -5,7 +5,7 @@ import {spawnSync} from 'node:child_process';
 import {createServer} from 'node:net';
 import {createSocket} from 'node:dgram';
 import {mkdtempSync,mkdirSync,rmSync,readFileSync} from 'node:fs';
-import {createHash} from 'node:crypto';
+import {createHash,randomBytes} from 'node:crypto';
 import {tmpdir} from 'node:os';
 import {dirname,join,resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
@@ -21,14 +21,26 @@ const exe=join(scratch,'protocol-control.exe');
 const tcp4Peers=[],tcp6Peers=[],udp4Packets=[],udp6Packets=[];
 const peerOf=s=>({
  remoteAddress:s.remoteAddress,remoteFamily:s.remoteFamily,
- remotePort:s.remotePort,localAddress:s.localAddress,localPort:s.localPort
+ remotePort:s.remotePort,localAddress:s.localAddress,localPort:s.localPort,
+ proof:Buffer.alloc(0),invalid:false
 });
+const recordTcp=(s,peers)=>{
+ const peer=peerOf(s);peers.push(peer);
+ s.on('data',chunk=>{
+  if(!Buffer.isBuffer(chunk)||peer.proof.length+chunk.length>128){
+   peer.invalid=true;s.destroy();return;
+  }
+  peer.proof=Buffer.concat([peer.proof,chunk]);
+ });
+ s.on('error',()=>{peer.invalid=true});
+ s.on('end',()=>s.end());
+};
 const packetOf=(m,rinfo)=>({
  payload:Buffer.from(m),address:rinfo.address,
  family:rinfo.family,size:rinfo.size,port:rinfo.port
 });
-const tcp4=createServer(s=>{tcp4Peers.push(peerOf(s));s.end();});
-const tcp6=createServer(s=>{tcp6Peers.push(peerOf(s));s.end();});
+const tcp4=createServer(s=>recordTcp(s,tcp4Peers));
+const tcp6=createServer(s=>recordTcp(s,tcp6Peers));
 const udp4=createSocket('udp4'),udp6=createSocket('udp6');
 udp4.on('message',(m,rinfo)=>udp4Packets.push(packetOf(m,rinfo)));
 udp6.on('message',(m,rinfo)=>udp6Packets.push(packetOf(m,rinfo)));
@@ -51,13 +63,18 @@ try{
  await bindUdp(udp6,'::1',expectedTcp6Port);
  opened=true;
  // The Rust probe's 'control' mode contains NO remote test-net attempts.
- const control=spawnSync(exe,[String(expectedTcp4Port),String(expectedTcp6Port),'control'],
+ const expectedTcp4Nonce=randomBytes(16).toString('hex');
+ const expectedTcp6Nonce=randomBytes(16).toString('hex');
+ if(expectedTcp4Nonce===expectedTcp6Nonce)deny('duplicate TCP proof challenges');
+ const control=spawnSync(exe,[String(expectedTcp4Port),String(expectedTcp6Port),'control',
+  expectedTcp4Nonce,expectedTcp6Nonce],
   {encoding:'utf8',timeout:12000,maxBuffer:32768,windowsHide:true});
  await new Promise(done=>setTimeout(done,300));
  if(sha!==digest())deny('native Rust probe bytes changed during local control');
  const assessment=assessNativePositiveControl({
   control,tcp4Accepts:tcp4Peers.length,tcp6Accepts:tcp6Peers.length,
   tcp4Peers,tcp6Peers,expectedTcp4Port,expectedTcp6Port,
+  expectedTcp4Nonce,expectedTcp6Nonce,
   udp4Receipts:udp4Packets.length,udp6Receipts:udp6Packets.length,
   udp4Packets,udp6Packets
  });
