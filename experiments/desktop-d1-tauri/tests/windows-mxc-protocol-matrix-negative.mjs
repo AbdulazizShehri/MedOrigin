@@ -6,11 +6,12 @@
  * and then node windows-mxc-protocol-matrix-negative.mjs.
  */
 import { getPlatformSupport, run } from '@microsoft/mxc-sdk/v1';
-import {assessNativeProtocolMatrix} from './windows-mxc-protocol-matrix-verdict.mjs';
+import {assessNativeProtocolMatrix,assessNativePositiveControl} from './windows-mxc-protocol-matrix-verdict.mjs';
 import { createServer } from 'node:net';
 import { createSocket } from 'node:dgram';
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, rmSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, rmSync, readFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -51,6 +52,8 @@ try {
   const compile = spawnSync('rustc', ['+1.97.1','-C','debuginfo=0','-C','opt-level=1',
     '-o',probe,source], {encoding:'utf8',timeout:120000});
   requireGate(compile.status === 0, 'Rust source compile failed: ' + (compile.stderr || '').slice(-500));
+  const probeDigest=()=>createHash('sha256').update(readFileSync(probe)).digest('hex');
+  const pinnedDigest=probeDigest();
   await listenTcp(tcp4,'127.0.0.1');
   await listenTcp(tcp6,'::1');
   const port4 = String(tcp4.address().port);
@@ -60,18 +63,14 @@ try {
   started = true;
   const ports = [port4,port6];
   const control = spawnSync(probe,[...ports,'control'],{encoding:'utf8',timeout:12000});
-  requireGate(control.status === 0,'unrestricted native control exited nonzero');
-  for (const key of ['TCP4_LOOPBACK','TCP6_LOOPBACK']) {
-    requireGate(control.stdout.includes('D1_MXC_'+key+'=CONNECTED'),key+' positive TCP control failed');
-  }
-  for (const key of ['UDP4_LOOPBACK','UDP6_LOOPBACK']) {
-    requireGate(new RegExp('D1_MXC_'+key+'=SENT\\d+').test(control.stdout),
-      key+' positive UDP control failed');
-  }
   await new Promise(done=>setTimeout(done,200));
   requireGate(udp4Receipts === 1 && udp6Receipts === 1,
     'unrestricted positive control UDP packets not observed by both local listeners');
-  console.log('D1_MXC_NATIVE_UNRESTRICTED_IPV4_IPV6_TCP_UDP_LOCAL_CONTROL_PASS');
+  const controlReceipt=assessNativePositiveControl({control,udp4Receipts,udp6Receipts});
+  requireGate(probeDigest()===pinnedDigest,
+    'native probe bytes changed between control and containment');
+  console.log('D1_MXC_NATIVE_UNRESTRICTED_IPV4_IPV6_TCP_UDP_LOCAL_CONTROL_PASS',
+    controlReceipt.classification);
 
   // Explicit default-deny egress with no internet, private-network or
   // hostLoopback exemptions. No global firewall modification or admin rights.
@@ -86,6 +85,8 @@ try {
     timeoutMs:30000,
   };
   const result = await run(request);
+  requireGate(probeDigest()===pinnedDigest,
+    'native probe bytes changed between control and containment');
   requireGate(!result.timedOut, 'native MXC child timed out');
   requireGate((result.warnings || []).length === 0, 'native MXC warnings');
   console.log('D1_MXC_NATIVE_CONTAINED_SOCKET_RESULTS\n'+(result.stdout || ''));
