@@ -14,7 +14,7 @@ public/clinical software release.
   Separate concurrent Draft #823 was observed and **not altered**;
   this Windows qualification was independently stacked on #822.
 - **Exact tested source code SHA**
-  `1775793db26aafb131b1da91d6f02eee4d7dcf31`
+  `6d7f75d48d064239e2bc149e7a69770caa58f0e2`
   (**before** this append-only report commit).
 - Only one new Python synthetic builder handoff utility and tests,
   one new Windows real-artifact/offline-FHIR read-only workflow, and
@@ -44,13 +44,26 @@ public/clinical software release.
   required handoff module was not yet present. This is a missing-
   implementation RED baseline, **not proof of a product exploit**.
 - After handoff implementation and strict Ruff 0.14.4 formatting,
-  [final code SHA source CI #41359906884](https://github.com/AbdulazizShehri/MedOrigin/actions/runs/41359906884):
+  [final code SHA source CI #41360381893](https://github.com/AbdulazizShehri/MedOrigin/actions/runs/41360381893):
   **COMPLETED SUCCESS 4/4** Windows2025 + Ubuntu24.04 ×
   Python3.11/3.12. All four raw logs inspected:
-  **55 PASS / 1 SKIP** each; Ruff check PASS and all four files
+  **57 PASS / 1 SKIP** each; Ruff check PASS and all four files
   already formatted. The single source-only skip is a separate
   optional real-built-dist fixture that intentionally lacks
   `MEDORIGIN_PROPOSAL_TEST_DIST` here.
+- A second test-first **post-snapshot hardlink/mode drift RED**
+  at code SHA `c6cf348b7d0f6277dfde0ab8e563f1ff51af940a`
+  was confirmed in actual
+  [hosted Windows/Linux run #41360240083](https://github.com/AbdulazizShehri/MedOrigin/actions/runs/41360240083):
+  **2 expected FAIL / 55 PASS / 1 SKIP** on all four matrix
+  shards. The old identity tuple omitted `st_mode` and
+  `st_nlink`, and a new external hardlink after the Wheel read
+  escaped the final builder inventory. The repaired
+  `_identity()` checks **mode and link count on original path
+  and pinned fd**, while final handoff rechecks all three
+  original builder file identities **after** snapshotted reads.
+  This prevents the tested alias/mode-drift gap without relying
+  on platform-specific Windows ctime.
 - Source-level test covers exact-three-entry builder admission,
   unaccounted archive/text/directory rejection, symlink/hardlink
   refusal, source and destination path controls, size budget,
@@ -59,7 +72,7 @@ public/clinical software release.
 
 ## Real Windows build, exact SHA and offline installed FHIR
 
-- [Final code SHA Windows real-artifact run #41359906949](https://github.com/AbdulazizShehri/MedOrigin/actions/runs/41359906949):
+- [Final code SHA Windows real-artifact run #41360381902](https://github.com/AbdulazizShehri/MedOrigin/actions/runs/41360381902):
   **COMPLETED SUCCESS 2/2** on actual hosted Windows2025,
   building separately with Python 3.11 and 3.12.
 - Both jobs use free pinned `uv 0.12.19`, their own temporary Python
@@ -79,14 +92,14 @@ public/clinical software release.
 | Proposed Windows archive | SHA-256 (two builds on 3.11 and two builds on 3.12) |
 | --- | --- |
 | `medscale-0.3.0-py3-none-any.whl` | `3df98fb5f8cb37bf78fd1461961779dc25453292e7e1d7dec1983628cdd4441f` |
-| `medscale-0.3.0.tar.gz` | `599c9d82c50dc6a0c80629c60ec23c6b72559e9d3518bd81277ba73b4000f56c` |
+| `medscale-0.3.0.tar.gz` | `b8f034881c759aa6bc523d887d2a5a99258a2dfebeccff33888f2064ba23a3b3` |
 
   **Do not infer cross-OS identical archive bytes.** These Windows
   SHA values bind to code SHA `1775793d...`. The older Linux
   SHA-256 from #822 was generated at a *different source commit*;
   an sdist includes exact Git provenance, so comparing unrelated
   commit hashes would be invalid.
-- With actual `MEDORIGIN_PROPOSAL_TEST_DIST` set, **56/56
+- With actual `MEDORIGIN_PROPOSAL_TEST_DIST` set, **58/58
   PASS with 0 SKIP** in each Windows real-artifact job, plus
   **1/1** explicit re-execution of the built-artifact positive
   fixture. This does **not** erase the optional skip in separate
