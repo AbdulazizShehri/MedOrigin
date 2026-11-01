@@ -1,0 +1,118 @@
+# Synthetic developer-only ADR-0045 PROPOSAL; never publish/install systemwide.
+name: ADR45 Windows real archive build and offline installed CLI (NO RELEASE)
+on:
+  push:
+    branches:
+      - test/medorigin-adr45-windows-real-installed-20261102
+  pull_request:
+    branches:
+      - test/medorigin-adr45-compare-stable-archives-20261102
+    paths:
+      - '.github/workflows/medorigin-adr45-windows-real-installed.yml'
+      - 'scripts/qa/adr45_private_builder_handoff.py'
+      - 'tests/test_adr45_private_builder_handoff.py'
+      - 'scripts/verify_medorigin_base_only_proposal.py'
+      - 'scripts/compare_medorigin_base_only_archives.py'
+permissions:
+  contents: read
+jobs:
+  exact-source-windows-private-rebuild:
+    runs-on: windows-2025
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        build_python: ['3.11', '3.12']
+    steps:
+      - name: Checkout exact source without retained credentials
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Free pinned uv
+        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        with:
+          version: '0.12.19'
+          enable-cache: false
+      - name: Stage exact-source proposed archives and verify two independent Windows builds
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          uv python install 3.11 3.12
+          if($LASTEXITCODE -ne 0){throw 'Free pinned Python unavailable'}
+          $version='${{ matrix.build_python }}'
+          $builderVenv=Join-Path $env:RUNNER_TEMP "adr45-win-builder-py$version"
+          uv venv --python $version $builderVenv
+          if($LASTEXITCODE -ne 0){throw 'Private build environment unavailable'}
+          $builderPython=Join-Path $builderVenv 'Scripts/python.exe'
+          uv pip install --python $builderPython 'hatchling==1.32.4'
+          if($LASTEXITCODE -ne 0){throw 'Exact Hatchling generator could not be pinned'}
+          & $builderPython -c 'import hatchling;print("ADR45_WIN_PINNED_GENERATOR_PASS")'
+          if($LASTEXITCODE -ne 0){throw 'Private generator unavailable'}
+          $first=Join-Path $env:RUNNER_TEMP "adr45-win-first-py$version"
+          $second=Join-Path $env:RUNNER_TEMP "adr45-win-second-py$version"
+          foreach($root in @($first,$second)){
+            New-Item -ItemType Directory -Path $root -ErrorAction Stop |Out-Null
+            $source=Join-Path $root 'source'
+            $builder=Join-Path $root 'builder'
+            $dist=Join-Path $root 'dist'
+            uv run --no-project --python $version python scripts/stage_medorigin_base_only_proposal.py --out $source
+            if($LASTEXITCODE -ne 0){throw 'Frozen source staging NO-GO'}
+            uv build --offline --python $builderPython --no-build-isolation --wheel --sdist $source --out-dir $builder
+            if($LASTEXITCODE -ne 0){throw 'Private Windows archive build NO-GO'}
+            uv run --no-project --python $version python scripts/qa/adr45_private_builder_handoff.py --builder $builder --dist $dist
+            if($LASTEXITCODE -ne 0){throw 'Fail-closed builder handoff NO-GO'}
+            uv run --no-project --python $version python scripts/verify_medorigin_base_only_proposal.py --repo . --dist $dist
+            if($LASTEXITCODE -ne 0){throw 'Exact Git/receipt/archive verification NO-GO'}
+          }
+          uv run --no-project --python $version python scripts/compare_medorigin_base_only_archives.py --repo . --left (Join-Path $first 'dist') --right (Join-Path $second 'dist') --require-identical
+          if($LASTEXITCODE -ne 0){throw 'Real Windows same-source archive-byte parity NO-GO'}
+          $sha=Get-FileHash (Join-Path $first 'dist/medscale-0.3.0-py3-none-any.whl') -Algorithm SHA256
+          $sha2=Get-FileHash (Join-Path $second 'dist/medscale-0.3.0-py3-none-any.whl') -Algorithm SHA256
+          $sd=Get-FileHash (Join-Path $first 'dist/medscale-0.3.0.tar.gz') -Algorithm SHA256
+          $sd2=Get-FileHash (Join-Path $second 'dist/medscale-0.3.0.tar.gz') -Algorithm SHA256
+          if($sha.Hash -ne $sha2.Hash -or $sd.Hash -ne $sd2.Hash){throw 'Different exact archive bytes'}
+          Write-Output "ADR45_WIN_WHEEL_SHA256=$($sha.Hash.ToLowerInvariant())"
+          Write-Output "ADR45_WIN_SDIST_SHA256=$($sd.Hash.ToLowerInvariant())"
+          Write-Output 'ADR45_WIN_TWO_REAL_ARCHIVE_PAIRS_IDENTICAL_NONPUBLISHING'
+      - name: Exercise exact real archive fixture without optional skip
+        shell: pwsh
+        env:
+          MEDORIGIN_PROPOSAL_TEST_DIST: ${{ runner.temp }}/adr45-win-first-py${{ matrix.build_python }}/dist
+        run: |
+          $ErrorActionPreference='Stop'
+          $env:PYTHONPATH=[string]::Join([IO.Path]::PathSeparator,@((Join-Path (Get-Location) 'src'),(Join-Path (Get-Location) 'scripts'),(Join-Path (Get-Location) 'tests')))
+          $tmp=Join-Path $env:RUNNER_TEMP 'adr45-win-real-pytest'
+          uv run --no-project --python '${{ matrix.build_python }}' --with pytest==8.4.2 python -m pytest -q -rs -o addopts= --basetemp $tmp tests/test_verify_medorigin_base_only_proposal.py tests/test_compare_medorigin_base_only_archives.py tests/test_adr45_private_builder_handoff.py
+          if($LASTEXITCODE -ne 0){throw 'Real-Wheel/sdist test suite NO-GO'}
+          # The specific built-artifact test must be selected and executed;
+          # optional Windows symlink capability may independently skip.
+          uv run --no-project --python '${{ matrix.build_python }}' --with pytest==8.4.2 python -m pytest -q -rs -o addopts= --basetemp (Join-Path $env:RUNNER_TEMP 'adr45-win-real-only') tests/test_verify_medorigin_base_only_proposal.py::test_real_dist_when_supplied_remains_unpublished
+          if($LASTEXITCODE -ne 0){throw 'Actual built-artifact positive fixture NO-GO'}
+          Write-Output 'ADR45_WIN_REAL_BUILT_ARTIFACT_POSITIVE_EXECUTED'
+      - name: Install privately offline and replay fictional FHIR through both CLI versions
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $wheel=Join-Path $env:RUNNER_TEMP 'adr45-win-first-py${{ matrix.build_python }}/dist/medscale-0.3.0-py3-none-any.whl'
+          $cli=@{}
+          foreach($version in @('3.11','3.12')){
+            $venv=Join-Path $env:RUNNER_TEMP "adr45-win-installed-py$version"
+            uv venv --offline --python $version $venv
+            if($LASTEXITCODE -ne 0){throw 'Offline Python venv NO-GO'}
+            $python=Join-Path $venv 'Scripts/python.exe'
+            uv pip install --offline --no-index --no-deps --python $python $wheel
+            if($LASTEXITCODE -ne 0){throw 'Offline approved-core-wheel install NO-GO'}
+            $cli[$version]=Join-Path $venv 'Scripts/medscale.exe'
+            & $cli[$version] --version
+            if($LASTEXITCODE -ne 0){throw 'Offline installed CLI startup NO-GO'}
+          }
+          uv run --no-project --python 3.11 python examples/synthetic_fhir_developer_beta/reproduce.py --cli $cli['3.11'] --alt-cli $cli['3.12'] --out (Join-Path $env:RUNNER_TEMP 'adr45-win-fhir-fictional-replay')
+          if($LASTEXITCODE -ne 0){throw 'Offline fictional FHIR CLI journey NO-GO'}
+          Write-Output 'ADR45_WIN_OFFLINE_PY311_PY312_INSTALLED_FHIR_REPLAY_PASS'
+      - name: Refuse publication approval
+        shell: pwsh
+        run: |
+          Write-Output 'ADR45_PROPOSED_NOT_ACCEPTED_NO_RESEARCH_ROOT_CHANGE'
+          Write-Output 'PUBLICATION_AUTHORIZED_FALSE_NO_PH_I_NO_RELEASE_NO_UPLOAD'
