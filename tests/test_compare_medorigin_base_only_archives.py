@@ -51,6 +51,23 @@ def _make_pair(folder: Path, creator: int, timestamp: int, altered: bool = False
     (folder / "medscale-0.3.0.tar.gz").write_bytes(gzip.compress(tar.getvalue(), mtime=0))
 
 
+def _fake_verified(_repo: Path, dist: Path) -> dict[str, object]:
+    # Synthetic fixture only: real verifier compares all source bytes to Git.
+    import hashlib
+
+    return {
+        "status": "BASE_ONLY_PROPOSAL_SOURCE_BOUND_VERIFIED",
+        "source_git_commit": "test-source",
+        "wheel_sha256": hashlib.sha256(
+            (dist / "medscale-0.3.0-py3-none-any.whl").read_bytes()
+        ).hexdigest(),
+        "sdist_sha256": hashlib.sha256((dist / "medscale-0.3.0.tar.gz").read_bytes()).hexdigest(),
+        "publication_authorized": False,
+        "adr_0045_accepted": False,
+        "independent_review_complete": False,
+    }
+
+
 def test_source_bound_equal_members_different_envelopes(
     audit: Any, monkeypatch: Any, tmp_path: Path
 ) -> None:
@@ -59,13 +76,15 @@ def test_source_bound_equal_members_different_envelopes(
     _make_pair(right, 3, 20)
     calls: list[Path] = []
 
-    def fake_verification(_repo: Path, dist: Path) -> dict[str, str]:
+    def fake_verification(_repo: Path, dist: Path) -> dict[str, object]:
         calls.append(dist)
-        return {"source_git_commit": "test-source"}
+        return _fake_verified(_repo, dist)
 
     monkeypatch.setattr(audit, "verify", fake_verification)
     result = audit.compare(ROOT, left, right)
-    assert calls == [left.resolve(), right.resolve()]
+    assert len(calls) == 2
+    assert all(path not in {left, right} for path in calls)
+    assert calls[0] != calls[1]
     assert result["publication_authorized"] is False
     assert result["adr_0045_accepted"] is False
     assert result["status"] == "SOURCE_BOUND_MEMBERS_EQUAL_ARCHIVE_ENVELOPES_DIFFER"
@@ -82,7 +101,7 @@ def test_byte_identical_copy(audit: Any, monkeypatch: Any, tmp_path: Path) -> No
     right.mkdir()
     for name in (audit.WHEEL, audit.SDIST):
         shutil.copyfile(left / name, right / name)
-    monkeypatch.setattr(audit, "verify", lambda *_: {"source_git_commit": "test-source"})
+    monkeypatch.setattr(audit, "verify", _fake_verified)
     result = audit.compare(ROOT, left, right)
     assert result["status"] == "SOURCE_BOUND_ARCHIVES_BYTE_IDENTICAL"
     assert result["wheel"]["archive_bytes_identical"]
@@ -95,7 +114,7 @@ def test_strict_mode_refuses_equal_members_with_different_archives(
     left, right = tmp_path / "left", tmp_path / "right"
     _make_pair(left, 0, 10)
     _make_pair(right, 3, 20)
-    monkeypatch.setattr(audit, "verify", lambda *_: {"source_git_commit": "test-source"})
+    monkeypatch.setattr(audit, "verify", _fake_verified)
     with pytest.raises(audit.ProposalVerificationError, match="require-identical"):
         audit.compare(ROOT, left, right, require_identical=True)
 
@@ -108,7 +127,7 @@ def test_strict_mode_passes_identical_archives(
     right.mkdir()
     for name in (audit.WHEEL, audit.SDIST):
         shutil.copyfile(left / name, right / name)
-    monkeypatch.setattr(audit, "verify", lambda *_: {"source_git_commit": "test-source"})
+    monkeypatch.setattr(audit, "verify", _fake_verified)
     result = audit.compare(ROOT, left, right, require_identical=True)
     assert result["status"] == "SOURCE_BOUND_ARCHIVES_BYTE_IDENTICAL"
 
@@ -124,7 +143,7 @@ def test_reject_member_differences_even_if_mocked_gate_says_pass(
     left, right = tmp_path / "left", tmp_path / "right"
     _make_pair(left, 3, 0)
     _make_pair(right, 3, 0, altered=True)
-    monkeypatch.setattr(audit, "verify", lambda *_: {"source_git_commit": "test-source"})
+    monkeypatch.setattr(audit, "verify", _fake_verified)
     with pytest.raises(audit.ProposalVerificationError, match="member bytes differ"):
         audit.compare(ROOT, left, right)
 
@@ -145,7 +164,7 @@ def test_same_tar_bytes_different_gzip_compression(
     # Use a larger, compressible valid TAR payload while keeping every member unchanged.
     (left / audit.SDIST).write_bytes(gzip.compress(tar, compresslevel=1, mtime=0))
     (right / audit.SDIST).write_bytes(gzip.compress(tar, compresslevel=9, mtime=0))
-    monkeypatch.setattr(audit, "verify", lambda *_: {"source_git_commit": "test-source"})
+    monkeypatch.setattr(audit, "verify", _fake_verified)
     result = audit.compare(ROOT, left, right)
     assert result["sdist"]["decompressed_tar_identical"]
     assert not result["sdist"]["archive_bytes_identical"]
@@ -167,7 +186,7 @@ def test_equal_zip_members_different_compression_streams(
             compresslevel=level,
         ) as archive:
             archive.writestr("medscale/safe.py", payload)
-    monkeypatch.setattr(audit, "verify", lambda *_: {"source_git_commit": "test-source"})
+    monkeypatch.setattr(audit, "verify", _fake_verified)
     result = audit.compare(ROOT, left, right)
     assert result["wheel"]["member_count"] == 1
     assert result["wheel"]["compressed_member_streams_identical"] is False
@@ -203,3 +222,132 @@ def test_cli_uses_explicit_receipt_without_logging_member_names(
     assert json.loads(receipt.read_text(encoding="utf-8")) == evidence
     assert audit.main(argv) == 2
     assert json.loads(receipt.read_text(encoding="utf-8")) == evidence
+
+
+def test_comparator_uses_private_snapshots_not_mutable_original_paths(
+    audit: Any, monkeypatch: Any, tmp_path: Path
+) -> None:
+    left, right = tmp_path / "left", tmp_path / "right"
+    _make_pair(left, 3, 0)
+    _make_pair(right, 3, 0)
+    originals = {left.resolve(), right.resolve()}
+    orig_read = audit.read_stable_dist_bytes if hasattr(audit, "read_stable_dist_bytes") else None
+    seen: list[Path] = []
+
+    def capture(path: Path) -> tuple[bytes, bytes]:
+        seen.append(path)
+        assert orig_read is not None
+        return orig_read(path)
+
+    monkeypatch.setattr(audit, "read_stable_dist_bytes", capture, raising=False)
+
+    def checked_verification(_repo: Path, dist: Path) -> dict[str, object]:
+        assert dist not in originals, "untrusted original dist reopened for verification"
+        return {
+            "source_git_commit": "test-source",
+            "status": "BASE_ONLY_PROPOSAL_SOURCE_BOUND_VERIFIED",
+            "wheel_sha256": audit.digest((dist / audit.WHEEL).read_bytes()),
+            "sdist_sha256": audit.digest((dist / audit.SDIST).read_bytes()),
+            "publication_authorized": False,
+            "adr_0045_accepted": False,
+            "independent_review_complete": False,
+        }
+
+    monkeypatch.setattr(audit, "verify", checked_verification)
+    out = audit.compare(ROOT, left, right)
+    assert out["status"] == "SOURCE_BOUND_ARCHIVES_BYTE_IDENTICAL"
+    assert seen == [left, right]
+
+
+def test_comparator_rejects_forged_verifier_archive_hashes(
+    audit: Any, monkeypatch: Any, tmp_path: Path
+) -> None:
+    left, right = tmp_path / "left", tmp_path / "right"
+    _make_pair(left, 3, 0)
+    _make_pair(right, 3, 0)
+
+    def forged(_repo: Path, dist: Path) -> dict[str, object]:
+        return {
+            "source_git_commit": "test-source",
+            "status": "BASE_ONLY_PROPOSAL_SOURCE_BOUND_VERIFIED",
+            "wheel_sha256": "0" * 64,
+            "sdist_sha256": "0" * 64,
+            "publication_authorized": False,
+            "adr_0045_accepted": False,
+            "independent_review_complete": False,
+        }
+
+    monkeypatch.setattr(audit, "verify", forged)
+    with pytest.raises(audit.ProposalVerificationError, match=r"digest|snapshot|identity"):
+        audit.compare(ROOT, left, right)
+
+
+def test_comparator_does_not_reopen_originals_after_verification(
+    audit: Any, monkeypatch: Any, tmp_path: Path
+) -> None:
+    left, right = tmp_path / "left", tmp_path / "right"
+    _make_pair(left, 3, 0)
+    _make_pair(right, 3, 0)
+    original_paths = {
+        left / audit.WHEEL,
+        left / audit.SDIST,
+        right / audit.WHEEL,
+        right / audit.SDIST,
+    }
+
+    def fake_verify(_repo: Path, dist: Path) -> dict[str, object]:
+        return {
+            "source_git_commit": "test-source",
+            "status": "BASE_ONLY_PROPOSAL_SOURCE_BOUND_VERIFIED",
+            "wheel_sha256": audit.digest((dist / audit.WHEEL).read_bytes()),
+            "sdist_sha256": audit.digest((dist / audit.SDIST).read_bytes()),
+            "publication_authorized": False,
+            "adr_0045_accepted": False,
+            "independent_review_complete": False,
+        }
+
+    monkeypatch.setattr(audit, "verify", fake_verify)
+    for func in (
+        "_zip_headers",
+        "_tar_headers",
+        "_zip_compressed_fingerprint",
+        "_tar_payload_hash",
+        "load_wheel",
+        "load_sdist",
+    ):
+        original = getattr(audit, func)
+
+        def spy(path: Path, *, _original: Any = original) -> Any:
+            assert path not in original_paths, "diagnostics reopened untrusted original archive"
+            return _original(path)
+
+        monkeypatch.setattr(audit, func, spy)
+    assert audit.compare(ROOT, left, right)["status"] == "SOURCE_BOUND_ARCHIVES_BYTE_IDENTICAL"
+
+
+def test_comparator_snapshot_resists_original_mutation_after_verifier(
+    audit: Any, monkeypatch: Any, tmp_path: Path
+) -> None:
+    left, right = tmp_path / "left", tmp_path / "right"
+    _make_pair(left, 3, 0)
+    _make_pair(right, 3, 0)
+    calls = 0
+
+    def fake_verify(_repo: Path, dist: Path) -> dict[str, object]:
+        nonlocal calls
+        calls += 1
+        record = {
+            "source_git_commit": "test-source",
+            "status": "BASE_ONLY_PROPOSAL_SOURCE_BOUND_VERIFIED",
+            "wheel_sha256": audit.digest((dist / audit.WHEEL).read_bytes()),
+            "sdist_sha256": audit.digest((dist / audit.SDIST).read_bytes()),
+            "publication_authorized": False,
+            "adr_0045_accepted": False,
+            "independent_review_complete": False,
+        }
+        if calls == 1:
+            (left / audit.WHEEL).write_bytes(b"CHANGED_EXTERNAL_AFTER_SNAPSHOT")
+        return record
+
+    monkeypatch.setattr(audit, "verify", fake_verify)
+    assert audit.compare(ROOT, left, right)["status"] == "SOURCE_BOUND_ARCHIVES_BYTE_IDENTICAL"

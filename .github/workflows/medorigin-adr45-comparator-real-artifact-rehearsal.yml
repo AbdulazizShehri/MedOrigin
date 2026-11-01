@@ -1,0 +1,108 @@
+# Explicitly NONPUBLISHING ADR-0045 draft proposal. No upload/package release.
+name: ADR45 real built-archive comparator rehearsal (unpublished)
+on:
+  push:
+    branches:
+      - test/medorigin-adr45-compare-stable-archives-20261102
+  pull_request:
+    branches:
+      - test/medorigin-adr45-artifact-stable-snapshot-20261102
+    paths:
+      - '.github/workflows/medorigin-adr45-comparator-real-artifact-rehearsal.yml'
+      - 'scripts/compare_medorigin_base_only_archives.py'
+      - 'scripts/verify_medorigin_base_only_proposal.py'
+      - 'scripts/stage_medorigin_base_only_proposal.py'
+      - 'tests/test_compare_medorigin_base_only_archives.py'
+      - 'tests/test_verify_medorigin_base_only_proposal.py'
+permissions:
+  contents: read
+jobs:
+  exact-source-real-artifact-unpublished:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Checkout exact, unmerged proposal SHA without credentials
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Pinned free uv
+        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        with:
+          version: '0.12.19'
+          enable-cache: false
+      - name: Build and independently verify two private exact-source distributions
+        shell: bash
+        run: |
+          set -euo pipefail
+          uv python install 3.11
+          # The frozen project allows any hatchling version, but the
+          # exact-Git verifier attests generator hatchling 1.32.4.
+          # Pin ONLY this private test-build environment, not research root.
+          uv venv --python 3.11 "$RUNNER_TEMP/adr45-private-build-venv"
+          uv pip install --python "$RUNNER_TEMP/adr45-private-build-venv/bin/python" 'hatchling==1.32.4'
+          "$RUNNER_TEMP/adr45-private-build-venv/bin/python" -c 'import hatchling;print("ADR45_PINNED_HATCHLING_IMPORT_PASS")'
+          first="$RUNNER_TEMP/medorigin-adr45-private-first"
+          second="$RUNNER_TEMP/medorigin-adr45-private-second"
+          python3 scripts/stage_medorigin_base_only_proposal.py --out "$first/source"
+          uv build --python "$RUNNER_TEMP/adr45-private-build-venv/bin/python" --no-build-isolation --wheel --sdist "$first/source" --out-dir "$first/builder"
+          echo "ADR45_UV_BUILDER_INVENTORY"; find "$first/builder" -maxdepth 1 -printf "%f %y\n" | sort
+          # Stage first build into strict two-file verifier envelope.
+          # The second build follows below, then uses the same exact gate.
+          python3 - "$first/builder" "$first/dist" <<'PY'
+          import pathlib, shutil, stat, sys
+          source, target = map(pathlib.Path, sys.argv[1:])
+          wheel, sdist = "medscale-0.3.0-py3-none-any.whl", "medscale-0.3.0.tar.gz"
+          entries = tuple(source.iterdir())
+          if len(entries) != 3 or {p.name for p in entries} != {wheel, sdist, ".gitignore"}:
+              raise SystemExit("ADR45_BUILDER_ENVELOPE_NO_GO")
+          if any(not stat.S_ISREG(p.lstat().st_mode) or p.is_symlink() for p in entries):
+              raise SystemExit("ADR45_NONREGULAR_BUILDER_OUTPUT_NO_GO")
+          if any(not 0 < (source / n).stat().st_size <= 50_000_000 for n in (wheel, sdist)):
+              raise SystemExit("ADR45_BUILDER_SIZE_NO_GO")
+          target.mkdir()
+          for n in (wheel, sdist):
+              shutil.copyfile(source / n, target / n)
+          print("ADR45_FIRST_TWO_ARCHIVES_PRIVATE_STAGING_ONLY")
+          PY
+          python3 scripts/verify_medorigin_base_only_proposal.py --repo . --dist "$first/dist"
+          python3 scripts/stage_medorigin_base_only_proposal.py --out "$second/source"
+          uv build --offline --python "$RUNNER_TEMP/adr45-private-build-venv/bin/python" --no-build-isolation --wheel --sdist "$second/source" --out-dir "$second/builder"
+          python3 - "$second/builder" "$second/dist" <<'PY'
+          import pathlib, shutil, stat, sys
+          source, target = map(pathlib.Path, sys.argv[1:])
+          wheel, sdist = "medscale-0.3.0-py3-none-any.whl", "medscale-0.3.0.tar.gz"
+          entries = tuple(source.iterdir())
+          if len(entries) != 3 or {p.name for p in entries} != {wheel, sdist, ".gitignore"}:
+              raise SystemExit("ADR45_BUILDER_ENVELOPE_NO_GO")
+          if any(not stat.S_ISREG(p.lstat().st_mode) or p.is_symlink() for p in entries):
+              raise SystemExit("ADR45_NONREGULAR_BUILDER_OUTPUT_NO_GO")
+          if any(not 0 < (source / n).stat().st_size <= 50_000_000 for n in (wheel, sdist)):
+              raise SystemExit("ADR45_BUILDER_SIZE_NO_GO")
+          target.mkdir()
+          for n in (wheel, sdist):
+              shutil.copyfile(source / n, target / n)
+          print("ADR45_SECOND_TWO_ARCHIVES_PRIVATE_STAGING_ONLY")
+          PY
+          python3 scripts/verify_medorigin_base_only_proposal.py --repo . --dist "$second/dist"
+          echo 'ADR45_FIRST_SECOND_ARCHIVE_SHA256_BEGIN'
+          sha256sum "$first/dist/medscale-0.3.0-py3-none-any.whl" "$second/dist/medscale-0.3.0-py3-none-any.whl"
+          sha256sum "$first/dist/medscale-0.3.0.tar.gz" "$second/dist/medscale-0.3.0.tar.gz"
+          echo 'ADR45_FIRST_SECOND_ARCHIVE_SHA256_END'
+          python3 scripts/compare_medorigin_base_only_archives.py --repo . --left "$first/dist" --right "$second/dist" --require-identical
+          echo 'ADR45_TWO_REAL_BUILT_ARCHIVES_SOURCE_BOUND_IDENTICAL_UNPUBLISHED'
+      - name: Actually execute the previously skipped built-artifact verifier fixture
+        shell: bash
+        env:
+          PYTHONPATH: 'src:scripts:tests'
+          MEDORIGIN_PROPOSAL_TEST_DIST: ${{ runner.temp }}/medorigin-adr45-private-first/dist
+        run: |
+          set -euo pipefail
+          uv run --no-project --python 3.11 --with pytest==8.4.2 python -m pytest -q -rs -o addopts= tests/test_verify_medorigin_base_only_proposal.py tests/test_compare_medorigin_base_only_archives.py
+          echo 'ADR45_REAL_ARTIFACT_FIXTURE_EXECUTED_NOT_SKIPPED'
+      - name: Verify no publication authorization
+        shell: bash
+        run: |
+          echo 'ADR45_UNAPPROVED_NONPUBLISHING_REAL_ARTIFACT_REHEARSAL_ONLY'
+          echo 'PUBLICATION_AUTHORIZED_FALSE_NO_CREDENTIALS_NO_REGISTRY_UPLOAD_NO_RELEASE'
