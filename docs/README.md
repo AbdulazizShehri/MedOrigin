@@ -31,6 +31,15 @@ are welcome.
 - [Discussions](https://github.com/AbdulazizShehri/MedOrigin/discussions) — ideas and feedback
 - [Code of Conduct](../CODE_OF_CONDUCT.md) and [Security](../SECURITY.md)
 
+## EGM design drafts (not approved)
+
+[Living design index](designs/SITEMAP.md) contains an EGM-style
+[D1 network confinement design](designs/D1_NETWORK_CONFINEMENT_EGM.md)
+and [cold review packet](designs/D1_EGM_COLD_REVIEW_PACKET.md).
+These are **author-side drafts** with **no fresh Goldfish review run**;
+they do not change the #662 offline/no-egress NO-GO decision,
+independent security review, or release authorization.
+
 ## Engineering reference
 
 - [Interoperability](architecture/interoperability_strategy.md) — FHIR boundary
