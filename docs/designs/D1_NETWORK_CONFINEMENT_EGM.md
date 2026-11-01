@@ -111,6 +111,26 @@ writing its host-owned capture output. Offline Windows validation:
 hardening, **not** a resolution of #662. The approved design must
 account for a request probe succeeding while live capture fails.
 
+### 2026-11-01 actual UDP socket-API ambiguity
+
+The [native TCP/UDP matrix NO-GO report](../../experiments/desktop-d1-tauri/evidence/windows-mxc-udp-send-softaccept-no-go-20261101.md)
+records a separate current Windows `26300.9818` MXC ProcessContainer
+experiment using the **same synthetic Rust binary** for unrestricted
+local-control and deny-by-default cases. IPv4/IPv6 TCP (loopback and
+documentation destinations) returned `WSA10013`; all four UDP sends
+returned `SENT23`. Both host-owned loopback listeners nevertheless
+observed **zero contained datagrams** after the positive controls.
+A UDP `send_to` success is **not proof of later network delivery**;
+zero listener receipts are also **not proof of packet/WFP denial**,
+especially for external/broker/DNS traffic. The test remains NO-GO.
+
+The strict eight-protocol verifier now explicitly rejects this
+ambiguous UDP soft-accept and treats source-only CI tests as validation
+of error reporting, **not** native OS isolation proof. The required
+independently observed UDP/WFP, IPv4/IPv6/DNS packet negative tests
+remain unperformed; the separate current MXC native capture path still
+fails `E_NOTIMPL`.
+
 ## 6. Test matrix and acceptance criteria
 
 | Case | Expected result / required evidence |
