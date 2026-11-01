@@ -33,3 +33,15 @@ test('gate queries current process primary token, not job or user-controlled mar
  assert.match(gate,/primary_token_not_appcontainer/);
  assert.doesNotMatch(gate,/IsProcessInJob|std::env::var|GetEnvironmentVariable/);
 });
+
+test('primary-token admission also checks absence of three well-known network capability SIDs',()=>{
+ assert.match(gate,/GetTokenInformation\(handle, 30,/);
+ assert.match(gate,/INTERNET_CLIENT/);
+ assert.match(gate,/INTERNET_CLIENT_SERVER/);
+ assert.match(gate,/PRIVATE_NETWORK_CLIENT_SERVER/);
+ assert.match(gate,/EqualSid\(sid, expected\.0\.as_ptr\(\)\.cast\(\)\)/);
+ assert.match(gate,/reject_network_capability_bits\(network_bits\)/);
+ assert.match(gate,/primary_token_has_network_capability/);
+ assert.match(gate,/primary_token_capability_query_failed/);
+ assert.doesNotMatch(gate,/std::env::var|GetEnvironmentVariable|IsProcessInJob/);
+});
