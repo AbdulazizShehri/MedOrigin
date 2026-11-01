@@ -97,8 +97,11 @@ try {
   const ports = [port4,port6];
   const expectedTcp4Nonce=randomBytes(16).toString('hex');
   const expectedTcp6Nonce=randomBytes(16).toString('hex');
-  requireGate(expectedTcp4Nonce!==expectedTcp6Nonce,'duplicate TCP proof challenges');
-  const control = spawnSync(probe,[...ports,'control',expectedTcp4Nonce,expectedTcp6Nonce],
+  const expectedUdp4Nonce=randomBytes(16).toString('hex');
+  const expectedUdp6Nonce=randomBytes(16).toString('hex');
+  requireGate(new Set([expectedTcp4Nonce,expectedTcp6Nonce,expectedUdp4Nonce,expectedUdp6Nonce]).size===4,
+    'duplicate TCP/UDP proof challenges');
+  const control = spawnSync(probe,[...ports,'control',expectedTcp4Nonce,expectedTcp6Nonce,expectedUdp4Nonce,expectedUdp6Nonce],
     {encoding:'utf8',timeout:12000});
   await new Promise(done=>setTimeout(done,200));
   requireGate(udp4Receipts === 1 && udp6Receipts === 1,
@@ -107,7 +110,7 @@ try {
     control,udp4Receipts,udp6Receipts,tcp4Accepts,tcp6Accepts,
     tcp4Peers,tcp6Peers,
     expectedTcp4Port:Number(port4),expectedTcp6Port:Number(port6),
-    expectedTcp4Nonce,expectedTcp6Nonce,udp4Packets,udp6Packets
+    expectedTcp4Nonce,expectedTcp6Nonce,expectedUdp4Nonce,expectedUdp6Nonce,udp4Packets,udp6Packets
   });
   requireGate(probeDigest()===pinnedDigest,
     'native probe bytes changed between control and containment');

@@ -18,7 +18,7 @@ const peer=(family,nonce)=>({
  localPort:family==='4'?43001:43002,proof:tcpProof(family,nonce)
 });
 const udp=(family)=>({
- payload:Buffer.from('synthetic-mxc-udp-probe'),address:family==='IPv4'?'127.0.0.1':'::1',
+ payload:Buffer.concat([Buffer.from('mxcudp:'),Buffer.from((family==='IPv4'?'c':'d').repeat(32),'hex')]),address:family==='IPv4'?'127.0.0.1':'::1',
  family,size:23,port:45000
 });
 const good=()=>({
@@ -29,6 +29,7 @@ const good=()=>({
  tcp4Peers:[peer('4',nonce4)],tcp6Peers:[peer('6',nonce6)],
  expectedTcp4Port:43001,expectedTcp6Port:43002,
  expectedTcp4Nonce:nonce4,expectedTcp6Nonce:nonce6,
+ expectedUdp4Nonce:'c'.repeat(32),expectedUdp6Nonce:'d'.repeat(32),
  udp4Receipts:1,udp6Receipts:1,udp4Packets:[udp('IPv4')],udp6Packets:[udp('IPv6')]
 });
 const reject=r=>assert.throws(()=>assessNativePositiveControl(r),/D1_MXC_PROTOCOL_NO_GO/);
