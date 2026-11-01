@@ -23,4 +23,10 @@ Assert-Denied { Assert-MxcD1ObservedEndpoints -Tcp @((Tcp 'Established' '0.0.0.0
 Assert-Denied { Assert-MxcD1ObservedEndpoints -Tcp @((Tcp 'Established' '')) -Udp @() -Phase 'blank' } 'unknown TCP remote'
 Assert-Denied { Assert-MxcD1ObservedEndpoints -Tcp @() -Udp @([pscustomobject]@{LocalAddress='0.0.0.0';OwningProcess=42}) -Phase 'udp' } 'bound UDP'
 Assert-Denied { Assert-MxcD1ObservedEndpoints -Tcp @($null) -Udp @() -Phase 'null' } 'null TCP record'
+Assert-Denied { Assert-MxcD1ObservedEndpoints -Tcp @() -Udp @($null) -Phase 'nulludp' } 'null UDP record'
+$uia=Get-Content -LiteralPath (Join-Path $PSScriptRoot 'windows-mxc-d1-real-uia-qualification.ps1') -Raw
+if($uia -notmatch [regex]::Escape(". (Join-Path `$PSScriptRoot 'windows-mxc-d1-network-endpoint-guard.ps1')")) { throw 'MXC D1 live UIA observer does not dot-source guard' }
+if($uia -notmatch [regex]::Escape("Assert-MxcD1ObservedEndpoints -Tcp `$tcp -Udp `$udp -Phase 'initial'")) { throw 'Initial snapshot is not guarded' }
+if($uia -notmatch [regex]::Escape("Assert-MxcD1ObservedEndpoints -Tcp `$tcpNow -Udp `$udpNow -Phase ('sample-'+`$sample)")) { throw 'Windowed snapshot is not guarded' }
+Write-Output 'PASS source integration both initial and 12 sampling windows'
 Write-Output 'MXC_D1_ENDPOINT_NEGATIVE_SOURCE_TESTS_PASS_NO_PACKET_PROOF'
