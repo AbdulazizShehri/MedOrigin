@@ -51,10 +51,10 @@ def _make_pair(folder: Path, creator: int, timestamp: int, altered: bool = False
     (folder / "medscale-0.3.0.tar.gz").write_bytes(gzip.compress(tar.getvalue(), mtime=0))
 
 
-
 def _fake_verified(_repo: Path, dist: Path) -> dict[str, object]:
     # Synthetic fixture only: real verifier compares all source bytes to Git.
     import hashlib
+
     return {
         "status": "BASE_ONLY_PROPOSAL_SOURCE_BOUND_VERIFIED",
         "source_git_commit": "test-source",
@@ -289,9 +289,12 @@ def test_comparator_does_not_reopen_originals_after_verification(
     _make_pair(left, 3, 0)
     _make_pair(right, 3, 0)
     original_paths = {
-        left / audit.WHEEL, left / audit.SDIST,
-        right / audit.WHEEL, right / audit.SDIST,
+        left / audit.WHEEL,
+        left / audit.SDIST,
+        right / audit.WHEEL,
+        right / audit.SDIST,
     }
+
     def fake_verify(_repo: Path, dist: Path) -> dict[str, object]:
         return {
             "source_git_commit": "test-source",
@@ -302,13 +305,22 @@ def test_comparator_does_not_reopen_originals_after_verification(
             "adr_0045_accepted": False,
             "independent_review_complete": False,
         }
+
     monkeypatch.setattr(audit, "verify", fake_verify)
-    for func in ("_zip_headers", "_tar_headers", "_zip_compressed_fingerprint",
-                 "_tar_payload_hash", "load_wheel", "load_sdist"):
+    for func in (
+        "_zip_headers",
+        "_tar_headers",
+        "_zip_compressed_fingerprint",
+        "_tar_payload_hash",
+        "load_wheel",
+        "load_sdist",
+    ):
         original = getattr(audit, func)
+
         def spy(path: Path, *, _original: Any = original) -> Any:
             assert path not in original_paths, "diagnostics reopened untrusted original archive"
             return _original(path)
+
         monkeypatch.setattr(audit, func, spy)
     assert audit.compare(ROOT, left, right)["status"] == "SOURCE_BOUND_ARCHIVES_BYTE_IDENTICAL"
 
@@ -320,6 +332,7 @@ def test_comparator_snapshot_resists_original_mutation_after_verifier(
     _make_pair(left, 3, 0)
     _make_pair(right, 3, 0)
     calls = 0
+
     def fake_verify(_repo: Path, dist: Path) -> dict[str, object]:
         nonlocal calls
         calls += 1
@@ -335,5 +348,6 @@ def test_comparator_snapshot_resists_original_mutation_after_verifier(
         if calls == 1:
             (left / audit.WHEEL).write_bytes(b"CHANGED_EXTERNAL_AFTER_SNAPSHOT")
         return record
+
     monkeypatch.setattr(audit, "verify", fake_verify)
     assert audit.compare(ROOT, left, right)["status"] == "SOURCE_BOUND_ARCHIVES_BYTE_IDENTICAL"
