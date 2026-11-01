@@ -140,14 +140,11 @@ def _verified_copy(
     return evidence
 
 
-def _require_private_copies_unchanged(
-    private: Path, wheel_raw: bytes, sdist_raw: bytes
-) -> None:
+def _require_private_copies_unchanged(private: Path, wheel_raw: bytes, sdist_raw: bytes) -> None:
     """Reject modifications to the task-owned temporary artifacts during diagnostics."""
-    if (
-        digest((private / WHEEL).read_bytes()) != digest(wheel_raw)
-        or digest((private / SDIST).read_bytes()) != digest(sdist_raw)
-    ):
+    if digest((private / WHEEL).read_bytes()) != digest(wheel_raw) or digest(
+        (private / SDIST).read_bytes()
+    ) != digest(sdist_raw):
         raise ProposalVerificationError("private archive snapshot changed during diagnostics")
 
 
