@@ -1,0 +1,32 @@
+# Design-document contracts only. This CI is NOT a Goldfish review,
+# native Windows run, OS packet/ETW/WFP isolation proof, or release approval.
+name: MedOrigin D1 EGM design-only contracts
+on:
+  push:
+    branches:
+      - docs/medorigin-d1-egm-isolation-design-20261101
+  pull_request:
+    branches:
+      - test/medorigin-d1-mxc-endpoint-negative-20261101
+    paths:
+      - 'docs/designs/**'
+      - '.agents/skills/medorigin-elephant/**'
+      - 'experiments/desktop-d1-tauri/tests/windows-d1-egm-design-contract.test.mjs'
+      - '.github/workflows/medorigin-d1-egm-design-contract.yml'
+permissions:
+  contents: read
+jobs:
+  design-only:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+      - name: Validate bounded EGM design docs and fail-closed review-status contract
+        shell: bash
+        run: |
+          node --check experiments/desktop-d1-tauri/tests/windows-d1-egm-design-contract.test.mjs
+          node --test experiments/desktop-d1-tauri/tests/windows-d1-egm-design-contract.test.mjs
+          echo 'D1_EGM_DESIGN_SOURCE_ONLY_GOLDFISH_NOT_RUN_NO_WFP_NO_RELEASE'
