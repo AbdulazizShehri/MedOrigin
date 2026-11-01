@@ -92,9 +92,54 @@ architecture approval has been granted by this reviewer.
 **Disposition:** findings are OPEN pending a revision; no review
 PASS, packet confinement or security approval follows.
 
+## Stage 7 — Design Critic — ONE persona COMPLETE, others pending
+
+- Parent: `ses_e67fcf85fffeYiIiNf1mYvt1Ma`.
+- Genuine child: `ses_e67fcbed2ffeloq9hYMXSmoS3K`.
+- Verified exported `subagent` tool metadata: `status=completed`,
+  `truncated=false`, child finished successfully, **28 real read calls**,
+  including `EGM/agents/design_critic.md`, EGM feature-spec standard,
+  original target v2 plan, Rust token guard, Tauri app config,
+  archived native #807 and MXC capture/UDP negative evidence.
+- **Blocker:** current process token admission check cannot attest
+  application-wide WFP, broker, DNS, UDP or packet containment.
+- **Blocker:** native `captureDenials E_NOTIMPL` and `UDP SENT23`
+  retain separate unsupported evidence boundaries; no G3–G5 PASS.
+- **Major:** verify the `networkLoopback` SID derivation across
+  supported Windows builds before treating the hardcoded capability SID
+  check as a universal defense. This is a **reviewer-raised hypothesis**,
+  not a reproduced fail-open security finding.
+- **Major:** source digest checks do not yet provide a signed mandatory
+  startup/immutable-handle proof; source-to-executable TOCTOU and launcher
+  governance remain T5 HOLD.
+- **Major:** no independent Windows broker/DNS ownership attribution
+  or short-lived child packet observation. Existing PowerShell socket
+  snapshots cannot prove the missing events.
+- **Major:** no actual observer-specific T2 schema enforcement, tamper
+  chain, independently witnessed positive/negative packet controls or
+  OS packet claim. Need bounded source-only negative validator and T3
+  architecture decision before such a claim.
+- **Major:** WebView2 background TCP evidence remains issue #662 OPEN.
+- **Correction of reviewer overreach, checked against actual GitHub
+  source:** Reviewer F9 claimed no `src-tauri/capabilities/` folder.
+  **False**: `src-tauri/capabilities/default.json` exists, limits
+  capability to `main` with `core:default` and no network plugin.
+  The remaining question is whether that *actual* grant suffices for
+  `preview_status`/`hash_fixture` and content isolation, not an
+  absent capability directory. Do not carry forward that false claim.
+- **Correction of stale reviewer wording:** The old target draft said
+  no real fresh review had happened; that was true when authored,
+  but stages 5 and 6 actually ran in OpenCode and this stage-7 critic
+  also ran. Full five-stage sign-off is still **INCOMPLETE**.
+
+This is only the **design_critic** member of stage 7; structural and
+style subagents must be independently verified, and stages 8 and 9
+are not satisfied by it. Child findings are adversarial hypotheses
+requiring triage and source confirmation, not security proof.
+
 ## Incomplete stages and evidence boundaries
 
-- **Stage 7 Design critique: NOT YET COMPLETE** (no result admitted here).
+- **Stage 7 Design critique: PARTIAL** (design_critic verified; structural and style pending).
 - **Stage 8 Second zoom-out: NOT RUN.**
 - **Stage 9 Implementation readiness: NOT RUN.**
 - Independent human security review, owner choice A/B, packet/WFP/DNS/
