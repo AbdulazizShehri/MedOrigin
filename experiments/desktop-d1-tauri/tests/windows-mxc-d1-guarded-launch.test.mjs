@@ -68,3 +68,10 @@ test('negative executable admission rejects before optional native SDK can evalu
   assert.doesNotMatch(result.stdout,/D1_GUARDED_UNPUBLISHED_MXC_TIMEOUT_OBSERVED/);
  } finally {rmSync(f.dir,{force:true,recursive:true})}
 });
+
+test('guarded launcher must require real four-fixture UIA and socket evidence, not just timeout',()=>{
+ assert.match(launcher,/assertGuardedUiaEvidence\(uiaStatus,uiaOutput,admitted\.sha256\)/);
+ assert.match(launcher,/Promise\.all\(\[run\(request\),observeGuardedUia/);
+ assert.match(launcher,/timeoutMs:90000/);
+ assert.doesNotMatch(launcher,/D1_GUARDED_UNPUBLISHED_MXC_TIMEOUT_OBSERVED_RELEASE_STILL_NO_GO/);
+});
