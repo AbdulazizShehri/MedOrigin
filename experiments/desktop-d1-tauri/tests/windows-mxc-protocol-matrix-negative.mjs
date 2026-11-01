@@ -32,7 +32,8 @@ mkdirSync(output);
 let tcp4Accepts=0;
 let tcp6Accepts=0;
 // This captures where the actual host listener accepted each connection.
-// It is NOT a challenge/response binding to the child probe executable.
+// Challenge bytes correlate this local receipt to the invoked control,
+// but do NOT authenticate a process identity, signed binary or OS egress.
 const tcp4Peers=[];
 const tcp6Peers=[];
 const peerOf=s=>({
