@@ -29,20 +29,29 @@ export function assessNativeProtocolMatrix({result,delivered4,delivered6}) {
  const stdout=result.stdout;
  requireCondition(typeof stdout==='string'&&stdout.length>0&&stdout.length<=32768,
   'contained socket evidence missing or unbounded');
- const values=new Map();
- for(const line of stdout.split(/\r?\n/)){
-  if(!line.startsWith('D1_MXC_'))continue;
-  const m=/^D1_MXC_([A-Z0-9_]+)=(WSA\d+|SENT\d+|CONNECTED)$/.exec(line);
-  if(!m){
-   if(line==='D1_MXC_ALL_8_NATIVE_SOCKETS_WSA10013_PASS')continue;
-   failure('malformed synthetic socket marker');
+ // The Rust probe emits exactly eight socket rows and one final sentinel.
+ // Ignore neither unrelated child diagnostics nor duplicate/early sentinels.
+ const lines=stdout.split(/\r?\n/);
+ if(lines.at(-1)==='')lines.pop(); // tolerate one terminal newline only
+ const values=new Map(),sentinelPositions=[];
+ for(const [index,line] of lines.entries()){
+  if(line==='D1_MXC_ALL_8_NATIVE_SOCKETS_WSA10013_PASS'){
+   sentinelPositions.push(index);
+   continue;
   }
+  if(line==='')failure('empty native stdout line');
+  if(!line.startsWith('D1_MXC_'))failure('unexpected native stdout diagnostic');
+  const m=/^D1_MXC_([A-Z0-9_]+)=(WSA\d+|SENT\d+|CONNECTED)$/.exec(line);
+  if(!m)failure('malformed synthetic socket marker');
   requireCondition(keys.includes(m[1]),'unknown synthetic socket marker');
   requireCondition(!values.has(m[1]),'duplicate synthetic socket marker');
   values.set(m[1],m[2]);
  }
  requireCondition(values.size===keys.length &&
   keys.every(key=>values.has(key)),'incomplete eight-protocol socket matrix');
+ requireCondition(sentinelPositions.length===1 &&
+  sentinelPositions[0]===lines.length-1,
+  'native Rust eight-socket success sentinel missing, duplicated or out of order');
  for(const key of tcpKeys){
   requireCondition(values.get(key)==='WSA10013',
    key+' lacks explicit TCP WSAEACCES refusal');
