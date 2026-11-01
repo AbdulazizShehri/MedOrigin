@@ -290,14 +290,23 @@ def qualified_dist_paths(dist: Path) -> tuple[Path, Path]:
     return wheel, sdist
 
 
-def _stat_identity(info: os.stat_result) -> tuple[int, int, int, int, int]:
-    """Bind one concrete file identity and data-stability snapshot."""
+def _stat_identity(info: os.stat_result) -> tuple[int, int, int, int, int, int, int]:
+    """Bind file identity, content stability, mode and hardlink count."""
     # Windows Python 3.14 reports different st_ctime_ns for an open fd
     # versus the same path (fd reflects file modified time). Do not compare
-    # that platform-dependent field. Match file-id, device, length and mtime;
-    # retain ctime as an extra concurrent-mutation guard on POSIX.
+    # that platform-dependent field. Retain ctime as an extra POSIX guard.
+    # Crucially, st_nlink and st_mode MUST be stable: a new hardlink alias
+    # or permission change between reads invalidates the ordinary-file gate.
     ctime = 0 if os.name == "nt" else info.st_ctime_ns
-    return (info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns, ctime)
+    return (
+        info.st_dev,
+        info.st_ino,
+        info.st_size,
+        info.st_mtime_ns,
+        ctime,
+        info.st_mode,
+        info.st_nlink,
+    )
 
 
 def _read_pinned_regular_bytes(path: Path, directory_identity: tuple[int, int]) -> bytes:
@@ -353,7 +362,7 @@ def read_stable_dist_bytes(dist: Path) -> tuple[bytes, bytes]:
             raise ProposalVerificationError("artifact directory changed during inspection")
         directory_identity = (info.st_dev, info.st_ino)
 
-        def file_identity(path: Path) -> tuple[int, int, int, int, int]:
+        def file_identity(path: Path) -> tuple[int, int, int, int, int, int, int]:
             return _stat_identity(path.stat(follow_symlinks=False))
 
         before = (file_identity(wheel), file_identity(sdist))
