@@ -1,0 +1,37 @@
+# Source-only cold restart and lifecycle receipt checks; hosted runners
+# DO NOT run the native Tauri/WebView2 GUI, MXC SDK, packet/WFP or DNS proof.
+name: D1 guarded MXC cold-restart source contracts
+on:
+  push:
+    branches:
+      - test/medorigin-d1-guarded-cold-restart-20261101
+  pull_request:
+    branches:
+      - test/medorigin-d1-guarded-uia-transcript-integrity-20261101
+    paths:
+      - 'experiments/desktop-d1-tauri/tests/windows-mxc-d1-guarded-*'
+      - 'experiments/desktop-d1-tauri/tests/windows-mxc-d1-cold-restart-*'
+      - 'experiments/desktop-d1-tauri/tests/windows-mxc-d1-lifecycle-proof*'
+      - '.github/workflows/medorigin-d1-guarded-cold-restart.yml'
+permissions:
+  contents: read
+jobs:
+  guarded-cold-restart-source:
+    runs-on: windows-2025
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+      - name: Verify launcher, cold-restart receipt, UIA and lifecycle source contracts
+        shell: pwsh
+        run: |
+          $t='experiments/desktop-d1-tauri/tests'
+          node --check "$t/windows-mxc-d1-cold-restart-qualification.mjs"
+          if($LASTEXITCODE -ne 0){throw 'Cold restart JS syntax NO-GO'}
+          node --check "$t/windows-mxc-d1-guarded-preview-launch.mjs"
+          if($LASTEXITCODE -ne 0){throw 'Guarded launcher JS syntax NO-GO'}
+          node --test "$t/windows-mxc-d1-guarded-cold-restart.test.mjs" "$t/windows-mxc-d1-lifecycle-proof.test.mjs" "$t/windows-mxc-d1-guarded-launch.test.mjs" "$t/windows-mxc-d1-guarded-uia-observer.test.mjs"
+          if($LASTEXITCODE -ne 0){throw 'D1 source receipt/lifecycle integrity NO-GO'}
+          Write-Output 'D1_GUARDED_COLD_RESTART_SOURCE_ONLY_NO_MXC_WFP_PACKET_RELEASE_ATTESTATION'
