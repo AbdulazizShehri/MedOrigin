@@ -12,8 +12,12 @@ function Read-WfpAuditVisibility([string]$subcategory) {
     # ERROR_PRIVILEGE_NOT_HELD (1314) is expected; treat it as NOT READABLE.
     # Discard command text: it may contain host/localized identifying data.
     try {
+        # Under PowerShell 5.1 a failed native executable can throw on
+        # all-stream redirection when ErrorActionPreference is Stop. Keep
+        # native exit codes (1314 / 5) intact while suppressing all text.
+        $ErrorActionPreference='Continue'
         $global:LASTEXITCODE=0
-        & auditpol.exe /get /subcategory:$subcategory /r *> $null
+        & auditpol.exe /get /subcategory:$subcategory /r 2>$null | Out-Null
         $code=$LASTEXITCODE
         if ($code -eq 0) { return 'READABLE_UNVERIFIED' }
         if ($code -eq 1314 -or $code -eq 5) { return 'PRIVILEGE_DENIED' }
