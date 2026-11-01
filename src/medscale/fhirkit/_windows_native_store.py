@@ -290,7 +290,18 @@ def store(
         try:
             descriptor = msvcrt.open_osfhandle(temp_handle, os.O_WRONLY | os.O_BINARY)
             transferred = True
-            with os.fdopen(descriptor, "w", encoding="utf-8", newline="\n") as output:
+            try:
+                output_stream = os.fdopen(descriptor, "w", encoding="utf-8", newline="\n")
+            except BaseException:
+                # The CRT now owns the native HANDLE, but fdopen may fail
+                # before a Python file object can take responsibility for it.
+                # Dispose via the adopted descriptor, never by pathname.
+                try:
+                    native.dispose_temp(msvcrt.get_osfhandle(descriptor))
+                finally:
+                    os.close(descriptor)
+                raise
+            with output_stream as output:
                 try:
                     output.write(report_json)
                     output.flush()
