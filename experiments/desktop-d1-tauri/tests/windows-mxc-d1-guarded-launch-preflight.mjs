@@ -28,7 +28,11 @@ export function requirePinnedD1Executable(rawPath,rawSha) {
      if(lstatSync(component).isSymbolicLink())fail('reparse or symlink path component');
    }
    const canonical=realpathSync.native(rawPath);
-   if(canonical.toLowerCase()!==rawPath.toLowerCase())fail('resolved path changed');
+   // Windows may canonicalize temp/volume aliases without a link in the path.
+   // Reject explicit symlinks and junctions component-by-component above;
+   // require that the resolved target is still the named D1 preview binary.
+   if(!isAbsolute(canonical)||basename(canonical).toLowerCase()!=='medorigin-desktop-d1-preview.exe')
+     fail('resolved executable target name changed');
    const st=lstatSync(rawPath);
    if(!st.isFile()||st.size===0)fail('not a regular nonempty executable');
    const actual=createHash('sha256').update(readFileSync(rawPath)).digest('hex');
