@@ -10,13 +10,18 @@ function Assert-Denied([scriptblock]$Block,[string]$Case) {
   if(-not $denied) { throw ('D1 endpoint guard erroneously accepted '+$Case) }
   Write-Output ('PASS deny '+$Case)
 }
-function Tcp([string]$State,[string]$Remote) {
-  [pscustomobject]@{State=$State;RemoteAddress=$Remote;OwningProcess=42}
+function Tcp([string]$State,[string]$Remote,[string]$Local='127.0.0.1') {
+  [pscustomobject]@{State=$State;RemoteAddress=$Remote;LocalAddress=$Local;OwningProcess=42}
 }
 Assert-MxcD1ObservedEndpoints -Tcp @() -Udp @() -Phase 'empty'
 Assert-MxcD1ObservedEndpoints -Tcp @((Tcp 'Established' '127.0.0.1'),(Tcp 'Established' '::1')) -Udp @() -Phase 'loopback'
-Assert-MxcD1ObservedEndpoints -Tcp @((Tcp 'Listen' '0.0.0.0'),(Tcp 'Bound' '::')) -Udp @() -Phase 'listeners'
-Write-Output 'PASS allow empty, loopback and passive TCP'
+Assert-MxcD1ObservedEndpoints -Tcp @((Tcp 'Listen' '0.0.0.0' '127.0.0.1'),(Tcp 'Bound' '::' '::1')) -Udp @() -Phase 'listeners'
+Write-Output 'PASS allow empty, loopback and explicitly local passive TCP'
+Assert-Denied { Assert-MxcD1ObservedEndpoints -Tcp @((Tcp 'Listen' '0.0.0.0' '0.0.0.0')) -Udp @() -Phase 'wildcard-listener' } 'IPv4 wildcard listener'
+Assert-Denied { Assert-MxcD1ObservedEndpoints -Tcp @((Tcp 'Bound' '::' '::')) -Udp @() -Phase 'wildcard-bound' } 'IPv6 wildcard bound'
+Assert-Denied { Assert-MxcD1ObservedEndpoints -Tcp @((Tcp 'Listen' '0.0.0.0' '192.0.2.15')) -Udp @() -Phase 'external-listener' } 'external IPv4 listener'
+Assert-Denied { Assert-MxcD1ObservedEndpoints -Tcp @((Tcp 'Listen' '0.0.0.0' '')) -Udp @() -Phase 'missing-local' } 'missing local listener address'
+Assert-Denied { Assert-MxcD1ObservedEndpoints -Tcp @((Tcp 'MysteryState' '127.0.0.1')) -Udp @() -Phase 'unknown-state' } 'unclassified TCP state'
 Assert-Denied { Assert-MxcD1ObservedEndpoints -Tcp @((Tcp 'Established' '203.0.113.5')) -Udp @() -Phase 'ipv4' } 'external IPv4'
 Assert-Denied { Assert-MxcD1ObservedEndpoints -Tcp @((Tcp 'SynSent' '2001:db8::1')) -Udp @() -Phase 'ipv6' } 'external IPv6'
 Assert-Denied { Assert-MxcD1ObservedEndpoints -Tcp @((Tcp 'Established' '0.0.0.0')) -Udp @() -Phase 'wildcard' } 'wildcard active TCP'
