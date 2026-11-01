@@ -45,3 +45,13 @@ test('primary-token admission also checks absence of three well-known network ca
  assert.match(gate,/primary_token_capability_query_failed/);
  assert.doesNotMatch(gate,/std::env::var|GetEnvironmentVariable|IsProcessInJob/);
 });
+
+test('reject separately granted networkLoopback hashed capability SID',()=>{
+ assert.match(gate,/HOST_LOOPBACK/);
+ assert.match(gate,/820624432/);
+ assert.match(gate,/2503302554/);
+ assert.match(gate,/4267032225/);
+ assert.match(gate,/EqualSid\(sid, \(&HOST_LOOPBACK as \*const SidWithTenSubAuthorities\)\.cast\(\)\)/);
+ assert.match(gate,/network_bits \|= 1u8 << 3/);
+ assert.match(gate,/primary_token_has_network_capability/);
+});
