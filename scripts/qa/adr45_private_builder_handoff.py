@@ -7,6 +7,7 @@ uv's builder-only .gitignore is inspected but is NEVER copied to dist.
 from __future__ import annotations
 
 import argparse
+import ctypes
 import hashlib
 import itertools
 import json
@@ -14,6 +15,7 @@ import os
 import shutil
 import stat
 import sys
+import tempfile
 from pathlib import Path
 
 WHEEL = "medscale-0.3.0-py3-none-any.whl"
@@ -67,6 +69,53 @@ def _pinned_bytes(path: Path, *, limit: int, parent_id: tuple[int, int]) -> byte
         raise HandoffError("builder file cannot be read safely") from exc
 
 
+def _commit_private_staging(staging: Path, destination: Path) -> None:
+    """Atomically publish one private staging directory, NEVER overwrite.
+
+    Windows os.rename refuses existing destinations. On Linux use renameat2
+    RENAME_NOREPLACE; unsupported OS/filesystems fail closed. This helper
+    is a local evidence handoff, not a general package publisher.
+    """
+    if destination.exists() or destination.is_symlink():
+        raise HandoffError("destination exists; refusing replacement")
+    try:
+        if os.name == "nt":
+            staging.rename(destination)
+        elif sys.platform.startswith("linux"):
+            libc = ctypes.CDLL(None, use_errno=True)
+            rename_noreplace = getattr(libc, "renameat2", None)
+            if rename_noreplace is None:
+                raise HandoffError("atomic destination no-replace unavailable")
+            rename_noreplace.argtypes = (
+                ctypes.c_int,
+                ctypes.c_char_p,
+                ctypes.c_int,
+                ctypes.c_char_p,
+                ctypes.c_uint,
+            )
+            rename_noreplace.restype = ctypes.c_int
+            # AT_FDCWD=-100, RENAME_NOREPLACE=1; no Linux rename fallback.
+            result = rename_noreplace(-100, os.fsencode(staging), -100, os.fsencode(destination), 1)
+            if result != 0:
+                raise OSError(ctypes.get_errno(), "destination no-replace failed")
+        else:
+            raise HandoffError("atomic destination no-replace unsupported on this OS")
+    except OSError as exc:
+        raise HandoffError("destination exists or cannot be atomically committed") from exc
+
+
+def _cleanup_owned_stage(staging: Path, identity: tuple[int, int]) -> None:
+    """Delete only the random staging tree if it still has OUR inode identity."""
+    try:
+        current = staging.lstat()
+    except FileNotFoundError:
+        return
+    if not stat.S_ISDIR(current.st_mode) or (current.st_dev, current.st_ino) != identity:
+        # Never follow an unexpected substitution or remove others' files.
+        return
+    shutil.rmtree(staging)
+
+
 def handoff(builder: Path, destination: Path) -> dict[str, object]:
     """Read exact ordinary builder outputs once; create two-file private dist.
 
@@ -103,26 +152,39 @@ def handoff(builder: Path, destination: Path) -> dict[str, object]:
             _identity((builder / name).lstat()) != initial_files[name] for name in BUILDER_NAMES
         ):
             raise HandoffError("builder source file identity changed after snapshot")
-        # Do not make a destination directory until source inputs pass
-        # all metadata, byte, and directory checks above.
-        destination.mkdir()
+        # Do not write any payload into the caller-visible destination.
+        # The only names opened below belong to our unpredictable private
+        # sibling directory; one atomic no-replace rename commits them.
+        staging = Path(tempfile.mkdtemp(prefix="medorigin-adr45-owned-", dir=destination.parent))
+        st = staging.lstat()
+        stage_identity = (st.st_dev, st.st_ino)
         try:
             for name, raw in ((WHEEL, wheel), (SDIST, sdist)):
-                flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_BINARY", 0)
-                fd = os.open(destination / name, flags, 0o600)
+                flags = (
+                    os.O_WRONLY
+                    | os.O_CREAT
+                    | os.O_EXCL
+                    | getattr(os, "O_BINARY", 0)
+                    | getattr(os, "O_NOFOLLOW", 0)
+                )
+                fd = os.open(staging / name, flags, 0o600)
                 with os.fdopen(fd, "wb") as stream:
                     stream.write(raw)
-                if (destination / name).read_bytes() != raw:
+                if (staging / name).read_bytes() != raw:
                     raise HandoffError("private dist byte snapshot changed")
-            with os.scandir(destination) as scan:
+            with os.scandir(staging) as scan:
                 out = list(itertools.islice(scan, 3))
             if len(out) != 2 or {item.name for item in out} != {WHEEL, SDIST}:
                 raise HandoffError("private dist has unexpected entries")
-        except BaseException:
-            # Only our newly created exclusive private destination may be
-            # removed; no original builder file or caller-existing path.
-            shutil.rmtree(destination)
-            raise
+            current = staging.lstat()
+            if (
+                not stat.S_ISDIR(current.st_mode)
+                or (current.st_dev, current.st_ino) != stage_identity
+            ):
+                raise HandoffError("private staging directory identity changed")
+            _commit_private_staging(staging, destination)
+        finally:
+            _cleanup_owned_stage(staging, stage_identity)
         return {
             "status": "ADR45_PRIVATE_TWO_ARCHIVES_STAGED",
             "publication_authorized": False,

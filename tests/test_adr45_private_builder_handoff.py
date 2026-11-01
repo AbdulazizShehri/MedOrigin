@@ -191,3 +191,88 @@ def test_handoff_detects_hardlink_alias_created_after_wheel_snapshot(
     assert not (tmp_path / "dist").exists()
     if outside.exists():
         outside.unlink()
+
+
+def test_handoff_never_writes_to_untrusted_destination_path_before_publish(
+    gate: Any, monkeypatch: Any, tmp_path: Path
+) -> None:
+    """The caller-visible destination must never receive in-progress bytes."""
+    source = make_builder(tmp_path / "builder")
+    destination = tmp_path / "dist"
+    original_open = os.open
+    opened: list[Path] = []
+
+    def monitor_open(path: str | os.PathLike[str], flags: int, *args: Any, **kwargs: Any) -> int:
+        entry = Path(path)
+        opened.append(entry)
+        if entry.parent == destination:
+            raise AssertionError("early write into caller destination")
+        return original_open(path, flags, *args, **kwargs)
+
+    monkeypatch.setattr(gate.os, "open", monitor_open)
+    receipt = gate.handoff(source, destination)
+    assert receipt["status"] == "ADR45_PRIVATE_TWO_ARCHIVES_STAGED"
+    assert destination.is_dir()
+    assert (destination / WHEEL).read_bytes() == b"SYNTHETIC_WHEEL"
+    assert (destination / SDIST).read_bytes() == b"SYNTHETIC_SDIST"
+    assert all(p.parent != destination for p in opened)
+
+
+def test_concurrent_destination_injected_at_commit_is_never_replaced(
+    gate: Any, monkeypatch: Any, tmp_path: Path
+) -> None:
+    """Atomic no-replace finalization preserves a racing caller-owned dir."""
+    source = make_builder(tmp_path / "builder")
+    dest = tmp_path / "dist"
+    original_commit = gate._commit_private_staging
+
+    def inject_caller_dir(staging: Path, intended: Path) -> None:
+        assert intended == dest
+        dest.mkdir()
+        (dest / "foreign").write_bytes(b"DO_NOT_DELETE")
+        original_commit(staging, intended)
+
+    monkeypatch.setattr(gate, "_commit_private_staging", inject_caller_dir)
+    with pytest.raises(gate.HandoffError, match=r"destination|exists|replace"):
+        gate.handoff(source, dest)
+    assert (dest / "foreign").read_bytes() == b"DO_NOT_DELETE"
+    assert list(dest.iterdir()) == [dest / "foreign"]
+
+
+def test_error_after_concurrent_target_creation_never_deletes_foreign_directory(
+    gate: Any, monkeypatch: Any, tmp_path: Path
+) -> None:
+    """A failed temporary write may clean only its own staged directory."""
+    source = make_builder(tmp_path / "builder")
+    dest = tmp_path / "dist"
+    original_open = os.open
+    injected = False
+
+    def fail_first_wheel(
+        path: str | os.PathLike[str], flags: int, *args: Any, **kwargs: Any
+    ) -> int:
+        nonlocal injected
+        if Path(path).name == WHEEL and Path(path).parent != source and not injected:
+            injected = True
+            dest.mkdir()
+            (dest / "foreign").write_bytes(b"STILL_HERE")
+            raise OSError("synthetic private copy failure")
+        return original_open(path, flags, *args, **kwargs)
+
+    monkeypatch.setattr(gate.os, "open", fail_first_wheel)
+    with pytest.raises(gate.HandoffError, match=r"changed|unreadable|copy|destination"):
+        gate.handoff(source, dest)
+    assert injected
+    assert (dest / "foreign").read_bytes() == b"STILL_HERE"
+    assert list(dest.iterdir()) == [dest / "foreign"]
+
+
+def test_no_stray_private_directory_after_success_or_failure(
+    gate: Any, monkeypatch: Any, tmp_path: Path
+) -> None:
+    """Temporary stage names may not be orphaned inside the parent."""
+    source = make_builder(tmp_path / "builder")
+    destination = tmp_path / "dist"
+    gate.handoff(source, destination)
+    assert {p.name for p in tmp_path.iterdir()} == {"builder", "dist"}
+    assert not any("adr45" in p.name and p.name != "dist" for p in tmp_path.iterdir())
