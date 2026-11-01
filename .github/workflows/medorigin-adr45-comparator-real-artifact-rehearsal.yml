@@ -37,10 +37,16 @@ jobs:
         run: |
           set -euo pipefail
           uv python install 3.11
+          # The frozen project allows any hatchling version, but the
+          # exact-Git verifier attests generator hatchling 1.32.4.
+          # Pin ONLY this private test-build environment, not research root.
+          uv venv --python 3.11 "$RUNNER_TEMP/adr45-private-build-venv"
+          uv pip install --python "$RUNNER_TEMP/adr45-private-build-venv/bin/python" 'hatchling==1.32.4'
+          "$RUNNER_TEMP/adr45-private-build-venv/bin/python" -c 'import hatchling;print("ADR45_PINNED_HATCHLING_IMPORT_PASS")'
           first="$RUNNER_TEMP/medorigin-adr45-private-first"
           second="$RUNNER_TEMP/medorigin-adr45-private-second"
           python3 scripts/stage_medorigin_base_only_proposal.py --out "$first/source"
-          uv build --wheel --sdist "$first/source" --out-dir "$first/builder"
+          uv build --python "$RUNNER_TEMP/adr45-private-build-venv/bin/python" --no-build-isolation --wheel --sdist "$first/source" --out-dir "$first/builder"
           echo "ADR45_UV_BUILDER_INVENTORY"; find "$first/builder" -maxdepth 1 -printf "%f %y\n" | sort
           # Stage first build into strict two-file verifier envelope.
           # The second build follows below, then uses the same exact gate.
@@ -62,7 +68,7 @@ jobs:
           PY
           python3 scripts/verify_medorigin_base_only_proposal.py --repo . --dist "$first/dist"
           python3 scripts/stage_medorigin_base_only_proposal.py --out "$second/source"
-          uv build --offline --wheel --sdist "$second/source" --out-dir "$second/builder"
+          uv build --offline --python "$RUNNER_TEMP/adr45-private-build-venv/bin/python" --no-build-isolation --wheel --sdist "$second/source" --out-dir "$second/builder"
           python3 - "$second/builder" "$second/dist" <<'PY'
           import pathlib, shutil, stat, sys
           source, target = map(pathlib.Path, sys.argv[1:])
