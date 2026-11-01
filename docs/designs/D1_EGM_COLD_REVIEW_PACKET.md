@@ -6,8 +6,32 @@ This packet is designed so a reviewer with **no prior chat context** can
 evaluate the proposed [D1 network confinement design](D1_NETWORK_CONFINEMENT_EGM.md).
 It is not a review receipt, fresh-agent transcript or finding.
 
+## 2026-11-01 v2 source/readiness handoff
+
+The complete successor [EGM v2 execution plan](D1_EGM_EXECUTION_PLAN_V2.md)
+is now a **mandatory** input. Review the distinction between:
+- [#807 native receipt](../../experiments/desktop-d1-tauri/evidence/windows-d1-pr807-native-guarded-two-cold-starts-20261101.md):
+  original code commit `03498d7856cf15e32e3a5f627a778000365a08cc` passed two actual
+  guarded MXC starts (8/8 synthetic UIA), but **did not capture OS packets**.
+- [#808](https://github.com/AbdulazizShehri/MedOrigin/pull/808):
+  `a7cdbdf4d498f1a75017333a20f6ae1db4a476b1` has 25/25 hosted
+  source tests but has **no independent native Windows replay** at this head.
+- Native MXC `captureDenials` `E_NOTIMPL` and UDP `SENT23` ambiguity remain
+  NO-GO. A socket API result, source test or UIA exit 0 cannot substitute OS evidence.
+- v2 stages **T0–T2** claim source-only implementation readiness;
+  **T3–T6** explicitly do not. Any undetermined choice of WFP identity,
+  observer backend, privilege, VM, broker exemption or endpoint is a
+  required owner/security decision, **not** a choice for the implementer.
+
+Follow the upstream EGM
+[implementation-readiness standard](https://github.com/google/elephant-goldfish-model/blob/403d8881d62022490637d740657b33f01e321ea8/resources/document_standards/implementation-readiness-standard.md)
+and the source-pinned
+[review skill](https://github.com/google/elephant-goldfish-model/blob/403d8881d62022490637d740657b33f01e321ea8/skills/egm-review/SKILL.md).
+A reviewer without an actual isolated fresh agent is **NOT RUN**.
+No source lint, self-review or historical unrelated report grants approval.
+
 ## Review inputs — read completely before reviewing
-1. The full [design draft](D1_NETWORK_CONFINEMENT_EGM.md) and its
+1. The complete [v2 execution plan](D1_EGM_EXECUTION_PLAN_V2.md), the full [design draft](D1_NETWORK_CONFINEMENT_EGM.md) and its
    [concept brief](D1_NETWORK_CONFINEMENT_CONCEPTS_BRIEF.md).
 2. Issue [#662](https://github.com/AbdulazizShehri/MedOrigin/issues/662)
    with real external WebView2 IPv6 evidence and acceptance requirements.
