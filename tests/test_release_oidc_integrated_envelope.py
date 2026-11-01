@@ -7,6 +7,7 @@ builds a distribution, installs dependencies, or publishes anything.
 
 from __future__ import annotations
 
+import re
 import shutil
 import subprocess
 import tempfile
@@ -22,7 +23,9 @@ def job_block(workflow: str, name: str) -> str:
     start = f"  {name}:\n"
     if workflow.count(start) != 1:
         raise AssertionError(f"Missing or duplicate job: {name}")
-    return workflow.split(start, 1)[1].split("\n  ", 1)[0]
+    remainder = workflow.split(start, 1)[1]
+    next_job = re.search(r"(?m)^  [a-z0-9-]+:\\s*$", remainder)
+    return remainder[: next_job.start()] if next_job else remainder
 
 
 def actual_oidc_shell(workflow: str) -> str:
