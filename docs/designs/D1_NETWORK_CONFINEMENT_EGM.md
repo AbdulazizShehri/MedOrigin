@@ -56,6 +56,39 @@ Trust rules:
 - **Product boundary:** verify real 4/4 React/UIA → Tauri IPC → Rust SHA journeys. Preserve app startup, steady state, shutdown and cold restart; require cleanup of every owned descendant and ephemeral profile.
 - **Evidence boundary:** attach a sanitized append-only manifest recording source SHA, binary SHA256, policy/test configuration, Windows/SDK versions, capture start/end times, relevant process identities, expected/observed blocked controls, missing event counts and exact exit codes. SHA or success-marker alone is insufficient.
 
+## 5.5 Existing partial experiments vs the missing OS proof
+
+The repository already contains related **experimental source**, which must
+not be silently described as absent or as a completed security qualification:
+
+- [`windows-mxc-capture-denials-experiment.mjs`](../../experiments/desktop-d1-tauri/tests/windows-mxc-capture-denials-experiment.mjs)
+  requests an MXC `captureDenials` block-mode report while a synthetic native
+  probe attempts localhost and TEST-NET connections. The paired
+  [verdict](../../experiments/desktop-d1-tauri/tests/windows-mxc-capture-report-verdict.mjs)
+  requires specific `WSA10013` output and a nonempty denial JSON, but itself
+  labels the result **NOT_WFP_OR_PACKET_ATTESTED**. This probe is not
+  the real Tauri/WebView2 process tree and does not cover independent
+  DNS/IPv6/UDP and brokered-service packet attribution. Existing source
+  cannot be promoted to a new full-product negative-flow receipt.
+- [`windows-mxc-d1-cold-restart-qualification.mjs`](../../experiments/desktop-d1-tauri/tests/windows-mxc-d1-cold-restart-qualification.mjs)
+  wraps two actual MXC GUI runs at an exact executable SHA and checks
+  post-shutdown process identities using
+  [`windows-mxc-d1-lifecycle-proof.mjs`](../../experiments/desktop-d1-tauri/tests/windows-mxc-d1-lifecycle-proof.mjs).
+  This gives a bounded restart/cleanup *test mechanism*, not an OS packet
+  capture, signed installer/upgrade audit, or release approval.
+- [`windows-mxc-d1-real-uia-qualification.ps1`](../../experiments/desktop-d1-tauri/tests/windows-mxc-d1-real-uia-qualification.ps1)
+  checks actual UIA and 12 process-identity-bracketed TCP/UDP endpoint
+  samples; it cannot see attempts between samples or external
+  Windows broker/service traffic.
+
+**Remaining divergence from the target:** none of these existing mechanisms
+supplies an independent and complete OS-enforced WebView2+broker DNS,
+IPv4/IPv6 and TCP/UDP packet-level denial record tied to the exact signed
+application and policy over the full lifecycle. An approved implementation
+must **reuse or explicitly replace** these experimental sources after a
+fresh review, rather than creating redundant tools or claiming their tests
+are already sufficient.
+
 ## 6. Test matrix and acceptance criteria
 
 | Case | Expected result / required evidence |
