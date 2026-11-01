@@ -243,3 +243,92 @@ def test_full_verifier_refuses_third_artifact_before_reading_archives(
     # bogus Wheel would not qualify this exact publisher boundary.
     with pytest.raises(gate.ProposalVerificationError, match="exactly two"):
         gate.verify(ROOT, dist)
+
+
+def test_artifact_snapshot_reads_only_two_pinned_regular_file_payloads(
+    gate: Any, tmp_path: Path
+) -> None:
+    dist = tmp_path / "dist"
+    dist.mkdir()
+    (dist / "medscale-0.3.0-py3-none-any.whl").write_bytes(b"EXACT_WHEEL")
+    (dist / "medscale-0.3.0.tar.gz").write_bytes(b"EXACT_SDIST")
+    assert gate.read_stable_dist_bytes(dist) == (b"EXACT_WHEEL", b"EXACT_SDIST")
+
+
+def test_artifact_snapshot_rejects_file_over_budget_before_parsing(
+    gate: Any, tmp_path: Path, monkeypatch: Any
+) -> None:
+    dist = tmp_path / "dist"
+    dist.mkdir()
+    (dist / "medscale-0.3.0-py3-none-any.whl").write_bytes(b"A")
+    (dist / "medscale-0.3.0.tar.gz").write_bytes(b"B" * 16)
+    # Do not allocate a giant file; alter the verifier's per-member bound.
+    monkeypatch.setattr(gate, "MAX_TOTAL", 8)
+    with pytest.raises(gate.ProposalVerificationError, match=r"oversized|budget"):
+        gate.read_stable_dist_bytes(dist)
+
+
+def test_artifact_snapshot_rejects_link_retargeted_after_inventory(
+    gate: Any, tmp_path: Path, monkeypatch: Any
+) -> None:
+    dist = tmp_path / "dist"
+    dist.mkdir()
+    wheel = dist / "medscale-0.3.0-py3-none-any.whl"
+    wheel.write_bytes(b"WHEEL")
+    (dist / "medscale-0.3.0.tar.gz").write_bytes(b"SDIST")
+    outside = tmp_path / "outside"
+    outside.write_bytes(b"UNAPPROVED")
+    probe = tmp_path / "link-capability"
+    try:
+        probe.symlink_to(outside)
+    except (OSError, NotImplementedError):
+        pytest.skip("Ordinary unprivileged symlink creation unavailable")
+    probe.unlink()
+    original = gate.qualified_dist_paths
+
+    def race(path: Path) -> tuple[Path, Path]:
+        paths = original(path)
+        wheel.unlink()
+        wheel.symlink_to(outside)
+        return paths
+
+    monkeypatch.setattr(gate, "qualified_dist_paths", race)
+    with pytest.raises(gate.ProposalVerificationError, match=r"changed|regular|symlink"):
+        gate.read_stable_dist_bytes(dist)
+
+
+def test_artifact_snapshot_refuses_in_place_file_change_between_snapshots(
+    gate: Any, tmp_path: Path, monkeypatch: Any
+) -> None:
+    dist = tmp_path / "dist"
+    dist.mkdir()
+    wheel = dist / "medscale-0.3.0-py3-none-any.whl"
+    wheel.write_bytes(b"WHEEL")
+    (dist / "medscale-0.3.0.tar.gz").write_bytes(b"SDIST")
+    original = gate._read_pinned_regular_bytes
+
+    def mutate(path: Path, directory_identity: tuple[int, int]) -> bytes:
+        contents = original(path, directory_identity)
+        if path == wheel:
+            wheel.write_bytes(b"CHANGED_AFTER_FIRST_READ")
+        return contents
+
+    monkeypatch.setattr(gate, "_read_pinned_regular_bytes", mutate)
+    with pytest.raises(gate.ProposalVerificationError, match=r"changed|unstable"):
+        gate.read_stable_dist_bytes(dist)
+
+
+def test_full_verifier_must_use_stable_snapshot_not_unsafe_reopened_original_paths(
+    gate: Any, tmp_path: Path, monkeypatch: Any
+) -> None:
+    dist = tmp_path / "dist"
+    dist.mkdir()
+    (dist / "medscale-0.3.0-py3-none-any.whl").write_bytes(b"FAKE")
+    (dist / "medscale-0.3.0.tar.gz").write_bytes(b"FAKE")
+
+    def sentinel(_dist: Path) -> tuple[bytes, bytes]:
+        raise gate.ProposalVerificationError("STABLE_SNAPSHOT_REQUIRED")
+
+    monkeypatch.setattr(gate, "read_stable_dist_bytes", sentinel, raising=False)
+    with pytest.raises(gate.ProposalVerificationError, match="STABLE_SNAPSHOT_REQUIRED"):
+        gate.verify(ROOT, dist)

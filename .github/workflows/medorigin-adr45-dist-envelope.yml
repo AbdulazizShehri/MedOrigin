@@ -5,9 +5,11 @@ on:
   push:
     branches:
       - test/medorigin-adr45-dist-envelope-20261031
+      - test/medorigin-adr45-artifact-stable-snapshot-20261102
   pull_request:
     branches:
       - test/medorigin-core-dist-extra-rejection-20261031
+      - test/medorigin-adr45-dist-envelope-20261031
     paths:
       - '.github/workflows/medorigin-adr45-dist-envelope.yml'
       - 'scripts/verify_medorigin_base_only_proposal.py'
@@ -50,6 +52,13 @@ jobs:
           )
           uv run --no-project --python "${{ matrix.python }}" --with pytest==8.4.2 python -m pytest -q -o addopts= --basetemp "$env:RUNNER_TEMP/adr45-proposal" tests/test_verify_medorigin_base_only_proposal.py
           if ($LASTEXITCODE -ne 0) { throw 'Proposed package source verifier regression failed' }
+      - name: Lint and format verifier source with pinned Ruff
+        shell: pwsh
+        run: |
+          uvx --from ruff==0.14.4 ruff check scripts/verify_medorigin_base_only_proposal.py tests/test_verify_medorigin_base_only_proposal.py
+          if ($LASTEXITCODE -ne 0) { throw 'ADR45 proposal Ruff lint NO-GO' }
+          uvx --from ruff==0.14.4 ruff format --check scripts/verify_medorigin_base_only_proposal.py tests/test_verify_medorigin_base_only_proposal.py
+          if ($LASTEXITCODE -ne 0) { throw 'ADR45 proposal Ruff formatting NO-GO' }
       - name: Explicit nonpublishing result
         shell: pwsh
         run: |
