@@ -4,9 +4,11 @@ on:
   push:
     branches:
       - test/medorigin-adr45-windows-real-installed-20261102
+      - security/medorigin-adr45-exclusive-staged-destination-20261102
   pull_request:
     branches:
       - test/medorigin-adr45-compare-stable-archives-20261102
+      - test/medorigin-adr45-windows-real-installed-20261102
     paths:
       - '.github/workflows/medorigin-adr45-windows-real-installed.yml'
       - 'scripts/qa/adr45_private_builder_handoff.py'
