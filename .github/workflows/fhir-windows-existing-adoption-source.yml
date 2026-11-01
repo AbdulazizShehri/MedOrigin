@@ -1,0 +1,46 @@
+# Read-only Windows source regression; no publication, artifacts or patient data.
+name: FHIR Windows existing HANDLE adoption cleanup QA
+on:
+  push:
+    branches:
+      - fix/medorigin-fhir-windows-existing-adoption-cleanup-20261101
+  pull_request:
+    branches:
+      - fix/medorigin-fhir-windows-fdopen-cleanup-20261101
+permissions:
+  contents: read
+jobs:
+  windows-existing-handle:
+    runs-on: windows-2025
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+          fetch-depth: 1
+          fetch-tags: false
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        with:
+          enable-cache: false
+      - run: uv python install ${{ matrix.python }}
+      - name: Pinned Ruff
+        run: |
+          uvx --python ${{ matrix.python }} ruff==0.14.4 check src/medscale/fhirkit/_windows_native_store.py src/medscale/fhirkit/storage.py tests/test_fhir_windows_existing_adoption_cleanup.py
+          uvx --python ${{ matrix.python }} ruff==0.14.4 format --check --diff src/medscale/fhirkit/_windows_native_store.py src/medscale/fhirkit/storage.py tests/test_fhir_windows_existing_adoption_cleanup.py
+      - name: Real Windows synthetic failure and retained native regressions
+        env:
+          PYTHONPATH: src
+        run: >-
+          uv run --no-project --python ${{ matrix.python }} --with pytest==8.4.2
+          python -m pytest -q
+          tests/test_fhir_windows_existing_adoption_cleanup.py
+          tests/test_fhir_windows_fdopen_cleanup.py
+          tests/test_fhir_windows_tempfd_cleanup.py
+          tests/test_fhir_windows_native_store_junction_race.py
+          tests/test_fhir_storage_atomic_publish.py
+      - run: echo "WINDOWS_EXISTING_HANDLE_ADOPTION_SYNTHETIC_ONLY_NO_RELEASE"
