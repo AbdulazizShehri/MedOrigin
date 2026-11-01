@@ -170,13 +170,33 @@ release approval. Each gate transition must record exact source SHA,
 artifact digest, policy/observer identity where applicable, actual verifier,
 time window, result and unresolved exceptions; prior receipts are immutable.
 
+### Named gate ownership and append-only receipt destinations
+
+| Gate | Responsible recorder / independent signer | Proposed evidence location and transition |
+| --- | --- | --- |
+| G0 | Source-build engineer; independently verified SHA | `experiments/desktop-d1-tauri/evidence/` exact-source native receipt; limited author-side PASS |
+| G1 | Windows UIA engineer; native test log inspected | Same evidence folder, immutable source/exe hash; bounded UIA PASS only |
+| G2 | Windows isolation engineer; separately reviewed tokens/cleanup | Same folder, source-bound MXC and direct-launch negative controls; bounded PASS only |
+| G3 | Authorized independent OS observer; human security reviewer | New sanitized capture receipt under evidence/, only after approved A/B; cannot pass on probe |
+| G4 | Independent OS flow owner reviewer; human security reviewer | Same evidence/, broker+DNS identity crosswalk, unknown count zero |
+| G5 | Authorized observer and human security reviewer | Same evidence/, IPv4/IPv6 TCP/UDP/DNS positive and denied controls, drop counters zero |
+| G6 | Windows recovery test engineer and independent security reviewer | Same evidence/, full lifecycle/crash/restart plus observer continuity |
+| G7 | Owner for release decision **and separate** independent human security reviewer | `docs/designs/reviews/` actual review receipts and separate issue #603/#574/#622 dispositions |
+
+A recorder may mark a narrow observed **test gate** PASS only with
+corresponding verifiable input; **no author, agent or source CI may sign
+OS packet G3–G5 or overall release PASS**. Every state transition is a
+new sanitized append-only report with exact source SHA, exe/policy SHA
+when applicable, event boundaries, observer identity, reviewer role
+and prior result reference; do not overwrite an earlier verdict.
+
 ### Zero-decision boundary and current readiness
 
 | Stage | Present state | Permitted without architectural choice |
 | --- | --- | --- |
-| T0 | **READY, documentation-only** | Reconcile exact evidence and enforce existing tests |
-| T1 | **READY, read-only inventory** | Read Windows facts and already documented SDK probe fields; never choose or activate an audit backend |
-| T2 | **READY only for backend-neutral source schema** | Pure syntax/negative tests; defer observer-specific fields and live verdict until T3 |
+| T0 | **AUTHOR-SIDE READY (RELEASE NO-GO), documentation-only** | Reconcile exact evidence and enforce existing tests |
+| T1 | **AUTHOR-SIDE READY (RELEASE NO-GO), read-only inventory** | Read Windows facts and already documented SDK probe fields; never choose or activate an audit backend |
+| T2 | **AUTHOR-SIDE READY (RELEASE NO-GO) only for backend-neutral source schema** | Pure syntax/negative tests; defer observer-specific fields and live verdict until T3 |
 | T3–T6 | **HOLD** | No privileged capture, security policy, packaging, cross-platform approval or release |
 
 **Existing paths** are below under `docs/designs/` and
@@ -261,6 +281,14 @@ feasibility receipt is filed, clearly NOT G3 observer proof. No system settings 
 
 ### T2 — Offline evidence-schema/adversarial verdict (source-only; READY after T0)
 
+**Minimal-reuse decision:** Existing `windows-mxc-capture-report-verdict.mjs`
+already validates SDK capture metadata and actionable/verbose report pairs;
+existing `windows-mxc-protocol-matrix-verdict.mjs` already rejects
+TCP/UDP ambiguity, including `SENT23`. Neither validates *generic,
+backend-neutral, replay-resistant source/receipt identity*. Therefore a
+separate small pure parser is justified for that missing purpose only.
+Do not duplicate or replace native report/protocol verifiers.
+
 **EGM Step 5 correction:** T2 is limited to a **backend-neutral**
 source-verdict for immutable identity, internal consistency, and negative
 mutations. The following observer-specific fields are **provisional
@@ -338,25 +366,19 @@ token, descendants, brokers, errors, recovery and signing are bound
 **only after** T4 produces accepted evidence and a new architecture ADR.
 No uncontained fallback; installer/update changes need separate review.
 
-### T6 — Cross-platform and release governance (HOLD)
+### T6 — Release governance handoff (HOLD)
 
-**Target files:** none in the Windows-only D1 experiment. macOS/Linux
-qualification is a separate future roadmap, not this implementation.
-**Required review once approved:** independently close #603, #574, #622
-and re-qualify relevant platform artifacts. No D1 release action now.
-
-**Scope correction (EGM Zoom Out):** Windows D1 work **does not**
-include implementing macOS/Linux qualification. That is a separate
-platform roadmap with its own owner authorization and evidence.
-This stage only tracks release blockers and hands off platform plans
-without executing them inside D1. No new cross-platform code is
-authorized by this document.
-
-
-Independently qualify macOS/Linux native APIs; Windows evidence does
-not transfer. Resolve #603, #574 and #622 through their own review
-track, including optional extras, supply chain, signatures and
-versioning. No release or protected-main merge from this D1 packet.
+**No cross-platform work belongs to Windows D1.** Any macOS/Linux
+qualification must be proposed in a separate owner-approved project
+and must not inherit Windows security evidence.
+**Target files:** none in D1; no runtime, package or installer change
+authorized here. **Test/review handoff:** independently resolve
+[#603](https://github.com/AbdulazizShehri/MedOrigin/issues/603),
+[#574](https://github.com/AbdulazizShehri/MedOrigin/issues/574) and
+[#622](https://github.com/AbdulazizShehri/MedOrigin/issues/622),
+including optional extras, supply chain, code signing, versioning and
+release decision. Remains HOLD: no protected-main merge, tag, installer,
+patient data, clinical use or publication.
 
 ## 6. Required controls and threat-focused cases for T4
 
