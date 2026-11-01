@@ -1,0 +1,56 @@
+# Synthetic-only ADR-0045 proposal qualification. NEVER authorizes publication.
+name: ADR45 proposal archive identity drift source-only
+on:
+  push:
+    branches:
+      - test/medorigin-adr45-linkcount-race-20261102
+  pull_request:
+    branches:
+      - test/medorigin-adr45-compare-stable-archives-20261102
+    paths:
+      - '.github/workflows/medorigin-adr45-identity-drift.yml'
+      - 'scripts/verify_medorigin_base_only_proposal.py'
+      - 'tests/test_verify_medorigin_artifact_identity_drift.py'
+permissions:
+  contents: read
+jobs:
+  source-only:
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 12
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2025]
+        python: ["3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        with:
+          version: '0.12.19'
+          enable-cache: false
+      - name: Pinned synthetic source and adversarial race tests
+        shell: pwsh
+        run: |
+          uv python install "${{ matrix.python }}"
+          $env:PYTHONPATH = [string]::Join(
+            [IO.Path]::PathSeparator,
+            @((Join-Path (Get-Location) 'src'), (Join-Path (Get-Location) 'scripts'), (Join-Path (Get-Location) 'tests'))
+          )
+          uv run --no-project --python "${{ matrix.python }}" --with pytest==8.4.2 python -m pytest -q -o addopts= --basetemp "$env:RUNNER_TEMP/adr45-identity" tests/test_verify_medorigin_artifact_identity_drift.py tests/test_verify_medorigin_base_only_proposal.py tests/test_compare_medorigin_base_only_archives.py
+          if ($LASTEXITCODE -ne 0) { throw 'ADR45 identity-drift proposal source NO-GO' }
+      - name: Pinned Ruff syntax and formatting
+        shell: pwsh
+        run: |
+          uvx --from ruff==0.14.4 ruff check scripts/verify_medorigin_base_only_proposal.py tests/test_verify_medorigin_artifact_identity_drift.py
+          if ($LASTEXITCODE -ne 0) { throw 'ADR45 identity-drift Ruff lint NO-GO' }
+          uvx --from ruff==0.14.4 ruff format --check scripts/verify_medorigin_base_only_proposal.py tests/test_verify_medorigin_artifact_identity_drift.py
+          if ($LASTEXITCODE -ne 0) { throw 'ADR45 identity-drift Ruff format NO-GO' }
+      - name: Explicit nonpublishing status
+        shell: pwsh
+        run: |
+          Write-Output 'ADR45_IDENTITY_DRIFT_SYNTHETIC_ONLY'
+          Write-Output 'ADR45_OWNER_NOT_ACCEPTED_PUBLICATION_AUTHORIZED_FALSE'
