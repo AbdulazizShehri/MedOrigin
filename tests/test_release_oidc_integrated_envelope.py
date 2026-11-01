@@ -24,7 +24,7 @@ def job_block(workflow: str, name: str) -> str:
     if workflow.count(start) != 1:
         raise AssertionError(f"Missing or duplicate job: {name}")
     remainder = workflow.split(start, 1)[1]
-    next_job = re.search(r"(?m)^  [a-z0-9-]+:\\s*$", remainder)
+    next_job = re.search(r"(?m)^  [a-z0-9-]+:\s*$", remainder)
     return remainder[: next_job.start()] if next_job else remainder
 
 
