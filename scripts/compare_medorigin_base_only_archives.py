@@ -13,6 +13,7 @@ import json
 import struct
 import sys
 import tarfile
+import tempfile
 import zipfile
 from pathlib import Path
 
@@ -23,6 +24,7 @@ from verify_medorigin_base_only_proposal import (
     digest,
     load_sdist,
     load_wheel,
+    read_stable_dist_bytes,
     verify,
 )
 
@@ -111,71 +113,119 @@ def _changed_headers(
     return {"changed_count": len(changed), "first_changed_members": changed[:20]}
 
 
+def _verified_copy(
+    repository: Path, private: Path, wheel_raw: bytes, sdist_raw: bytes
+) -> dict[str, object]:
+    """Verify exactly the bytes pinned from an untrusted external dist folder.
+
+    The proposal verifier is intentionally NOT a publisher. Demand explicit
+    source-bound positive status and nonpublishing flags, not just a dict.
+    """
+    private.mkdir()
+    (private / WHEEL).write_bytes(wheel_raw)
+    (private / SDIST).write_bytes(sdist_raw)
+    evidence = verify(repository, private)
+    if (
+        evidence.get("status") != "BASE_ONLY_PROPOSAL_SOURCE_BOUND_VERIFIED"
+        or evidence.get("publication_authorized") is not False
+        or evidence.get("adr_0045_accepted") is not False
+        or evidence.get("independent_review_complete") is not False
+        or not isinstance(evidence.get("source_git_commit"), str)
+        or evidence.get("wheel_sha256") != digest(wheel_raw)
+        or evidence.get("sdist_sha256") != digest(sdist_raw)
+    ):
+        raise ProposalVerificationError("private archive snapshot verifier digest or status mismatch")
+    return evidence
+
+
+def _require_private_copies_unchanged(
+    private: Path, wheel_raw: bytes, sdist_raw: bytes
+) -> None:
+    """Reject modifications to the task-owned temporary artifacts during diagnostics."""
+    if (
+        digest((private / WHEEL).read_bytes()) != digest(wheel_raw)
+        or digest((private / SDIST).read_bytes()) != digest(sdist_raw)
+    ):
+        raise ProposalVerificationError("private archive snapshot changed during diagnostics")
+
+
 def compare(
     repository: Path, left: Path, right: Path, *, require_identical: bool = False
 ) -> dict[str, object]:
-    """Compare artifacts only after both independently pass Git-bound verification."""
-    left = left.resolve()
-    right = right.resolve()
-    if left == right:
+    """Compare separately pinned untrusted archives, never their mutable paths.
+
+    Snapshot BOTH inputs before verification and any metadata diagnostic.
+    Re-parse and re-open ONLY private owned copies from that point onward.
+    """
+    left = left.absolute()
+    right = right.absolute()
+    if left == right or (left.exists() and right.exists() and left.samefile(right)):
         raise ProposalVerificationError("comparison requires distinct directories")
-    # Fail closed on any source, metadata, injected-member, archive, or RECORD defect.
-    left_gate = verify(repository, left)
-    right_gate = verify(repository, right)
-    result: dict[str, object] = {
-        "schema": "MEDORIGIN-ADR0045-CROSS-HOST-DIAGNOSTIC-1",
-        "source_git_commit": left_gate["source_git_commit"],
-        "adr_0045_accepted": False,
-        "independent_review_complete": False,
-        "publication_authorized": False,
-    }
-    if left_gate["source_git_commit"] != right_gate["source_git_commit"]:
-        raise ProposalVerificationError("comparison spans different Git source revisions")
-    archive_equal: dict[str, bool] = {}
-    for kind, filename, load in (
-        ("wheel", WHEEL, load_wheel),
-        ("sdist", SDIST, load_sdist),
-    ):
-        a_path, b_path = left / filename, right / filename
-        a_members, b_members = load(a_path), load(b_path)
-        a_fingerprint, b_fingerprint = _fingerprint(a_members), _fingerprint(b_members)
-        if a_fingerprint != b_fingerprint or a_members != b_members:
-            raise ProposalVerificationError(f"{kind} source-bound member bytes differ")
-        a_hash, b_hash = digest(a_path.read_bytes()), digest(b_path.read_bytes())
-        a_meta = _zip_headers(a_path) if kind == "wheel" else _tar_headers(a_path)
-        b_meta = _zip_headers(b_path) if kind == "wheel" else _tar_headers(b_path)
-        entry: dict[str, object] = {
-            "left_sha256": a_hash,
-            "right_sha256": b_hash,
-            "archive_bytes_identical": a_hash == b_hash,
-            "member_fingerprint": a_fingerprint,
-            "member_count": len(a_members),
-            "archive_header_difference": _changed_headers(a_meta, b_meta),
+    # The existing verifier's fd and stable-directory identity requirements
+    # apply to BOTH external inputs. No original paths are used after this.
+    left_wheel, left_sdist = read_stable_dist_bytes(left)
+    right_wheel, right_sdist = read_stable_dist_bytes(right)
+    with tempfile.TemporaryDirectory(prefix="medorigin-adr45-comparator-proposal-") as scratch:
+        a_root, b_root = Path(scratch) / "left", Path(scratch) / "right"
+        left_gate = _verified_copy(repository, a_root, left_wheel, left_sdist)
+        right_gate = _verified_copy(repository, b_root, right_wheel, right_sdist)
+        if left_gate["source_git_commit"] != right_gate["source_git_commit"]:
+            raise ProposalVerificationError("comparison spans different Git source revisions")
+        result: dict[str, object] = {
+            "schema": "MEDORIGIN-ADR0045-CROSS-HOST-DIAGNOSTIC-1",
+            "source_git_commit": left_gate["source_git_commit"],
+            "adr_0045_accepted": False,
+            "independent_review_complete": False,
+            "publication_authorized": False,
         }
-        if kind == "sdist":
-            a_tar, b_tar = _tar_payload_hash(a_path), _tar_payload_hash(b_path)
-            entry["decompressed_tar_sha256"] = a_tar
-            entry["decompressed_tar_identical"] = a_tar == b_tar
-            entry["gzip_header_identical"] = a_path.read_bytes()[:10] == b_path.read_bytes()[:10]
-        else:
-            a_streams = _zip_compressed_fingerprint(a_path)
-            b_streams = _zip_compressed_fingerprint(b_path)
-            entry["compressed_member_streams_identical"] = a_streams == b_streams
-            entry["left_compressed_stream_fingerprint"] = a_streams
-            entry["right_compressed_stream_fingerprint"] = b_streams
-        archive_equal[kind] = a_hash == b_hash
-        result[kind] = entry
-    both_equal = all(archive_equal[k] for k in ("wheel", "sdist"))
-    result["status"] = (
-        "SOURCE_BOUND_ARCHIVES_BYTE_IDENTICAL"
-        if both_equal
-        else "SOURCE_BOUND_MEMBERS_EQUAL_ARCHIVE_ENVELOPES_DIFFER"
-    )
-    if require_identical and not both_equal:
-        raise ProposalVerificationError(
-            "require-identical: source-bound archives have different outer bytes"
+        archive_equal: dict[str, bool] = {}
+        for kind, filename, load, a_raw, b_raw in (
+            ("wheel", WHEEL, load_wheel, left_wheel, right_wheel),
+            ("sdist", SDIST, load_sdist, left_sdist, right_sdist),
+        ):
+            # These are private ephemeral copies only, not caller-owned dist paths.
+            a_path, b_path = a_root / filename, b_root / filename
+            a_members, b_members = load(a_path), load(b_path)
+            a_fingerprint, b_fingerprint = _fingerprint(a_members), _fingerprint(b_members)
+            if a_fingerprint != b_fingerprint or a_members != b_members:
+                raise ProposalVerificationError(f"{kind} source-bound member bytes differ")
+            a_hash, b_hash = digest(a_raw), digest(b_raw)
+            a_meta = _zip_headers(a_path) if kind == "wheel" else _tar_headers(a_path)
+            b_meta = _zip_headers(b_path) if kind == "wheel" else _tar_headers(b_path)
+            entry: dict[str, object] = {
+                "left_sha256": a_hash,
+                "right_sha256": b_hash,
+                "archive_bytes_identical": a_hash == b_hash,
+                "member_fingerprint": a_fingerprint,
+                "member_count": len(a_members),
+                "archive_header_difference": _changed_headers(a_meta, b_meta),
+            }
+            if kind == "sdist":
+                a_tar, b_tar = _tar_payload_hash(a_path), _tar_payload_hash(b_path)
+                entry["decompressed_tar_sha256"] = a_tar
+                entry["decompressed_tar_identical"] = a_tar == b_tar
+                entry["gzip_header_identical"] = a_raw[:10] == b_raw[:10]
+            else:
+                a_streams = _zip_compressed_fingerprint(a_path)
+                b_streams = _zip_compressed_fingerprint(b_path)
+                entry["compressed_member_streams_identical"] = a_streams == b_streams
+                entry["left_compressed_stream_fingerprint"] = a_streams
+                entry["right_compressed_stream_fingerprint"] = b_streams
+            archive_equal[kind] = a_hash == b_hash
+            result[kind] = entry
+        _require_private_copies_unchanged(a_root, left_wheel, left_sdist)
+        _require_private_copies_unchanged(b_root, right_wheel, right_sdist)
+        both_equal = all(archive_equal[k] for k in ("wheel", "sdist"))
+        result["status"] = (
+            "SOURCE_BOUND_ARCHIVES_BYTE_IDENTICAL"
+            if both_equal
+            else "SOURCE_BOUND_MEMBERS_EQUAL_ARCHIVE_ENVELOPES_DIFFER"
         )
-    return result
+        if require_identical and not both_equal:
+            raise ProposalVerificationError(
+                "require-identical: source-bound archives have different outer bytes"
+            )
+        return result
 
 
 def main(argv: list[str] | None = None) -> int:
