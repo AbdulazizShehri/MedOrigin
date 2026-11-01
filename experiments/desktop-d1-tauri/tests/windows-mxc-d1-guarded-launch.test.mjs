@@ -49,9 +49,9 @@ test('candidate entrypoint never falls back to direct child spawn and keeps expl
  assert.match(launcher,/network:\{egress:\{default:'deny'\},ingress:\{default:'deny',hostLoopback:'deny'\}\}/);
  assert.match(launcher,/readonlyPaths:\[admitted\.path\]/);
  assert.match(launcher,/ui:\{disable:false,isolation:'container'\}/);
- assert.match(launcher,/timeoutMs:35000/);
+ assert.match(launcher,/timeoutMs:90000/);
  assert.match(launcher,/result\.timedOut!==true/);
- assert.match(launcher,/D1_GUARDED_UNPUBLISHED_MXC_TIMEOUT_OBSERVED_RELEASE_STILL_NO_GO/);
+ assert.match(launcher,/D1_GUARDED_REAL_UIA_4_OF_4_AND_SOCKETS_PASS_NETWORK_STILL_NO_GO/);
  assert.doesNotMatch(launcher,/spawnSync\(|spawn\(|execSync\(|execFileSync\(/);
 });
 
