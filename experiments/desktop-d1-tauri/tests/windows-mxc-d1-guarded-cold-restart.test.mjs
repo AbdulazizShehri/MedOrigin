@@ -56,25 +56,25 @@ test('reject duplicate, reordered, forged, or injected guarded receipts',()=>{
 });
 test('reject any unrecognized stdout, including failure lines hidden beside valid receipts',()=>{
  for(const output of [
-  good+'unrelated line\\n',
-  'unrelated line\\n'+good,
-  good+'D1_MXC_GUARDED_LAUNCH_NO_GO: injected failure\\n',
-  good+'MXC_D1_REAL_APP_UIA_4_OF_4_PASS_NONPUBLISHING_NETWORK_STILL_NO_GO\\n',
-  good+'WARNING: unexpected SDK diagnostic\\n',
-  good+'\\n',
-  good+'\\r\\n',
-  '\\n'+good,
-  rows.join('\\n')+'\\n\\n'+rows[2]+'\\n'
+  good+'unrelated line\n',
+  'unrelated line\n'+good,
+  good+'D1_MXC_GUARDED_LAUNCH_NO_GO: injected failure\n',
+  good+'MXC_D1_REAL_APP_UIA_4_OF_4_PASS_NONPUBLISHING_NETWORK_STILL_NO_GO\n',
+  good+'WARNING: unexpected SDK diagnostic\n',
+  good+'\n',
+  good+'\r\n',
+  '\n'+good,
+  rows.join('\n')+'\n\n'+rows[2]+'\n'
  ])assert.throws(()=>parse(output),/D1_LIFECYCLE_NO_GO/);
 });
 test('reject whitespace, blank-line and record-boundary camouflage',()=>{
  for(const output of [
-  ' '+rows.join('\\n'),
-  rows.join('\\n ')+'\\n',
-  rows.join('\\n')+' \\n',
-  rows[0]+'\\n\\n'+rows[1]+'\\n'+rows[2],
-  '\\ufeff'+rows.join('\\n'),
-  rows[0]+'\\r'+rows[1]+'\\n'+rows[2]
+  ' '+rows.join('\n'),
+  rows.join('\n ')+'\n',
+  rows.join('\n')+' \n',
+  rows[0]+'\n\n'+rows[1]+'\n'+rows[2],
+  '\ufeff'+rows.join('\n'),
+  rows[0]+'\r'+rows[1]+'\n'+rows[2]
  ])assert.throws(()=>parse(output),/D1_LIFECYCLE_NO_GO/);
 });
 test('reject invalid or duplicate process identities and absent WebView2',()=>{
