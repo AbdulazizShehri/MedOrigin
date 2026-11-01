@@ -91,7 +91,10 @@ export function findD1SecurityDrift(s) {
     design.includes('Release: NO-GO') &&
     design.includes('independent OS') &&
     design.includes('positive control') &&
-    design.includes('#662'),
+    design.includes('#662') &&
+    design.includes('windows-mxc-capture-denials-experiment.mjs') &&
+    design.includes('windows-mxc-d1-cold-restart-qualification.mjs') &&
+    design.includes('NOT_WFP_OR_PACKET_ATTESTED'),
     'design_review_status_or_packet_boundary_drift');
   return issues;
 }
