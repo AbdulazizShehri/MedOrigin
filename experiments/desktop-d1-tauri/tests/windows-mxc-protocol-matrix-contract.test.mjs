@@ -29,8 +29,9 @@ test('positive control never sends to reserved remote endpoints',()=>{
 test('UDP local reception is measured separately from send API result',()=>{
   assert.match(runner,/const delivered4=udp4Receipts-1/);
   assert.match(runner,/const delivered6=udp6Receipts-1/);
-  assert.match(runner,/delivered4 === 0 && delivered6 === 0/);
-  assert.match(runner,/UDP4_LOOPBACK','UDP6_LOOPBACK/);
+  const verifier=readFileSync(join(d,'windows-mxc-protocol-matrix-verdict.mjs'),'utf8');
+  assert.match(verifier,/delivered4===0&&delivered6===0/);
+  assert.match(verifier,/UDP4_LOOPBACK','UDP6_LOOPBACK/);
 });
 test('fail-closed all-eight WSA10013 acceptance; no false UDP pass',()=>{
   assert.match(probe,/if result != "WSA10013"/);
