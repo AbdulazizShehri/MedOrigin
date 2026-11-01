@@ -17,7 +17,10 @@ function requireCondition(condition,reason){if(!condition)failure(reason)}
 // A positive control must prove the SAME unrestricted test binary could
 // connect to both local TCP listeners and send exactly one 23-byte UDP
 // datagram to each. This does not attest MXC, WFP or product egress.
-export function assessNativePositiveControl({control,udp4Receipts,udp6Receipts}) {
+export function assessNativePositiveControl({
+ control,udp4Receipts,udp6Receipts,tcp4Accepts,tcp6Accepts,
+ udp4Packets,udp6Packets
+}) {
  requireCondition(control&&typeof control==='object',
   'unrestricted native control result missing');
  requireCondition(control.status===0&&control.signal===null&&control.error==null,
@@ -41,6 +44,24 @@ export function assessNativePositiveControl({control,udp4Receipts,udp6Receipts})
   'unrestricted native control transcript is not exact and ordered');
  requireCondition(udp4Receipts===1&&udp6Receipts===1,
   'unrestricted native UDP listener receipts not exactly one each');
+ // A CONNECTED/SENT23 child transcript is not enough: the exact host-side
+ // listeners must independently observe one accepted TCP connection and
+ // one expected local UDP payload per address family.
+ requireCondition(tcp4Accepts===1&&tcp6Accepts===1,
+  'unrestricted native TCP listeners did not accept exactly one connection each');
+ const payload=Buffer.from('synthetic-mxc-udp-probe','utf8');
+ const validPacket=(packet,family,address)=>
+  packet&&typeof packet==='object'&&
+  Buffer.isBuffer(packet.payload)&&packet.payload.equals(payload)&&
+  packet.address===address&&packet.family===family&&
+  packet.size===payload.length&&
+  Number.isSafeInteger(packet.port)&&packet.port>=1&&packet.port<=65535;
+ requireCondition(Array.isArray(udp4Packets)&&udp4Packets.length===1&&
+  validPacket(udp4Packets[0],'IPv4','127.0.0.1'),
+  'unrestricted native UDP4 listener payload or source not exact');
+ requireCondition(Array.isArray(udp6Packets)&&udp6Packets.length===1&&
+  validPacket(udp6Packets[0],'IPv6','::1'),
+  'unrestricted native UDP6 listener payload or source not exact');
  return Object.freeze({classification:'UNCONFINED_LOCAL_POSITIVE_CONTROL_ONLY'});
 }
 
