@@ -24,14 +24,15 @@ const configurations=[
  {label:'deny',egress:'deny',ingress:'deny'},
  {label:'allow-egress',egress:'allow',ingress:'deny'},
  {label:'allow-ingress',egress:'deny',ingress:'allow'},
- {label:'allow-both',egress:'allow',ingress:'allow'}
+ {label:'allow-both',egress:'allow',ingress:'allow'},
+ {label:'allow-host-loopback',egress:'deny',ingress:'deny',hostLoopback:'allow'}
 ];
 for(const config of configurations){
  const tmp=mkdtempSync(join(dirname(exe),'mxc-d1-token-policy-'));
  try {
   const result=await run({
    command:'"'+exe+'"',containment:{type:'process'},
-   network:{egress:{default:config.egress},ingress:{default:config.ingress,hostLoopback:'deny'}},
+   network:{egress:{default:config.egress},ingress:{default:config.ingress,hostLoopback:config.hostLoopback||'deny'}},
    ui:{disable:true},filesystem:{readonlyPaths:[exe],readwritePaths:[tmp]},
    workingDirectory:tmp,
    environment:{SystemRoot:process.env.SystemRoot,LOCALAPPDATA:tmp,APPDATA:tmp,TEMP:tmp,TMP:tmp},
@@ -43,9 +44,9 @@ for(const config of configurations){
    demand(result.exitCode===0&&result.stdout?.includes('D1_NATIVE_PRIMARY_TOKEN_GATE_ACCEPTED_NO_PACKET_PROOF'),'denied MXC policy should admit the verified token');
    console.log('D1_PRIMARY_TOKEN_DENY_POLICY_POSITIVE_PASS');
   }else{
-   demand(result.exitCode===76&&result.stderr?.includes('primary_token_has_network_capability'),'permissive ingress or egress must fail the exact runtime token gate');
+   demand(result.exitCode===76&&result.stderr?.includes('primary_token_has_network_capability'),'permissive ingress, egress or host loopback must fail the exact runtime token gate');
    console.log('D1_PRIMARY_TOKEN_PERMISSIVE_NETWORK_POLICY_NEGATIVE_PASS',config.label);
   }
  }finally{rmSync(tmp,{recursive:true,force:true,maxRetries:10,retryDelay:100})}
 }
-console.log('D1_EXACT_RUNTIME_TOKEN_GATE_FOUR_POLICY_MATRIX_PASS_NO_WFP_ATTESTATION');
+console.log('D1_EXACT_RUNTIME_TOKEN_GATE_FIVE_POLICY_MATRIX_PASS_NO_WFP_ATTESTATION');
