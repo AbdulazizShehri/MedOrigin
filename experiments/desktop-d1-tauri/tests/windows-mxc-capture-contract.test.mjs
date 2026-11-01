@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {dirname,join} from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {assessCaptureResult,selectActionableCaptureFiles}
+import {assessCaptureResult,selectActionableCaptureFiles,requireNativeCapturePreflight}
   from './windows-mxc-capture-report-verdict.mjs';
 
 const d=dirname(fileURLToPath(import.meta.url));
@@ -104,4 +104,28 @@ test('test-only same binary, reserved network target and owned cleanup',()=>{
  assert.match(runner,/readonlyPaths:\[native\]/);
  assert.match(runner,/rmSync\(root,\{force:true,recursive:true\}\)/);
  assert.doesNotMatch(runner,/netsh|Set-NetFirewallRule|gh release|PHI\s*=/i);
+});
+
+test('native ProcessContainer capture preflight is advisory and fail-closed',()=>{
+ const native={tier:'base-container',probes:{nativeCaptureAvailable:true},warnings:[]};
+ assert.deepEqual(requireNativeCapturePreflight(native),{
+  tier:'base-container',classification:'PROBE_ONLY_NOT_EXECUTION_PROOF'
+ });
+ for(const untrusted of [
+  undefined,{}, {...native,tier:'appcontainer-bfs'},
+  {...native,tier:'appcontainer-dacl'},{...native,tier:undefined},
+  {...native,probes:{nativeCaptureAvailable:false}},
+  {...native,probes:{}},{...native,warnings:['requires UAC']},
+  {...native,warnings:undefined},
+  {...native,error:{message:'backend_unavailable'}},
+ ])assert.throws(()=>requireNativeCapturePreflight(untrusted),/CAPTURE_NO_GO/);
+});
+test('runner refuses guarded WPR/UAC fallback before launching contained probe',()=>{
+ assert.match(runner,/\bprobe\(request\)/);
+ assert.match(runner,/requireNativeCapturePreflight\(await probe\(request\)\)/);
+ const preflightAt=runner.indexOf('requireNativeCapturePreflight(await probe(request))');
+ const runAt=runner.indexOf('const result=await run(request)');
+ assert.ok(preflightAt>0&&runAt>preflightAt,'must check native capture first');
+ assert.match(runner,/PROBE_ONLY_NO_UAC_NO_PACKET_PROOF/);
+ assert.doesNotMatch(runner,/Set-NetFirewall|Start-Process.*RunAs|permissiveLearningMode/);
 });
