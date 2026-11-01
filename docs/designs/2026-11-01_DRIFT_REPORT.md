@@ -39,6 +39,17 @@ unapproved design does not authorize filling them on the owner host.
   capture directory and does not elevate to guarded WPR, but **no
   OS packet/network-denial audit was obtained**. Independent supported
   disposable-OS feasibility and full D1/broker capture remain pending.
+- **Native IPv4/IPv6 UDP socket-API soft-accept (new actual NO-GO):**
+  On Windows build `26300.9818` MXC deny-all, an actual
+  synthetic 8-protocol matrix returned `WSA10013` for all four
+  TCP attempts but `SENT23` for all four UDP attempts, despite
+  both owned loopback listeners observing zero delivered
+  contained datagrams. This is **neither confirmation of UDP
+  egress nor WFP packet denial**. The new fail-closed
+  [UDP verdict report](../../experiments/desktop-d1-tauri/evidence/windows-mxc-udp-send-softaccept-no-go-20261101.md)
+  and 34 in-memory source tests keep this boundary visible.
+  External/brokered UDP and DNS still require independent
+  OS packet observations in an authorized disposable host.
 - **No immutable launch-policy identity:** The current primary-token
   AppContainer/SID helper rejects known Internet/private/hostLoopback
   capabilities but cannot prove authentic MXC source, OS policy or signed

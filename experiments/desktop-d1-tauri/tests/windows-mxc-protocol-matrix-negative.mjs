@@ -6,6 +6,7 @@
  * and then node windows-mxc-protocol-matrix-negative.mjs.
  */
 import { getPlatformSupport, run } from '@microsoft/mxc-sdk/v1';
+import {assessNativeProtocolMatrix} from './windows-mxc-protocol-matrix-verdict.mjs';
 import { createServer } from 'node:net';
 import { createSocket } from 'node:dgram';
 import { spawnSync } from 'node:child_process';
@@ -93,18 +94,12 @@ try {
   const delivered6=udp6Receipts-1;
   console.log('D1_MXC_CONTAINED_UDP4_LOCAL_DELIVERED='+delivered4);
   console.log('D1_MXC_CONTAINED_UDP6_LOCAL_DELIVERED='+delivered6);
-  requireGate(delivered4 === 0 && delivered6 === 0,
-    'OS allowed contained UDP datagram to reach a real local listener');
-  const keys = ['TCP4_LOOPBACK','TCP6_LOOPBACK','UDP4_LOOPBACK','UDP6_LOOPBACK',
-    'TCP4_TEST_NET','TCP6_DOC_NET','UDP4_TEST_NET','UDP6_DOC_NET'];
-  for(const key of keys) {
-    requireGate(new RegExp('(?:^|\\n)D1_MXC_'+key+'=WSA10013(?:\\r?\\n|$)').test(result.stdout || ''),
-      key+' did not demonstrate WSA10013 enforcement');
-  }
-  requireGate(result.exitCode===0, 'contained probe exit code not zero');
-  requireGate(result.stdout.includes('D1_MXC_ALL_8_NATIVE_SOCKETS_WSA10013_PASS'),
-    'native eight-socket acceptance sentinel missing');
-  console.log('D1_MXC_EIGHT_SOCKET_KERNEL_EGRESS_DENIAL_PASS_NOT_WEBVIEW2');
+  const verdict=assessNativeProtocolMatrix({result,delivered4,delivered6});
+  // This is only the native socket-API refusal boundary. Do not claim
+  // packet-level WFP, DNS, WebView2, broker or release proof.
+  console.log('D1_MXC_EIGHT_SOCKET_API_REFUSALS',
+    JSON.stringify(verdict));
+  console.log('D1_MXC_EIGHT_SOCKET_API_DENIAL_NOT_WEBVIEW2_OR_WFP');
 } catch(e) {
   console.error('D1_MXC_PROTOCOL_MATRIX_NO_GO',e?.message || String(e));
   process.exitCode=1;

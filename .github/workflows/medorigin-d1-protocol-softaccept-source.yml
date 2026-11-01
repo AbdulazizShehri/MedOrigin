@@ -1,0 +1,37 @@
+# NONPUBLISHING source-only tests; no network egress or packet capture.
+# A green CI job is not a native MXC, WebView2, WFP or clinical release proof.
+name: D1 MXC UDP soft-accept fail-closed contracts
+on:
+  push:
+    branches:
+      - test/medorigin-d1-udp-softaccept-negative-20261101
+  pull_request:
+    branches:
+      - test/medorigin-d1-mxc-denial-receipt-integrity-20261101
+    paths:
+      - 'experiments/desktop-d1-tauri/tests/windows-mxc-protocol-matrix-*'
+      - '.github/workflows/medorigin-d1-protocol-softaccept-source.yml'
+permissions:
+  contents: read
+jobs:
+  udp-evidence-source:
+    runs-on: windows-2025
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+      - name: Verify protocol matrix fail-closed verdict and in-memory negative mutations
+        shell: pwsh
+        run: |
+          $p='experiments/desktop-d1-tauri/tests'
+          node --check "$p/windows-mxc-protocol-matrix-verdict.mjs"
+          if ($LASTEXITCODE -ne 0) { throw 'UDP source verifier JS parse NO-GO' }
+          node --check "$p/windows-mxc-protocol-matrix-negative.mjs"
+          if ($LASTEXITCODE -ne 0) { throw 'Native MXC source harness JS parse NO-GO' }
+          node --test "$p/windows-mxc-protocol-matrix-verdict.test.mjs" "$p/windows-mxc-protocol-matrix-contract.test.mjs"
+          if ($LASTEXITCODE -ne 0) { throw 'UDP soft-accept negative source tests NO-GO' }
+          rustc --edition 2024 --emit metadata -Dwarnings -o "$env:RUNNER_TEMP/medorigin-udp-matrix.rmeta" "$p/windows-mxc-protocol-matrix-probe.rs"
+          if ($LASTEXITCODE -ne 0) { throw 'Synthetic native Rust probe build NO-GO' }
+          Write-Output 'D1_UDP_SOFTACCEPT_SOURCE_ONLY_NO_MXC_PACKET_WFP_WEBVIEW2_RELEASE'
