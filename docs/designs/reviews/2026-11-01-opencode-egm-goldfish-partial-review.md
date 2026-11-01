@@ -179,10 +179,38 @@ findings on a later commit. Independent stage-8 and stage-9 checks
 must explicitly name that newer source rather than carry forward
 a design approval.
 
+## Stage 8 — Second Zoom-Out — ACTUALLY RUN; verdict FAIL
+
+- First source `df18a3858ebf73933d8bffe5f29ca261af3f6ef0`:
+  actual OpenCode child `ses_e67f7556dffen9lSxmwezEEIBg`
+  hit its step cap before all linked sources; **INCOMPLETE**, not PASS.
+- Second source `8c5760dd740ee8dc261976ee91ede53343e205f3`:
+  parent `ses_e67f3ac30ffeFsPuG3V8sDcw2X`, child
+  `ses_e67f39d3fffeRH6EbSnfaEox9z`; verified
+  `subagent` status `completed`, `truncated=false`, child
+  `succeeded`, **16 actual read calls** including upstream
+  `zoom_out.md`, upstream zoom-out standard and the entire updated
+  MedOrigin v2 plan and linked evidence.
+- **Review verdict: FAIL** (five Major, three Nit), distinct from
+  successful tool execution; no Blocker newly demonstrated.
+  Findings: excessive early schema/test details; cross-platform T6
+  scope creep; existing-report-verdict reuse not proven; G0–G7 signer
+  accountability under-specified; source-only READY label could
+  suggest release permission; state-token style drift; T0 plan/self-test
+  frozen baseline ambiguity; missing index links.
+- Author-side repairs were subsequently made in later documentation
+  commits: limit T2 to backend-neutral source identity, move Windows
+  D1 T6 to release-governance handoff, add explicit G0–G7 signer
+  evidence path table and existing-verdict reuse decision,
+  reword source-only readiness and index supporting references.
+- **No independent Step 8 PASS receipt exists for these later edits.**
+  Do not promote author corrections to reviewer approval. Re-run
+  relevant stages on exact latest SHA before declaring EGM ready.
+
 ## Incomplete stages and evidence boundaries
 
 - **Stage 7 Design critique: THREE personas COMPLETED, findings OPEN** (not design approval).
-- **Stage 8 Second zoom-out: NOT RUN.**
+- **Stage 8 Second zoom-out: RUN; latest independent verdict FAIL** (author repairs pending fresh review).
 - **Stage 9 Implementation readiness: NOT RUN.**
 - Independent human security review, owner choice A/B, packet/WFP/DNS/
   IPv4/IPv6/UDP and Windows broker attribution: **NOT APPROVED /
