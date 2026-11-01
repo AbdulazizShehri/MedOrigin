@@ -17,5 +17,10 @@ tauri = { version = "2", features = [] }
 serde = { version = "1", features = ["derive"] }
 medorigin-desktop-d0-rust-prototype = { path = "../../desktop-d0-rust" }
 
+# Unpublished Windows D1 preview refuses a raw uncontained launch before
+# WebView2 creation; separate crate owns the narrow auditable Win32 FFI.
+[target.'cfg(windows)'.dependencies]
+medorigin-d1-windows-token-gate = { path = "../windows-token-gate" }
+
 [lints.rust]
 unsafe_code = "forbid"
