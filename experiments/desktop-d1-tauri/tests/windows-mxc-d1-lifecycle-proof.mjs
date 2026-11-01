@@ -41,10 +41,11 @@ export function requireQualifiedRun({status,stdout}) {
 // after its full native MXC GUI/UIA + bounded socket-sample qualification.
 // A legacy runner's free-form success substrings cannot pass this contract.
 // This proves process identity lifecycle observations, NOT packet/DNS denial.
-export function requireGuardedQualifiedRun({status,stdout,sha256}) {
+export function requireGuardedQualifiedRun({status,stdout,stderr,signal,sha256}) {
  if(status!==0||typeof stdout!=='string'||stdout.length>2*1024*1024||
+   typeof stderr!=='string'||stderr.trim()!==''||signal!==null||
    typeof sha256!=='string'||!/^[a-f0-9]{64}$/i.test(sha256))
-  throw Error('D1_LIFECYCLE_NO_GO: guarded runner status, output or hash invalid');
+  throw Error('D1_LIFECYCLE_NO_GO: guarded runner status, stdout, stderr, signal or hash invalid');
  // This launcher is the sole stdout receipt producer: accept only its three
  // complete, ordered records. Filtering by prefix (or trimming) could silently
  // ignore warning/failure text, blank lines, or tampered record boundaries.
