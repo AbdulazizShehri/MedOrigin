@@ -33,7 +33,7 @@ export function findD1SecurityDrift(s) {
   // well-known internet/private-network and the separately discovered
   // hostLoopback hashed SID. Lexical checks do not prove FFI semantics.
   addUnless(gate.includes('OpenProcessToken(process, 0x0008, &mut handle)') &&
-    gate.includes('GetTokenInformation(handle, 30,') &&
+    gate.split('GetTokenInformation(handle, 30,').length-1===2 &&
     /GetTokenInformation\(\s*handle,\s*29,/m.test(gate) &&
     gate.includes('primary_token_not_appcontainer') &&
     gate.includes('primary_token_capability_query_failed'),
@@ -77,9 +77,9 @@ export function findD1SecurityDrift(s) {
   // TCP-only and root-PID-only observation are incomplete even as
   // *sampled* evidence. Keep UDP and descendant identity checks.
   addUnless(observer.includes('Get-NetTCPConnection') &&
-    observer.includes('Get-NetUDPEndpoint') &&
+    observer.split('Get-NetUDPEndpoint').length-1===2 &&
     observer.includes('Assert-MxcD1ProcessTreeContinuity') &&
-    observer.includes('Assert-MxcD1StableSocketWindow') &&
+    observer.split('Assert-MxcD1StableSocketWindow').length-1===2 &&
     observer.includes('Assert-MxcD1ObservedEndpoints') &&
     observer.includes('$sample -lt 12') &&
     observer.includes('NO_PACKET_LEVEL_ATTESTATION'),
@@ -88,7 +88,7 @@ export function findD1SecurityDrift(s) {
   // A source checker is not allowed to turn the document into GO.
   addUnless(design.includes('DRAFT / NOT APPROVED') &&
     design.includes('Goldfish review: NOT RUN') &&
-    design.includes('RELEASE NO-GO') &&
+    design.includes('Release: NO-GO') &&
     design.includes('independent OS') &&
     design.includes('positive control') &&
     design.includes('#662'),
