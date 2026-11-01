@@ -23,10 +23,11 @@ export async function observeGuardedUia(executable,sha256) {
 export function assertGuardedUiaEvidence(status,output,sha256) {
  if(status!==0||typeof output!=='string'||!(/^[0-9a-fA-F]{64}$/).test(sha256))
   fail('missing qualified observer exit or expected SHA-256');
+ const lines=output.split(/\r?\n/).map(line=>line.trim());
  for(const id of cases) {
   const marker='MXC_D1_UIA_PASS '+id;
   // Each journey is bound to a complete line, not a partial identifier.
-  if(!output.split(/\r?\n/).some(line=>line.trim()===marker))
+  if(!lines.includes(marker))
    fail('missing verified journey '+id);
  }
  const snapshot=output.match(/MXC_D1_PROCESS_TREE=(\d+) WEBVIEW2=(\d+) OWNED_TCP=(\d+) NONLOOP_TCP=(\d+) UDP_ENDPOINTS=(\d+) ROOT_SHA256=([0-9a-fA-F]{64})/);
@@ -34,8 +35,8 @@ export function assertGuardedUiaEvidence(status,output,sha256) {
     Number(snapshot[3])!==0||Number(snapshot[4])!==0||Number(snapshot[5])!==0||
     snapshot[6].toLowerCase()!==sha256.toLowerCase())
   fail('process-tree identity or socket snapshot not verified');
- if(!/^MXC_D1_TIME_WINDOWED_TCP_SAMPLER_PASS samples=12 max_owned_tcp=0 max_udp_endpoints=0 NO_PACKET_LEVEL_ATTESTATION$/m.test(output))
+ if(!lines.includes('MXC_D1_TIME_WINDOWED_TCP_SAMPLER_PASS samples=12 max_owned_tcp=0 max_udp_endpoints=0 NO_PACKET_LEVEL_ATTESTATION'))
   fail('12 identity-bracketed TCP UDP samples missing or nonzero');
- if(!/^MXC_D1_REAL_APP_UIA_4_OF_4_PASS_NONPUBLISHING_NETWORK_STILL_NO_GO$/m.test(output))
+ if(!lines.includes('MXC_D1_REAL_APP_UIA_4_OF_4_PASS_NONPUBLISHING_NETWORK_STILL_NO_GO'))
   fail('real UIA script did not print final source-bound PASS marker');
 }
