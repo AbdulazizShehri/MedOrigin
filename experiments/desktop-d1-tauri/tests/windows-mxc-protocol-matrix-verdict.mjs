@@ -20,7 +20,7 @@ function requireCondition(condition,reason){if(!condition)failure(reason)}
 export function assessNativePositiveControl({
  control,udp4Receipts,udp6Receipts,tcp4Accepts,tcp6Accepts,
  tcp4Peers,tcp6Peers,expectedTcp4Port,expectedTcp6Port,
- udp4Packets,udp6Packets
+ expectedTcp4Nonce,expectedTcp6Nonce,udp4Packets,udp6Packets
 }) {
  requireCondition(control&&typeof control==='object',
   'unrestricted native control result missing');
@@ -50,9 +50,13 @@ export function assessNativePositiveControl({
  // one expected local UDP payload per address family.
  requireCondition(tcp4Accepts===1&&tcp6Accepts===1,
   'unrestricted native TCP listeners did not accept exactly one connection each');
+ const validNonce=nonce=>typeof nonce==='string'&&/^[0-9a-f]{32}$/.test(nonce);
+ requireCondition(validNonce(expectedTcp4Nonce)&&validNonce(expectedTcp6Nonce)&&
+  expectedTcp4Nonce!==expectedTcp6Nonce,
+  'two distinct lowercase 128-bit local control challenge values required');
  const validLocalPort=port=>Number.isSafeInteger(port)&&port>=1025&&port<=65535;
  const validSourcePort=port=>Number.isSafeInteger(port)&&port>=1&&port<=65535;
- const requirePeer=(peers,expectedPort,family,address)=>{
+ const requirePeer=(peers,expectedPort,family,address,nonce)=>{
   requireCondition(validLocalPort(expectedPort),
    'unrestricted TCP listener expected port absent or invalid');
   requireCondition(Array.isArray(peers)&&peers.length===1,
@@ -63,9 +67,14 @@ export function assessNativePositiveControl({
    peer.localAddress===address&&peer.localPort===expectedPort&&
    validSourcePort(peer.remotePort),
    'unrestricted TCP peer identity differs from expected local listener');
+  const frame=Buffer.from('D1_MXC_TCP'+(family==='IPv4'?'4':'6')+
+   '_PROOF='+nonce,'ascii');
+  requireCondition(peer.invalid!==true&&Buffer.isBuffer(peer.proof)&&
+   peer.proof.equals(frame),
+   'unrestricted TCP proof bytes missing, stale, duplicated or forged');
  };
- requirePeer(tcp4Peers,expectedTcp4Port,'IPv4','127.0.0.1');
- requirePeer(tcp6Peers,expectedTcp6Port,'IPv6','::1');
+ requirePeer(tcp4Peers,expectedTcp4Port,'IPv4','127.0.0.1',expectedTcp4Nonce);
+ requirePeer(tcp6Peers,expectedTcp6Port,'IPv6','::1',expectedTcp6Nonce);
  const payload=Buffer.from('synthetic-mxc-udp-probe','utf8');
  const validPacket=(packet,family,address)=>
   packet&&typeof packet==='object'&&
