@@ -41,6 +41,7 @@ jobs:
           second="$RUNNER_TEMP/medorigin-adr45-private-second"
           python3 scripts/stage_medorigin_base_only_proposal.py --out "$first/source"
           uv build --wheel --sdist "$first/source" --out-dir "$first/dist"
+          echo "ADR45_BUILDER_FIRST_DIST_INVENTORY_BEGIN"; find "$first/dist" -maxdepth 1 -printf "%f %y\n" | sort; echo "ADR45_BUILDER_FIRST_DIST_INVENTORY_END"
           python3 scripts/verify_medorigin_base_only_proposal.py --repo . --dist "$first/dist"
           python3 scripts/stage_medorigin_base_only_proposal.py --out "$second/source"
           uv build --offline --wheel --sdist "$second/source" --out-dir "$second/dist"
