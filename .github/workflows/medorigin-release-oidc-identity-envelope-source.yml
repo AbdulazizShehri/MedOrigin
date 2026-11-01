@@ -1,0 +1,35 @@
+# Nonpublishing source-only integration: build SHA/name + private handoff + OIDC envelope.
+# Never invoke a tag, build/publish/upload action, OIDC, registry, or release.
+name: MedOrigin integrated TestPyPI artifact identity and envelope source QA
+on:
+  push:
+    branches:
+      - test/medorigin-release-oidc-identity-envelope-integrated-20261101
+  pull_request:
+    branches:
+      - security/medorigin-release-cross-job-name-binding-20261031
+    paths:
+      - '.github/workflows/release.yml'
+      - 'tests/test_release_oidc_integrated_envelope.py'
+      - '.github/workflows/medorigin-release-oidc-identity-envelope-source.yml'
+permissions:
+  contents: read
+jobs:
+  source-only:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+          fetch-tags: false
+      - name: Run actual extracted pre-OIDC Bash against fictional negative fixtures
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s tests -p 'test_release_oidc_integrated_envelope.py' -v
+      - name: State evidence limit
+        shell: bash
+        run: |
+          echo 'SOURCE_ONLY_NO_OIDC_NO_RELEASE_NO_PUBLISH_NO_INDEPENDENT_SECURITY_APPROVAL'
