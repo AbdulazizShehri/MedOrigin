@@ -53,6 +53,14 @@ fn hash_fixture(fixture_id: String, max_input_bytes: usize) -> Result<FixtureHas
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // Windows D1 preview only: reject direct non-AppContainer launches
+    // before creating Tauri or WebView2. An AppContainer token does not
+    // independently establish that MXC or network-denial policy was used.
+    #[cfg(windows)]
+    if let Err(reason) = medorigin_d1_windows_token_gate::require_windows_appcontainer_primary_token() {
+        eprintln!("D1_WINDOWS_APPCONTAINER_REQUIRED_NO_GO: {reason}");
+        std::process::exit(76);
+    }
     tauri::Builder::default()
         .invoke_handler(tauri::generate_handler![preview_status, hash_fixture])
         .run(tauri::generate_context!())
