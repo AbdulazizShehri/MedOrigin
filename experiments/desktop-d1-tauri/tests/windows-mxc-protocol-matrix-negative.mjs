@@ -31,8 +31,16 @@ const probe = join(scratch, 'protocol-matrix.exe');
 mkdirSync(output);
 let tcp4Accepts=0;
 let tcp6Accepts=0;
-const tcp4 = createServer(s => {tcp4Accepts+=1;s.end();});
-const tcp6 = createServer(s => {tcp6Accepts+=1;s.end();});
+// This captures where the actual host listener accepted each connection.
+// It is NOT a challenge/response binding to the child probe executable.
+const tcp4Peers=[];
+const tcp6Peers=[];
+const peerOf=s=>({
+ remoteAddress:s.remoteAddress,remoteFamily:s.remoteFamily,
+ remotePort:s.remotePort,localAddress:s.localAddress,localPort:s.localPort
+});
+const tcp4 = createServer(s => {tcp4Accepts+=1;tcp4Peers.push(peerOf(s));s.end();});
+const tcp6 = createServer(s => {tcp6Accepts+=1;tcp6Peers.push(peerOf(s));s.end();});
 const udp4 = createSocket('udp4');
 const udp6 = createSocket('udp6');
 let udp4Receipts = 0;
@@ -80,6 +88,8 @@ try {
     'unrestricted positive control UDP packets not observed by both local listeners');
   const controlReceipt=assessNativePositiveControl({
     control,udp4Receipts,udp6Receipts,tcp4Accepts,tcp6Accepts,
+    tcp4Peers,tcp6Peers,
+    expectedTcp4Port:Number(port4),expectedTcp6Port:Number(port6),
     udp4Packets,udp6Packets
   });
   requireGate(probeDigest()===pinnedDigest,
