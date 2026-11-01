@@ -63,3 +63,44 @@ def test_existing_report_read_adoption_failure_closes_native_handle(
         for handle in rejected:
             if handle_is_live(handle):
                 close(ctypes.c_void_p(handle))
+
+
+@pytest.mark.skipif(os.name != "nt", reason="Windows existing-report CRT descriptor handoff only")
+def test_existing_report_fdopen_failure_closes_adopted_descriptor(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    report = ValidationReport(status="valid")
+    root = tmp_path / "synthetic-root"
+    root.mkdir()
+    existing = store_report(report, root=root)
+    assert existing.is_file()
+
+    real_fdopen = os.fdopen
+    rejected: list[int] = []
+
+    def reject_read_stream(fd: int, mode: str = "r", *args: object, **kwargs: object):
+        if mode == "rb":
+            rejected.append(fd)
+            raise OSError("synthetic existing-report Python read stream construction failure")
+        return real_fdopen(fd, mode, *args, **kwargs)
+
+    def descriptor_is_live(fd: int) -> bool:
+        try:
+            os.fstat(fd)
+        except OSError:
+            return False
+        return True
+
+    monkeypatch.setattr(os, "fdopen", reject_read_stream)
+    try:
+        with pytest.raises(FhirStorageError):
+            store_report(report, root=root)
+        assert len(rejected) == 1, "must reach existing-report Python read stream construction"
+        assert not descriptor_is_live(rejected[0]), "failed read-side fdopen leaked CRT descriptor"
+        directory = storage.fhirkit_reports_dir(root) / report_hash(report)
+        assert not list(directory.glob(".report-*.tmp"))
+        assert existing.is_file()
+    finally:
+        for fd in rejected:
+            if descriptor_is_live(fd):
+                os.close(fd)
