@@ -1,13 +1,13 @@
 // Nonpublishing synthetic Windows host experiment: captureDenials must BLOCK.
 // This test contains no PHI and sends only localhost and RFC5737 TEST-NET.
 // SDK is temporary scratch-only; do not use a permissive Learning Mode.
-import { getPlatformSupport, run } from '@microsoft/mxc-sdk/v1';
+import { getPlatformSupport, probe, run } from '@microsoft/mxc-sdk/v1';
 import { createServer } from 'node:net';
 import { spawnSync } from 'node:child_process';
 import { mkdtempSync,mkdirSync,readFileSync,readdirSync,rmSync } from 'node:fs';
 import { basename,dirname,join,resolve,sep } from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {assessCaptureResult,selectActionableCaptureFiles} from './windows-mxc-capture-report-verdict.mjs';
+import {assessCaptureResult,selectActionableCaptureFiles,requireNativeCapturePreflight} from './windows-mxc-capture-report-verdict.mjs';
 const dir=dirname(fileURLToPath(import.meta.url));
 const source=join(dir,'windows-mxc-tcp-probe.rs');
 const root=mkdtempSync(join(dir,'scratch-capture-'));
@@ -43,6 +43,12 @@ try {
     environment:{SystemRoot:process.env.SystemRoot,LOCALAPPDATA:work,TEMP:work,TMP:work},
     timeoutMs:30000,
   };
+  // Request-specific probe before any sandbox/capture launch: reject hosts
+  // that would fall back to AppContainer+guarded WPR with a UAC prompt.
+  // No machine security/audit policy changes or unintended elevation.
+  const preflight=requireNativeCapturePreflight(await probe(request));
+  console.log('MXC_CAPTURE_NATIVE_PREFLIGHT',preflight.tier,
+    'PROBE_ONLY_NO_UAC_NO_PACKET_PROOF');
   console.log('MXC_CAPTURE_REQUEST_BLOCK_WITH_NO_ALLOW');
   const result=await run(request);
   console.log('MXC_CAPTURE_COMPLETED',JSON.stringify({
