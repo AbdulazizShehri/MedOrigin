@@ -1,0 +1,53 @@
+# Source-only. Hosted CI cannot attest to real WFP or packet-level isolation.
+name: D1 MXC IPv4 IPv6 TCP UDP source contract (nonpublishing)
+
+on:
+  push:
+    branches:
+      - test/medorigin-d1-mxc-ipv6-udp-20261101
+  pull_request:
+    branches:
+      - test/medorigin-d1-mxc-processcontainer-20261031
+    paths:
+      - '.github/workflows/desktop-d1-mxc-ipv6-udp-source.yml'
+      - 'experiments/desktop-d1-tauri/tests/windows-mxc-*'
+
+permissions:
+  contents: read
+
+jobs:
+  source-only:
+    name: Compile native synthetic probe and validate fail-closed test contract
+    runs-on: windows-2025
+    timeout-minutes: 15
+    steps:
+      - name: Read-only exact source checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+          fetch-tags: false
+      - name: Pinned Rust compiler and formatter
+        shell: pwsh
+        run: rustup toolchain install 1.97.1 --profile minimal --component rustfmt
+      - name: Source format and compilation
+        shell: pwsh
+        run: |
+          $root='experiments/desktop-d1-tauri/tests'
+          rustfmt +1.97.1 --check "$root/windows-mxc-tcp-probe.rs"
+          if ($LASTEXITCODE -ne 0) { throw 'Rust source format failed' }
+          rustc +1.97.1 -C debuginfo=0 -C opt-level=1 -o "$env:RUNNER_TEMP/medorigin-mxc-synthetic-probe.exe" "$root/windows-mxc-tcp-probe.rs"
+          if ($LASTEXITCODE -ne 0) { throw 'Synthetic probe compilation failed' }
+      - name: JS syntax and source policy regression
+        shell: pwsh
+        run: |
+          $root='experiments/desktop-d1-tauri/tests'
+          node --check "$root/windows-mxc-processcontainer-network-negative.mjs"
+          if ($LASTEXITCODE -ne 0) { throw 'Node syntax failed' }
+          node --test "$root/windows-mxc-policy-contract.test.mjs" "$root/windows-mxc-ipv6-udp-contract.test.mjs"
+          if ($LASTEXITCODE -ne 0) { throw 'MXC fail-closed source tests failed' }
+      - name: Source-only qualification marker
+        shell: pwsh
+        run: |
+          Write-Output 'D1_MXC_IPV4_IPV6_TCP_UDP_SOURCE_ONLY_PASS_NOT_OS_RUNTIME'
+          Write-Output 'NO_D1_APP_PACKET_DNS_ATTESTATION_NO_RELEASE'
