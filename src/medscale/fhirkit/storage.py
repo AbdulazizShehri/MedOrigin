@@ -320,7 +320,14 @@ def _store_posix_report(
         temporary_name = f".report-{os.urandom(16).hex()}.tmp"
         flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW
         temporary_fd = os.open(temporary_name, flags, 0o600, dir_fd=directory_fd)
-        with os.fdopen(temporary_fd, "w", encoding="utf-8", newline="\n") as output:
+        try:
+            output_stream = os.fdopen(temporary_fd, "w", encoding="utf-8", newline="\n")
+        except BaseException:
+            # The descriptor is ours until fdopen successfully adopts it.
+            # Close it even when constructing the Python stream fails.
+            os.close(temporary_fd)
+            raise
+        with output_stream as output:
             output.write(report_json)
             output.flush()
             os.fsync(output.fileno())
