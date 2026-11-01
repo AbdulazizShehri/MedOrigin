@@ -92,17 +92,14 @@ test('T1 rejects dirty, untracked, failed, noisy or malformed Git provenance',()
   [gitReply(sha+'\n'),gitReply(' M tests/file.mjs\n')],
   [gitReply(sha+'\n'),gitReply('?? scratch.txt\n')],
   [gitReply(sha+'\n'),gitReply('',1)],
-  [gitReply(sha+'\n'),gitReply('','', 'warning')],
+  [gitReply(sha+'\n'),gitReply('',0,'warning')],
   [gitReply('A'.repeat(40)+'\n'),gitReply('')],
   [gitReply(sha+'\nEXTRA\n'),gitReply('')],
   [gitReply(sha+'\n',1),gitReply('')],
   [gitReply(sha+'\n',0,'warning'),gitReply('')]
  ];
  for(const pair of scenarios){
-  const actual=pair.map(x=>x);
-  // Explicit stderr warning case must fail even if command exits zero.
-  if(actual[1]?.length===4)actual[1]=gitReply('',0,'warning');
-  reject(()=>provenance.readCleanGitSourceIdentity('C:\\synthetic-repo',mockGit(actual)));
+  reject(()=>provenance.readCleanGitSourceIdentity('C:\\synthetic-repo',mockGit([...pair])));
  }
 });
 test('T1 binds the OS query between two clean identical source snapshots',()=>{
