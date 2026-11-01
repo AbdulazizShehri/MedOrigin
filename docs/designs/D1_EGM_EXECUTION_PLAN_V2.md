@@ -215,6 +215,22 @@ NOT implementation-ready until the decision and review are accepted.**
 
 ### T0 — Evidence reconciliation (source-only; READY)
 
+**Exact local replay command (existing source):** from the MedOrigin
+repository root with official checksum-verified Windows Node.js
+**24.22.1**, run:
+
+```powershell
+node --test experiments/desktop-d1-tauri/tests/windows-d1-egm-v2-plan-contract.test.mjs experiments/desktop-d1-tauri/tests/windows-d1-egm-design-contract.test.mjs
+```
+
+Do not run a test from a different source branch. Record `git rev-parse
+HEAD` and `git status --porcelain` before and after and compare
+document/source drift to the frozen original v2 planning base
+`cf23239e59c7cf3e8e5966bb8723c05fe46d31b3`.
+The two source-only tests and GitHub Actions are **not** network or
+Goldfish approvals.
+
+
 **EGM Step 5 correction:** this work is source-only, not strictly
 documentation-only: the v2 plan-contract test and its Windows CI workflow
 are **already existing on Draft #809** at
@@ -246,6 +262,40 @@ negative-capture evidence.
 dependency graph changes. This documentation PR remains Draft.
 
 ### T1 — Observer capability inventory (nonprivileged read-only; READY after T0)
+
+**Minimal implementation contract (new proposed files):** the Node
+entrypoint invokes *only* non-elevated read-only OS queries, e.g.
+PowerShell `Get-CimInstance Win32_OperatingSystem` for
+`BuildNumber`/`Version`, and a boolean privilege check via
+`WindowsPrincipal.IsInRole(Administrator)`; never serialize username,
+user SID, network adapters, DNS destinations, process lists or raw
+privilege groups. Read the installed lockfile for the exact SDK
+version and call SDK `getPlatformSupport()` only if installed and
+recognized. Do not call live native `captureDenials`, WFP/ETW, or
+create a policy. Unsupported API/host gives `BLOCKED`, never success.
+
+The minimal bounded source receipt has fields `sourceSha` (40 lower
+hex), `osBuild` (nonempty version/build string), `sdkVersion`
+(strict release string or `UNAVAILABLE`), `observerAvailable`
+(**false unless independently proven**), `captureProbeOnly`
+(boolean), `privilegeRequired` (boolean or `UNKNOWN`), `reason`
+(`UNVERIFIED`, `UNSUPPORTED`, `SDK_UNAVAILABLE` or
+`PRIVILEGE_REQUIRED`), and constant
+`status: "READ_ONLY_FEASIBILITY"`. It is a capability **inventory**,
+not packet policy evidence. Reject missing fields, excessive output,
+unknown enums, absent OS build and any native-os PASS claim.
+
+
+**Reuse symbol map (existing, read-only):** reuse
+`assessCaptureResult`, `selectActionableCaptureFiles`, and
+`requireNativeCapturePreflight` from
+`experiments/desktop-d1-tauri/tests/windows-mxc-capture-report-verdict.mjs`
+for capture report metadata; reuse `assessNativeProtocolMatrix` from
+`windows-mxc-protocol-matrix-verdict.mjs` for socket-API protocol
+ambiguity. Their source error scopes remain separate
+(`MXC_CAPTURE_NO_GO` and `D1_MXC_PROTOCOL_NO_GO`);
+do **not** call or merge them into the new pure source identity
+parser as if they generated independent WFP evidence.
 
 **Reuse requirement:** before writing the proposed inventory, read the
 **existing** `experiments/desktop-d1-tauri/tests/windows-mxc-capture-report-verdict.mjs`,
@@ -280,6 +330,28 @@ OS version, partial result and nonzero subprocess exit.
 feasibility receipt is filed, clearly NOT G3 observer proof. No system settings changed.
 
 ### T2 — Offline evidence-schema/adversarial verdict (source-only; READY after T0)
+
+**Exact pure interface (new proposed file):**
+`assessSourceOnlyReceipt(receipt, expected, seenIds)`, exported as a
+named function from `windows-d1-egm-evidence-verdict.mjs`.
+`receipt` and `expected` are plain, own-property-only JSON-like
+objects; `seenIds` is a read-only `Set<string>` supplied by
+the caller. The function never writes or mutates that Set. Require
+exact keys and types in `receipt`: `schemaVersion: 1`,
+`status: "SOURCE_ONLY"`, `scope: "synthetic-source-only"`,
+`sourceSha` (40 **lowercase** hex), `exeSha256` (64 lowercase
+hex), `receiptId` (64 lowercase hex). `expected` contains exactly
+`sourceSha` and `exeSha256` of the same canonical types; both
+must equal `receipt` byte-for-byte. Reject unknown/missing keys,
+duplicate prior receiptId, non-plain input, oversized JSON
+(32 KiB UTF-8), invalid normalization, other status, all
+`RELEASE_GO`/`WFP_PASS` claims, or any observer/packet field.
+Return `Object.freeze({verdict: "SOURCE_SCHEMA_VALID_ONLY",
+sourceSha, exeSha256, receiptId})`. Otherwise throw a stable
+`D1_EGM_SOURCE_RECEIPT_NO_GO` error. The caller owns persistence
+and true append-only replay history; this pure function cannot prove
+global uniqueness, signed receipts or OS security.
+
 
 **Minimal-reuse decision:** Existing `windows-mxc-capture-report-verdict.mjs`
 already validates SDK capture metadata and actionable/verbose report pairs;
