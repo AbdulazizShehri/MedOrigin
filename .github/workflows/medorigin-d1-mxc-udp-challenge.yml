@@ -1,0 +1,58 @@
+# Synthetic-only nonpublishing source checks. NOT MXC, WFP/ETW, packet, DNS,
+# WebView2 descendant, security approval, installer or release qualification.
+name: D1 MXC UDP nonce receipts (source-only)
+on:
+  push:
+    branches:
+      - test/medorigin-d1-udp-challenge-receipts-20261102
+  pull_request:
+    branches:
+      - test/medorigin-d1-tcp-proof-nonce-20261102
+    paths:
+      - '.github/workflows/medorigin-d1-mxc-udp-challenge.yml'
+      - 'experiments/desktop-d1-tauri/tests/windows-mxc-*.mjs'
+      - 'experiments/desktop-d1-tauri/tests/windows-mxc-protocol-matrix-probe.rs'
+permissions:
+  contents: read
+jobs:
+  windows-source-only:
+    runs-on: windows-2025
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+      - name: Pin synthetic Rust source checker
+        shell: pwsh
+        run: |
+          rustup toolchain install 1.97.1 --profile minimal --component rustfmt
+          if($LASTEXITCODE -ne 0){throw 'Pinned Rust install NO-GO'}
+      - name: Fail closed on UDP replay and all inherited TCP/UDP source contracts
+        shell: pwsh
+        run: |
+          $p='experiments/desktop-d1-tauri/tests'
+          foreach($f in @('windows-mxc-protocol-matrix-verdict.mjs',
+            'windows-mxc-protocol-matrix-negative.mjs',
+            'windows-mxc-unconfined-loopback-qualification.mjs')){
+            node --check "$p/$f"
+            if($LASTEXITCODE -ne 0){throw "Source syntax NO-GO: $f"}
+          }
+          $rust="$p/windows-mxc-protocol-matrix-probe.rs"
+          rustfmt +1.97.1 --check $rust
+          if($LASTEXITCODE -ne 0){throw 'Rust format NO-GO'}
+          rustc +1.97.1 --edition=2021 --emit=metadata -o "$env:RUNNER_TEMP/udp-probe.rmeta" $rust
+          if($LASTEXITCODE -ne 0){throw 'Rust source compile NO-GO'}
+          $tests=@(
+            'windows-mxc-tcp-challenge-receipts',
+            'windows-mxc-tcp-peer-receipts',
+            'windows-mxc-listener-evidence',
+            'windows-mxc-positive-control-integrity',
+            'windows-mxc-protocol-matrix-verdict',
+            'windows-mxc-protocol-matrix-stdio',
+            'windows-mxc-protocol-matrix-contract',
+            'windows-mxc-udp-challenge-receipts'
+          ) | ForEach-Object { "$p/$_.test.mjs" }
+          node --test --test-reporter=tap $tests
+          if($LASTEXITCODE -ne 0){throw 'UDP nonce source verification NO-GO'}
+          Write-Output 'D1_MXC_UDP_CHALLENGE_SOURCE_ONLY_NOT_NATIVE_MXC_OR_OS_PACKET_PROOF'
