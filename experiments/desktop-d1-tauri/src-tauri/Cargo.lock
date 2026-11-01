@@ -1777,6 +1777,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "medorigin-d1-windows-token-gate"
+version = "0.0.0"
+
+[[package]]
 name = "medorigin-desktop-d0-rust-prototype"
 version = "0.0.0"
 dependencies = [
@@ -1787,6 +1791,7 @@ dependencies = [
 name = "medorigin-desktop-d1-preview"
 version = "0.0.0"
 dependencies = [
+ "medorigin-d1-windows-token-gate",
  "medorigin-desktop-d0-rust-prototype",
  "serde",
  "tauri",

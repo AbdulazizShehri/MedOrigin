@@ -70,8 +70,13 @@ $webview=@($all | Where-Object {$ids.Contains([int]$_.ProcessId) -and $_.Name -e
 if($webview.Count -lt 1){throw 'No actual WebView2 descendants under D1 root'}
 $inventory=ConvertTo-MxcD1PublicInventory -Inventory $initial.Inventory
 Write-Output ('MXC_D1_PROCESS_SNAPSHOT_JSON='+(ConvertTo-Json -InputObject $inventory -Compress -Depth 3))
+. (Join-Path $PSScriptRoot 'windows-mxc-d1-network-endpoint-guard.ps1')
 $tcp=@(Get-NetTCPConnection -ErrorAction Stop | Where-Object {$ids.Contains([int]$_.OwningProcess)})
 $udp=@(Get-NetUDPEndpoint -ErrorAction Stop | Where-Object {$ids.Contains([int]$_.OwningProcess)})
+$postInitialProcesses=@(Get-CimInstance Win32_Process -ErrorAction Stop)
+$postInitial=Assert-MxcD1ProcessTreeContinuity -Processes $postInitialProcesses -RootPid $rootPid -ExpectedExePath $full -ExpectedStartTicks $rootStartTicks -Seen $identityHistory
+Assert-MxcD1StableSocketWindow -Before $initial.Inventory -After $postInitial.Inventory -Tcp $tcp -Udp $udp -Phase 'initial'
+Assert-MxcD1ObservedEndpoints -Tcp $tcp -Udp $udp -Phase 'initial'
 $nonloop=@($tcp | Where-Object {$_.RemoteAddress -notin @('127.0.0.1','::1','0.0.0.0','::') -and $_.State -notin @('Listen','Bound')})
 Write-Output ('MXC_D1_PROCESS_TREE='+$ids.Count+' WEBVIEW2='+$webview.Count+' OWNED_TCP='+$tcp.Count+' NONLOOP_TCP='+$nonloop.Count+' UDP_ENDPOINTS='+$udp.Count+' ROOT_SHA256='+$sha)
 if($nonloop.Count -gt 0){throw 'Observed nonloopback TCP in MXC D1 descendant tree'}
@@ -85,6 +90,10 @@ for($sample=0;$sample -lt 12;$sample++){
   if($web.Count -lt 1){throw 'Real WebView2 descendants missing during windowed sampling'}
   $tcpNow=@(Get-NetTCPConnection -ErrorAction Stop | Where-Object {$tree.Contains([int]$_.OwningProcess)})
   $udpNow=@(Get-NetUDPEndpoint -ErrorAction Stop | Where-Object {$tree.Contains([int]$_.OwningProcess)})
+  $postSampleProcesses=@(Get-CimInstance Win32_Process -ErrorAction Stop)
+  $postSample=Assert-MxcD1ProcessTreeContinuity -Processes $postSampleProcesses -RootPid $rootPid -ExpectedExePath $full -ExpectedStartTicks $rootStartTicks -Seen $identityHistory
+  Assert-MxcD1StableSocketWindow -Before $sampled.Inventory -After $postSample.Inventory -Tcp $tcpNow -Udp $udpNow -Phase ('sample-'+$sample)
+  Assert-MxcD1ObservedEndpoints -Tcp $tcpNow -Udp $udpNow -Phase ('sample-'+$sample)
   $bad=@($tcpNow | Where-Object {
     $_.RemoteAddress -notin @('127.0.0.1','::1','0.0.0.0','::') -and $_.State -notin @('Listen','Bound')
   })
