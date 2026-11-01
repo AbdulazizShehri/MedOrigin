@@ -44,7 +44,7 @@ def test_private_exact_two_archives_and_receipts(gate: Any, tmp_path: Path) -> N
     receipt = gate.handoff(src, dest)
     assert receipt["status"] == "ADR45_PRIVATE_TWO_ARCHIVES_STAGED"
     assert receipt["publication_authorized"] is False
-    assert set(p.name for p in dest.iterdir()) == {WHEEL, SDIST}
+    assert {p.name for p in dest.iterdir()} == {WHEEL, SDIST}
     assert (dest / WHEEL).read_bytes() == b"SYNTHETIC_WHEEL"
     assert (dest / SDIST).read_bytes() == b"SYNTHETIC_SDIST"
     assert set(receipt["sha256"]) == {WHEEL, SDIST}
@@ -60,7 +60,7 @@ def test_builder_extra_item_never_permitted(
         path.mkdir()
     else:
         path.write_bytes(b"EVIL")
-    with pytest.raises(gate.HandoffError, match="builder|unexpected|exact"):
+    with pytest.raises(gate.HandoffError, match=r"builder|unexpected|exact"):
         gate.handoff(src, tmp_path / "dist")
     assert not (tmp_path / "dist").exists()
 
@@ -75,7 +75,7 @@ def test_builder_link_refused_without_link_following(gate: Any, tmp_path: Path) 
         wheel.symlink_to(target)
     except (OSError, NotImplementedError):
         pytest.skip("unprivileged symlink not supported on this Windows host")
-    with pytest.raises(gate.HandoffError, match="symlink|regular"):
+    with pytest.raises(gate.HandoffError, match=r"symlink|regular"):
         gate.handoff(src, tmp_path / "dist")
     assert not (tmp_path / "dist").exists()
 
@@ -88,7 +88,7 @@ def test_builder_hardlink_not_promoted(gate: Any, tmp_path: Path) -> None:
         os.link(wheel, other)
     except (OSError, NotImplementedError):
         pytest.skip("hardlink creation not supported on this test filesystem")
-    with pytest.raises(gate.HandoffError, match="hardlink|regular"):
+    with pytest.raises(gate.HandoffError, match=r"hardlink|regular"):
         gate.handoff(src, tmp_path / "dist")
     assert not (tmp_path / "dist").exists()
 
@@ -100,14 +100,14 @@ def test_builder_directory_replaced_with_symlink(gate: Any, tmp_path: Path) -> N
         link.symlink_to(source, target_is_directory=True)
     except (OSError, NotImplementedError):
         pytest.skip("directory symlink creation unavailable")
-    with pytest.raises(gate.HandoffError, match="directory|symlink"):
+    with pytest.raises(gate.HandoffError, match=r"directory|symlink"):
         gate.handoff(link, tmp_path / "dist")
 
 
 def test_over_budget_no_copy(gate: Any, monkeypatch: Any, tmp_path: Path) -> None:
     src = make_builder(tmp_path / "builder")
     monkeypatch.setattr(gate, "MAX_ARTIFACT_BYTES", 5)
-    with pytest.raises(gate.HandoffError, match="size|budget"):
+    with pytest.raises(gate.HandoffError, match=r"size|budget"):
         gate.handoff(src, tmp_path / "dist")
     assert not (tmp_path / "dist").exists()
 
@@ -118,7 +118,7 @@ def test_target_must_not_exist_and_never_overwrite(gate: Any, tmp_path: Path) ->
     dest.mkdir()
     important = dest / "important"
     important.write_bytes(b"DO_NOT_TOUCH")
-    with pytest.raises(gate.HandoffError, match="destination|exists"):
+    with pytest.raises(gate.HandoffError, match=r"destination|exists"):
         gate.handoff(src, dest)
     assert important.read_bytes() == b"DO_NOT_TOUCH"
 
@@ -133,7 +133,7 @@ def test_unexpected_builder_gitignore_link_refused(gate: Any, tmp_path: Path) ->
         gi.symlink_to(target)
     except (OSError, NotImplementedError):
         pytest.skip("symlinks unavailable")
-    with pytest.raises(gate.HandoffError, match="symlink|regular"):
+    with pytest.raises(gate.HandoffError, match=r"symlink|regular"):
         gate.handoff(src, tmp_path / "dist")
 
 
