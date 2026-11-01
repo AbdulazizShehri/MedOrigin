@@ -16,8 +16,8 @@ import itertools
 import json
 import os
 import stat
-import tempfile
 import subprocess
+import tempfile
 import sys
 import tarfile
 import tomllib
@@ -310,10 +310,10 @@ def _read_pinned_regular_bytes(
     This is still NOT a publisher-side post-verification immutability lock.
     """
     try:
-        root_stat = os.stat(path.parent, follow_symlinks=False)
+        root_stat = path.parent.stat(follow_symlinks=False)
         if (root_stat.st_dev, root_stat.st_ino) != directory_identity:
             raise ProposalVerificationError("artifact directory changed during inspection")
-        before = os.stat(path, follow_symlinks=False)
+        before = path.stat(follow_symlinks=False)
         if (
             not stat.S_ISREG(before.st_mode)
             or before.st_nlink != 1
@@ -333,11 +333,13 @@ def _read_pinned_regular_bytes(
                 raise ProposalVerificationError("artifact payload exceeds snapshot budget")
             if _stat_identity(after) != _stat_identity(before):
                 raise ProposalVerificationError("artifact changed during pinned read")
-        if _stat_identity(os.stat(path, follow_symlinks=False)) != _stat_identity(before):
+        if _stat_identity(path.stat(follow_symlinks=False)) != _stat_identity(before):
             raise ProposalVerificationError("artifact pathname changed during pinned read")
         return raw
     except OSError as exc:
-        raise ProposalVerificationError("artifact changed or unreadable during pinned read") from exc
+        raise ProposalVerificationError(
+            "artifact changed or unreadable during pinned read"
+        ) from exc
 
 
 def read_stable_dist_bytes(dist: Path) -> tuple[bytes, bytes]:
@@ -348,18 +350,19 @@ def read_stable_dist_bytes(dist: Path) -> tuple[bytes, bytes]:
     """
     wheel, sdist = qualified_dist_paths(dist)
     try:
-        info = os.stat(dist, follow_symlinks=False)
+        info = dist.stat(follow_symlinks=False)
         if not stat.S_ISDIR(info.st_mode) or info.st_ino == 0:
             raise ProposalVerificationError("artifact directory changed during inspection")
         directory_identity = (info.st_dev, info.st_ino)
         def file_identity(path: Path) -> tuple[int, int, int, int, int]:
-            return _stat_identity(os.stat(path, follow_symlinks=False))
+            return _stat_identity(path.stat(follow_symlinks=False))
+
         before = (file_identity(wheel), file_identity(sdist))
         wheel_bytes = _read_pinned_regular_bytes(wheel, directory_identity)
         sdist_bytes = _read_pinned_regular_bytes(sdist, directory_identity)
+        current_dir = dist.stat(follow_symlinks=False)
         if (
-            (os.stat(dist, follow_symlinks=False).st_dev,
-             os.stat(dist, follow_symlinks=False).st_ino) != directory_identity
+            (current_dir.st_dev, current_dir.st_ino) != directory_identity
             or (file_identity(wheel), file_identity(sdist)) != before
         ):
             raise ProposalVerificationError("artifact source changed between stable snapshots")
