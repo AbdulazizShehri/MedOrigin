@@ -118,6 +118,8 @@ The earlier native #807 success is valid G1/G2 evidence for its **older**
 source only; it is not a G3–G7 pass. #808 remains G1/G2 **NOT_RUN** until
 real native replay is completed and recorded.
 
+## 5. Implementation plan: permitted zero-decision work vs HOLD work
+
 ### Gate evidence location, state authority and transitions
 
 For this D1 experiment, sanitized **append-only factual** evidence belongs under
@@ -152,13 +154,15 @@ time window, result and unresolved exceptions; prior receipts are immutable.
 Reading existing Windows edition/privilege metadata is fact gathering,
 **not** permission to choose WFP API, ETW provider, VM design, broker
 exemption, policy identity or release authority.
-## 5. Implementation plan: permitted zero-decision work vs HOLD work
+
 
 The upstream EGM
 [implementation-readiness standard](https://github.com/google/elephant-goldfish-model/blob/403d8881d62022490637d740657b33f01e321ea8/resources/document_standards/implementation-readiness-standard.md)
 requires a zero-decision plan: exact files, steps, tests and stable checkpoints.
 **T0–T2 below are ready as source-only tasks. T3–T6 are intentionally
 NOT implementation-ready until the decision and review are accepted.**
+
+### T0 — Evidence reconciliation (source-only; READY)
 
 **EGM Step 5 correction:** this work is source-only, not strictly
 documentation-only: the v2 plan-contract test and its Windows CI workflow
@@ -172,10 +176,14 @@ installer or OS policy. Existing `docs/designs/reviews/` reports remain
 separate append-only factual evidence (Stage T3 review process), never
 fabricated or deleted. If a shared doc has moved since branch cut, stop,
 reconcile the diff, and re-run the exact-head checks.
-### T0 — Evidence reconciliation (source-only; READY)
+
 
 **Files:** update this plan, `D1_NETWORK_CONFINEMENT_EGM.md`,
-`D1_EGM_COLD_REVIEW_PACKET.md`, and `SITEMAP.md` only.
+`D1_EGM_COLD_REVIEW_PACKET.md`, and `SITEMAP.md`, plus the
+already existing `experiments/desktop-d1-tauri/tests/windows-d1-egm-v2-plan-contract.test.mjs`
+and `.github/workflows/medorigin-d1-egm-v2-plan-contract.yml` for
+source-only plan-contract corrections. These are the exact T0 mutation paths;
+all runtime/security files remain out of scope.
 **Work:** preserve immutable source-to-binary receipt linkage from #807,
 mark #808 native **NOT_RUN**, and keep EGM and release states **NOT RUN / NO-GO**.
 **Tests:** run existing
@@ -186,6 +194,8 @@ negative-capture evidence.
 **Done when:** source-only tests pass on exact planning commit; no code or
 dependency graph changes. This documentation PR remains Draft.
 
+### T1 — Observer capability inventory (nonprivileged read-only; READY after T0)
+
 **Reuse requirement:** before writing the proposed inventory, read the
 **existing** `experiments/desktop-d1-tauri/tests/windows-mxc-capture-report-verdict.mjs`,
 `windows-mxc-capture-denials-experiment.mjs`, existing source-only
@@ -194,7 +204,7 @@ dependency graph changes. This documentation PR remains Draft.
 source SHA and fail-closed metadata checks; do **not** rerun the native
 capture experiment as part of read-only inventory. Changes to those
 existing files require a separately reviewed minimal diff.
-### T1 — Observer capability inventory (nonprivileged read-only; READY after T0)
+
 
 **Files (new, proposed next Draft):**
 `experiments/desktop-d1-tauri/tests/windows-d1-observer-capability-inventory.mjs`
@@ -218,6 +228,8 @@ OS version, partial result and nonzero subprocess exit.
 **Done when:** source tests pass and an attributable *read-only*
 feasibility receipt is filed, clearly NOT G3 observer proof. No system settings changed.
 
+### T2 — Offline evidence-schema/adversarial verdict (source-only; READY after T0)
+
 **EGM Step 5 correction:** T2 is limited to a **backend-neutral**
 source-verdict for immutable identity, internal consistency, and negative
 mutations. The following observer-specific fields are **provisional
@@ -229,7 +241,7 @@ belongs to T3 after architecture selection. Reuse the existing
 and `windows-mxc-protocol-matrix-verdict.mjs` error classifications
 where their behavior already applies; add a new parser only for the
 missing abstract proof/lineage boundary.
-### T2 — Offline evidence-schema/adversarial verdict (source-only; READY after T0)
+
 
 **Files (new, separate next Draft):**
 `experiments/desktop-d1-tauri/tests/windows-d1-egm-evidence-verdict.mjs`
@@ -285,13 +297,15 @@ token, descendants, brokers, errors, recovery and signing are bound
 **only after** T4 produces accepted evidence and a new architecture ADR.
 No uncontained fallback; installer/update changes need separate review.
 
+### T6 — Cross-platform and release governance (HOLD)
+
 **Scope correction (EGM Zoom Out):** Windows D1 work **does not**
 include implementing macOS/Linux qualification. That is a separate
 platform roadmap with its own owner authorization and evidence.
 This stage only tracks release blockers and hands off platform plans
 without executing them inside D1. No new cross-platform code is
 authorized by this document.
-### T6 — Cross-platform and release governance (HOLD)
+
 
 Independently qualify macOS/Linux native APIs; Windows evidence does
 not transfer. Resolve #603, #574 and #622 through their own review
@@ -324,13 +338,15 @@ At every step, a deliberately observed allowed-control packet establishes
 sensitivity; an explicit attributed blocked-control record establishes
 visibility into denial. Both are necessary, neither alone sufficient.
 
+## 7. Machine-readable evidence discipline
+
 The envelope in this section is a **NON-NORMATIVE PLACEHOLDER**.
 It is not a receipt from OpenCode, MXC, WFP, DNS or a source test. Any
 event schema or observer-specific field becomes normative only through
 a separately reviewed, owner-approved T3 architecture decision and T4
 observed controls. T2 may validate abstract consistency and fail closed
 without asserting OS packet denial.
-## 7. Machine-readable evidence discipline
+
 
 Suggested **future** sanitized envelope (example fields, not observed values):
 
@@ -366,6 +382,8 @@ bounded timing, drop counters, control destinations/ownership without PHI,
 and independent review decisions. Keep raw privacy-sensitive captures
 out of the repository; commit only sanitized reproducible metadata.
 
+## 8. Fresh-context EGM Goldfish handoff and drift policy
+
 ### Verified partial Goldfish invocation, not a completed EGM approval
 
 Two actual native OpenCode `subagent` reviews were completed on the
@@ -383,7 +401,7 @@ The full review remains NO-GO. This partial receipt does not override
 the original `Review state: NOT RUN` marker used for complete five-stage
 acceptance, and never substitutes independently approved OS packet
 proof or owner/security release decisions.
-## 8. Fresh-context EGM Goldfish handoff and drift policy
+
 
 Upstream source: Google
 [Elephant-Goldfish Model](https://github.com/google/elephant-goldfish-model)
@@ -391,9 +409,11 @@ pinned to `403d8881d62022490637d740657b33f01e321ea8` (Apache-2.0).
 It is a design/review plugin, not a medical model. Read the full plugin,
 its persona files and standards; do not claim upstream Google approval.
 
-**Goldfish review: NOT RUN.** This session does not expose native isolated
-subagent tools. A parent-context critique or passing CI must not be relabelled
-as a Goldfish review. If a harness lacks actual fresh subagents, stop
+**Goldfish review: NOT RUN as a complete five-stage acceptance.**
+Native OpenCode fresh subagents did execute stages 5, 6 and the three
+Stage-7 personas. The initial Stage-8 pass was INCOMPLETE due to tool
+step limits; Stage 9 is not complete. Parent-context critique and CI
+do not constitute Goldfish or security approval. If a harness lacks actual fresh subagents, stop
 review dispatch with **BLOCKED / NOT RUN**, rather than fabricate personas.
 
 The independent fresh reviewer must read this entire document, the
