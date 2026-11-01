@@ -41,6 +41,11 @@ jobs:
             if ($errors.Count -ne 0) { throw ('D1 PowerShell parser NO-GO: ' + $path) }
           }
           Write-Output 'D1_MXC_POWERSHELL_SOURCE_PARSE_PASS_NO_NATIVE_ATTESTATION'
+      - name: Verify bounded real GUI observation budgets
+        shell: pwsh
+        run: |
+          node --test experiments/desktop-d1-tauri/tests/windows-mxc-d1-real-app-timeout-contract.test.mjs
+          if ($LASTEXITCODE -ne 0) { throw 'Real MXC observation timeout source contract failed' }
       - name: Qualification boundary
         shell: pwsh
         run: |
