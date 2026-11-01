@@ -134,7 +134,9 @@ def _verified_copy(
         or evidence.get("wheel_sha256") != digest(wheel_raw)
         or evidence.get("sdist_sha256") != digest(sdist_raw)
     ):
-        raise ProposalVerificationError("private archive snapshot verifier digest or status mismatch")
+        raise ProposalVerificationError(
+            "private archive snapshot verifier digest or status mismatch"
+        )
     return evidence
 
 
