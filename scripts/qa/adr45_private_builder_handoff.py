@@ -3,6 +3,7 @@
 This does NOT approve ADR-0045, attest a publisher, or alter research roots.
 uv's builder-only .gitignore is inspected but is NEVER copied to dist.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -38,11 +39,7 @@ def _pinned_bytes(path: Path, *, limit: int, parent_id: tuple[int, int]) -> byte
         if (parent.st_dev, parent.st_ino) != parent_id:
             raise HandoffError("builder directory identity changed")
         before = path.lstat()
-        if (
-            not stat.S_ISREG(before.st_mode)
-            or before.st_ino == 0
-            or before.st_nlink != 1
-        ):
+        if not stat.S_ISREG(before.st_mode) or before.st_ino == 0 or before.st_nlink != 1:
             raise HandoffError("builder file is symlink, hardlink, or nonregular")
         if not (0 < before.st_size <= limit):
             raise HandoffError("builder file size exceeds the bounded budget")
