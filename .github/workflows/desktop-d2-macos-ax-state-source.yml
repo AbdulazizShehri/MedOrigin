@@ -1,0 +1,46 @@
+# Source-only Swift semantic and AXValueChanged qualification. Not VoiceOver speech acceptance.
+name: D2 macOS AX selected-state source contract (nonpublishing)
+
+on:
+  push:
+    branches:
+      - test/medorigin-d2-macos-ax-state-notify-20261101
+  pull_request:
+    branches:
+      - test/medorigin-d2-windows-native-uia-20261031
+    paths:
+      - 'experiments/desktop-d2-native-egui/tests/macos-native-ax-state-notification.swift'
+      - 'experiments/desktop-d2-native-egui/README.md'
+      - '.github/workflows/desktop-d2-macos-ax-state-source.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: d2-macos-ax-state-source-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  macos-ax-state-source:
+    name: Native AX semantics Swift lint/typecheck (not interactive or spoken)
+    runs-on: macos-latest
+    timeout-minutes: 15
+    steps:
+      - name: Read-only exact triggering source checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+          fetch-tags: false
+      - name: Swift source strict format
+        run: >-
+          swift format lint --strict
+          experiments/desktop-d2-native-egui/tests/macos-native-ax-state-notification.swift
+      - name: Swift AppKit/ApplicationServices source typecheck
+        run: >-
+          swiftc -typecheck
+          experiments/desktop-d2-native-egui/tests/macos-native-ax-state-notification.swift
+      - name: Explicit no-release boundary
+        run: |
+          echo "D2_MACOS_AX_SEMANTICS_SOURCE_ONLY_PASS_NOT_VOICEOVER_SPEECH"
+          echo "Real AXValueChanged and selected-state acceptance requires an authorized interactive Mac."

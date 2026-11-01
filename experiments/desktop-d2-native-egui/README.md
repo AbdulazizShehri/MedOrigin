@@ -503,3 +503,9 @@ or published artifact is created. Linux zbus transitive maintenance
 #673, macOS spoken VoiceOver #676, independent release-security #603
 and owner/ADR #574 remain separate NO-GO; #662 Windows D1 egress
 remains OPEN. Protect frozen research roots and historical data.
+
+### macOS AX selected-state and notification qualification (nonpublishing)
+
+The source-controlled `tests/macos-native-ax-state-notification.swift` is an additional **real interactive Mac** acceptance test for the fictional D2 preview. It requires a live D2 PID and pre-existing Accessibility inspection permission. After asynchronous AccessKit tree readiness, it checks four named selector controls, readable role descriptions, enabled states and binary selected values; it registers native `AXObserver` `AXValueChanged` notifications and requires a real notification **and** exactly one selected control after each of four `AXPress` selections. The test normalizes the initial selection to avoid false negatives when the same app process is reused. An invalid PID must fail closed. No system accessibility settings are changed.
+
+On an authorized Apple Silicon Mac (macOS 26.6.2), pinned eframe 0.36.0/Rust 1.97.1, the four selected-state/notification transitions passed twice on the same real D2 process, the wrong-PID negative failed as required, and Swift strict formatting/typecheck passed. The read-only hosted macOS workflow performs **source lint/typecheck only**; it cannot attest interactive AX events. **This is NOT a test of actual VoiceOver spoken output, speech announcements, second-device usability or independent release-security approval.** Issue #676 remains OPEN and native D2 remains NO-GO for release. All data are synthetic; no publication, installer, clinical use, PHI or network-isolation approval.
