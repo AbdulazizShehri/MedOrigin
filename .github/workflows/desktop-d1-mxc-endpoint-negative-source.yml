@@ -1,0 +1,32 @@
+# Nonpublishing synthetic source tests only. This workflow does not demonstrate
+# OS network enforcement, packet-level telemetry, native MXC or actual WebView2.
+name: D1 MXC owned endpoint fail-closed source contracts
+on:
+  push:
+    branches: [test/medorigin-d1-mxc-endpoint-negative-20261101]
+  pull_request:
+    branches: [fix/medorigin-mxc-sdk-import-gate-20261031]
+    paths:
+      - 'experiments/desktop-d1-tauri/tests/windows-mxc-d1-network-endpoint-guard.ps1'
+      - 'experiments/desktop-d1-tauri/tests/windows-mxc-d1-network-endpoint-guard.test.ps1'
+      - 'experiments/desktop-d1-tauri/tests/windows-mxc-d1-real-uia-qualification.ps1'
+      - '.github/workflows/desktop-d1-mxc-endpoint-negative-source.yml'
+permissions:
+  contents: read
+jobs:
+  windows-source:
+    runs-on: windows-2025
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+      - name: Strict synthetic TCP and UDP negative cases and real harness binding
+        shell: pwsh
+        run: |
+          & experiments/desktop-d1-tauri/tests/windows-mxc-d1-network-endpoint-guard.test.ps1
+      - name: Qualification boundary
+        shell: pwsh
+        run: |
+          Write-Output 'SYNTHETIC_SOURCE_ONLY_NO_PACKET_PROOF_NO_NATIVE_MXC_NO_WEBVIEW2_NO_RELEASE'
