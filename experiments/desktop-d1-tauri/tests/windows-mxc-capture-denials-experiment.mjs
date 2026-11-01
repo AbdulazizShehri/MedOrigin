@@ -1,18 +1,20 @@
 // Nonpublishing synthetic Windows host experiment: captureDenials must BLOCK.
 // This test contains no PHI and sends only localhost and RFC5737 TEST-NET.
 // SDK is temporary scratch-only; do not use a permissive Learning Mode.
-import { getPlatformSupport, run } from '@microsoft/mxc-sdk/v1';
+import { getPlatformSupport, probe, run } from '@microsoft/mxc-sdk/v1';
 import { createServer } from 'node:net';
 import { spawnSync } from 'node:child_process';
 import { mkdtempSync,mkdirSync,readFileSync,readdirSync,rmSync } from 'node:fs';
 import { basename,dirname,join,resolve,sep } from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {assessCaptureResult} from './windows-mxc-capture-report-verdict.mjs';
+import {assessCaptureResult,selectActionableCaptureFiles,requireNativeCapturePreflight} from './windows-mxc-capture-report-verdict.mjs';
 const dir=dirname(fileURLToPath(import.meta.url));
 const source=join(dir,'windows-mxc-tcp-probe.rs');
 const root=mkdtempSync(join(dir,'scratch-capture-'));
 const output=join(root,'output');
+const work=join(root,'work');
 mkdirSync(output);
+mkdirSync(work);
 const native=join(root,'probe.exe');
 const server=createServer(socket=>socket.end());
 let listening=false;
@@ -34,29 +36,37 @@ try {
     command:`"${native}" ${port}`,
     containment:{type:'processcontainer',config:{captureDenials:{mode:'block',outputPath:join(output,'denials.json'),retainEtl:false}}},
     network:{egress:{default:'deny'},ingress:{default:'deny',hostLoopback:'deny'}},
-    filesystem:{readonlyPaths:[native],readwritePaths:[output]},
-    workingDirectory:output,
-    environment:{SystemRoot:process.env.SystemRoot,LOCALAPPDATA:output,TEMP:output,TMP:output},
+    // The contained workload must NEVER be allowed to edit its own host-owned
+    // capture report. Keep writable scratch and capture output separate.
+    filesystem:{readonlyPaths:[native],readwritePaths:[work]},
+    workingDirectory:work,
+    environment:{SystemRoot:process.env.SystemRoot,LOCALAPPDATA:work,TEMP:work,TMP:work},
     timeoutMs:30000,
   };
+  // Request-specific probe before any sandbox/capture launch: reject hosts
+  // that would fall back to AppContainer+guarded WPR with a UAC prompt.
+  // No machine security/audit policy changes or unintended elevation.
+  const preflight=requireNativeCapturePreflight(await probe(request));
+  console.log('MXC_CAPTURE_NATIVE_PREFLIGHT',preflight.tier,
+    'PROBE_ONLY_NO_UAC_NO_PACKET_PROOF');
   console.log('MXC_CAPTURE_REQUEST_BLOCK_WITH_NO_ALLOW');
   const result=await run(request);
-  console.log('MXC_CAPTURE_RESULT',JSON.stringify(result).slice(0,6500));
+  console.log('MXC_CAPTURE_COMPLETED',JSON.stringify({
+    exitCode:result.exitCode,timedOut:result.timedOut,
+    warnings:(result.warnings||[]).length,
+    totalDenials:result.outputMetadata?.captureDenials?.totalDenials,
+    truncated:result.outputMetadata?.captureDenials?.deniedResourcesTruncated
+  }));
   ensure(!result.outputMetadata?.captureDenialsError,'SDK reports capture finalization failure');
   const reportPath=result.outputMetadata?.captureDenials?.outputPath;
   ensure(typeof reportPath==='string' && reportPath.length>0,'SDK did not bind an authoritative capture output path');
   ensure(resolve(dirname(reportPath))===resolve(output),'capture output escaped task-owned directory');
-  const reports=readdirSync(output).filter(n=>n.endsWith('.json'));
-  ensure(reports.length===1 && reports[0]===basename(reportPath),'capture report filename differs from structured SDK metadata');
-  console.log('MXC_CAPTURE_REPORT_FILES',JSON.stringify(reports));
-  for(const name of reports){
-    try{
-      const payload=JSON.parse(readFileSync(join(output,name),'utf8'));
-      console.log('MXC_CAPTURE_JSON_SUMMARY',JSON.stringify({summary:payload.summary,total_denials:payload.denials?.length,
-        sample:(payload.denials||[]).slice(0,3)}).slice(0,3000));
-    }catch(e){console.log('MXC_CAPTURE_REPORT_BAD_JSON',e.message);}
-  }
-  const verdict=assessCaptureResult(result,reports,name=>readFileSync(join(output,name),'utf8'));
+  // MXC seals two files: actionable denials.<run>.json and its
+  // denials.<run>.verbose.json sibling. Never mistake the verbose file
+  // for an actionable receipt or log raw resources to CI.
+  const reports=selectActionableCaptureFiles(readdirSync(output),reportPath);
+  const verdict=assessCaptureResult(result,reports,
+    name=>readFileSync(join(output,name),'utf8'));
   console.log('MXC_CAPTURE_REPORT_VERIFIED_NOT_WFP_PROOF',JSON.stringify(verdict));
 } catch(e){console.error('MXC_CAPTURE_NO_GO',e.message);process.exitCode=1;}
 finally{

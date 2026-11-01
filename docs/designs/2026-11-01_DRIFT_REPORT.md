@@ -29,6 +29,16 @@ unapproved design does not authorize filling them on the owner host.
   already runs two exact-SHA MXC GUI sessions and checks process identity
   cleanup. It does not establish installer/upgrade, crash-recovery or
   independently verified broker/network packet continuity.
+- **Native capture preflight/runtime divergence (new actual negative):**
+  A Windows 26300 request-specific `probe` for block-mode MXC
+  `captureDenials` returned native `base-container` available, yet
+  the actual sandbox failed `StartLearningModeTraceWithOptions`
+  (`0x80004001 / E_NOTIMPL`) before writing a receipt. The
+  [receipt integrity experiment](../../experiments/desktop-d1-tauri/evidence/windows-mxc-capture-receipt-native-no-go-20261101.md)
+  now rejects incomplete/mismatched reports, requires a host-owned
+  capture directory and does not elevate to guarded WPR, but **no
+  OS packet/network-denial audit was obtained**. Independent supported
+  disposable-OS feasibility and full D1/broker capture remain pending.
 - **No immutable launch-policy identity:** The current primary-token
   AppContainer/SID helper rejects known Internet/private/hostLoopback
   capabilities but cannot prove authentic MXC source, OS policy or signed

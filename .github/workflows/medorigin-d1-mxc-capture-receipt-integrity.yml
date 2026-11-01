@@ -1,0 +1,38 @@
+# Synthetic-only Node integrity checks, NOT native MXC/WFP/packet proof.
+name: D1 MXC denial capture receipt integrity
+on:
+  push:
+    branches:
+      - test/medorigin-d1-mxc-denial-receipt-integrity-20261101
+  pull_request:
+    branches:
+      - docs/medorigin-d1-egm-isolation-design-20261101
+    paths:
+      - 'experiments/desktop-d1-tauri/tests/windows-mxc-capture-*'
+      - '.github/workflows/medorigin-d1-mxc-capture-receipt-integrity.yml'
+permissions:
+  contents: read
+jobs:
+  capture-receipt-source:
+    runs-on: windows-2025
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+      - name: Verify MXC denial receipt consistency and host-owned capture staging
+        shell: pwsh
+        run: |
+          $d='experiments/desktop-d1-tauri/tests'
+          node --check "$d/windows-mxc-capture-report-verdict.mjs"
+          if ($LASTEXITCODE -ne 0) { throw 'Capture verifier JS parser NO-GO' }
+          node --check "$d/windows-mxc-capture-denials-experiment.mjs"
+          if ($LASTEXITCODE -ne 0) { throw 'Capture runner JS parser NO-GO' }
+          node --test "$d/windows-mxc-capture-contract.test.mjs"
+          if ($LASTEXITCODE -ne 0) { throw 'Capture receipt integrity negative contracts NO-GO' }
+          # EGM design remains an unreviewed NO-GO, including this failed
+          # native-capture experiment and independent OS-proof blockers.
+          node --test "$d/windows-d1-egm-design-contract.test.mjs" "$d/windows-d1-egm-source-drift.test.mjs"
+          if ($LASTEXITCODE -ne 0) { throw 'EGM source/design NO-GO contract failed' }
+          Write-Output 'CAPTURE_RECEIPT_SOURCE_ONLY_NO_WFP_NO_PACKET_NO_MXC_NO_RELEASE'

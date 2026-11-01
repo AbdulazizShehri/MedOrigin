@@ -89,6 +89,28 @@ must **reuse or explicitly replace** these experimental sources after a
 fresh review, rather than creating redundant tools or claiming their tests
 are already sufficient.
 
+### 2026-11-01 actual MXC capture compatibility finding
+
+The [capture integrity and native failure report](../../experiments/desktop-d1-tauri/evidence/windows-mxc-capture-receipt-native-no-go-20261101.md)
+records an additional real NO-GO on Windows build `10.0.26300`
+using cached MXC SDK `1.0.1`: an exact-request `probe` returned
+`base-container` and `nativeCaptureAvailable=true`, but the
+subsequent `captureDenials.mode='block'` run failed before a receipt
+could be generated:
+`StartLearningModeTraceWithOptions: HRESULT 0x80004001 (E_NOTIMPL)`.
+No native packet/denial capture exists from that attempted run.
+The experiment deliberately refused an automatic UAC/guarded capture
+fallback, did not turn on permissive Learning Mode and did not alter
+machine-wide Windows firewall or auditing policy.
+
+The receipt verifier now cross-checks SDK metadata against the
+actionable JSON count, exit status and truncation indicators, requires
+the per-run actionable+verbose pair, and prevents the workload from
+writing its host-owned capture output. Offline Windows validation:
+**30/30 source/negative cases PASS**. This is useful evidence-integrity
+hardening, **not** a resolution of #662. The approved design must
+account for a request probe succeeding while live capture fails.
+
 ## 6. Test matrix and acceptance criteria
 
 | Case | Expected result / required evidence |
