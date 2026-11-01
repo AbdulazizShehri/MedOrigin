@@ -107,7 +107,7 @@ export function readCleanGitSourceIdentity(repoDir,runner=spawnSync){
   return result.stdout;
  };
  const head=git(['rev-parse','--verify','HEAD']);
- if(!/^[0-9a-f]{40}\\r?\\n$/.test(head))deny('Git HEAD not canonical');
+ if(!/^[0-9a-f]{40}\r?\n$/.test(head))deny('Git HEAD not canonical');
  const dirty=git(['status','--porcelain=v1','--untracked-files=all']);
  if(dirty!=='')deny('Git source tree is dirty');
  return head.trim();
