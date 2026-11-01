@@ -25,7 +25,15 @@ A successful GUI or a zero-socket snapshot does not demonstrate zero packets.
 | [MXC capture native NO-GO](../../experiments/desktop-d1-tauri/evidence/windows-mxc-capture-receipt-native-no-go-20261101.md) | Windows 26300 / SDK 1.0.1 | `captureDenials` failed with `E_NOTIMPL` | Native packet/audit availability |
 | [UDP matrix native NO-GO](../../experiments/desktop-d1-tauri/evidence/windows-mxc-udp-send-softaccept-no-go-20261101.md) | Synthetic Rust probe, separate from WebView2 product | TCP `WSA10013`; UDP `SENT23` with no local listener delivery | Either UDP packet-level denial or UDP external delivery |
 
-**Source freeze for this planning delta:** `a7cdbdf4d498f1a75017333a20f6ae1db4a476b1` (#808).
+**Frozen D1 runtime code baseline:** `a7cdbdf4d498f1a75017333a20f6ae1db4a476b1` (#808).
+Subsequent Draft #809 commits are documentation/source-contract edits;
+source-drift does **not** qualify new native MXC executable behavior.
+Goldfish stages 5–7 reviewed original planning document commit
+`cf23239e59c7cf3e8e5966bb8723c05fe46d31b3`.
+Stage-8 reviewed a later documentation revision
+`df18a3858ebf73933d8bffe5f29ca261af3f6ef0` and returned
+**INCOMPLETE** due to step limits. The updated plan requires re-review,
+not automatic transfer of old approvals.
 Later source changes require a **new**, exact-SHA evidence record; never reuse #807's
 native receipt to qualify #808 or this documentation branch. This plan is based on
 [the original D1 EGM concept and design](D1_NETWORK_CONFINEMENT_EGM.md) and
@@ -78,6 +86,29 @@ The OS boundary must be assessed independently from MXC's requested
 configuration or a process's self-reported token flags. Windows DNS
 caching, proxies, shared service workers and PID reuse must be classified.
 Do not log real user destinations or packet contents.
+
+## Proposed Architecture (unapproved concept)
+
+Already implemented: synthetic D1 Tauri/Rust app, guarded MXC test launcher,
+primary-token admission check and sampled UIA/socket/process monitors.
+**Not implemented:** an authorized independently verified OS deny policy,
+WFP/ETW capture that works on this host, DNS/broker attribution, a mandatory
+signed launcher or a release decision. The conceptual component flow is
+exact-source binary → guarded contained process → WebView2 descendants →
+future approved OS denial policy + independent observer and controls →
+sanitized evidence → independent security review. An app-side token check
+or CSP is never the independent OS observer.
+
+## Risks & Mitigations (unapproved)
+
+| Risk | Mitigation and decision owner | Gate |
+| --- | --- | --- |
+| Native MXC capture `E_NOTIMPL` after positive SDK probe | T1 read-only inventory; owner-approved disposable observer, independent security reviewer | G3 BLOCKED |
+| UDP `SENT23` and zero local delivery | Independent positive-control and explicit denied-flow packet record, security reviewer | G5 NOT_RUN |
+| DNS cache, shared broker/proxy egress, unknown PID | Cross-process, time-bound owner classification; unknown → NO-GO, security reviewer | G4 NOT_RUN |
+| PID reuse, short-lived children, dropped trace events | Immutable process start ID and observer event counters; incomplete → STOP | G4/G6 NOT_RUN |
+| Hardcoded `networkLoopback` SID may differ by Windows build | Read-only supported-host derivation check before relying on the gate, Windows security engineer | G2 UNVERIFIED hypothesis |
+| Binary TOCTOU, unsigned launcher, capability bypass | Immutable file/policy binding, signed mandatory launcher and review, owner/security | T5 HOLD |
 
 ## 3. Architectural alternatives and STOP decision
 
@@ -246,15 +277,19 @@ missing abstract proof/lineage boundary.
 **Files (new, separate next Draft):**
 `experiments/desktop-d1-tauri/tests/windows-d1-egm-evidence-verdict.mjs`
 and `experiments/desktop-d1-tauri/tests/windows-d1-egm-evidence-verdict.test.mjs`. Keep this free of native OS probes.
-**Work:** implement a pure parser that **fails closed** for the following
-fields in an eventual independent observer receipt: `sourceSha`,
-`exeSha256`, `policySha256`, `osBuild`, `observerIdentity`,
+**Work:** implement a pure, backend-neutral source validator for
+`sourceSha`, `exeSha256`, unique `receiptId`, schema version,
+`status` and `scope`. Reject missing or invalid SHA, conflicting
+source or binary identity, malformed/replayed receipt IDs, unknown state,
+nonzero child exit, and invented security/release PASS. The only possible
+positive classification is **SOURCE_SCHEMA_VALID_ONLY**, never an OS
+enforcement or release PASS. **Do not freeze an observer API before T3.**
+Candidate observer fields `policySha256`, `osBuild`, `observerIdentity`,
 `observationStart`, `observationEnd`, `eventCount`,
 `droppedEvents`, `positiveControls`, `deniedControls`,
-`unknownOwnershipCount`, `brokerClassification`, `protocolCoverage`,
-`lifecycleCoverage`, `status`, and `scope`.
-The parser may return **SOURCE_SCHEMA_VALID_ONLY** for complete synthetic
-fixtures, never an OS enforcement or release PASS.
+`unknownOwnershipCount`, `brokerClassification`,
+`protocolCoverage` and `lifecycleCoverage` remain
+**NON-NORMATIVE**, deferred to the approved backend/ADR at T3/T4.
 **Negative tests:** missing/mismatched SHA, duplicate process identity,
 stale or reversed timestamps, zero positive-control detection, lost
 events, `SENT23` misclassified as a block, missing IPv6/DNS, unknown broker,
@@ -292,12 +327,23 @@ broker, dropped records, incomplete privileges, lack of guest rollback.
 
 ### T5 — Verified policy bound to mandatory launcher (HOLD)
 
+**Target files:** not specified or authorized until owner-approved T3/T4
+backend selection; this is NOT implementation-ready.
+**Required tests once approved:** mandatory entrypoint, no uncontained
+fallback, changed EXE/policy hash refusal, restart/upgrade/crash/cleanup,
+unknown broker refusal and no global firewall changes. Do not execute now.
+
 Define how policy identity, immutable executable file handle, effective
 token, descendants, brokers, errors, recovery and signing are bound
 **only after** T4 produces accepted evidence and a new architecture ADR.
 No uncontained fallback; installer/update changes need separate review.
 
 ### T6 — Cross-platform and release governance (HOLD)
+
+**Target files:** none in the Windows-only D1 experiment. macOS/Linux
+qualification is a separate future roadmap, not this implementation.
+**Required review once approved:** independently close #603, #574, #622
+and re-qualify relevant platform artifacts. No D1 release action now.
 
 **Scope correction (EGM Zoom Out):** Windows D1 work **does not**
 include implementing macOS/Linux qualification. That is a separate
@@ -415,6 +461,13 @@ Stage-7 personas. The initial Stage-8 pass was INCOMPLETE due to tool
 step limits; Stage 9 is not complete. Parent-context critique and CI
 do not constitute Goldfish or security approval. If a harness lacks actual fresh subagents, stop
 review dispatch with **BLOCKED / NOT RUN**, rather than fabricate personas.
+
+Independent reviewers must also read the actual
+[native MXC app source](../../experiments/desktop-d1-tauri/tests/windows-mxc-d1-real-app-qualification.mjs),
+[Windows token guard](../../experiments/desktop-d1-tauri/windows-token-gate/src/lib.rs),
+[socket observer](../../experiments/desktop-d1-tauri/tests/windows-mxc-d1-network-endpoint-guard.ps1),
+and [concepts brief](D1_NETWORK_CONFINEMENT_CONCEPTS_BRIEF.md).
+Missing a required read is an incomplete stage.
 
 The independent fresh reviewer must read this entire document, the
 [original design](D1_NETWORK_CONFINEMENT_EGM.md),
