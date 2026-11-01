@@ -58,7 +58,9 @@ def _fake_verified(_repo: Path, dist: Path) -> dict[str, object]:
     return {
         "status": "BASE_ONLY_PROPOSAL_SOURCE_BOUND_VERIFIED",
         "source_git_commit": "test-source",
-        "wheel_sha256": hashlib.sha256((dist / "medscale-0.3.0-py3-none-any.whl").read_bytes()).hexdigest(),
+        "wheel_sha256": hashlib.sha256(
+            (dist / "medscale-0.3.0-py3-none-any.whl").read_bytes()
+        ).hexdigest(),
         "sdist_sha256": hashlib.sha256((dist / "medscale-0.3.0.tar.gz").read_bytes()).hexdigest(),
         "publication_authorized": False,
         "adr_0045_accepted": False,
@@ -276,7 +278,7 @@ def test_comparator_rejects_forged_verifier_archive_hashes(
         }
 
     monkeypatch.setattr(audit, "verify", forged)
-    with pytest.raises(audit.ProposalVerificationError, match="digest|snapshot|identity"):
+    with pytest.raises(audit.ProposalVerificationError, match=r"digest|snapshot|identity"):
         audit.compare(ROOT, left, right)
 
 
