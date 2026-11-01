@@ -39,7 +39,11 @@ export function assessNativeProtocolMatrix({result,delivered4,delivered6}) {
    sentinelPositions.push(index);
    continue;
   }
-  if(line==='')failure('empty native stdout line');
+  if(line===''){
+   if(!lines.includes('D1_MXC_ALL_8_NATIVE_SOCKETS_WSA10013_PASS'))
+    failure('native Rust eight-socket success sentinel missing');
+   failure('empty native stdout line');
+  }
   if(!line.startsWith('D1_MXC_'))failure('unexpected native stdout diagnostic');
   const m=/^D1_MXC_([A-Z0-9_]+)=(WSA\d+|SENT\d+|CONNECTED)$/.exec(line);
   if(!m)failure('malformed synthetic socket marker');
@@ -49,9 +53,6 @@ export function assessNativeProtocolMatrix({result,delivered4,delivered6}) {
  }
  requireCondition(values.size===keys.length &&
   keys.every(key=>values.has(key)),'incomplete eight-protocol socket matrix');
- requireCondition(sentinelPositions.length===1 &&
-  sentinelPositions[0]===lines.length-1,
-  'native Rust eight-socket success sentinel missing, duplicated or out of order');
  for(const key of tcpKeys){
   requireCondition(values.get(key)==='WSA10013',
    key+' lacks explicit TCP WSAEACCES refusal');
@@ -68,6 +69,9 @@ export function assessNativeProtocolMatrix({result,delivered4,delivered6}) {
   requireCondition(value==='WSA10013',
    key+' lacks explicit UDP WSAEACCES refusal');
  }
+ requireCondition(sentinelPositions.length===1 &&
+  sentinelPositions[0]===lines.length-1,
+  'native Rust eight-socket success sentinel missing, duplicated or out of order');
  requireCondition(result.exitCode===0,'native probe exit not zero');
  requireCondition(stdout.split(/\r?\n/).includes(
   'D1_MXC_ALL_8_NATIVE_SOCKETS_WSA10013_PASS'),
