@@ -203,3 +203,118 @@ def test_cli_uses_explicit_receipt_without_logging_member_names(
     assert json.loads(receipt.read_text(encoding="utf-8")) == evidence
     assert audit.main(argv) == 2
     assert json.loads(receipt.read_text(encoding="utf-8")) == evidence
+
+
+def test_comparator_uses_private_snapshots_not_mutable_original_paths(
+    audit: Any, monkeypatch: Any, tmp_path: Path
+) -> None:
+    left, right = tmp_path / "left", tmp_path / "right"
+    _make_pair(left, 3, 0)
+    _make_pair(right, 3, 0)
+    originals = {left.resolve(), right.resolve()}
+    orig_read = audit.read_stable_dist_bytes if hasattr(audit, "read_stable_dist_bytes") else None
+    seen: list[Path] = []
+
+    def capture(path: Path) -> tuple[bytes, bytes]:
+        seen.append(path)
+        assert orig_read is not None
+        return orig_read(path)
+
+    monkeypatch.setattr(audit, "read_stable_dist_bytes", capture, raising=False)
+
+    def checked_verification(_repo: Path, dist: Path) -> dict[str, object]:
+        assert dist not in originals, "untrusted original dist reopened for verification"
+        return {
+            "source_git_commit": "test-source",
+            "status": "BASE_ONLY_PROPOSAL_SOURCE_BOUND_VERIFIED",
+            "wheel_sha256": audit.digest((dist / audit.WHEEL).read_bytes()),
+            "sdist_sha256": audit.digest((dist / audit.SDIST).read_bytes()),
+            "publication_authorized": False,
+            "adr_0045_accepted": False,
+            "independent_review_complete": False,
+        }
+
+    monkeypatch.setattr(audit, "verify", checked_verification)
+    out = audit.compare(ROOT, left, right)
+    assert out["status"] == "SOURCE_BOUND_ARCHIVES_BYTE_IDENTICAL"
+    assert seen == [left, right]
+
+
+def test_comparator_rejects_forged_verifier_archive_hashes(
+    audit: Any, monkeypatch: Any, tmp_path: Path
+) -> None:
+    left, right = tmp_path / "left", tmp_path / "right"
+    _make_pair(left, 3, 0)
+    _make_pair(right, 3, 0)
+
+    def forged(_repo: Path, dist: Path) -> dict[str, object]:
+        return {
+            "source_git_commit": "test-source",
+            "status": "BASE_ONLY_PROPOSAL_SOURCE_BOUND_VERIFIED",
+            "wheel_sha256": "0" * 64,
+            "sdist_sha256": "0" * 64,
+            "publication_authorized": False,
+            "adr_0045_accepted": False,
+            "independent_review_complete": False,
+        }
+
+    monkeypatch.setattr(audit, "verify", forged)
+    with pytest.raises(audit.ProposalVerificationError, match="digest|snapshot|identity"):
+        audit.compare(ROOT, left, right)
+
+
+def test_comparator_does_not_reopen_originals_after_verification(
+    audit: Any, monkeypatch: Any, tmp_path: Path
+) -> None:
+    left, right = tmp_path / "left", tmp_path / "right"
+    _make_pair(left, 3, 0)
+    _make_pair(right, 3, 0)
+    original_paths = {
+        left / audit.WHEEL, left / audit.SDIST,
+        right / audit.WHEEL, right / audit.SDIST,
+    }
+    def fake_verify(_repo: Path, dist: Path) -> dict[str, object]:
+        return {
+            "source_git_commit": "test-source",
+            "status": "BASE_ONLY_PROPOSAL_SOURCE_BOUND_VERIFIED",
+            "wheel_sha256": audit.digest((dist / audit.WHEEL).read_bytes()),
+            "sdist_sha256": audit.digest((dist / audit.SDIST).read_bytes()),
+            "publication_authorized": False,
+            "adr_0045_accepted": False,
+            "independent_review_complete": False,
+        }
+    monkeypatch.setattr(audit, "verify", fake_verify)
+    for func in ("_zip_headers", "_tar_headers", "_zip_compressed_fingerprint",
+                 "_tar_payload_hash", "load_wheel", "load_sdist"):
+        original = getattr(audit, func)
+        def spy(path: Path, *, _original: Any = original) -> Any:
+            assert path not in original_paths, "diagnostics reopened untrusted original archive"
+            return _original(path)
+        monkeypatch.setattr(audit, func, spy)
+    assert audit.compare(ROOT, left, right)["status"] == "SOURCE_BOUND_ARCHIVES_BYTE_IDENTICAL"
+
+
+def test_comparator_snapshot_resists_original_mutation_after_verifier(
+    audit: Any, monkeypatch: Any, tmp_path: Path
+) -> None:
+    left, right = tmp_path / "left", tmp_path / "right"
+    _make_pair(left, 3, 0)
+    _make_pair(right, 3, 0)
+    calls = 0
+    def fake_verify(_repo: Path, dist: Path) -> dict[str, object]:
+        nonlocal calls
+        calls += 1
+        record = {
+            "source_git_commit": "test-source",
+            "status": "BASE_ONLY_PROPOSAL_SOURCE_BOUND_VERIFIED",
+            "wheel_sha256": audit.digest((dist / audit.WHEEL).read_bytes()),
+            "sdist_sha256": audit.digest((dist / audit.SDIST).read_bytes()),
+            "publication_authorized": False,
+            "adr_0045_accepted": False,
+            "independent_review_complete": False,
+        }
+        if calls == 1:
+            (left / audit.WHEEL).write_bytes(b"CHANGED_EXTERNAL_AFTER_SNAPSHOT")
+        return record
+    monkeypatch.setattr(audit, "verify", fake_verify)
+    assert audit.compare(ROOT, left, right)["status"] == "SOURCE_BOUND_ARCHIVES_BYTE_IDENTICAL"
