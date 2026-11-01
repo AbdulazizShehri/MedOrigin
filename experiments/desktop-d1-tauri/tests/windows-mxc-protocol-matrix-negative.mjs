@@ -29,14 +29,26 @@ const scratch = mkdtempSync(join(root, 'medorigin-mxc-protocol-'));
 const output = join(scratch, 'output');
 const probe = join(scratch, 'protocol-matrix.exe');
 mkdirSync(output);
-const tcp4 = createServer(s => s.end());
-const tcp6 = createServer(s => s.end());
+let tcp4Accepts=0;
+let tcp6Accepts=0;
+const tcp4 = createServer(s => {tcp4Accepts+=1;s.end();});
+const tcp6 = createServer(s => {tcp6Accepts+=1;s.end();});
 const udp4 = createSocket('udp4');
 const udp6 = createSocket('udp6');
 let udp4Receipts = 0;
 let udp6Receipts = 0;
-udp4.on('message', () => { udp4Receipts += 1; });
-udp6.on('message', () => { udp6Receipts += 1; });
+const udp4Packets=[];
+const udp6Packets=[];
+const recordPacket=(message,rinfo)=>({
+  payload:Buffer.from(message),address:rinfo.address,
+  family:rinfo.family,size:rinfo.size,port:rinfo.port
+});
+udp4.on('message', (message,rinfo) => {
+  udp4Receipts+=1;udp4Packets.push(recordPacket(message,rinfo));
+});
+udp6.on('message', (message,rinfo) => {
+  udp6Receipts+=1;udp6Packets.push(recordPacket(message,rinfo));
+});
 let started = false;
 const listenTcp = (server, host) => new Promise((ok, fail) => {
   server.once('error', fail);
@@ -66,7 +78,10 @@ try {
   await new Promise(done=>setTimeout(done,200));
   requireGate(udp4Receipts === 1 && udp6Receipts === 1,
     'unrestricted positive control UDP packets not observed by both local listeners');
-  const controlReceipt=assessNativePositiveControl({control,udp4Receipts,udp6Receipts});
+  const controlReceipt=assessNativePositiveControl({
+    control,udp4Receipts,udp6Receipts,tcp4Accepts,tcp6Accepts,
+    udp4Packets,udp6Packets
+  });
   requireGate(probeDigest()===pinnedDigest,
     'native probe bytes changed between control and containment');
   console.log('D1_MXC_NATIVE_UNRESTRICTED_IPV4_IPV6_TCP_UDP_LOCAL_CONTROL_PASS',
