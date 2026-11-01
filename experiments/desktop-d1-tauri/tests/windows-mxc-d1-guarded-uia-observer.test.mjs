@@ -43,6 +43,31 @@ test('reject duplicate or partially forged journey markers',()=>{
   deny(good.replace(id,id+'postfix'));
  }
 });
+test('reject extra journey or unrecognized forged journey lines',()=>{
+ deny(good+'MXC_D1_UIA_PASS patient-extra\n');
+ deny(good+'MXC_D1_UIA_PASS patient-minimal partial\n');
+ deny(good.replace(journeys[0],'MXC_D1_UIA_PASS patient-unknown'));
+});
+test('PowerShell UIA source emits every receipt anchor in chronological order',async()=>{
+ const {readFileSync}=await import('node:fs');
+ const script=readFileSync(new URL('./windows-mxc-d1-real-uia-qualification.ps1',
+  import.meta.url),'utf8');
+ const anchors=[
+  "Write-Output ('MXC_D1_UIA_PASS '+$case.id)",
+  "Write-Output ('MXC_D1_PROCESS_SNAPSHOT_JSON='",
+  "Write-Output ('MXC_D1_PROCESS_TREE='",
+  "Write-Output ('MXC_D1_TIME_WINDOWED_TCP_SAMPLER_PASS",
+  "Write-Output 'MXC_D1_REAL_APP_UIA_4_OF_4_PASS"
+ ];
+ let prior=-1;
+ for(const anchor of anchors){
+  const at=script.indexOf(anchor);
+  assert.ok(at>prior,'Expected real PowerShell output order: '+anchor);
+  prior=at;
+ }
+ assert.match(script,/Assert-MxcD1ProcessTreeContinuity/);
+ assert.match(script,/Assert-MxcD1StableSocketWindow/);
+});
 test('reject reordering fixture or process/sampler evidence',()=>{
  const reordered=lines.slice();
  [reordered[0],reordered[1]]=[reordered[1],reordered[0]];
