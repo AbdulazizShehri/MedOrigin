@@ -1,0 +1,40 @@
+# Nonpublishing synthetic-only test of the exact downstream TestPyPI payload guard.
+# No build, package upload, tag, release, OIDC permission, or registry access.
+name: MedOrigin TestPyPI exact payload envelope source qualification
+on:
+  push:
+    branches:
+      - test/medorigin-testpypi-exact-envelope-20261101
+  pull_request:
+    branches:
+      - test/medorigin-adr45-dist-envelope-20261031
+    paths:
+      - '.github/workflows/release.yml'
+      - 'tests/test_release_workflow_contract.py'
+      - '.github/workflows/medorigin-testpypi-envelope-source.yml'
+permissions:
+  contents: read
+jobs:
+  exact-envelope:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+      - name: Exercise actual pre-OIDC payload shell with synthetic negative fixtures
+        shell: bash
+        run: |
+          set -euo pipefail
+          command -v bash
+          python3 - <<'PY'
+          import runpy
+          namespace = runpy.run_path("tests/test_release_workflow_contract.py")
+          namespace["test_testpypi_oidc_payload_rejects_unreviewed_files_and_links"]()
+          print("TESTPYPI_EXACT_TWO_REGULAR_FILES_NEGATIVE_FIXTURES_PASS_SOURCE_ONLY")
+          PY
+      - name: Evidence limit
+        shell: bash
+        run: |
+          echo 'NO_PUBLISH_NO_OIDC_NO_RELEASE_NO_INDEPENDENT_SECURITY_APPROVAL'
