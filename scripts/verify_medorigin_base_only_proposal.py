@@ -292,7 +292,12 @@ def qualified_dist_paths(dist: Path) -> tuple[Path, Path]:
 
 def _stat_identity(info: os.stat_result) -> tuple[int, int, int, int, int]:
     """Bind one concrete file identity and data-stability snapshot."""
-    return (info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns, info.st_ctime_ns)
+    # Windows Python 3.14 reports different st_ctime_ns for an open fd
+    # versus the same path (fd reflects file modified time). Do not compare
+    # that platform-dependent field. Match file-id, device, length and mtime;
+    # retain ctime as an extra concurrent-mutation guard on POSIX.
+    ctime = 0 if os.name == "nt" else info.st_ctime_ns
+    return (info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns, ctime)
 
 
 def _read_pinned_regular_bytes(
