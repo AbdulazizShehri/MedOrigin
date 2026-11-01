@@ -1,0 +1,43 @@
+# Unpublished D1 permission feasibility, NOT Security event/packet capture.
+name: D1 WFP audit privilege read source-only (NO-GO)
+on:
+  push:
+    branches:
+      - test/medorigin-d1-wfp-audit-read-permission-20261102
+  pull_request:
+    branches:
+      - test/medorigin-d1-native-passive-wfp-inventory-20261102
+    paths:
+      - 'experiments/desktop-d1-tauri/tests/windows-d1-wfp-audit-read-permission.mjs'
+      - 'experiments/desktop-d1-tauri/tests/windows-d1-wfp-audit-read-permission.ps1'
+      - 'experiments/desktop-d1-tauri/tests/windows-d1-wfp-audit-read-permission.test.mjs'
+      - '.github/workflows/medorigin-d1-wfp-audit-read-permission.yml'
+permissions:
+  contents: read
+jobs:
+  source-only:
+    runs-on: windows-2025
+    timeout-minutes: 8
+    steps:
+      - name: Checkout exact candidate without retained credentials
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+          fetch-depth: 1
+      - name: Strict audit-policy permission source contracts
+        shell: pwsh
+        run: |
+          $t='experiments/desktop-d1-tauri/tests'
+          node --check "$t/windows-d1-wfp-audit-read-permission.mjs"
+          if ($LASTEXITCODE -ne 0) { throw 'D1 audit reader JS invalid' }
+          node --check "$t/windows-d1-wfp-audit-read-permission.test.mjs"
+          if ($LASTEXITCODE -ne 0) { throw 'D1 audit reader tests invalid' }
+          node --test "$t/windows-d1-wfp-audit-read-permission.test.mjs" "$t/windows-d1-passive-os-observer-inventory.test.mjs" "$t/windows-d1-observer-capability-inventory.test.mjs" "$t/windows-d1-egm-evidence-verdict.test.mjs"
+          if ($LASTEXITCODE -ne 0) { throw 'D1 nonadmin audit visibility source NO-GO' }
+      - name: Explicitly deny OS packet and release authority
+        shell: pwsh
+        run: |
+          Write-Output 'D1_AUDITPOL_METADATA_PERMISSIONS_NOT_OS_PACKET_PROOF'
+          Write-Output 'AUDITPOL_READ_ONLY_NO_EVENT_READ_NO_SECURITY_POLICY_CHANGE'
+          Write-Output 'G3_BLOCKED_G4_G5_NOT_RUN_G7_BLOCKED_NO_PUBLICATION'
