@@ -4,6 +4,7 @@
 // itself establish production isolation or full packet/DNS attestation.
 import {requireSupportedWindowsMxcNode} from './windows-mxc-d1-runtime-node-qualification.mjs';
 import {requirePinnedD1Executable} from './windows-mxc-d1-guarded-launch-preflight.mjs';
+import {observeGuardedUia,assertGuardedUiaEvidence} from './windows-mxc-d1-guarded-uia-observer.mjs';
 import {mkdtempSync,rmSync} from 'node:fs';
 import {createHash} from 'node:crypto';
 import {readFileSync} from 'node:fs';
@@ -34,17 +35,22 @@ try {
      SystemRoot:process.env.SystemRoot,LOCALAPPDATA:scratch,
      APPDATA:scratch,TEMP:scratch,TMP:scratch,WEBVIEW2_USER_DATA_FOLDER:scratch
    },
-   timeoutMs:35000
+   timeoutMs:90000
  };
  // Keep the pre-launch source-hash check adjacent to actual MXC run.
  const secondHash=createHash('sha256').update(readFileSync(admitted.path)).digest('hex');
  if(secondHash!==admitted.sha256)reject('executable changed after initial pin validation');
- const result=await run(request);
+ // Real GUI/IPC and process-tree observation must complete *during* MXC run.
+ // A container that merely reaches its timeout must never qualify on its own.
+ const [result,evidence]=await Promise.all([run(request),observeGuardedUia(admitted.path,admitted.sha256)]);
+ const {status:uiaStatus,stdout:uiaOutput,errorCode:uiaSpawnError}=evidence;
  const afterHash=createHash('sha256').update(readFileSync(admitted.path)).digest('hex');
  if(afterHash!==admitted.sha256)reject('executable changed during contained run');
  if((result.warnings||[]).length!==0||result.timedOut!==true)
    reject('runtime warnings or early GUI exit; containment not qualified');
- console.log('D1_GUARDED_UNPUBLISHED_MXC_TIMEOUT_OBSERVED_RELEASE_STILL_NO_GO');
+ if(uiaSpawnError)reject('Windows UIA observer process failed to launch or complete');
+ assertGuardedUiaEvidence(uiaStatus,uiaOutput,admitted.sha256);
+ console.log('D1_GUARDED_REAL_UIA_4_OF_4_AND_SOCKETS_PASS_NETWORK_STILL_NO_GO');
 } catch(error) {
  console.error('D1_MXC_GUARDED_LAUNCH_NO_GO',error.message);
  process.exitCode=1;
