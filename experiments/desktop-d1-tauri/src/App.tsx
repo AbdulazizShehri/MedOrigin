@@ -56,6 +56,36 @@ function isSafePreviewStatus(value: unknown): value is PreviewStatus {
     candidate.webview_runtime_egress_qualified === false;
 }
 
+// TypeScript's invoke<T> is only a compile-time assertion. The IPC boundary
+// must validate the complete serialized native receipt at runtime.
+function hasExactFields(value: unknown, fields: readonly string[]): value is Record<string, unknown> {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
+  const keys = Object.keys(value);
+  return keys.length === fields.length && fields.every((field) => Object.prototype.hasOwnProperty.call(value, field));
+}
+
+function isSafeHashReceipt(value: unknown, fixture: FixtureId, bytes: number): value is HashResult {
+  if (!hasExactFields(value, ["contract", "fixture_id", "bytes", "sha256_hex", "synthetic_only", "release_authorized"])) return false;
+  return value.contract === "medorigin-desktop-d0-raw-sha256-v1" &&
+    value.fixture_id === fixture &&
+    value.bytes === bytes &&
+    typeof value.sha256_hex === "string" &&
+    /^[0-9a-f]{64}$/.test(value.sha256_hex) &&
+    value.synthetic_only === true &&
+    value.release_authorized === false;
+}
+
+function isSafeEnvelopeReceipt(value: unknown, fixture: FixtureId, bytes: number, expected: EnvelopeResult["status"]): value is EnvelopeResult {
+  if (!hasExactFields(value, ["contract", "fixture_id", "bytes", "status", "synthetic_only", "full_fhir_r4_validated", "release_authorized"])) return false;
+  return value.contract === "medorigin-d0-synthetic-fhir-envelope-v1" &&
+    value.fixture_id === fixture &&
+    value.bytes === bytes &&
+    value.status === expected &&
+    value.synthetic_only === true &&
+    value.full_fhir_r4_validated === false &&
+    value.release_authorized === false;
+}
+
 const EXPECTED_ENVELOPE_STATUS: Record<FixtureId, EnvelopeResult["status"]> = {
   "patient-minimal": "FHIR_ENVELOPE_OK",
   "patient-invalid-utf8": "INVALID_UTF8",
@@ -105,28 +135,18 @@ export default function App() {
     setEnvelope(null);
     setBusy(true);
     try {
-      const checked = await invoke<HashResult>("hash_fixture", { fixtureId: selected, maxInputBytes: 65536 });
-      if (
-        checked.fixture_id !== selected || !checked.synthetic_only || checked.release_authorized ||
-        checked.bytes !== Number(chosen.size.replace(/[^0-9]/g, "")) ||
-        checked.contract !== "medorigin-desktop-d0-raw-sha256-v1"
-      ) {
+      const checked = await invoke<unknown>("hash_fixture", { fixtureId: selected, maxInputBytes: 65536 });
+      if (!isSafeHashReceipt(checked, selected, Number(chosen.size.replace(/[^0-9]/g, "")))) {
         throw new Error("Unexpected native hash response contract");
       }
       if (checked.sha256_hex !== chosen.sha) {
         setResult(checked);
         return;
       }
-      const inspected = await invoke<EnvelopeResult>("inspect_fhir_fixture_envelope", {
+      const inspected = await invoke<unknown>("inspect_fhir_fixture_envelope", {
         fixtureId: selected, maxInputBytes: 65536,
       });
-      if (
-        inspected.fixture_id !== selected || !inspected.synthetic_only ||
-        inspected.release_authorized || inspected.full_fhir_r4_validated ||
-        inspected.contract !== "medorigin-d0-synthetic-fhir-envelope-v1" ||
-        inspected.bytes !== checked.bytes ||
-        inspected.status !== EXPECTED_ENVELOPE_STATUS[selected]
-      ) {
+      if (!isSafeEnvelopeReceipt(inspected, selected, checked.bytes, EXPECTED_ENVELOPE_STATUS[selected])) {
         throw new Error("Unexpected synthetic FHIR envelope response contract");
       }
       // Do not display a successful hash before validating the second bridge

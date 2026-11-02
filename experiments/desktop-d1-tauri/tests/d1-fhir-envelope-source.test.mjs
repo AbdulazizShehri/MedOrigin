@@ -44,11 +44,16 @@ test('startup bridge status is strictly validated before enabling verification',
 });
 
 test('UI presents a truthful and fail-closed nonclinical result after a matching hash',()=>{
- assert.match(ui,/invoke<EnvelopeResult>\("inspect_fhir_fixture_envelope"/);
+ assert.match(ui,/invoke<unknown>\("hash_fixture"/);
+ assert.match(ui,/invoke<unknown>\("inspect_fhir_fixture_envelope"/);
+ assert.match(ui,/function isSafeHashReceipt\(value: unknown/);
+ assert.match(ui,/function isSafeEnvelopeReceipt\(value: unknown/);
+ assert.match(ui,/function hasExactFields\(value: unknown/);
+ assert.match(ui,/Object\.prototype\.hasOwnProperty\.call\(value, field\)/);
+ assert.match(ui,/\^\[0-9a-f\]\{64\}\$/);
+ assert.match(ui,/value\.full_fhir_r4_validated === false/);
+ assert.match(ui,/value\.release_authorized === false/);
+ assert.match(ui,/isSafeEnvelopeReceipt\(inspected, selected, checked\.bytes, EXPECTED_ENVELOPE_STATUS\[selected\]\)/);
  assert.match(ui,/if \(checked\.sha256_hex !== chosen\.sha\)/);
- assert.match(ui,/inspected\.status !== EXPECTED_ENVELOPE_STATUS\[selected\]/);
- assert.match(ui,/inspected\.bytes !== checked\.bytes/);
- assert.match(ui,/inspected\.full_fhir_r4_validated/);
- assert.match(ui,/inspected\.contract !== "medorigin-d0-synthetic-fhir-envelope-v1"/);
  assert.match(ui,/Not a full FHIR R4, clinical, or profile validation/);
 });
