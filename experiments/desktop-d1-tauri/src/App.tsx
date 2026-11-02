@@ -42,6 +42,20 @@ const FIXTURES: readonly { id: FixtureId; title: string; kind: string; size: str
   { id: "bundle-linked", title: "Bundle linked by URN", kind: "VALID SYNTHETIC", size: "559 B", description: "The fictional Observation links to the Patient entry fullUrl URN.", sha: "1d24976b74ab0481ce2acc1010d58ec5e4b9da9ba93071e1042afeb299a03d88" },
   { id: "bundle-dangling", title: "Bundle dangling URN", kind: "NEGATIVE CASE", size: "559 B", description: "The Observation points to an absent fictional Patient URN.", sha: "1bbc0bac94b3ff19dce3502164f3243748cf5aa7e869433bdb09e7ec2266b229" },
 ];
+// The native status handshake is untrusted until all six expected fields
+// agree with the unreleased, synthetic-only capability contract.
+function isSafePreviewStatus(value: unknown): value is PreviewStatus {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
+  const candidate = value as Record<string, unknown>;
+  return Object.keys(candidate).length === 6 &&
+    candidate.mode === "SYNTHETIC_DEVELOPER_PREVIEW" &&
+    candidate.data_access === "twelve_allowlisted_in_memory_fixtures_only" &&
+    candidate.release_authorized === false &&
+    candidate.production_parity_qualified === false &&
+    candidate.app_network_plugins_enabled === false &&
+    candidate.webview_runtime_egress_qualified === false;
+}
+
 const EXPECTED_ENVELOPE_STATUS: Record<FixtureId, EnvelopeResult["status"]> = {
   "patient-minimal": "FHIR_ENVELOPE_OK",
   "patient-invalid-utf8": "INVALID_UTF8",
@@ -66,9 +80,21 @@ export default function App() {
   const [error, setError] = useState("");
   useEffect(() => {
     let alive = true;
-    invoke<PreviewStatus>("preview_status")
-      .then((next) => { if (alive) setStatus(next); })
-      .catch(() => { if (alive) setError("Native desktop bridge unavailable. Open this preview in Tauri."); });
+    invoke<unknown>("preview_status")
+      .then((next) => {
+        if (!alive) return;
+        if (!isSafePreviewStatus(next)) {
+          setStatus(null);
+          setError("Native desktop bridge status rejected; verification unavailable.");
+          return;
+        }
+        setStatus(next);
+      })
+      .catch(() => {
+        if (!alive) return;
+        setStatus(null);
+        setError("Native desktop bridge unavailable. Open this preview in Tauri.");
+      });
     return () => { alive = false; };
   }, []);
 
