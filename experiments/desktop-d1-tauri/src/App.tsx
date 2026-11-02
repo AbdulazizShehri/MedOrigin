@@ -37,6 +37,7 @@ type NativeBatchRow = {
 type NativeBatchResponse = {
   contract: string;
   rows: NativeBatchRow[];
+  batch_sha256_hex: string;
   synthetic_only: boolean;
   full_fhir_r4_validated: boolean;
   release_authorized: boolean;
@@ -116,11 +117,17 @@ const EXPECTED_ENVELOPE_STATUS: Record<FixtureId, EnvelopeResult["status"]> = {
 };
 
 
+// A stable digest of the ordered twelve-row fictional metadata, computed
+// independently from the pinned Python golden. Not a digital signature,
+// trusted attestation, clinical validation, or evidence of network confinement.
+const EXPECTED_BATCH_SHA256 = "af062a37ed639a6df5c769bb0e9cb2e0e792b3f68760853ff8ea8e97e2ab5088";
+
 // A single native command owns the batch. Reject extra fields, missing rows,
 // reordered/duplicated fixtures, forged status, or invented security approval.
 function isSafeNativeBatchReceipt(value: unknown): value is NativeBatchResponse {
-  if (!hasExactFields(value, ["contract", "rows", "synthetic_only", "full_fhir_r4_validated", "release_authorized", "webview_runtime_egress_qualified"])) return false;
+  if (!hasExactFields(value, ["contract", "rows", "batch_sha256_hex", "synthetic_only", "full_fhir_r4_validated", "release_authorized", "webview_runtime_egress_qualified"])) return false;
   if (value.contract !== "medorigin-d1-native-fictional-batch-v1" ||
+      value.batch_sha256_hex !== EXPECTED_BATCH_SHA256 ||
       value.synthetic_only !== true || value.full_fhir_r4_validated !== false ||
       value.release_authorized !== false || value.webview_runtime_egress_qualified !== false ||
       !Array.isArray(value.rows) || value.rows.length !== FIXTURES.length) return false;
@@ -284,6 +291,7 @@ export default function App() {
               <div className="batch-summary" role="status">
                 <strong>12/12 fictional fixtures verified</strong>
                 <p>Raw SHA-256 and expected fictional envelope status matched for each allowlisted sample. Not FHIR R4 or clinical validation.</p>
+                <p>Deterministic batch metadata SHA-256 (not signed or security-approved): <code>{EXPECTED_BATCH_SHA256}</code></p>
                 <ul>{batchRows.map((row) => <li className="batch-row" key={row.id}>{row.title}: {row.status.replace(/_/g, " ")}</li>)}</ul>
               </div>
             )}

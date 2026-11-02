@@ -1,6 +1,7 @@
 // Contract checks are source-only; Rust native tests prove behavior separately.
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import {createHash} from 'node:crypto';
 import {readFileSync} from 'node:fs';
 import {dirname,resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
@@ -56,6 +57,21 @@ test('UI presents a truthful and fail-closed nonclinical result after a matching
  assert.match(ui,/isSafeEnvelopeReceipt\(inspected, selected, checked\.bytes, EXPECTED_ENVELOPE_STATUS\[selected\]\)/);
  assert.match(ui,/if \(checked\.sha256_hex !== chosen\.sha\)/);
  assert.match(ui,/Not a full FHIR R4, clinical, or profile validation/);
+});
+
+test('native batch fingerprint matches independent Node SHA-256 over all twelve exact Rust golden rows', () => {
+ assert.match(rust,/batch_sha256_hex/);
+ assert.match(ui,/value\.batch_sha256_hex !== EXPECTED_BATCH_SHA256/);
+ const block=rust.split('const NATIVE_BATCH_GOLDENS:')[1]?.split('];')[0];
+ assert.ok(block, 'native golden table');
+ const entries=[...block.matchAll(/\(\s*"([^"]+)",\s*([\d_]+),\s*"([0-9a-f]{64})",\s*"([A-Z0-9_]+)",\s*\)/g)];
+ assert.equal(entries.length,12);
+ assert.equal(new Set(entries.map((e)=>e[1])).size,12);
+ const payload='medorigin-d1-native-batch-v1\n'+entries.map((e)=>`${e[1]}\t${Number(e[2].replaceAll('_',''))}\t${e[3]}\t${e[4]}\n`).join('');
+ const actual=createHash('sha256').update(payload,'utf8').digest('hex');
+ assert.equal(actual,'af062a37ed639a6df5c769bb0e9cb2e0e792b3f68760853ff8ea8e97e2ab5088');
+ assert.match(ui,new RegExp('const EXPECTED_BATCH_SHA256 = "'+actual+'"'));
+ assert.notEqual(createHash('sha256').update(payload.replace('bundle-dangling','bundle-linked'),'utf8').digest('hex'),actual);
 });
 
 test('native fictional batch is single IPC, strict and atomic with no clinical claims', () => {

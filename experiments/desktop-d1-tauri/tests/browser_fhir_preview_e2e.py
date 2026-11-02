@@ -65,6 +65,7 @@ MOCK_BRIDGE = r"""
           rows.push({fixture_id: id, bytes: item[1], sha256_hex: item[0], status: item[2]});
         }
         const receipt = {contract: "medorigin-d1-native-fictional-batch-v1", rows,
+          batch_sha256_hex: "af062a37ed639a6df5c769bb0e9cb2e0e792b3f68760853ff8ea8e97e2ab5088",
           synthetic_only: true, full_fhir_r4_validated: false,
           release_authorized: false, webview_runtime_egress_qualified: false};
         const forge = window.__testForgeBatchReceipt;
@@ -75,6 +76,7 @@ MOCK_BRIDGE = r"""
         if (forge === "duplicate") receipt.rows[11] = {...receipt.rows[0]};
         if (forge === "wrongStatus") receipt.rows[11].status = "FHIR_ENVELOPE_OK";
         if (forge === "wrongDigest") receipt.rows[11].sha256_hex = "0".repeat(64);
+        if (forge === "wrongBatchFingerprint") receipt.batch_sha256_hex = "0".repeat(64);
         return receipt;
       }
       const item = samples[args.fixtureId];
@@ -249,6 +251,16 @@ class PreviewBrowserChecks(unittest.TestCase):
         self.assertEqual(self.page.locator(".batch-row").count(), 12)
         self.assertEqual(self.page.evaluate("window.__testInspectCalls"), 12)
         expect(self.page.locator(".outcome-error")).to_have_count(0)
+
+    def test_batch_receipt_displays_stable_digest_and_refuses_forged_digest(self) -> None:
+        self.page.get_by_role("button", name="Verify all 12 fictional fixtures").click()
+        expect(self.page.locator(".batch-summary")).to_contain_text(
+            "af062a37ed639a6df5c769bb0e9cb2e0e792b3f68760853ff8ea8e97e2ab5088"
+        )
+        self.page.evaluate("window.__testForgeBatchReceipt = 'wrongBatchFingerprint'")
+        self.page.get_by_role("button", name="Verify all 12 fictional fixtures").click()
+        expect(self.page.locator(".batch-summary")).to_have_count(0)
+        expect(self.page.locator(".outcome-error")).to_contain_text("refused")
 
     def test_batch_late_forged_receipt_never_reports_partial_success(self) -> None:
         self.page.evaluate("window.__testFailFixture = 'bundle-dangling'")

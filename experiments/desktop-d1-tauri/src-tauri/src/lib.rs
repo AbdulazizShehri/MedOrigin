@@ -2,7 +2,7 @@
 //! No network, arbitrary files, Python subprocess, telemetry, updater or shell.
 
 use medorigin_desktop_d0_rust_prototype::{
-    hash_fixture_raw_v1, inspect_named_synthetic_fhir_envelope_v1,
+    hash_fictional_batch_rows_v1, hash_fixture_raw_v1, inspect_named_synthetic_fhir_envelope_v1,
 };
 use serde::Serialize;
 
@@ -98,6 +98,7 @@ struct NativeBatchRow {
 struct NativeBatchResponse {
     contract: &'static str,
     rows: Vec<NativeBatchRow>,
+    batch_sha256_hex: String,
     synthetic_only: bool,
     full_fhir_r4_validated: bool,
     release_authorized: bool,
@@ -208,10 +209,26 @@ fn verify_all_fixtures(max_input_bytes: usize) -> Result<NativeBatchResponse, St
             status: inspected.status,
         });
     }
+    // The stable SHA-256 fingerprints the complete ordered synthetic row
+    // metadata. It is not an authentication signature or release attestation.
+    let batch_sha256_hex = hash_fictional_batch_rows_v1(
+        &rows
+            .iter()
+            .map(|row| {
+                (
+                    row.fixture_id,
+                    row.bytes,
+                    row.sha256_hex.as_str(),
+                    row.status,
+                )
+            })
+            .collect::<Vec<_>>(),
+    );
     // No intermediate rows escape Rust if any one check fails.
     Ok(NativeBatchResponse {
         contract: "medorigin-d1-native-fictional-batch-v1",
         rows,
+        batch_sha256_hex,
         synthetic_only: true,
         full_fhir_r4_validated: false,
         release_authorized: false,
@@ -372,6 +389,10 @@ mod tests {
         let result = verify_all_fixtures(65_536).expect("fixed fictional batch");
         assert_eq!(result.contract, "medorigin-d1-native-fictional-batch-v1");
         assert_eq!(result.rows.len(), 12);
+        assert_eq!(
+            result.batch_sha256_hex,
+            "af062a37ed639a6df5c769bb0e9cb2e0e792b3f68760853ff8ea8e97e2ab5088"
+        );
         assert_eq!(result.rows[0].fixture_id, "patient-minimal");
         assert_eq!(result.rows[11].fixture_id, "bundle-dangling");
         assert!(result.synthetic_only);
