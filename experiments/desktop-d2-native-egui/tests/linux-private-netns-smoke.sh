@@ -4,6 +4,16 @@
 # or establish Windows/D1, macOS, general production or clinical readiness.
 set -euo pipefail
 
+# WSL2 has an active Windows PE binfmt broker that can execute host Windows
+# programs even when the Linux child has no IPv4/IPv6 routes. Never report a
+# passing Linux network-containment smoke from a WSL host.
+if grep -qi microsoft /proc/sys/kernel/osrelease 2>/dev/null ||
+   [[ -n "${WSL_INTEROP:-}" ]] ||
+   [[ -e /proc/sys/fs/binfmt_misc/WSLInterop ]]; then
+  echo "WSL_WINDOWS_PROCESS_INTEROP_UNCONFINED: Linux netns cannot qualify host Windows broker egress" >&2
+  exit 2
+fi
+
 if [[ $# -ne 2 ]]; then
   echo "Usage: bash linux-private-netns-smoke.sh EXACT_LINUX_D2_ELF SHA256" >&2
   exit 2
