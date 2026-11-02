@@ -9,6 +9,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import re
 import sys
 import zipfile
 from contextlib import ExitStack
@@ -33,12 +34,21 @@ def inspect_wheel(
     expected_version: str | None = None,
     distribution: str = "medscale",
     require_core_only: bool = False,
+    expected_sha256: str | None = None,
 ) -> dict[str, object]:
     """Inspect the bytes to be installed, never source pyproject or inferred URLs."""
     issues: list[str] = []
     version: str | None = None
     actual: dict[str, str] = {}
     digest: str | None = None
+    # A supplied expected digest is an operator-controlled reference, not
+    # an independently authenticated or signed provenance statement.
+    expected_canonical = expected_sha256 is None or (
+        isinstance(expected_sha256, str)
+        and re.fullmatch(r"[0-9a-f]{64}", expected_sha256) is not None
+    )
+    if not expected_canonical:
+        issues.append("expected Wheel SHA-256 must be 64 lowercase hexadecimal characters")
     try:
         # Use one opened file descriptor to avoid hashing a different path
         # target than the Wheel whose metadata is subsequently inspected.
@@ -48,6 +58,8 @@ def inspect_wheel(
             for chunk in iter(lambda: source.read(1024 * 1024), b""):
                 hasher.update(chunk)
             digest = hasher.hexdigest()
+            if expected_sha256 is not None and digest != expected_sha256:
+                issues.append("Wheel SHA-256 disagrees with operator expected digest")
             source.seek(0)
             archive = resources.enter_context(zipfile.ZipFile(source))
             metadata_paths = [
@@ -119,6 +131,12 @@ def inspect_wheel(
         "status": "METADATA_QUALIFIED_ONLY" if not issues else "BLOCKED",
         "publication_authorized": False,
         "core_only_verified": require_core_only and not issues,
+        "expected_digest_matched": (
+            expected_sha256 is not None
+            and expected_canonical
+            and digest == expected_sha256
+            and not issues
+        ),
         "issues": issues,
     }
 
@@ -127,6 +145,11 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--wheel", required=True, type=Path)
     parser.add_argument("--expected-version", default=None)
+    parser.add_argument(
+        "--expected-sha256",
+        default=None,
+        help="compare the exact Wheel bytes to a separately obtained SHA-256 digest",
+    )
     parser.add_argument(
         "--require-core-only",
         action="store_true",
@@ -144,6 +167,7 @@ def main(argv: list[str] | None = None) -> int:
         expected_version=args.expected_version,
         distribution=args.distribution,
         require_core_only=args.require_core_only,
+        expected_sha256=args.expected_sha256,
     )
     encoded = json.dumps(result, sort_keys=True, indent=2) + "\n"
     if args.json_out is not None:

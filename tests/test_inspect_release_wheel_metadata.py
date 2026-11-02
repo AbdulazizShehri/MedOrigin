@@ -32,6 +32,7 @@ def inspect_wheel(
     expected_version: str | None = None,
     distribution: str = "medscale",
     require_core_only: bool = False,
+    expected_sha256: str | None = None,
 ) -> dict[str, Any]:
     """Exercise the operator CLI instead of importing scripts under an alias."""
     command = [
@@ -46,6 +47,8 @@ def inspect_wheel(
         command.extend(["--expected-version", expected_version])
     if require_core_only:
         command.append("--require-core-only")
+    if expected_sha256 is not None:
+        command.extend(["--expected-sha256", expected_sha256])
     completed = subprocess.run(command, check=False, text=True, capture_output=True)
     assert completed.returncode in (0, 2), completed.stderr
     data = json.loads(completed.stdout)
@@ -350,4 +353,56 @@ def test_core_wheel_rejects_unexpected_native_or_install_payload(
     result = inspect_wheel(wheel, require_core_only=True)
     assert "core wheel contains native executable or installer payload" in result["issues"]
     assert result["core_only_verified"] is False
+    assert result["publication_authorized"] is False
+
+
+def test_expected_digest_binds_core_wheel_to_operator_supplied_reference(tmp_path: Path) -> None:
+    wheel = _wheel(tmp_path / "candidate.whl")
+    reference_digest = hashlib.sha256(wheel.read_bytes()).hexdigest()
+    verified = inspect_wheel(
+        wheel,
+        expected_version="0.3.0",
+        require_core_only=True,
+        expected_sha256=reference_digest,
+    )
+    assert verified["status"] == "METADATA_QUALIFIED_ONLY"
+    assert verified["core_only_verified"] is True
+    assert verified["expected_digest_matched"] is True
+    assert verified["publication_authorized"] is False
+    bad = inspect_wheel(wheel, require_core_only=True, expected_sha256="0" * 64)
+    assert bad["status"] == "BLOCKED"
+    assert bad["core_only_verified"] is False
+    assert bad["expected_digest_matched"] is False
+    assert "Wheel SHA-256 disagrees with operator expected digest" in bad["issues"]
+
+
+@pytest.mark.parametrize(
+    "invalid",
+    ["", "F" * 64, "g" * 64, "a" * 63, "a" * 65, " a" * 32, "sha256:" + "a" * 64],
+)
+def test_expected_digest_rejects_malformed_or_noncanonical_reference(
+    tmp_path: Path, invalid: str
+) -> None:
+    wheel = _wheel(tmp_path / "candidate.whl")
+    result = inspect_wheel(wheel, require_core_only=True, expected_sha256=invalid)
+    assert result["status"] == "BLOCKED"
+    assert result["expected_digest_matched"] is False
+    assert result["publication_authorized"] is False
+    assert "expected Wheel SHA-256 must be 64 lowercase hexadecimal characters" in result["issues"]
+
+
+def test_digest_reference_match_never_overrides_invalid_wheel(tmp_path: Path) -> None:
+    wheel = _wheel(tmp_path / "candidate.whl", requirements=("pillow==12.3.0",))
+    digest = hashlib.sha256(wheel.read_bytes()).hexdigest()
+    result = inspect_wheel(wheel, require_core_only=True, expected_sha256=digest)
+    assert result["status"] == "BLOCKED"
+    assert result["core_only_verified"] is False
+    assert result["expected_digest_matched"] is False
+    assert result["publication_authorized"] is False
+
+
+def test_legacy_inspection_never_claims_external_digest_binding(tmp_path: Path) -> None:
+    wheel = _wheel(tmp_path / "candidate.whl")
+    result = inspect_wheel(wheel)
+    assert result["expected_digest_matched"] is False
     assert result["publication_authorized"] is False
