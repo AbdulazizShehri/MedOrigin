@@ -177,13 +177,21 @@ def main() -> int:
                 err = proc.stderr.read(2000).decode("utf-8", errors="replace") if proc.stderr else ""
                 refuse(f"native app exited rc={proc.returncode} stderr={err[-900:]!r}")
             found = subprocess.run(
-                ["xdotool", "search", "--onlyvisible", "--pid", str(proc.pid),
+                ["xdotool", "search", "--onlyvisible",
                  "--name", "MedOrigin Native Rust"],
                 capture_output=True, text=True, timeout=3, check=False,
             )
             ids = [i.strip() for i in found.stdout.splitlines() if i.strip().isdigit()]
             return ids[0] if found.returncode == 0 and len(ids) == 1 else None
-        x11_id = wait_for(x11_window, "native window mapped on disposable X11", 15)
+        try:
+            x11_id = wait_for(x11_window, "native window mapped on disposable X11", 15)
+        except RuntimeError as exc:
+            x11 = subprocess.run(
+                ["xwininfo", "-root", "-tree"],
+                capture_output=True, text=True, timeout=5, check=False,
+            )
+            refuse(f"{exc}; native_proc_poll={proc.poll()}, "
+                   f"X11 tree={x11.stdout[-2400:]!r}")
         focus = subprocess.run(
             ["xdotool", "windowactivate", "--sync", str(x11_id)],
             capture_output=True, text=True, timeout=6, check=False,
