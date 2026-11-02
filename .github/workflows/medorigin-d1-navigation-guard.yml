@@ -1,0 +1,54 @@
+# Unpublished D1 app navigation defense-in-depth only; NOT Windows packet egress proof.
+name: D1 native WebView navigation and popup refusal (nonpublishing)
+on:
+  push:
+    branches:
+      - security/medorigin-d1-deny-external-navigation-20261102
+  pull_request:
+    paths:
+      - 'experiments/desktop-d1-tauri/src-tauri/src/lib.rs'
+      - 'experiments/desktop-d1-tauri/src-tauri/tauri.conf.json'
+      - 'experiments/desktop-d1-tauri/tests/d1-navigation-policy-source.test.mjs'
+      - '.github/workflows/medorigin-d1-navigation-guard.yml'
+permissions:
+  contents: read
+jobs:
+  windows-native:
+    runs-on: windows-2025
+    timeout-minutes: 35
+    steps:
+      - name: Checkout exact candidate without credentials
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - name: Source contract RED-GREEN guard
+        shell: pwsh
+        run: |
+          node --test experiments/desktop-d1-tauri/tests/d1-navigation-policy-source.test.mjs
+          if ($LASTEXITCODE -ne 0) { throw 'D1 navigation source contract failed' }
+      - name: Install locked frontend for compile-only qualification
+        shell: pwsh
+        working-directory: experiments/desktop-d1-tauri
+        run: |
+          npm ci --no-audit --no-fund
+          if ($LASTEXITCODE -ne 0) { throw 'D1 locked npm install failed' }
+          npm run build
+          if ($LASTEXITCODE -ne 0) { throw 'D1 Vite build failed' }
+      - name: Native Rust format
+        shell: pwsh
+        working-directory: experiments/desktop-d1-tauri/src-tauri
+        run: |
+          cargo fmt -- --check
+          if ($LASTEXITCODE -ne 0) { throw 'D1 Rust format failed' }
+      - name: Native Windows Rust unit tests (no application launch)
+        shell: pwsh
+        working-directory: experiments/desktop-d1-tauri/src-tauri
+        run: |
+          cargo test --locked --lib
+          if ($LASTEXITCODE -ne 0) { throw 'D1 native Windows unit tests failed' }
+      - name: Release authority stays blocked
+        shell: pwsh
+        run: |
+          Write-Output 'D1_WEBVIEW_NAVIGATION_ONLY_NOT_WEBVIEW2_BACKGROUND_PACKET_DENIAL'
+          Write-Output 'NO_PHI_NO_RELEASE_G3_BLOCKED_G4_G5_NOT_RUN_G7_BLOCKED'
