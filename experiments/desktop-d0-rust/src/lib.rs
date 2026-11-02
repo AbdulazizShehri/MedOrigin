@@ -85,6 +85,74 @@ pub fn hash_fixture_raw_v1(
     })
 }
 
+/// A narrow offline envelope check for four BUILT-IN fictional test fixtures.
+///
+/// This does not implement FHIR R4 conformance, terminology, profiles,
+/// references, clinical validation, or arbitrary user-file parsing.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SyntheticFhirEnvelope {
+    pub contract: &'static str,
+    pub fixture_id: &'static str,
+    pub bytes: usize,
+    pub status: &'static str,
+    pub synthetic_only: bool,
+    pub full_fhir_r4_validated: bool,
+    pub release_authorized: bool,
+}
+
+pub fn inspect_named_synthetic_fhir_envelope_v1(
+    fixture_id: &str,
+    max_input_bytes: usize,
+) -> Result<SyntheticFhirEnvelope, HashError> {
+    if max_input_bytes == 0 || max_input_bytes > MAX_PROTOTYPE_INPUT_BYTES {
+        return Err(HashError::InvalidLimit);
+    }
+    let (name, len) = match fixture_id {
+        "patient-minimal" => ("patient-minimal", PATIENT.len()),
+        "patient-invalid-utf8" => ("patient-invalid-utf8", 1),
+        "patient-exact-limit" => ("patient-exact-limit", FHIR_RESOURCE_LIMIT_BYTES),
+        "patient-over-limit" => ("patient-over-limit", FHIR_RESOURCE_LIMIT_BYTES + 1),
+        _ => return Err(HashError::UnknownFixture),
+    };
+    if len > max_input_bytes {
+        return Err(HashError::InputTooLarge);
+    }
+    // Reject oversize before allocating or attempting to parse its bytes.
+    let status = if len > FHIR_RESOURCE_LIMIT_BYTES {
+        "RESOURCE_TOO_LARGE"
+    } else {
+        let mut payload: Vec<u8> = match name {
+            "patient-minimal" | "patient-exact-limit" => PATIENT.to_vec(),
+            "patient-invalid-utf8" => vec![0xff],
+            _ => unreachable!("allowlisted fixture"),
+        };
+        if name == "patient-exact-limit" {
+            payload.resize(FHIR_RESOURCE_LIMIT_BYTES, b' ');
+        }
+        match serde_json::from_slice::<serde_json::Value>(&payload) {
+            Ok(value)
+                if value.get("resourceType").and_then(|v| v.as_str()) == Some("Patient")
+                    && value.get("id").and_then(|v| v.as_str()) == Some("synthetic")
+                    && value.get("active").and_then(|v| v.as_bool()) == Some(true) =>
+            {
+                "FHIR_ENVELOPE_OK"
+            }
+            Ok(_) => "INVALID_FHIR_ENVELOPE",
+            Err(_) if std::str::from_utf8(&payload).is_err() => "INVALID_UTF8",
+            Err(_) => "INVALID_JSON",
+        }
+    };
+    Ok(SyntheticFhirEnvelope {
+        contract: "medorigin-d0-synthetic-fhir-envelope-v1",
+        fixture_id: name,
+        bytes: len,
+        status,
+        synthetic_only: true,
+        full_fhir_r4_validated: false,
+        release_authorized: false,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

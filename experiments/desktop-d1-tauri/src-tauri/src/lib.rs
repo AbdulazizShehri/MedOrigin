@@ -1,7 +1,9 @@
 //! Experimental offline, synthetic-only desktop window. Not clinical or releasable.
 //! No network, arbitrary files, Python subprocess, telemetry, updater or shell.
 
-use medorigin_desktop_d0_rust_prototype::hash_fixture_raw_v1;
+use medorigin_desktop_d0_rust_prototype::{
+    hash_fixture_raw_v1, inspect_named_synthetic_fhir_envelope_v1,
+};
 use serde::Serialize;
 
 #[derive(Serialize)]
@@ -22,6 +24,37 @@ struct FixtureHashResponse {
     sha256_hex: String,
     synthetic_only: bool,
     release_authorized: bool,
+}
+
+#[derive(Debug, Serialize)]
+struct FhirEnvelopeResponse {
+    contract: &'static str,
+    fixture_id: &'static str,
+    bytes: usize,
+    status: &'static str,
+    synthetic_only: bool,
+    full_fhir_r4_validated: bool,
+    release_authorized: bool,
+}
+
+/// Only four built-in fictional test fixtures are accepted. No arbitrary
+/// JSON, filesystem access, references, terminology lookup or PHI.
+#[tauri::command]
+fn inspect_fhir_fixture_envelope(
+    fixture_id: String,
+    max_input_bytes: usize,
+) -> Result<FhirEnvelopeResponse, String> {
+    let checked = inspect_named_synthetic_fhir_envelope_v1(&fixture_id, max_input_bytes)
+        .map_err(|err| err.code().to_string())?;
+    Ok(FhirEnvelopeResponse {
+        contract: checked.contract,
+        fixture_id: checked.fixture_id,
+        bytes: checked.bytes,
+        status: checked.status,
+        synthetic_only: checked.synthetic_only,
+        full_fhir_r4_validated: false,
+        release_authorized: false,
+    })
 }
 
 #[tauri::command]
@@ -94,7 +127,11 @@ pub fn run() {
                 .build()?;
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![preview_status, hash_fixture])
+        .invoke_handler(tauri::generate_handler![
+            preview_status,
+            hash_fixture,
+            inspect_fhir_fixture_envelope
+        ])
         .run(tauri::generate_context!())
         .expect("MedOrigin D1 preview bootstrap failed");
 }
@@ -102,6 +139,27 @@ pub fn run() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn synthetic_envelope_command_reports_explicit_nonclinical_outcomes() {
+        for (id, expected) in [
+            ("patient-minimal", "FHIR_ENVELOPE_OK"),
+            ("patient-exact-limit", "FHIR_ENVELOPE_OK"),
+            ("patient-invalid-utf8", "INVALID_UTF8"),
+            ("patient-over-limit", "RESOURCE_TOO_LARGE"),
+        ] {
+            let observed = inspect_fhir_fixture_envelope(id.to_owned(), 65_536).unwrap();
+            assert_eq!(observed.status, expected);
+            assert_eq!(observed.fixture_id, id);
+            assert!(observed.synthetic_only);
+            assert!(!observed.full_fhir_r4_validated);
+            assert!(!observed.release_authorized);
+        }
+        assert_eq!(
+            inspect_fhir_fixture_envelope("../secret".to_owned(), 65_536).unwrap_err(),
+            "unknown_fixture"
+        );
+    }
 
     #[test]
     fn preview_navigation_allows_only_local_app_origin() {
