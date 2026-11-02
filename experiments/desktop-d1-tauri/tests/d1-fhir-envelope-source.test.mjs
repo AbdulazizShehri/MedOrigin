@@ -57,3 +57,17 @@ test('UI presents a truthful and fail-closed nonclinical result after a matching
  assert.match(ui,/if \(checked\.sha256_hex !== chosen\.sha\)/);
  assert.match(ui,/Not a full FHIR R4, clinical, or profile validation/);
 });
+
+test('twelve-case batch remains sequential, bounded, and atomic on rejected receipts', () => {
+ assert.match(ui,/async function verifyAll\(\)/);
+ assert.match(ui,/if \(flight\.current \|\| !status\) return/);
+ assert.match(ui,/for \(const fixture of FIXTURES\)/);
+ assert.match(ui,/isSafeHashReceipt\(checked, fixture\.id/);
+ assert.match(ui,/checked\.sha256_hex !== fixture\.sha/);
+ assert.match(ui,/isSafeEnvelopeReceipt\(inspected, fixture\.id/);
+ assert.match(ui,/setBatchRows\(rows\)/);
+ assert.match(ui,/setBatchComplete\(true\)/);
+ assert.match(ui,/setBatchRows\(\[\]\)/);
+ assert.match(ui,/batchComplete && batchRows\.length === FIXTURES\.length/);
+ assert.match(ui,/disabled=\{busy \|\| !status\}>Verify all 12 fictional fixtures/);
+});
