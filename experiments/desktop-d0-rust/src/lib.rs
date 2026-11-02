@@ -1,4 +1,4 @@
-//! Offline-only experimental SHA-256 on four exact, fictional D0 fixture byte sequences.
+//! Offline-only experimental SHA-256 on six exact, fictional D0 fixture byte sequences.
 //!
 //! This module accepts ONLY named in-memory, synthetic fixtures. It never opens
 //! paths, executes commands, starts servers, reads secrets, or emits telemetry.
@@ -8,6 +8,8 @@
 use sha2::{Digest, Sha256};
 
 const PATIENT: &[u8] = br#"{"resourceType":"Patient","id":"synthetic","active":true}"#;
+const OBSERVATION: &[u8] = br#"{"resourceType":"Observation","id":"synthetic-observation","status":"final","code":{"coding":[{"system":"urn:synthetic:code","code":"fictional-measurement"}]},"subject":{"reference":"Patient/synthetic"},"valueQuantity":{"value":37,"unit":"fictional"}}"#;
+const OBSERVATION_BAD_SUBJECT: &[u8] = br#"{"resourceType":"Observation","id":"synthetic-observation","status":"final","code":{"coding":[{"system":"urn:synthetic:code","code":"fictional-measurement"}]},"subject":{"reference":"Patient/nonexistent"},"valueQuantity":{"value":37,"unit":"fictional"}}"#;
 const MAX_PROTOTYPE_INPUT_BYTES: usize = 65_536;
 const FHIR_RESOURCE_LIMIT_BYTES: usize = 32_768;
 
@@ -49,6 +51,8 @@ pub fn hash_fixture_raw_v1(
         return Err(HashError::InvalidLimit);
     }
     let (identity, required_bytes) = match fixture_id {
+        "observation-minimal" => ("observation-minimal", OBSERVATION.len()),
+        "observation-bad-subject" => ("observation-bad-subject", OBSERVATION_BAD_SUBJECT.len()),
         "patient-minimal" => ("patient-minimal", PATIENT.len()),
         "patient-invalid-utf8" => ("patient-invalid-utf8", 1),
         "patient-over-limit" => ("patient-over-limit", FHIR_RESOURCE_LIMIT_BYTES + 1),
@@ -61,6 +65,8 @@ pub fn hash_fixture_raw_v1(
 
     let bytes = match identity {
         "patient-minimal" => PATIENT.to_vec(),
+        "observation-minimal" => OBSERVATION.to_vec(),
+        "observation-bad-subject" => OBSERVATION_BAD_SUBJECT.to_vec(),
         "patient-invalid-utf8" => vec![0xff],
         "patient-over-limit" => vec![b' '; required_bytes],
         "patient-exact-limit" => {
@@ -85,10 +91,11 @@ pub fn hash_fixture_raw_v1(
     })
 }
 
-/// A narrow offline envelope check for four BUILT-IN fictional test fixtures.
+/// A narrow offline envelope check for six BUILT-IN fictional test fixtures.
 ///
 /// This does not implement FHIR R4 conformance, terminology, profiles,
-/// references, clinical validation, or arbitrary user-file parsing.
+/// terminology, profiles, clinical validation, or arbitrary user-file parsing.
+/// The only allowed Observation subject is the built-in synthetic Patient.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SyntheticFhirEnvelope {
     pub contract: &'static str,
@@ -108,6 +115,8 @@ pub fn inspect_named_synthetic_fhir_envelope_v1(
         return Err(HashError::InvalidLimit);
     }
     let (name, len) = match fixture_id {
+        "observation-minimal" => ("observation-minimal", OBSERVATION.len()),
+        "observation-bad-subject" => ("observation-bad-subject", OBSERVATION_BAD_SUBJECT.len()),
         "patient-minimal" => ("patient-minimal", PATIENT.len()),
         "patient-invalid-utf8" => ("patient-invalid-utf8", 1),
         "patient-exact-limit" => ("patient-exact-limit", FHIR_RESOURCE_LIMIT_BYTES),
@@ -124,6 +133,8 @@ pub fn inspect_named_synthetic_fhir_envelope_v1(
         let mut payload: Vec<u8> = match name {
             "patient-minimal" | "patient-exact-limit" => PATIENT.to_vec(),
             "patient-invalid-utf8" => vec![0xff],
+            "observation-minimal" => OBSERVATION.to_vec(),
+            "observation-bad-subject" => OBSERVATION_BAD_SUBJECT.to_vec(),
             _ => unreachable!("allowlisted fixture"),
         };
         if name == "patient-exact-limit" {
@@ -136,6 +147,38 @@ pub fn inspect_named_synthetic_fhir_envelope_v1(
                     && value.get("active").and_then(|v| v.as_bool()) == Some(true) =>
             {
                 "FHIR_ENVELOPE_OK"
+            }
+            Ok(value)
+                if value.get("resourceType").and_then(|v| v.as_str()) == Some("Observation") =>
+            {
+                let complete = value.get("id").and_then(|v| v.as_str())
+                    == Some("synthetic-observation")
+                    && value.get("status").and_then(|v| v.as_str()) == Some("final")
+                    && value
+                        .pointer("/code/coding/0/system")
+                        .and_then(|v| v.as_str())
+                        == Some("urn:synthetic:code")
+                    && value
+                        .pointer("/code/coding/0/code")
+                        .and_then(|v| v.as_str())
+                        == Some("fictional-measurement")
+                    && value
+                        .pointer("/valueQuantity/value")
+                        .and_then(|v| v.as_i64())
+                        == Some(37)
+                    && value
+                        .pointer("/valueQuantity/unit")
+                        .and_then(|v| v.as_str())
+                        == Some("fictional");
+                if !complete {
+                    "INVALID_FHIR_ENVELOPE"
+                } else if value.pointer("/subject/reference").and_then(|v| v.as_str())
+                    != Some("Patient/synthetic")
+                {
+                    "INVALID_REFERENCE"
+                } else {
+                    "FHIR_ENVELOPE_OK"
+                }
             }
             Ok(_) => "INVALID_FHIR_ENVELOPE",
             Err(_) if std::str::from_utf8(&payload).is_err() => "INVALID_UTF8",
