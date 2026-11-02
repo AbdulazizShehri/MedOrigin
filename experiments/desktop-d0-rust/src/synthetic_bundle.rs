@@ -108,6 +108,21 @@ mod tests {
     use serde_json::{Value, json};
 
     #[test]
+    fn rejects_duplicate_json_keys_in_d2_copied_bundle_parser() {
+        let raw = std::str::from_utf8(include_bytes!("../fixtures/bundle-valid.json")).unwrap();
+        assert_eq!(inspect_fictional_bundle(raw.as_bytes()), "BUNDLE_GRAPH_OK");
+        for (needle, replacement) in [
+            ("\"resourceType\":\"Bundle\"", "\"resourceType\":\"Patient\",\"resourceType\":\"Bundle\""),
+            ("\"resourceType\":\"Patient\"", "\"resourceType\":\"Observation\",\"resourceType\":\"Patient\""),
+            ("\"resourceType\":\"Bundle\"", "\"\\u0072esourceType\":\"Patient\",\"resourceType\":\"Bundle\""),
+        ] {
+            let forged = raw.replacen(needle, replacement, 1);
+            assert_ne!(forged, raw, "test fixture must contain target");
+            assert_eq!(inspect_fictional_bundle(forged.as_bytes()), "INVALID_JSON");
+        }
+    }
+
+    #[test]
     fn rejects_manipulated_local_graph_instead_of_dereferencing() {
         let raw = include_bytes!("../fixtures/bundle-valid.json");
         let mut parsed: Value = serde_json::from_slice(raw).unwrap();
