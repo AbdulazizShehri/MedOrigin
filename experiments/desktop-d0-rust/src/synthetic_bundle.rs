@@ -1,10 +1,81 @@
 //! Offline fictional Bundle graph checks on fixed compiled fixtures only.
 //! This is NOT full FHIR conformance, terminology or clinical validation.
 use std::collections::HashSet;
+use std::fmt;
+
+use serde::de::{self, DeserializeSeed, MapAccess, SeqAccess, Visitor};
 
 use serde_json::Value;
 
+// serde_json::Value intentionally keeps the last occurrence of an object key.
+// Check every nested object before using Value for security-relevant graph
+// decisions; escaped JSON key names are decoded before duplicate comparison.
+struct UniqueKeys;
+
+impl<'de> DeserializeSeed<'de> for UniqueKeys {
+    type Value = ();
+
+    fn deserialize<D: de::Deserializer<'de>>(self, deserializer: D) -> Result<(), D::Error> {
+        deserializer.deserialize_any(UniqueKeys)
+    }
+}
+
+impl<'de> Visitor<'de> for UniqueKeys {
+    type Value = ();
+
+    fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+        formatter.write_str("JSON with no duplicate object keys")
+    }
+
+    fn visit_map<M: MapAccess<'de>>(self, mut map: M) -> Result<(), M::Error> {
+        let mut keys = HashSet::new();
+        while let Some(key) = map.next_key::<String>()? {
+            if !keys.insert(key) {
+                return Err(de::Error::custom("duplicate JSON object key"));
+            }
+            map.next_value_seed(UniqueKeys)?;
+        }
+        Ok(())
+    }
+
+    fn visit_seq<S: SeqAccess<'de>>(self, mut seq: S) -> Result<(), S::Error> {
+        while seq.next_element_seed(UniqueKeys)?.is_some() {}
+        Ok(())
+    }
+
+    fn visit_bool<E: de::Error>(self, _: bool) -> Result<(), E> {
+        Ok(())
+    }
+    fn visit_i64<E: de::Error>(self, _: i64) -> Result<(), E> {
+        Ok(())
+    }
+    fn visit_u64<E: de::Error>(self, _: u64) -> Result<(), E> {
+        Ok(())
+    }
+    fn visit_f64<E: de::Error>(self, _: f64) -> Result<(), E> {
+        Ok(())
+    }
+    fn visit_str<E: de::Error>(self, _: &str) -> Result<(), E> {
+        Ok(())
+    }
+    fn visit_string<E: de::Error>(self, _: String) -> Result<(), E> {
+        Ok(())
+    }
+    fn visit_unit<E: de::Error>(self) -> Result<(), E> {
+        Ok(())
+    }
+}
+
+pub(crate) fn reject_duplicate_object_keys(raw: &[u8]) -> Result<(), serde_json::Error> {
+    let mut parser = serde_json::Deserializer::from_slice(raw);
+    UniqueKeys.deserialize(&mut parser)?;
+    parser.end()
+}
+
 pub(crate) fn inspect_fictional_bundle(raw: &[u8]) -> &'static str {
+    if reject_duplicate_object_keys(raw).is_err() {
+        return "INVALID_JSON";
+    }
     let Ok(value) = serde_json::from_slice::<Value>(raw) else {
         return "INVALID_JSON";
     };
@@ -112,9 +183,18 @@ mod tests {
         let raw = std::str::from_utf8(include_bytes!("../fixtures/bundle-valid.json")).unwrap();
         assert_eq!(inspect_fictional_bundle(raw.as_bytes()), "BUNDLE_GRAPH_OK");
         for (needle, replacement) in [
-            ("\"resourceType\":\"Bundle\"", "\"resourceType\":\"Patient\",\"resourceType\":\"Bundle\""),
-            ("\"resourceType\":\"Patient\"", "\"resourceType\":\"Observation\",\"resourceType\":\"Patient\""),
-            ("\"resourceType\":\"Bundle\"", "\"\\u0072esourceType\":\"Patient\",\"resourceType\":\"Bundle\""),
+            (
+                "\"resourceType\":\"Bundle\"",
+                "\"resourceType\":\"Patient\",\"resourceType\":\"Bundle\"",
+            ),
+            (
+                "\"resourceType\":\"Patient\"",
+                "\"resourceType\":\"Observation\",\"resourceType\":\"Patient\"",
+            ),
+            (
+                "\"resourceType\":\"Bundle\"",
+                "\"\\u0072esourceType\":\"Patient\",\"resourceType\":\"Bundle\"",
+            ),
         ] {
             let forged = raw.replacen(needle, replacement, 1);
             assert_ne!(forged, raw, "test fixture must contain target");
