@@ -31,6 +31,7 @@ jobs:
       - name: Compile and lint bounded Python AT-SPI acceptance source
         run: |
           python3 -m py_compile experiments/desktop-d2-native-egui/tests/linux-native-fhir-atspi-qualification.py
+          python3 -m unittest discover -s experiments/desktop-d2-native-egui/tests -p test_linux_atspi_harness.py -v
           /usr/bin/python3 -c 'import pyatspi; print("AT_SPI_PYTHON_SYSTEM_AVAILABLE")'
       - name: Install original pinned Rust toolchain without source changes
         run: |

@@ -29,8 +29,12 @@ CASES = [
 ]
 
 
+class FatalQualificationError(RuntimeError):
+    """An actual negative acceptance receipt; never retry and obscure it."""
+
+
 def refuse(message: str) -> None:
-    raise RuntimeError("LINUX_D2_ATSPI_NO_GO: " + message)
+    raise FatalQualificationError("LINUX_D2_ATSPI_NO_GO: " + message)
 
 
 def tree(root: object, depth: int = 0, budget: list[int] | None = None) -> list[object]:
@@ -102,6 +106,8 @@ def wait_for(fn, label: str, seconds: float = 12) -> object:
             value = fn()
             if value:
                 return value
+        except FatalQualificationError:
+            raise
         except (AttributeError, RuntimeError, IndexError) as exc:
             last = type(exc).__name__
         time.sleep(0.2)
@@ -185,6 +191,8 @@ def main() -> int:
             return ids[0] if found.returncode == 0 and len(ids) == 1 else None
         try:
             x11_id = wait_for(x11_window, "native window mapped on disposable X11", 15)
+        except FatalQualificationError:
+            raise
         except RuntimeError as exc:
             x11 = subprocess.run(
                 ["xwininfo", "-root", "-tree"],
@@ -211,6 +219,8 @@ def main() -> int:
 
         try:
             window = wait_for(find_window, "native D2 AT-SPI frame", 20)
+        except FatalQualificationError:
+            raise
         except RuntimeError as exc:
             visible = [(name(n)[:90], role(n)) for n in tree(desktop)[:50]]
             refuse(f"{exc}; AT-SPI desktop visible nodes={visible}")
