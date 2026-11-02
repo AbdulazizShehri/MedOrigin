@@ -38,6 +38,7 @@ MOCK_BRIDGE = r"""
   window.__testForgeHash = false;
   window.__testForgeHashReceipt = "";
   window.__testForgeEnvelopeReceipt = "";
+  window.__testFailFixture = "";
   window.__TAURI_INTERNALS__ = {
     invoke: async (command, args = {}) => {
       if (command === "preview_status") {
@@ -69,6 +70,7 @@ MOCK_BRIDGE = r"""
         if (window.__testForgeEnvelopeReceipt === "extra") receipt.webview_runtime_egress_qualified = true;
         if (window.__testForgeEnvelopeReceipt === "missing") delete receipt.contract;
         if (window.__testForgeEnvelopeReceipt === "type") receipt.synthetic_only = "true";
+        if (window.__testFailFixture === args.fixtureId) receipt.release_authorized = true;
         return receipt;
       }
       throw "unexpected_command";
@@ -211,6 +213,25 @@ class PreviewBrowserChecks(unittest.TestCase):
                     "The local Rust command refused this request"
                 )
                 self.page.evaluate("window.__testForgeEnvelopeReceipt = ''")
+
+    def test_batch_verifies_all_twelve_fictional_fixtures(self) -> None:
+        self.page.get_by_role("button", name="Verify all 12 fictional fixtures").click()
+        expect(self.page.locator(".batch-summary")).to_contain_text(
+            "12/12 fictional fixtures verified"
+        )
+        self.assertEqual(self.page.locator(".batch-row").count(), 12)
+        self.assertEqual(self.page.evaluate("window.__testInspectCalls"), 12)
+        expect(self.page.locator(".outcome-error")).to_have_count(0)
+
+    def test_batch_late_forged_receipt_never_reports_partial_success(self) -> None:
+        self.page.evaluate("window.__testFailFixture = 'bundle-dangling'")
+        self.page.get_by_role("button", name="Verify all 12 fictional fixtures").click()
+        expect(self.page.locator(".outcome-error")).to_contain_text(
+            "The local Rust command refused this request"
+        )
+        expect(self.page.locator(".batch-summary")).to_have_count(0)
+        expect(self.page.locator(".batch-row")).to_have_count(0)
+        self.assertEqual(self.page.evaluate("window.__testInspectCalls"), 12)
 
     def test_hash_mismatch_never_invokes_structural_check(self) -> None:
         self.page.evaluate("window.__testForgeHash = true")
