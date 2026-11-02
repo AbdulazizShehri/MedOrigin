@@ -140,3 +140,16 @@ test('all read-only audit-state combinations remain NO-GO even when metadata is 
     assert.equal(v.policyChanged,false);
    }
 });
+test('native audit receipt rejects adversarial subprocess framing and substituted authority',()=>{
+ const f=fixture();
+ const canonical=JSON.stringify(f);
+ const variants=[
+  canonical+'\u0000',canonical+'\nWARNING',canonical+'\n'+canonical,
+  '\ufeff'+canonical,canonical.replace('"elevated":false','"elevated":true'),
+  canonical.replace('"packetDropAuditState":"PRIVILEGE_DENIED"','"packetDropAuditState":"PACKETS_DENIED"'),
+  canonical.replace('"osBuild":"10.0.26300"','"osBuild":"10.0.26300\\nHOST"'),
+  canonical.replace('"securityLogMetadata":"ACCESS_DENIED"','"securityLogMetadata":"FULL_LOG"')
+ ];
+ for(const stdout of variants)fail(()=>parseAuditNativeResult({...native(f),stdout}));
+ for(const status of [5,1314,255])fail(()=>parseAuditNativeResult({...native(f),status}));
+});
