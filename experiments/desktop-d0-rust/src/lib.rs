@@ -112,6 +112,31 @@ pub fn hash_fixture_raw_v1(
     })
 }
 
+/// Deterministic, domain-separated SHA-256 of a bounded caller-owned fictional
+/// batch receipt. This hashes row metadata, not patient data or a signature.
+/// The D1 caller supplies exactly twelve hard-coded, validated rows in order.
+#[must_use]
+pub fn hash_fictional_batch_rows_v1(rows: &[(&str, usize, &str, &str)]) -> String {
+    let mut digest = Sha256::new();
+    digest.update(b"medorigin-d1-native-batch-v1\n");
+    for (id, bytes, sha, status) in rows {
+        digest.update(id.as_bytes());
+        digest.update(b"\t");
+        digest.update(bytes.to_string().as_bytes());
+        digest.update(b"\t");
+        digest.update(sha.as_bytes());
+        digest.update(b"\t");
+        digest.update(status.as_bytes());
+        digest.update(b"\n");
+    }
+    let mut hex = String::with_capacity(64);
+    for byte in digest.finalize() {
+        use core::fmt::Write as _;
+        write!(&mut hex, "{byte:02x}").expect("String write");
+    }
+    hex
+}
+
 /// A narrow offline envelope check for twelve BUILT-IN fictional test fixtures.
 ///
 /// This does not implement FHIR R4 conformance, terminology, profiles,
@@ -237,6 +262,19 @@ pub fn inspect_named_synthetic_fhir_envelope_v1(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn fictional_batch_digest_is_order_and_content_sensitive() {
+        let rows = [("fictional-a", 1, "a", "OK"), ("fictional-b", 2, "b", "NO")];
+        let first = hash_fictional_batch_rows_v1(&rows);
+        assert_eq!(first.len(), 64);
+        assert_ne!(first, hash_fictional_batch_rows_v1(&[rows[1], rows[0]]));
+        assert_ne!(
+            first,
+            hash_fictional_batch_rows_v1(&[rows[0], ("fictional-b", 3, "b", "NO")])
+        );
+        assert_eq!(first, hash_fictional_batch_rows_v1(&rows));
+    }
 
     #[test]
     fn all_four_synthetic_golden_raw_byte_vectors_match_python() {
