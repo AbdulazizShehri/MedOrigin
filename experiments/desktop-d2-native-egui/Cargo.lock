@@ -1564,6 +1564,7 @@ version = "0.0.0"
 dependencies = [
  "eframe",
  "medorigin-desktop-d0-rust-prototype",
+ "serde_json",
 ]
 
 [[package]]
