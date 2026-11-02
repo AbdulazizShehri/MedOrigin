@@ -11,6 +11,8 @@ on:
       - 'experiments/desktop-d2-native-egui/tests/linux-private-netns-smoke.sh'
       - 'experiments/desktop-d2-native-egui/tests/linux-wsl-interop-refusal-integration.sh'
       - 'experiments/desktop-d2-native-egui/tests/test_linux_private_netns_host_interop.py'
+      - 'experiments/desktop-d2-native-egui/tests/verify_linux_accesskit_maintenance.py'
+      - 'experiments/desktop-d2-native-egui/tests/test_verify_linux_accesskit_maintenance.py'
       - '.github/workflows/medorigin-d2-offline-evidence-validator.yml'
 permissions:
   contents: read
@@ -30,6 +32,11 @@ jobs:
           bash -n linux-private-netns-smoke.sh
           bash -n linux-wsl-interop-refusal-integration.sh
           bash -n linux-private-netns-negative-gates.sh
+      - name: Maintain source-only warning for unmaintained Linux accessibility transitives
+        working-directory: experiments/desktop-d2-native-egui/tests
+        run: |
+          python3 -m unittest -v test_verify_linux_accesskit_maintenance.py
+          # This source check does not run cargo or claim refreshed RustSec approval.
       - name: Compile script source
         run: python3 -m py_compile experiments/desktop-d2-native-egui/tests/verify_offline_evidence.py experiments/desktop-d2-native-egui/tests/test_verify_offline_evidence.py
       - name: Verify no tracked code changed
