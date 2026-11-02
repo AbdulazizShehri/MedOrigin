@@ -18,10 +18,14 @@ test('new FHIR envelope bridge is explicitly synthetic-only and refuses full con
  assert.match(core,/pub fn inspect_named_synthetic_fhir_envelope_v1\(/);
  assert.match(core,/serde_json::from_slice/);
  assert.match(core,/RESOURCE_TOO_LARGE/);
+ assert.match(core,/"observation-bad-subject"/);
+ assert.match(core,/"INVALID_REFERENCE"/);
 });
 test('UI presents a truthful and fail-closed nonclinical result after a matching hash',()=>{
  assert.match(ui,/invoke<EnvelopeResult>\("inspect_fhir_fixture_envelope"/);
- assert.match(ui,/if \(checked\.sha256_hex === chosen\.sha\)/);
+ assert.match(ui,/if \(checked\.sha256_hex !== chosen\.sha\)/);
+ assert.match(ui,/inspected\.status !== EXPECTED_ENVELOPE_STATUS\[selected\]/);
+ assert.match(ui,/inspected\.bytes !== checked\.bytes/);
  assert.match(ui,/inspected\.full_fhir_r4_validated/);
  assert.match(ui,/inspected\.contract !== "medorigin-d0-synthetic-fhir-envelope-v1"/);
  assert.match(ui,/Not a full FHIR R4, clinical, or profile validation/);

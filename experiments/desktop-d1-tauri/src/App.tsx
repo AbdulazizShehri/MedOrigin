@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import "./App.css";
 
-type FixtureId = "patient-minimal" | "patient-invalid-utf8" | "patient-over-limit" | "patient-exact-limit";
+type FixtureId = "patient-minimal" | "patient-invalid-utf8" | "patient-over-limit" | "patient-exact-limit" | "observation-minimal" | "observation-bad-subject";
 type PreviewStatus = {
   mode: string;
   data_access: string;
@@ -15,7 +15,7 @@ type EnvelopeResult = {
   contract: string;
   fixture_id: FixtureId;
   bytes: number;
-  status: "FHIR_ENVELOPE_OK" | "INVALID_UTF8" | "INVALID_JSON" | "INVALID_FHIR_ENVELOPE" | "RESOURCE_TOO_LARGE";
+  status: "FHIR_ENVELOPE_OK" | "INVALID_UTF8" | "INVALID_JSON" | "INVALID_FHIR_ENVELOPE" | "INVALID_REFERENCE" | "RESOURCE_TOO_LARGE";
   synthetic_only: boolean;
   full_fhir_r4_validated: boolean;
   release_authorized: boolean;
@@ -33,7 +33,17 @@ const FIXTURES: readonly { id: FixtureId; title: string; kind: string; size: str
   { id: "patient-invalid-utf8", title: "Invalid encoding", kind: "NEGATIVE CASE", size: "1 B", description: "A single 0xFF byte. Hashing is independent of FHIR parsing.", sha: "a8100ae6aa1940d0b663bb31cd466142ebbdbd5187131b92d93818987832eb89" },
   { id: "patient-over-limit", title: "Oversize payload", kind: "NEGATIVE CASE", size: "32,769 B", description: "One byte beyond the Python FHIR resource budget.", sha: "b929f15ca4f3fa28f54991ed0cb8ac5f430e388ee08bf401a853d8af91e44538" },
   { id: "patient-exact-limit", title: "Exact limit", kind: "BOUNDARY CASE", size: "32,768 B", description: "A synthetic Patient padded with whitespace to the limit.", sha: "ea711ce560191a81c0722c4a26592e0e2d9abb2186b6fd3af6897cd89d417d4e" },
+  { id: "observation-minimal", title: "Fictional Observation", kind: "VALID SYNTHETIC", size: "251 B", description: "A fictional Observation referencing Patient/synthetic.", sha: "527806e5427cc45e55424d1b8dc8ddcdc86a2b37df2ae116735e6832268b5e19" },
+  { id: "observation-bad-subject", title: "Broken patient reference", kind: "NEGATIVE CASE", size: "253 B", description: "An Observation with a missing fictional Patient reference.", sha: "d2332ed753a59b46d19a11849cccd96a4250120ad3eab455580ce45b1d91b838" },
 ];
+const EXPECTED_ENVELOPE_STATUS: Record<FixtureId, EnvelopeResult["status"]> = {
+  "patient-minimal": "FHIR_ENVELOPE_OK",
+  "patient-invalid-utf8": "INVALID_UTF8",
+  "patient-over-limit": "RESOURCE_TOO_LARGE",
+  "patient-exact-limit": "FHIR_ENVELOPE_OK",
+  "observation-minimal": "FHIR_ENVELOPE_OK",
+  "observation-bad-subject": "INVALID_REFERENCE",
+};
 
 export default function App() {
   const [status, setStatus] = useState<PreviewStatus | null>(null);
@@ -58,24 +68,33 @@ export default function App() {
     setBusy(true);
     try {
       const checked = await invoke<HashResult>("hash_fixture", { fixtureId: selected, maxInputBytes: 65536 });
-      if (checked.fixture_id !== selected || !checked.synthetic_only || checked.release_authorized) {
-        throw new Error("Unexpected native response contract");
+      if (
+        checked.fixture_id !== selected || !checked.synthetic_only || checked.release_authorized ||
+        checked.bytes !== Number(chosen.size.replace(/[^0-9]/g, "")) ||
+        checked.contract !== "medorigin-desktop-d0-raw-sha256-v1"
+      ) {
+        throw new Error("Unexpected native hash response contract");
       }
+      if (checked.sha256_hex !== chosen.sha) {
+        setResult(checked);
+        return;
+      }
+      const inspected = await invoke<EnvelopeResult>("inspect_fhir_fixture_envelope", {
+        fixtureId: selected, maxInputBytes: 65536,
+      });
+      if (
+        inspected.fixture_id !== selected || !inspected.synthetic_only ||
+        inspected.release_authorized || inspected.full_fhir_r4_validated ||
+        inspected.contract !== "medorigin-d0-synthetic-fhir-envelope-v1" ||
+        inspected.bytes !== checked.bytes ||
+        inspected.status !== EXPECTED_ENVELOPE_STATUS[selected]
+      ) {
+        throw new Error("Unexpected synthetic FHIR envelope response contract");
+      }
+      // Do not display a successful hash before validating the second bridge
+      // response; otherwise an error in that bridge would be obscured by MATCHES.
       setResult(checked);
-      if (checked.sha256_hex === chosen.sha) {
-        const inspected = await invoke<EnvelopeResult>("inspect_fhir_fixture_envelope", {
-          fixtureId: selected, maxInputBytes: 65536,
-        });
-        if (
-          inspected.fixture_id !== selected || !inspected.synthetic_only ||
-          inspected.release_authorized || inspected.full_fhir_r4_validated ||
-          inspected.contract !== "medorigin-d0-synthetic-fhir-envelope-v1" ||
-          !["FHIR_ENVELOPE_OK", "INVALID_UTF8", "INVALID_JSON", "INVALID_FHIR_ENVELOPE", "RESOURCE_TOO_LARGE"].includes(inspected.status)
-        ) {
-          throw new Error("Unexpected synthetic FHIR envelope response contract");
-        }
-        setEnvelope(inspected);
-      }
+      setEnvelope(inspected);
     } catch (reason) {
       setError(typeof reason === "string" ? reason : "The local Rust command refused this request.");
     } finally {
@@ -129,7 +148,7 @@ export default function App() {
             {envelope && (
               <div className="envelope-result" role="status">
                 <div className="mini-label">FICTIONAL FHIR ENVELOPE CHECK</div>
-                <strong>{envelope.status === "FHIR_ENVELOPE_OK" ? "Basic Patient JSON fields found" : envelope.status.replace(/_/g, " ")}</strong>
+                <strong>{envelope.status === "FHIR_ENVELOPE_OK" ? "Basic fictional resource fields found" : envelope.status.replace(/_/g, " ")}</strong>
                 <p>{envelope.bytes.toLocaleString()} bytes checked. Not a full FHIR R4, clinical, or profile validation.</p>
               </div>
             )}
@@ -137,7 +156,7 @@ export default function App() {
         </div>
         <footer className="notice">
           <span className="notice-icon">i</span>
-          <div><strong>Unreleased engineering preview</strong><p>{status ? "Rust command bridge active. Four fixed synthetic cases only." : "Local native bridge not yet confirmed."} No clinician workflows, health records, application network plugins, installer qualification, or publishing authorization. WebView2 runtime egress is unqualified.</p></div>
+          <div><strong>Unreleased engineering preview</strong><p>{status ? "Rust command bridge active. Six fixed synthetic cases only." : "Local native bridge not yet confirmed."} No clinician workflows, health records, application network plugins, installer qualification, or publishing authorization. WebView2 runtime egress is unqualified.</p></div>
         </footer>
       </main>
     </div>
