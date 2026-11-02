@@ -81,6 +81,10 @@ try {
  }
  if($reverse -cne 'Compare: bundle-dangling'){throw 'REVERSE_SHIFT_TAB_FOCUS_WRONG'}
  Write-Output 'KEYBOARD_REAL_REVERSE_SHIFT_TAB_PASS'
+ SendKey '{ESC}'
+ See 'SHA-256: 747e1e038d6cc9a39a9cee209f621841cf6a9748d82be42fa545f19cfd6877a0' $false
+ See 'SHA-256: 527806e5427cc45e55424d1b8dc8ddcdc86a2b37df2ae116735e6832268b5e19' $false
+ Write-Output 'KEYBOARD_REAL_ESCAPE_CLEAR_PASS'
  TabUntil 'Compare: patient-minimal'
  SpaceAt 'Compare: patient-minimal'
  TabUntil 'Compare verified fictional JSON (read-only)'
@@ -97,7 +101,16 @@ try {
  SpaceAt 'Verify synthetic SHA-256'
  See 'SHA-256: 527806e5427cc45e55424d1b8dc8ddcdc86a2b37df2ae116735e6832268b5e19' $false
  Write-Output 'KEYBOARD_REAL_STALE_CLEAR_PASS'
- Write-Output 'D2_COMPARE_WINDOWS_KEYBOARD_4_OF_4_PASS_NONPUBLISHING'
+ TabUntil 'Compare: observation-minimal'
+ SpaceAt 'Compare: observation-minimal'
+ TabUntil 'Compare verified fictional JSON (read-only)'
+ SpaceAt 'Compare verified fictional JSON (read-only)'
+ See 'SHA-256: 527806e5427cc45e55424d1b8dc8ddcdc86a2b37df2ae116735e6832268b5e19'
+ TabUntil 'Clear fictional output (Escape)'
+ SpaceAt 'Clear fictional output (Escape)'
+ See 'SHA-256: 527806e5427cc45e55424d1b8dc8ddcdc86a2b37df2ae116735e6832268b5e19' $false
+ Write-Output 'KEYBOARD_REAL_CLEAR_BUTTON_PASS'
+ Write-Output 'D2_COMPARE_WINDOWS_KEYBOARD_6_OF_6_PASS_NONPUBLISHING'
 }catch{
  [Console]::Error.WriteLine('D2_COMPARE_WINDOWS_KEYBOARD_NO_GO: '+$_.Exception.Message)
  exit 1
