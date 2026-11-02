@@ -29,8 +29,18 @@ test('new FHIR envelope bridge is explicitly synthetic-only and refuses full con
  assert.match(ui,/"bundle-linked": "BUNDLE_GRAPH_OK"/);
  assert.match(ui,/"bundle-dangling": "INVALID_REFERENCE"/);
 });
+test('native IPC timeout refuses stale success and disables the bridge',()=>{
+ assert.match(ui,/const NATIVE_IPC_TIMEOUT_MS = 30_000/);
+ assert.match(ui,/Promise\.race\(\[/);
+ assert.match(ui,/setTimeout\(\(\) => reject\(new NativeIpcTimeout/);
+ assert.match(ui,/clearTimeout\(timer\)/);
+ assert.match(ui,/Native desktop bridge timed out; reload preview to retry/);
+ assert.match(ui,/reason instanceof NativeIpcTimeout/);
+ assert.match(ui,/setStatus\(null\)/);
+});
+
 test('startup bridge status is strictly validated before enabling verification',()=>{
- assert.match(ui,/invoke<unknown>\("preview_status"\)/);
+ assert.match(ui,/invokeWithDeadline\("preview_status"\)/);
  assert.match(ui,/function isSafePreviewStatus\(value: unknown\)/);
  assert.match(ui,/Object\.keys\(candidate\)\.length === 6/);
  for (const field of [
@@ -45,8 +55,8 @@ test('startup bridge status is strictly validated before enabling verification',
 });
 
 test('UI presents a truthful and fail-closed nonclinical result after a matching hash',()=>{
- assert.match(ui,/invoke<unknown>\("hash_fixture"/);
- assert.match(ui,/invoke<unknown>\("inspect_fhir_fixture_envelope"/);
+ assert.match(ui,/invokeWithDeadline\("hash_fixture"/);
+ assert.match(ui,/invokeWithDeadline\("inspect_fhir_fixture_envelope"/);
  assert.match(ui,/function isSafeHashReceipt\(value: unknown/);
  assert.match(ui,/function isSafeEnvelopeReceipt\(value: unknown/);
  assert.match(ui,/function hasExactFields\(value: unknown/);
@@ -82,7 +92,7 @@ test('native fictional batch is single IPC, strict and atomic with no clinical c
  assert.match(rust,/inspect_named_synthetic_fhir_envelope_v1\(id, max_input_bytes\)/);
  assert.match(rust,/verify_all_fixtures\s*\]/);
  assert.match(ui,/async function verifyAll\(\)/);
- assert.match(ui,/invoke<unknown>\("verify_all_fixtures"/);
+ assert.match(ui,/invokeWithDeadline\("verify_all_fixtures"/);
  assert.match(ui,/function isSafeNativeBatchReceipt\(value: unknown\)/);
  assert.match(ui,/value\.rows\.length !== FIXTURES\.length/);
  assert.match(ui,/row\.fixture_id === fixture\.id/);
