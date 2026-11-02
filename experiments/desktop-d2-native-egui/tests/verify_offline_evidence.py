@@ -66,7 +66,8 @@ def main():
         return 2
     result = evaluate(data)
     print(json.dumps(result, indent=2, sort_keys=True))
-    # A self-attested packet cannot produce a successful CI release gate.\n    return 3 if result["decision"] == "EVIDENCE_COMPLETE_REVIEW_REQUIRED" else 1
+    # A self-attested packet cannot produce a successful CI release gate.
+    return 3 if result["decision"] == "EVIDENCE_COMPLETE_REVIEW_REQUIRED" else 1
 
 
 if __name__ == "__main__":
