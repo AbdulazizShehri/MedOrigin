@@ -28,7 +28,7 @@ jobs:
       - name: Install pinned Rust with formatter and Clippy
         shell: pwsh
         run: |
-          rustup toolchain install 1.97.1 --profile minimal --component rustfmt clippy
+          rustup toolchain install 1.97.1 --profile minimal --component rustfmt --component clippy
           if ($LASTEXITCODE -ne 0) { throw 'Rust install failed' }
           rustup default 1.97.1
           if ($LASTEXITCODE -ne 0) { throw 'Rust version selection failed' }
