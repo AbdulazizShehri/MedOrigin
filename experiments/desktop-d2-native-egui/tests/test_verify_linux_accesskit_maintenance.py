@@ -95,6 +95,16 @@ class TestTransitiveMaintenanceGate(unittest.TestCase):
         self.assertEqual(packet["decision"], "NO_GO_INVALID_CARGO_METADATA")
         self.assertFalse(packet["release_authorized"])
 
+    def test_missing_reachable_resolved_node_refuses(self):
+        data = fixture(zbus_version="6.0.0", legacy=False)
+        data["resolve"]["nodes"] = [
+            n for n in data["resolve"]["nodes"] if n["id"] != "u"
+        ]
+        packet = SCANNER.evaluate(data)
+        self.assertEqual(packet["decision"], "NO_GO_INVALID_CARGO_METADATA")
+        self.assertEqual(packet["reason"], "REACHABLE_DEPENDENCY_NODE_MISSING")
+        self.assertFalse(packet["release_authorized"])
+
     def test_injected_wrong_root_fails_closed(self):
         data = fixture()
         data["packages"][0]["name"] = "some-other-project"
