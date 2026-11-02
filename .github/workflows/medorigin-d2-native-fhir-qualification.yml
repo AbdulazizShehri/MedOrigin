@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - feat/medorigin-d2-native-fhir-bundle-20261102
+      - feat/medorigin-d2-fictional-json-preview-20261102
   pull_request:
     paths:
       - 'experiments/desktop-d0-rust/**'
@@ -73,6 +74,22 @@ jobs:
           if (-not $text.Contains('D2_NATIVE_FHIR_UIA_8_OF_8_PASS_NONPUBLISHING')) { throw 'Missing UIA acceptance marker' }
           if ([regex]::Matches($text, "@\{id='").Count -ne 8) { throw 'Expected eight fictional UIA test cases' }
           Write-Output 'UIA_SCRIPT_SYNTAX_AND_EIGHT_FIXTURES_OK_SOURCE_ONLY_NO_GUI'
+      - name: Parse real Windows read-only fictional JSON UIA acceptance script
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $path = 'experiments/desktop-d2-native-egui/tests/windows-native-json-preview-uia.ps1'
+          $tokens = $null
+          $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile(
+            (Resolve-Path $path).Path, [ref]$tokens, [ref]$errors
+          ) | Out-Null
+          if (@($errors).Count -ne 0) { throw 'New native UIA preview script syntax failed' }
+          $text = Get-Content -LiteralPath $path -Raw
+          if (-not $text.Contains('NATIVE_JSON_PREVIEW_3_OF_3_PASS_NONPUBLISHING')) {
+            throw 'New preview script lacks full acceptance marker'
+          }
+          Write-Output 'NEW_JSON_PREVIEW_UIA_POWERSHELL_SOURCE_ONLY_PASS'
       - name: Verify checks did not alter tracked code or lockfiles
         shell: pwsh
         run: |
