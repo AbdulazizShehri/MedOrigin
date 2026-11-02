@@ -26,12 +26,5 @@ function Test-Rejection([string]$file,[string]$hash,[string]$expectedReason){
 }
 Test-Rejection $exe ('0'*64) 'EXECUTABLE_SHA_MISMATCH'
 Test-Rejection (Join-Path $PSScriptRoot 'nonexistent-fixture.exe') $sha 'POLICY_READ_ERROR_OR_INCOMPLETE_OBSERVATION'
-$raw=& powershell.exe -NoProfile -ExecutionPolicy Bypass -File $validator -Executable $exe -ExpectedSha256 $sha
-$code=$LASTEXITCODE
-$result=($raw | Out-String | ConvertFrom-Json -ErrorAction Stop)
-if($code -eq 0 -or $result.decision -ne 'NO_GO' -or
-   $result.release_authorized -ne $false -or
-   $result.os_enforcement_proven -ne $false -or
-   $result.host_policy_modified -ne $false){ throw 'REAL_OS_POTENTIAL_FALSE_SUCCESS' }
-Write-Output ('PREFLIGHT_REAL_OS_NO_GO: '+$result.reason)
+Test-Rejection $exe $sha 'EXECUTABLE_NAME_MISMATCH'
 Write-Output 'WINDOWS_POLICY_PREFLIGHT_3_OF_3_PASS_NONPUBLISHING'
