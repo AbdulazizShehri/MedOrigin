@@ -176,3 +176,20 @@ fn guard_refuses_synthetic_dependency_and_source_mutations() {
         vec!["reqwest"]
     );
 }
+
+#[test]
+fn guard_rejects_aliased_socket_imports_and_external_rust_inclusion() {
+    // These are adversarial examples, never executed network operations.
+    for source in [
+        "use std::net;",
+        "use std::{net::TcpStream};",
+        "use std::{ net :: TcpStream };",
+        "include!(\"hidden_network.rs\");",
+        "#[path = \"nested/hidden_network.rs\"] mod hidden;",
+    ] {
+        assert!(
+            disallowed_source_api(source).is_some(),
+            "source-only guard missed dangerous indirection: {source}"
+        );
+    }
+}
