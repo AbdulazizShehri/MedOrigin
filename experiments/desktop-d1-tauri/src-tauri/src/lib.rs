@@ -37,7 +37,7 @@ struct FhirEnvelopeResponse {
     release_authorized: bool,
 }
 
-/// Only ten built-in fictional test fixtures are accepted. No arbitrary
+/// Only twelve built-in fictional test fixtures are accepted. No arbitrary
 /// JSON, filesystem access, references, terminology lookup or PHI.
 #[tauri::command]
 fn inspect_fhir_fixture_envelope(
@@ -61,7 +61,7 @@ fn inspect_fhir_fixture_envelope(
 fn preview_status() -> PreviewStatus {
     PreviewStatus {
         mode: "SYNTHETIC_DEVELOPER_PREVIEW",
-        data_access: "ten_allowlisted_in_memory_fixtures_only",
+        data_access: "twelve_allowlisted_in_memory_fixtures_only",
         release_authorized: false,
         production_parity_qualified: false,
         app_network_plugins_enabled: false,
@@ -153,6 +153,8 @@ mod tests {
             ("bundle-bad-reference", "INVALID_REFERENCE"),
             ("bundle-duplicate", "DUPLICATE_ENTRY"),
             ("bundle-wrong-type", "INVALID_BUNDLE_TYPE"),
+            ("bundle-linked", "BUNDLE_GRAPH_OK"),
+            ("bundle-dangling", "INVALID_REFERENCE"),
         ] {
             let observed = inspect_fhir_fixture_envelope(id.to_owned(), 65_536).unwrap();
             assert_eq!(observed.status, expected);

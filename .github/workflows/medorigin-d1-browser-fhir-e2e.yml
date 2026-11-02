@@ -6,6 +6,7 @@ on:
     branches:
       - test/medorigin-d1-browser-failclosed-20261102
       - feat/medorigin-d1-synthetic-bundle-20261102
+      - feat/medorigin-d1-bundle-urn-resolution-20261102
   pull_request:
     paths:
       - 'experiments/desktop-d1-tauri/tests/browser_fhir_preview_e2e.py'

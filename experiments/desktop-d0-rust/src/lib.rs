@@ -1,4 +1,4 @@
-//! Offline-only experimental SHA-256 on ten exact, fictional D0 fixture byte sequences.
+//! Offline-only experimental SHA-256 on twelve exact, fictional D0 fixture byte sequences.
 //!
 //! This module accepts ONLY named in-memory, synthetic fixtures. It never opens
 //! paths, executes commands, starts servers, reads secrets, or emits telemetry.
@@ -13,6 +13,8 @@ const BUNDLE_VALID: &[u8] = include_bytes!("../fixtures/bundle-valid.json");
 const BUNDLE_BAD_REFERENCE: &[u8] = include_bytes!("../fixtures/bundle-bad-reference.json");
 const BUNDLE_DUPLICATE: &[u8] = include_bytes!("../fixtures/bundle-duplicate.json");
 const BUNDLE_WRONG_TYPE: &[u8] = include_bytes!("../fixtures/bundle-wrong-type.json");
+const BUNDLE_LINKED: &[u8] = include_bytes!("../fixtures/bundle-linked.json");
+const BUNDLE_DANGLING: &[u8] = include_bytes!("../fixtures/bundle-dangling.json");
 
 const PATIENT: &[u8] = br#"{"resourceType":"Patient","id":"synthetic","active":true}"#;
 const OBSERVATION: &[u8] = br#"{"resourceType":"Observation","id":"synthetic-observation","status":"final","code":{"coding":[{"system":"urn:synthetic:code","code":"fictional-measurement"}]},"subject":{"reference":"Patient/synthetic"},"valueQuantity":{"value":37,"unit":"fictional"}}"#;
@@ -62,6 +64,8 @@ pub fn hash_fixture_raw_v1(
         "bundle-bad-reference" => ("bundle-bad-reference", BUNDLE_BAD_REFERENCE.len()),
         "bundle-duplicate" => ("bundle-duplicate", BUNDLE_DUPLICATE.len()),
         "bundle-wrong-type" => ("bundle-wrong-type", BUNDLE_WRONG_TYPE.len()),
+        "bundle-linked" => ("bundle-linked", BUNDLE_LINKED.len()),
+        "bundle-dangling" => ("bundle-dangling", BUNDLE_DANGLING.len()),
         "observation-minimal" => ("observation-minimal", OBSERVATION.len()),
         "observation-bad-subject" => ("observation-bad-subject", OBSERVATION_BAD_SUBJECT.len()),
         "patient-minimal" => ("patient-minimal", PATIENT.len()),
@@ -79,6 +83,8 @@ pub fn hash_fixture_raw_v1(
         "bundle-bad-reference" => BUNDLE_BAD_REFERENCE.to_vec(),
         "bundle-duplicate" => BUNDLE_DUPLICATE.to_vec(),
         "bundle-wrong-type" => BUNDLE_WRONG_TYPE.to_vec(),
+        "bundle-linked" => BUNDLE_LINKED.to_vec(),
+        "bundle-dangling" => BUNDLE_DANGLING.to_vec(),
         "patient-minimal" => PATIENT.to_vec(),
         "observation-minimal" => OBSERVATION.to_vec(),
         "observation-bad-subject" => OBSERVATION_BAD_SUBJECT.to_vec(),
@@ -106,7 +112,7 @@ pub fn hash_fixture_raw_v1(
     })
 }
 
-/// A narrow offline envelope check for ten BUILT-IN fictional test fixtures.
+/// A narrow offline envelope check for twelve BUILT-IN fictional test fixtures.
 ///
 /// This does not implement FHIR R4 conformance, terminology, profiles,
 /// terminology, profiles, clinical validation, or arbitrary user-file parsing.
@@ -134,6 +140,8 @@ pub fn inspect_named_synthetic_fhir_envelope_v1(
         "bundle-bad-reference" => ("bundle-bad-reference", BUNDLE_BAD_REFERENCE.len()),
         "bundle-duplicate" => ("bundle-duplicate", BUNDLE_DUPLICATE.len()),
         "bundle-wrong-type" => ("bundle-wrong-type", BUNDLE_WRONG_TYPE.len()),
+        "bundle-linked" => ("bundle-linked", BUNDLE_LINKED.len()),
+        "bundle-dangling" => ("bundle-dangling", BUNDLE_DANGLING.len()),
         "observation-minimal" => ("observation-minimal", OBSERVATION.len()),
         "observation-bad-subject" => ("observation-bad-subject", OBSERVATION_BAD_SUBJECT.len()),
         "patient-minimal" => ("patient-minimal", PATIENT.len()),
@@ -154,6 +162,8 @@ pub fn inspect_named_synthetic_fhir_envelope_v1(
             "bundle-bad-reference" => BUNDLE_BAD_REFERENCE.to_vec(),
             "bundle-duplicate" => BUNDLE_DUPLICATE.to_vec(),
             "bundle-wrong-type" => BUNDLE_WRONG_TYPE.to_vec(),
+            "bundle-linked" => BUNDLE_LINKED.to_vec(),
+            "bundle-dangling" => BUNDLE_DANGLING.to_vec(),
             "patient-minimal" | "patient-exact-limit" => PATIENT.to_vec(),
             "patient-invalid-utf8" => vec![0xff],
             "observation-minimal" => OBSERVATION.to_vec(),

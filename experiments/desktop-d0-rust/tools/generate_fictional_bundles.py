@@ -17,11 +17,16 @@ def bundle(e, kind="collection"):
 valid = bundle(deepcopy(entries))
 bad = deepcopy(valid)
 bad["entry"][1]["resource"]["subject"]["reference"] = "Patient/absent"
+linked = deepcopy(valid)
+linked["entry"][1]["resource"]["subject"]["reference"] = "urn:uuid:00000000-0000-4000-8000-000000000001"
+dangling = deepcopy(linked)
+dangling["entry"][1]["resource"]["subject"]["reference"] = "urn:uuid:00000000-0000-4000-8000-000000000099"
 dupe = deepcopy(valid)
 dupe["entry"][1]["fullUrl"] = "urn:uuid:00000000-0000-4000-8000-000000000001"
 for name, data in [
     ("bundle-valid",valid),("bundle-bad-reference",bad),
-    ("bundle-duplicate",dupe),("bundle-wrong-type",bundle(deepcopy(entries),"transaction"))
+    ("bundle-duplicate",dupe),("bundle-wrong-type",bundle(deepcopy(entries),"transaction")),
+    ("bundle-linked",linked),("bundle-dangling",dangling)
 ]:
     raw=json.dumps(data,separators=(",",":"),ensure_ascii=True).encode("ascii")
     target = folder / (name + ".json")
