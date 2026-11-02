@@ -27,7 +27,10 @@ jobs:
           sudo apt-get install -y --no-install-recommends \
             libgtk-3-dev libxkbcommon-dev libwayland-dev libegl1-mesa-dev \
             libgl1-mesa-dev pkg-config xvfb xauth dbus-x11 at-spi2-core \
-            python3-pyatspi fluxbox xdotool x11-utils
+            python3-pyatspi fluxbox xdotool x11-utils libxkbcommon-x11-0
+          # winit loads the XKB bridge dynamically at startup; a successful
+          # compile alone cannot attest to this runtime shared library.
+          ldconfig -p | grep -F 'libxkbcommon-x11.so.0'
       - name: Compile and lint bounded Python AT-SPI acceptance source
         run: |
           python3 -m py_compile experiments/desktop-d2-native-egui/tests/linux-native-fhir-atspi-qualification.py
