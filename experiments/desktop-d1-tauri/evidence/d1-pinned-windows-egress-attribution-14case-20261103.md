@@ -31,6 +31,8 @@ Cases validated:
 13. Incorrect independently pinned image SHA => **NO_GO** exit 4.
 14. Inert on-disk image mutated **during mock socket query** => second SHA mismatch, **NO_GO** exit 4.
 
+**Regression of the existing D1 observer:** The source-controlled original `windows-egress-probe-selftest.ps1` was also fetched from this exact branch and run on Windows independently: **9/9 mocked cases PASS**, exit 0, marker `D1_EGRESS_PROBE_9_OF_9_PASS`. Both sets together are **23/23 mocked logic checks**, NOT a real packet-level or native-runtime test.
+
 No source-file mutation to Rust/React, package lock, or system config; source and tests retained in private Draft PR #661. Detailed usage instructions added to D1 README.
 
 ## Scope boundaries and next blocker
