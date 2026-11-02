@@ -214,9 +214,85 @@ def wait_for(fn, label: str, seconds: float = 12) -> object:
     refuse(f"timed out: {label}; last={last}")
 
 
+def verify_linux_keyboard_only(window: object, pyatspi: object) -> None:
+    """Exercise real XTest Tab/Shift+Tab/Space, NEVER AT-SPI Action.
+
+    The AT-SPI tree is read-only evidence of keyboard focus/results. Only the
+    disposable Xvfb desktop receives simulated keyboard events.
+    """
+
+    def focused_names() -> list[str]:
+        result = []
+        for node in tree(window):
+            try:
+                if node.getState().contains(pyatspi.STATE_FOCUSED):
+                    result.append(name(node))
+            except (AttributeError, RuntimeError):
+                continue
+        return result
+
+    def send_key(key: str) -> None:
+        permitted = {"Tab", "shift+Tab", "space"}
+        if key not in permitted:
+            refuse("unexpected virtual keyboard shortcut")
+        sent = subprocess.run(
+            ["xdotool", "key", "--clearmodifiers", "--delay", "80", key],
+            capture_output=True,
+            text=True,
+            timeout=5,
+            check=False,
+        )
+        if sent.returncode != 0:
+            refuse(f"X11 real keyboard injection refused {key}: {sent.stderr[-250:]!r}")
+        time.sleep(0.12)
+
+    def focus_target(label: str, direction: str = "Tab") -> None:
+        for _ in range(18):
+            names = focused_names()
+            if names == [label]:
+                return
+            if len(names) > 1:
+                refuse(f"ambiguous AT-SPI keyboard focus {names}")
+            send_key(direction)
+        refuse(f"keyboard-only tab traversal never focused {label!r}; last_focus={focused_names()}")
+
+    # Do not use AT-SPI programmatic presses anywhere on this path: only
+    # inspect accessible focus state and expected post-action labels.
+    for case_id, count, digest, status in CASES[:4]:
+        label = f"{case_id} ({count} bytes)"
+        focus_target(label)
+        send_key("space")
+        focus_target("Verify synthetic SHA-256")
+        send_key("space")
+        expected_sha = f"Synthetic raw SHA-256 verified: {digest}"
+        expected_envelope = f"Fictional FHIR envelope: {status} (NOT full FHIR R4 validation)"
+
+        def verified_separate_nodes(
+            expected_sha: str = expected_sha, expected_envelope: str = expected_envelope
+        ) -> bool:
+            current = [name(n) for n in tree(window) if role(n) == "label"]
+            return current.count(expected_sha) == 1 and current.count(expected_envelope) == 1
+
+        wait_for(
+            verified_separate_nodes,
+            f"keyboard-only exact accessible SHA and FHIR envelope for {case_id}",
+        )
+        print(f"LINUX_D2_KEYBOARD_FICTIONAL_CASE_PASS={case_id}", flush=True)
+
+    # Explicit reverse traversal check independent of the passed fixture
+    # receipts: from Verify, Shift+Tab must reach the last primary selector.
+    focus_target("patient-exact-limit (32768 bytes)", "shift+Tab")
+    print("LINUX_D2_KEYBOARD_REVERSE_SHIFT_TAB_PASS_NONPUBLISHING", flush=True)
+    print("LINUX_D2_KEYBOARD_4_OF_4_PASS_NONPUBLISHING", flush=True)
+
+
 def main() -> int:
-    if len(sys.argv) != 3:
-        refuse("usage: linux-native-fhir-atspi-qualification.py ABSOLUTE_BINARY EXACT_SHA256")
+    if len(sys.argv) not in (3, 4) or (len(sys.argv) == 4 and sys.argv[3] != "--keyboard"):
+        refuse(
+            "usage: linux-native-fhir-atspi-qualification.py ABSOLUTE_BINARY "
+            "EXACT_SHA256 [--keyboard]"
+        )
+    keyboard_mode = len(sys.argv) == 4
     path = Path(sys.argv[1])
     sha = sys.argv[2].lower()
     if (
@@ -415,6 +491,9 @@ def main() -> int:
             ) and find(window, "Verify synthetic SHA-256", ("push", "button"))
 
         wait_for(existing_controls, "original native D2 AT-SPI controls")
+        if keyboard_mode:
+            verify_linux_keyboard_only(window, pyatspi)
+            return 0
         for index, (case_id, size, digest, status) in enumerate(CASES):
             if index == 4:
                 expand = unique(

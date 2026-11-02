@@ -89,6 +89,24 @@ class LinuxATSPITestHarness(unittest.TestCase):
             APP.find_native_frame(FakeAccessible("main", "desktop frame", [duplicated]))
         )
 
+    def test_keyboard_mode_rejects_unknown_action_before_app_launch(self) -> None:
+        with (
+            patch.object(APP.sys, "argv", ["test", "/missing/file", "0" * 64, "--unsafe"]),
+            self.assertRaisesRegex(APP.FatalQualificationError, "usage"),
+        ):
+            APP.main()
+
+    def test_keyboard_only_mode_never_programmatically_presses_atspi_action(self) -> None:
+        import inspect
+
+        source = inspect.getsource(APP.verify_linux_keyboard_only)
+        self.assertIn('["xdotool", "key"', source)
+        self.assertIn('"shift+Tab"', source)
+        self.assertIn("STATE_FOCUSED", source)
+        self.assertNotIn("press(", source)
+        self.assertNotIn(".queryAction(", source)
+        self.assertIn("LINUX_D2_KEYBOARD_4_OF_4_PASS_NONPUBLISHING", source)
+
     def test_fatal_acceptance_failure_never_retried_or_obscured(self) -> None:
         called = 0
 
