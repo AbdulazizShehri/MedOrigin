@@ -7,12 +7,9 @@ from __future__ import annotations
 
 import json
 import subprocess
-import sys
 import unittest
-from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
-import medorigin_release_blocker_ledger as ledger
+from scripts import medorigin_release_blocker_ledger as ledger
 
 
 def parse_raw(raw: bytes) -> ledger.Gate:
