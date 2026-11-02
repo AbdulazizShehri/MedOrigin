@@ -28,6 +28,21 @@ test('new FHIR envelope bridge is explicitly synthetic-only and refuses full con
  assert.match(ui,/"bundle-linked": "BUNDLE_GRAPH_OK"/);
  assert.match(ui,/"bundle-dangling": "INVALID_REFERENCE"/);
 });
+test('startup bridge status is strictly validated before enabling verification',()=>{
+ assert.match(ui,/invoke<unknown>\("preview_status"\)/);
+ assert.match(ui,/function isSafePreviewStatus\(value: unknown\)/);
+ assert.match(ui,/Object\.keys\(candidate\)\.length === 6/);
+ for (const field of [
+  'release_authorized', 'production_parity_qualified',
+  'app_network_plugins_enabled', 'webview_runtime_egress_qualified'
+ ]) {
+  assert.ok(ui.includes('candidate.'+field+' === false'), field);
+ }
+ assert.match(ui,/candidate\.data_access === "twelve_allowlisted_in_memory_fixtures_only"/);
+ assert.match(ui,/setStatus\(null\)/);
+ assert.match(ui,/Native desktop bridge status rejected/);
+});
+
 test('UI presents a truthful and fail-closed nonclinical result after a matching hash',()=>{
  assert.match(ui,/invoke<EnvelopeResult>\("inspect_fhir_fixture_envelope"/);
  assert.match(ui,/if \(checked\.sha256_hex !== chosen\.sha\)/);

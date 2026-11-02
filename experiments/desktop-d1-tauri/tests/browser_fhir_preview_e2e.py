@@ -39,9 +39,14 @@ MOCK_BRIDGE = r"""
   window.__TAURI_INTERNALS__ = {
     invoke: async (command, args = {}) => {
       if (command === "preview_status") {
-        return {mode: "SYNTHETIC_DEVELOPER_PREVIEW", data_access: "twelve_allowlisted_in_memory_fixtures_only",
+        const status = {mode: "SYNTHETIC_DEVELOPER_PREVIEW", data_access: "twelve_allowlisted_in_memory_fixtures_only",
           release_authorized: false, production_parity_qualified: false,
           app_network_plugins_enabled: false, webview_runtime_egress_qualified: false};
+        const forged = new URLSearchParams(window.location.search).get("forgeStatus");
+        if (forged === "release") status.release_authorized = true;
+        if (forged === "egress") status.webview_runtime_egress_qualified = true;
+        if (forged === "missing") delete status.app_network_plugins_enabled;
+        return status;
       }
       const item = samples[args.fixtureId];
       if (!item || args.maxInputBytes !== 65536) throw "unknown_fixture";
@@ -116,6 +121,22 @@ class PreviewBrowserChecks(unittest.TestCase):
     def choose_and_verify(self, label: str) -> None:
         self.page.get_by_role("button", name=re.compile(label)).click()
         self.page.get_by_role("button", name="Verify with Rust").click()
+
+    def test_forged_startup_status_cannot_enable_native_verification(self) -> None:
+        for variant in ("release", "egress", "missing"):
+            with self.subTest(variant=variant):
+                self.page.goto(
+                    f"{self.local_url}?forgeStatus={variant}", wait_until="networkidle"
+                )
+                expect(
+                    self.page.get_by_role("button", name="Verify with Rust")
+                ).to_be_disabled()
+                expect(self.page.locator(".notice")).not_to_contain_text(
+                    "Rust command bridge active"
+                )
+                expect(self.page.locator(".outcome-error")).to_contain_text(
+                    "Native desktop bridge status rejected"
+                )
 
     def test_valid_and_broken_subject_responses(self) -> None:
         self.assertEqual(self.page.locator(".fixture").count(), 12)
