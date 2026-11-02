@@ -92,15 +92,34 @@ pub const FIXTURES: [FixtureSpec; 12] = [
     },
 ];
 
+#[derive(Clone, Debug)]
+struct FictionalComparison {
+    left: FixtureSpec,
+    right: FixtureSpec,
+    left_json: &'static str,
+    right_json: &'static str,
+}
+
 #[derive(Default)]
 pub struct MedOriginNativePreview {
     selected: usize,
+    compare_with: usize,
     result: Option<String>,
     preview: Option<String>,
     preview_notice: Option<&'static str>,
+    comparison: Option<FictionalComparison>,
 }
 
 impl MedOriginNativePreview {
+    /// Remove all previously rendered synthetic content while keeping only
+    /// allowlisted selection indices. This is not secure memory erasure.
+    pub fn clear_fictional_output(&mut self) {
+        self.result = None;
+        self.preview = None;
+        self.preview_notice = None;
+        self.comparison = None;
+    }
+
     /// Fail closed if either the trusted raw digest OR the independent
     /// structural outcome differs from the compiled fictional fixture catalog.
     /// A structurally invalid fixture is a correctly identified NEGATIVE test,
@@ -109,6 +128,7 @@ impl MedOriginNativePreview {
         self.result = None;
         self.preview = None;
         self.preview_notice = None;
+        self.comparison = None;
         let Some(fixture) = FIXTURES.get(self.selected) else {
             self.result = Some("FAIL CLOSED: invalid synthetic selection".to_owned());
             return Err("invalid_synthetic_selection");
@@ -187,10 +207,80 @@ impl MedOriginNativePreview {
             .as_deref()
             .expect("just assigned bounded fictional JSON"))
     }
+
+    /// A second independent verification, never trusting previously displayed
+    /// UI state. The only inputs are source-compiled fictional fixture IDs.
+    fn verified_json_for(index: usize) -> Result<&'static str, &'static str> {
+        let fixture = FIXTURES.get(index).ok_or("invalid_synthetic_selection")?;
+        if fixture.bytes > 2_048 {
+            return Err("preview_unavailable");
+        }
+        let digest =
+            hash_fixture_raw_v1(fixture.id, 65_536).map_err(|_| "synthetic_verification_failed")?;
+        let envelope = inspect_named_synthetic_fhir_envelope_v1(fixture.id, 65_536)
+            .map_err(|_| "synthetic_verification_failed")?;
+        let payload = fictional_json_preview_v1(fixture.id).map_err(|_| "preview_unavailable")?;
+        if digest.contract != "medorigin-desktop-d0-raw-sha256-v1"
+            || digest.fixture_id != fixture.id
+            || digest.bytes != fixture.bytes
+            || digest.sha256_hex != fixture.sha256
+            || envelope.contract != "medorigin-d0-synthetic-fhir-envelope-v1"
+            || envelope.fixture_id != fixture.id
+            || envelope.bytes != fixture.bytes
+            || envelope.status != fixture.status
+            || !envelope.synthetic_only
+            || envelope.full_fhir_r4_validated
+            || envelope.release_authorized
+            || payload.contract != "medorigin-d0-fictional-json-preview-v1"
+            || payload.fixture_id != fixture.id
+            || payload.bytes != fixture.bytes
+            || payload.sha256_hex != fixture.sha256
+            || payload.raw_json.len() != fixture.bytes
+            || !payload.synthetic_only
+            || payload.release_authorized
+        {
+            return Err("synthetic_comparison_mismatch");
+        }
+        Ok(payload.raw_json)
+    }
+
+    /// Compare two distinct, independently reverified source-fixed fictional
+    /// JSON texts. Never reads files, copies to clipboard or normalizes bytes.
+    pub fn compare_selected(&mut self) -> Result<(), &'static str> {
+        self.comparison = None;
+        self.preview = None;
+        self.preview_notice = None;
+        if self.hash_selected().is_err() {
+            return Err("synthetic_verification_failed");
+        }
+        if self.selected == self.compare_with {
+            self.result = Some("FAIL CLOSED: choose two distinct fictional fixtures".to_owned());
+            return Err("comparison_requires_distinct_fixtures");
+        }
+        let (Ok(left_json), Ok(right_json)) = (
+            Self::verified_json_for(self.selected),
+            Self::verified_json_for(self.compare_with),
+        ) else {
+            self.result = Some("FAIL CLOSED: fictional comparison refused".to_owned());
+            return Err("synthetic_comparison_refused");
+        };
+        let left = FIXTURES[self.selected];
+        let right = FIXTURES[self.compare_with];
+        self.comparison = Some(FictionalComparison {
+            left,
+            right,
+            left_json,
+            right_json,
+        });
+        Ok(())
+    }
 }
 
 impl eframe::App for MedOriginNativePreview {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
+        if ui.input(|input| input.key_pressed(egui::Key::Escape)) {
+            self.clear_fictional_output();
+        }
         egui::CentralPanel::default().show(ui, |ui| {
             ui.heading("MedOrigin — Native Rust Experiment");
             ui.strong("Synthetic developer preview only · No EHR · No clinical use");
@@ -205,6 +295,7 @@ impl eframe::App for MedOriginNativePreview {
                     self.result = None;
                     self.preview = None;
                     self.preview_notice = None;
+                    self.comparison = None;
                 }
             }
             if ui.button("Verify synthetic SHA-256").clicked() {
@@ -227,6 +318,7 @@ impl eframe::App for MedOriginNativePreview {
                             self.result = None;
                             self.preview = None;
                             self.preview_notice = None;
+                            self.comparison = None;
                         }
                     }
                 });
@@ -248,6 +340,60 @@ impl eframe::App for MedOriginNativePreview {
                     });
             }
             ui.separator();
+            ui.label("Compare two independently verified fictional JSON sources (read-only):");
+            ui.label(format!(
+                "Second fictional selection: {}",
+                FIXTURES
+                    .get(self.compare_with)
+                    .map_or("Invalid fictional selection", |fixture| fixture.id)
+            ));
+            // Use the same accessible button semantics as the original
+            // selectors. egui ComboBox did not expose an actionable Windows
+            // UIA ExpandCollapsePattern in the real native probe.
+            egui::CollapsingHeader::new("Choose second fictional fixture (9)")
+                .default_open(false)
+                .show(ui, |ui| {
+                    for (index, fixture) in FIXTURES.iter().enumerate() {
+                        if fixture.bytes <= 2_048
+                            && ui
+                                .selectable_label(
+                                    self.compare_with == index,
+                                    format!("Compare: {}", fixture.id),
+                                )
+                                .clicked()
+                        {
+                            self.compare_with = index;
+                            self.comparison = None;
+                        }
+                    }
+                });
+            if ui.button("Compare verified fictional JSON (read-only)").clicked() {
+                let _ = self.compare_selected();
+            }
+            if let Some(comparison) = &self.comparison {
+                ui.label("Both sources independently reverified · Negative FHIR statuses are expected test cases, not clinical conclusions");
+                ui.columns(2, |columns| {
+                    let (left, right) = columns.split_at_mut(1);
+                    for (column, fixture, raw) in [
+                        (&mut left[0], comparison.left, comparison.left_json),
+                        (&mut right[0], comparison.right, comparison.right_json),
+                    ] {
+                        column.strong(fixture.id);
+                        column.label(format!("Fictional envelope: {}", fixture.status));
+                        column.monospace(format!("SHA-256: {}", fixture.sha256));
+                        egui::ScrollArea::vertical()
+                            .max_height(160.0)
+                            .show(column, |ui| {
+                                ui.monospace(raw);
+                            });
+                    }
+                });
+            }
+            if ui.button("Clear fictional output (Escape)").clicked() {
+                self.clear_fictional_output();
+            }
+            ui.label("Keyboard: Tab/Shift+Tab to navigate, Space to activate, Escape to clear synthetic output.");
+            ui.separator();
             ui.label("FHIR structural checks only · Release: NO-GO · Network isolation: UNQUALIFIED · PHI: PROHIBITED");
         });
     }
@@ -256,6 +402,39 @@ impl eframe::App for MedOriginNativePreview {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn clear_fictional_output_removes_all_rendered_state_without_mutating_choices() {
+        let mut app = MedOriginNativePreview {
+            selected: 0,
+            compare_with: 4,
+            ..Default::default()
+        };
+        assert!(app.compare_selected().is_ok());
+        assert!(app.comparison.is_some());
+        app.clear_fictional_output();
+        assert_eq!((app.selected, app.compare_with), (0, 4));
+        assert!(app.result.is_none());
+        assert!(app.preview.is_none());
+        assert!(app.preview_notice.is_none());
+        assert!(app.comparison.is_none());
+
+        assert!(app.preview_selected().is_ok());
+        assert!(app.preview.is_some());
+        app.clear_fictional_output();
+        assert!(app.result.is_none());
+        assert!(app.preview.is_none());
+        assert!(app.preview_notice.is_none());
+        assert!(app.comparison.is_none());
+
+        app.selected = 1; // synthetic invalid UTF-8 boundary fixture
+        assert_eq!(app.preview_selected(), Err("preview_unavailable"));
+        assert!(app.preview_notice.is_some());
+        app.clear_fictional_output();
+        assert!(app.result.is_none());
+        assert!(app.preview_notice.is_none());
+        assert!(app.comparison.is_none());
+    }
 
     #[test]
     fn all_twelve_fictional_vectors_match_compiled_sha_and_expected_envelope_status() {
@@ -342,6 +521,66 @@ mod tests {
         assert_eq!(app.preview_selected(), Err("synthetic_verification_failed"));
         assert!(app.preview.is_none());
         assert!(!app.result.as_deref().unwrap().contains("SHA-256 verified"));
+    }
+
+    #[test]
+    fn fictional_side_by_side_comparison_reverifies_two_distinct_sources() {
+        let mut app = MedOriginNativePreview {
+            selected: 0,
+            compare_with: 4,
+            ..Default::default()
+        };
+        assert_eq!(app.compare_selected(), Ok(()));
+        let pair = app
+            .comparison
+            .as_ref()
+            .expect("two verified fictional texts");
+        assert_eq!(pair.left.id, "patient-minimal");
+        assert_eq!(pair.right.id, "observation-minimal");
+        assert_eq!(pair.left_json.len(), pair.left.bytes);
+        assert_eq!(pair.right_json.len(), pair.right.bytes);
+        assert!(pair.left_json.contains("Patient"));
+        assert!(pair.right_json.contains("Observation"));
+        assert!(app.preview.is_none(), "comparison must not reuse preview");
+
+        app.selected = 6;
+        app.compare_with = 7;
+        assert_eq!(app.compare_selected(), Ok(()));
+        let pair = app.comparison.as_ref().unwrap();
+        assert_eq!(pair.left.status, "BUNDLE_GRAPH_OK");
+        assert_eq!(pair.right.status, "INVALID_REFERENCE");
+        assert_ne!(pair.left_json, pair.right_json);
+        assert_ne!(pair.left.sha256, pair.right.sha256);
+        assert!(app.hash_selected().is_ok());
+        assert!(
+            app.comparison.is_none(),
+            "new verification clears stale pair"
+        );
+    }
+
+    #[test]
+    fn fictional_comparison_fails_closed_on_boundaries_and_invalid_selection() {
+        let mut app = MedOriginNativePreview {
+            selected: 0,
+            compare_with: 4,
+            ..Default::default()
+        };
+        assert!(app.compare_selected().is_ok());
+        for (left, right) in [
+            (1, 4),          // invalid UTF-8
+            (0, 2),          // over 32 KiB
+            (0, 3),          // exact 32 KiB
+            (0, 0),          // same fixture
+            (0, usize::MAX), // forged secondary index
+            (usize::MAX, 4), // forged primary index
+        ] {
+            app.selected = left;
+            app.compare_with = right;
+            assert!(app.compare_selected().is_err());
+            assert!(app.comparison.is_none(), "never retain stale comparison");
+            assert!(app.preview.is_none(), "never retain stale JSON");
+            assert!(app.result.as_deref().unwrap().starts_with("FAIL CLOSED"));
+        }
     }
 
     #[test]
