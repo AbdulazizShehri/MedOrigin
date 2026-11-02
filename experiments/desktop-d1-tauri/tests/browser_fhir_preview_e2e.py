@@ -29,7 +29,9 @@ MOCK_BRIDGE = r"""
     "bundle-valid": ["3a530a66c0f2b71908b1282985432e405f0f2f412c7ccc0143aa1972d9447983", 531, "BUNDLE_GRAPH_OK"],
     "bundle-bad-reference": ["4aabcfa54309c83052d62b4fdcf1c6635a6cd3d937551e2ab947899345f9f082", 528, "INVALID_REFERENCE"],
     "bundle-duplicate": ["813f8a3b8fee59ba74abdb293c6cac5cca103b390153730e6e3bc4656540f15b", 531, "DUPLICATE_ENTRY"],
-    "bundle-wrong-type": ["293c10c8abf055e8c1f84bae4913c7246bf9be5bf53dee0fb3c918e32a8346a7", 532, "INVALID_BUNDLE_TYPE"]
+    "bundle-wrong-type": ["293c10c8abf055e8c1f84bae4913c7246bf9be5bf53dee0fb3c918e32a8346a7", 532, "INVALID_BUNDLE_TYPE"],
+    "bundle-linked": ["1d24976b74ab0481ce2acc1010d58ec5e4b9da9ba93071e1042afeb299a03d88", 559, "BUNDLE_GRAPH_OK"],
+    "bundle-dangling": ["1bbc0bac94b3ff19dce3502164f3243748cf5aa7e869433bdb09e7ec2266b229", 559, "INVALID_REFERENCE"]
   };
   window.__testInspectCalls = 0;
   window.__testForgeEnvelope = false;
@@ -37,7 +39,7 @@ MOCK_BRIDGE = r"""
   window.__TAURI_INTERNALS__ = {
     invoke: async (command, args = {}) => {
       if (command === "preview_status") {
-        return {mode: "SYNTHETIC_DEVELOPER_PREVIEW", data_access: "ten_allowlisted_in_memory_fixtures_only",
+        return {mode: "SYNTHETIC_DEVELOPER_PREVIEW", data_access: "twelve_allowlisted_in_memory_fixtures_only",
           release_authorized: false, production_parity_qualified: false,
           app_network_plugins_enabled: false, webview_runtime_egress_qualified: false};
       }
@@ -116,7 +118,7 @@ class PreviewBrowserChecks(unittest.TestCase):
         self.page.get_by_role("button", name="Verify with Rust").click()
 
     def test_valid_and_broken_subject_responses(self) -> None:
-        self.assertEqual(self.page.locator(".fixture").count(), 10)
+        self.assertEqual(self.page.locator(".fixture").count(), 12)
         self.choose_and_verify("Fictional Observation")
         expect(self.page.locator(".envelope-result")).to_contain_text(
             "Basic fictional resource fields found"
@@ -126,6 +128,12 @@ class PreviewBrowserChecks(unittest.TestCase):
         expect(self.page.locator(".outcome-success")).to_have_count(1)
 
     def test_bundle_graph_success_and_rejection_cases(self) -> None:
+        self.choose_and_verify("Bundle linked by URN")
+        expect(self.page.locator(".envelope-result")).to_contain_text(
+            "Basic fictional resource fields found"
+        )
+        self.choose_and_verify("Bundle dangling URN")
+        expect(self.page.locator(".envelope-result")).to_contain_text("INVALID REFERENCE")
         self.choose_and_verify("Linked fictional Bundle")
         expect(self.page.locator(".envelope-result")).to_contain_text(
             "Basic fictional resource fields found"

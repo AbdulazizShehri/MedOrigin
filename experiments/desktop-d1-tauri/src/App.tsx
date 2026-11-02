@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import "./App.css";
 
-type FixtureId = "patient-minimal" | "patient-invalid-utf8" | "patient-over-limit" | "patient-exact-limit" | "observation-minimal" | "observation-bad-subject" | "bundle-valid" | "bundle-bad-reference" | "bundle-duplicate" | "bundle-wrong-type";
+type FixtureId = "patient-minimal" | "patient-invalid-utf8" | "patient-over-limit" | "patient-exact-limit" | "observation-minimal" | "observation-bad-subject" | "bundle-valid" | "bundle-bad-reference" | "bundle-duplicate" | "bundle-wrong-type" | "bundle-linked" | "bundle-dangling";
 type PreviewStatus = {
   mode: string;
   data_access: string;
@@ -39,6 +39,8 @@ const FIXTURES: readonly { id: FixtureId; title: string; kind: string; size: str
   { id: "bundle-bad-reference", title: "Bundle missing patient", kind: "NEGATIVE CASE", size: "528 B", description: "An Observation points to a fictional patient not in the bundle.", sha: "4aabcfa54309c83052d62b4fdcf1c6635a6cd3d937551e2ab947899345f9f082" },
   { id: "bundle-duplicate", title: "Duplicate Bundle entry", kind: "NEGATIVE CASE", size: "531 B", description: "Two resource entries share the same fictional fullUrl.", sha: "813f8a3b8fee59ba74abdb293c6cac5cca103b390153730e6e3bc4656540f15b" },
   { id: "bundle-wrong-type", title: "Unsupported Bundle type", kind: "NEGATIVE CASE", size: "532 B", description: "Transaction bundles are intentionally not accepted by this offline preview.", sha: "293c10c8abf055e8c1f84bae4913c7246bf9be5bf53dee0fb3c918e32a8346a7" },
+  { id: "bundle-linked", title: "Bundle linked by URN", kind: "VALID SYNTHETIC", size: "559 B", description: "The fictional Observation links to the Patient entry fullUrl URN.", sha: "1d24976b74ab0481ce2acc1010d58ec5e4b9da9ba93071e1042afeb299a03d88" },
+  { id: "bundle-dangling", title: "Bundle dangling URN", kind: "NEGATIVE CASE", size: "559 B", description: "The Observation points to an absent fictional Patient URN.", sha: "1bbc0bac94b3ff19dce3502164f3243748cf5aa7e869433bdb09e7ec2266b229" },
 ];
 const EXPECTED_ENVELOPE_STATUS: Record<FixtureId, EnvelopeResult["status"]> = {
   "patient-minimal": "FHIR_ENVELOPE_OK",
@@ -51,6 +53,8 @@ const EXPECTED_ENVELOPE_STATUS: Record<FixtureId, EnvelopeResult["status"]> = {
   "bundle-bad-reference": "INVALID_REFERENCE",
   "bundle-duplicate": "DUPLICATE_ENTRY",
   "bundle-wrong-type": "INVALID_BUNDLE_TYPE",
+  "bundle-linked": "BUNDLE_GRAPH_OK",
+  "bundle-dangling": "INVALID_REFERENCE",
 };
 
 export default function App() {
@@ -164,7 +168,7 @@ export default function App() {
         </div>
         <footer className="notice">
           <span className="notice-icon">i</span>
-          <div><strong>Unreleased engineering preview</strong><p>{status ? "Rust command bridge active. Ten fixed synthetic cases only." : "Local native bridge not yet confirmed."} No clinician workflows, health records, application network plugins, installer qualification, or publishing authorization. WebView2 runtime egress is unqualified.</p></div>
+          <div><strong>Unreleased engineering preview</strong><p>{status ? "Rust command bridge active. Twelve fixed synthetic cases only." : "Local native bridge not yet confirmed."} No clinician workflows, health records, application network plugins, installer qualification, or publishing authorization. WebView2 runtime egress is unqualified.</p></div>
         </footer>
       </main>
     </div>

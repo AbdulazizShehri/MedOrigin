@@ -29,6 +29,18 @@ fn fictional_bundle_reference_graph_is_consistent_and_fail_closed() {
             "293c10c8abf055e8c1f84bae4913c7246bf9be5bf53dee0fb3c918e32a8346a7",
             "INVALID_BUNDLE_TYPE",
         ),
+        (
+            "bundle-linked",
+            559,
+            "1d24976b74ab0481ce2acc1010d58ec5e4b9da9ba93071e1042afeb299a03d88",
+            "BUNDLE_GRAPH_OK",
+        ),
+        (
+            "bundle-dangling",
+            559,
+            "1bbc0bac94b3ff19dce3502164f3243748cf5aa7e869433bdb09e7ec2266b229",
+            "INVALID_REFERENCE",
+        ),
     ] {
         let hashed = hash_fixture_raw_v1(name, 65_536).unwrap();
         assert_eq!(hashed.bytes, size);

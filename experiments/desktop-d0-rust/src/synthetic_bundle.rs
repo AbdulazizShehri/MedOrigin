@@ -26,6 +26,7 @@ pub(crate) fn inspect_fictional_bundle(raw: &[u8]) -> &'static str {
 
     let mut urls = HashSet::new();
     let mut patient_seen = false;
+    let mut patient_full_url: Option<&str> = None;
     let mut observation_seen = false;
     let mut reference: Option<&str> = None;
     for entry in entries {
@@ -56,6 +57,7 @@ pub(crate) fn inspect_fictional_bundle(raw: &[u8]) -> &'static str {
                     return "INVALID_BUNDLE_ENVELOPE";
                 }
                 patient_seen = true;
+                patient_full_url = Some(url);
             }
             Some("Observation") => {
                 if observation_seen
@@ -92,7 +94,9 @@ pub(crate) fn inspect_fictional_bundle(raw: &[u8]) -> &'static str {
     if !patient_seen || !observation_seen {
         return "INVALID_BUNDLE_ENVELOPE";
     }
-    if reference != Some("Patient/synthetic") {
+    // Permit an exact synthetic relative reference OR a Bundle-local fullUrl
+    // belonging to the patient entry. Never dereference URLs or resolve remotely.
+    if reference != Some("Patient/synthetic") && reference != patient_full_url {
         return "INVALID_REFERENCE";
     }
     "BUNDLE_GRAPH_OK"
