@@ -58,6 +58,21 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'D2 native Rust tests failed' }
           cargo clippy --locked --all-targets --manifest-path experiments/desktop-d2-native-egui/Cargo.toml -- -D warnings
           if ($LASTEXITCODE -ne 0) { throw 'D2 Clippy failed' }
+      - name: Parse Windows real-UIA regression source without opening a GUI
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $path = 'experiments/desktop-d2-native-egui/tests/windows-native-fhir-uia-qualification.ps1'
+          $tokens = $null
+          $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile(
+            (Resolve-Path $path).Path, [ref]$tokens, [ref]$errors
+          ) | Out-Null
+          if (@($errors).Count -ne 0) { throw 'Native Windows UIA test has PowerShell syntax errors' }
+          $text = Get-Content -LiteralPath $path -Raw
+          if (-not $text.Contains('D2_NATIVE_FHIR_UIA_8_OF_8_PASS_NONPUBLISHING')) { throw 'Missing UIA acceptance marker' }
+          if ([regex]::Matches($text, "@\{id='").Count -ne 8) { throw 'Expected eight fictional UIA test cases' }
+          Write-Output 'UIA_SCRIPT_SYNTAX_AND_EIGHT_FIXTURES_OK_SOURCE_ONLY_NO_GUI'
       - name: Verify checks did not alter tracked code or lockfiles
         shell: pwsh
         run: |

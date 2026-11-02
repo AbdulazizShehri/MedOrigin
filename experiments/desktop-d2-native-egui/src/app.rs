@@ -161,7 +161,11 @@ impl eframe::App for MedOriginNativePreview {
                 let _ = self.hash_selected();
             }
             if let Some(result) = &self.result {
-                ui.monospace(result);
+                // Preserve the original standalone UIA/AX SHA text node. The
+                // FHIR status is a distinct accessible node for screen readers.
+                for line in result.lines() {
+                    ui.monospace(line);
+                }
             }
             egui::CollapsingHeader::new("Additional fictional FHIR/Bundle cases (8)")
                 .default_open(false)
