@@ -263,6 +263,16 @@ class PreviewBrowserChecks(unittest.TestCase):
         })""")
         expect(self.page.locator(".outcome-success")).to_have_count(0)
 
+    def test_hung_native_envelope_never_exposes_hash_success(self) -> None:
+        self.page.clock.install()
+        self.page.evaluate("window.__testHangCommand = 'inspect_fhir_fixture_envelope'")
+        self.page.get_by_role("button", name="Verify with Rust").click()
+        self.page.clock.fast_forward(30_100)
+        expect(self.page.locator(".verification-output")).to_contain_text("timed out")
+        expect(self.page.locator(".outcome-success")).to_have_count(0)
+        expect(self.page.locator(".envelope-result")).to_have_count(0)
+        expect(self.page.get_by_role("button", name="Verify with Rust")).to_be_disabled()
+
     def test_hung_native_batch_disables_verification_without_partial_success(self) -> None:
         self.page.clock.install()
         self.page.evaluate("window.__testHangCommand = 'verify_all_fixtures'")

@@ -141,6 +141,25 @@ function isSafeNativeBatchReceipt(value: unknown): value is NativeBatchResponse 
   });
 }
 
+// A stalled native IPC must not leave the preview indefinitely busy. The
+// underlying command is not cancelled: after a timeout the bridge stays
+// disabled until a full reload, preventing overlapping/replayed requests.
+const NATIVE_IPC_TIMEOUT_MS = 30_000;
+class NativeIpcTimeout extends Error {}
+async function invokeWithDeadline(command: string, args?: Record<string, unknown>): Promise<unknown> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      invoke<unknown>(command, args),
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new NativeIpcTimeout("native_ipc_deadline_exceeded")), NATIVE_IPC_TIMEOUT_MS);
+      }),
+    ]);
+  } finally {
+    if (timer !== undefined) clearTimeout(timer);
+  }
+}
+
 export default function App() {
   const [status, setStatus] = useState<PreviewStatus | null>(null);
   const [selected, setSelected] = useState<FixtureId>("patient-minimal");
@@ -154,7 +173,7 @@ export default function App() {
   const flight = useRef(false);
   useEffect(() => {
     let alive = true;
-    invoke<unknown>("preview_status")
+    invokeWithDeadline("preview_status")
       .then((next) => {
         if (!alive) return;
         if (!isSafePreviewStatus(next)) {
@@ -184,7 +203,7 @@ export default function App() {
     setEnvelope(null);
     setBusy(true);
     try {
-      const checked = await invoke<unknown>("hash_fixture", { fixtureId: selected, maxInputBytes: 65536 });
+      const checked = await invokeWithDeadline("hash_fixture", { fixtureId: selected, maxInputBytes: 65536 });
       if (!isSafeHashReceipt(checked, selected, Number(chosen.size.replace(/[^0-9]/g, "")))) {
         throw new Error("Unexpected native hash response contract");
       }
@@ -192,7 +211,7 @@ export default function App() {
         setResult(checked);
         return;
       }
-      const inspected = await invoke<unknown>("inspect_fhir_fixture_envelope", {
+      const inspected = await invokeWithDeadline("inspect_fhir_fixture_envelope", {
         fixtureId: selected, maxInputBytes: 65536,
       });
       if (!isSafeEnvelopeReceipt(inspected, selected, checked.bytes, EXPECTED_ENVELOPE_STATUS[selected])) {
@@ -203,7 +222,12 @@ export default function App() {
       setResult(checked);
       setEnvelope(inspected);
     } catch (reason) {
-      setError(typeof reason === "string" ? reason : "The local Rust command refused this request.");
+      if (reason instanceof NativeIpcTimeout) {
+        setStatus(null);
+        setError("Native desktop bridge timed out; reload preview to retry.");
+      } else {
+        setError(typeof reason === "string" ? reason : "The local Rust command refused this request.");
+      }
     } finally {
       flight.current = false;
       setBusy(false);
@@ -223,7 +247,7 @@ export default function App() {
     setBatchProgress(0);
     setBusy(true);
     try {
-      const checked = await invoke<unknown>("verify_all_fixtures", { maxInputBytes: 65536 });
+      const checked = await invokeWithDeadline("verify_all_fixtures", { maxInputBytes: 65536 });
       if (!isSafeNativeBatchReceipt(checked)) {
         throw new Error("Native batch receipt rejected");
       }
@@ -232,10 +256,15 @@ export default function App() {
       }));
       setBatchRows(rows);
       setBatchComplete(true);
-    } catch {
+    } catch (reason) {
       setBatchRows([]);
       setBatchComplete(false);
-      setError("The local Rust command refused this request.");
+      if (reason instanceof NativeIpcTimeout) {
+        setStatus(null);
+        setError("Native desktop bridge timed out; reload preview to retry.");
+      } else {
+        setError("The local Rust command refused this request.");
+      }
     } finally {
       flight.current = false;
       setBusy(false);
