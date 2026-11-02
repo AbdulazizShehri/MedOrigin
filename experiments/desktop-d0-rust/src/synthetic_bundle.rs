@@ -1,10 +1,80 @@
 //! Offline fictional Bundle graph checks on fixed compiled fixtures only.
 //! This is NOT full FHIR conformance, terminology or clinical validation.
 use std::collections::HashSet;
+use std::fmt;
 
+use serde::de::{self, DeserializeSeed, MapAccess, SeqAccess, Visitor};
 use serde_json::Value;
 
+// serde_json::Value intentionally keeps the last occurrence of an object key.
+// Check every nested object before using Value for security-relevant graph
+// decisions; escaped JSON key names are decoded before duplicate comparison.
+struct UniqueKeys;
+
+impl<'de> DeserializeSeed<'de> for UniqueKeys {
+    type Value = ();
+
+    fn deserialize<D: de::Deserializer<'de>>(self, deserializer: D) -> Result<(), D::Error> {
+        deserializer.deserialize_any(UniqueKeys)
+    }
+}
+
+impl<'de> Visitor<'de> for UniqueKeys {
+    type Value = ();
+
+    fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+        formatter.write_str("JSON with no duplicate object keys")
+    }
+
+    fn visit_map<M: MapAccess<'de>>(self, mut map: M) -> Result<(), M::Error> {
+        let mut keys = HashSet::new();
+        while let Some(key) = map.next_key::<String>()? {
+            if !keys.insert(key) {
+                return Err(de::Error::custom("duplicate JSON object key"));
+            }
+            map.next_value_seed(UniqueKeys)?;
+        }
+        Ok(())
+    }
+
+    fn visit_seq<S: SeqAccess<'de>>(self, mut seq: S) -> Result<(), S::Error> {
+        while seq.next_element_seed(UniqueKeys)?.is_some() {}
+        Ok(())
+    }
+
+    fn visit_bool<E: de::Error>(self, _: bool) -> Result<(), E> {
+        Ok(())
+    }
+    fn visit_i64<E: de::Error>(self, _: i64) -> Result<(), E> {
+        Ok(())
+    }
+    fn visit_u64<E: de::Error>(self, _: u64) -> Result<(), E> {
+        Ok(())
+    }
+    fn visit_f64<E: de::Error>(self, _: f64) -> Result<(), E> {
+        Ok(())
+    }
+    fn visit_str<E: de::Error>(self, _: &str) -> Result<(), E> {
+        Ok(())
+    }
+    fn visit_string<E: de::Error>(self, _: String) -> Result<(), E> {
+        Ok(())
+    }
+    fn visit_unit<E: de::Error>(self) -> Result<(), E> {
+        Ok(())
+    }
+}
+
+pub(crate) fn reject_duplicate_object_keys(raw: &[u8]) -> Result<(), serde_json::Error> {
+    let mut parser = serde_json::Deserializer::from_slice(raw);
+    UniqueKeys.deserialize(&mut parser)?;
+    parser.end()
+}
+
 pub(crate) fn inspect_fictional_bundle(raw: &[u8]) -> &'static str {
+    if reject_duplicate_object_keys(raw).is_err() {
+        return "INVALID_JSON";
+    }
     let Ok(value) = serde_json::from_slice::<Value>(raw) else {
         return "INVALID_JSON";
     };
@@ -106,6 +176,41 @@ pub(crate) fn inspect_fictional_bundle(raw: &[u8]) -> &'static str {
 mod tests {
     use super::inspect_fictional_bundle;
     use serde_json::{Value, json};
+
+    #[test]
+    fn refuses_duplicate_json_object_keys_at_every_depth() {
+        let raw = std::str::from_utf8(include_bytes!("../fixtures/bundle-valid.json")).unwrap();
+        assert_eq!(inspect_fictional_bundle(raw.as_bytes()), "BUNDLE_GRAPH_OK");
+        let duplicate_root = raw.replace(
+            "\"resourceType\":\"Bundle\"",
+            "\"resourceType\":\"Patient\",\"resourceType\":\"Bundle\"",
+        );
+        assert_ne!(duplicate_root, raw);
+        assert_eq!(
+            inspect_fictional_bundle(duplicate_root.as_bytes()),
+            "INVALID_JSON"
+        );
+
+        let duplicate_nested = raw.replace(
+            "\"resourceType\":\"Patient\"",
+            "\"resourceType\":\"Observation\",\"resourceType\":\"Patient\"",
+        );
+        assert_ne!(duplicate_nested, raw);
+        assert_eq!(
+            inspect_fictional_bundle(duplicate_nested.as_bytes()),
+            "INVALID_JSON"
+        );
+
+        let duplicate_escaped = raw.replace(
+            "\"resourceType\":\"Bundle\"",
+            "\"\\u0072esourceType\":\"Patient\",\"resourceType\":\"Bundle\"",
+        );
+        assert_ne!(duplicate_escaped, raw);
+        assert_eq!(
+            inspect_fictional_bundle(duplicate_escaped.as_bytes()),
+            "INVALID_JSON"
+        );
+    }
 
     #[test]
     fn rejects_manipulated_local_graph_instead_of_dereferencing() {

@@ -10,6 +10,7 @@ description = "Unreleased, synthetic-only Rust reference-hash experiment; not th
 [dependencies]
 sha2 = { version = "=0.11.1", default-features = false }
 serde_json = { version = "1", default-features = false, features = ["std"] }
+serde = { version = "1", default-features = false, features = ["std"] }
 
 [lints.rust]
 unsafe_code = "forbid"
