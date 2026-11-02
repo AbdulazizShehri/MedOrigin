@@ -20,6 +20,9 @@ test('new FHIR envelope bridge is explicitly synthetic-only and refuses full con
  assert.match(core,/RESOURCE_TOO_LARGE/);
  assert.match(core,/"observation-bad-subject"/);
  assert.match(core,/"INVALID_REFERENCE"/);
+ assert.match(core,/synthetic_bundle::inspect_fictional_bundle/);
+ assert.match(ui,/"bundle-valid": "BUNDLE_GRAPH_OK"/);
+ assert.match(ui,/"bundle-duplicate": "DUPLICATE_ENTRY"/);
 });
 test('UI presents a truthful and fail-closed nonclinical result after a matching hash',()=>{
  assert.match(ui,/invoke<EnvelopeResult>\("inspect_fhir_fixture_envelope"/);
