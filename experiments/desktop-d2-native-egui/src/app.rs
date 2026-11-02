@@ -100,6 +100,7 @@ struct FictionalComparison {
     right_json: &'static str,
     byte_diff_summary: String,
     byte_context: String,
+    json_path_diff: String,
 }
 
 /// Byte offsets are intentionally zero-based source bytes, not UTF-8 characters.
@@ -147,6 +148,97 @@ fn fictional_byte_context(left: &str, right: &str) -> String {
         window(a, offset),
         window(b, offset)
     )
+}
+
+/// A deterministic, bounded JSON Pointer summary for already verified
+/// source-compiled fictional payloads. Never loads external JSON or treats
+/// structural comparisons as clinical FHIR validation.
+fn fictional_json_path_diff(left: &str, right: &str) -> Result<String, &'static str> {
+    use serde_json::Value;
+
+    fn pointer_segment(key: &str) -> String {
+        key.replace('~', "~0").replace('/', "~1")
+    }
+
+    fn first_diff(
+        a: &Value,
+        b: &Value,
+        path: &str,
+        depth: usize,
+    ) -> Result<Option<(String, &'static str)>, &'static str> {
+        if depth > 32 {
+            return Err("fictional_json_depth_exceeded");
+        }
+        match (a, b) {
+            (Value::Object(left), Value::Object(right)) => {
+                // Shared keys first, sorted by name, so differences in the
+                // same field take precedence over unrelated missing fields.
+                let mut shared: Vec<_> =
+                    left.keys().filter(|key| right.contains_key(*key)).collect();
+                shared.sort();
+                for key in shared {
+                    let next = format!("{path}/{}", pointer_segment(key));
+                    if let Some(diff) = first_diff(&left[key], &right[key], &next, depth + 1)? {
+                        return Ok(Some(diff));
+                    }
+                }
+                let mut missing: Vec<_> = left
+                    .keys()
+                    .chain(right.keys())
+                    .filter(|key| !left.contains_key(*key) || !right.contains_key(*key))
+                    .collect();
+                missing.sort();
+                if let Some(key) = missing.first() {
+                    return Ok(Some((
+                        format!("{path}/{}", pointer_segment(key)),
+                        "field missing on one side",
+                    )));
+                }
+                Ok(None)
+            }
+            (Value::Array(left), Value::Array(right)) => {
+                for (index, (a, b)) in left.iter().zip(right).enumerate() {
+                    let next = format!("{path}/{index}");
+                    if let Some(diff) = first_diff(a, b, &next, depth + 1)? {
+                        return Ok(Some(diff));
+                    }
+                }
+                if left.len() != right.len() {
+                    return Ok(Some((
+                        format!("{path}/{}", left.len().min(right.len())),
+                        "array length differs",
+                    )));
+                }
+                Ok(None)
+            }
+            _ if a == b => Ok(None),
+            _ => {
+                let kind = if std::mem::discriminant(a) == std::mem::discriminant(b) {
+                    "value differs"
+                } else {
+                    "JSON type differs"
+                };
+                Ok(Some((
+                    if path.is_empty() {
+                        "/".to_owned()
+                    } else {
+                        path.to_owned()
+                    },
+                    kind,
+                )))
+            }
+        }
+    }
+
+    let a: Value = serde_json::from_str(left).map_err(|_| "fictional_json_parse_refused")?;
+    let b: Value = serde_json::from_str(right).map_err(|_| "fictional_json_parse_refused")?;
+    let summary = match first_diff(&a, &b, "", 0)? {
+        Some((pointer, kind)) => format!(
+            "Fictional JSON path difference: {pointer} ({kind}). Structural developer hint only; original source bytes unchanged."
+        ),
+        None => "Fictional JSON path difference: structurally identical; original source bytes may differ.".to_owned(),
+    };
+    Ok(summary)
 }
 
 #[derive(Default)]
@@ -306,6 +398,14 @@ impl MedOriginNativePreview {
         };
         let left = FIXTURES[self.selected];
         let right = FIXTURES[self.compare_with];
+        let json_path_diff = match fictional_json_path_diff(left_json, right_json) {
+            Ok(summary) => summary,
+            Err(_) => {
+                self.result =
+                    Some("FAIL CLOSED: fictional JSON path comparison refused".to_owned());
+                return Err("synthetic_json_path_refused");
+            }
+        };
         self.comparison = Some(FictionalComparison {
             left,
             right,
@@ -313,6 +413,7 @@ impl MedOriginNativePreview {
             right_json,
             byte_diff_summary: fictional_byte_diff_summary(left_json, right_json),
             byte_context: fictional_byte_context(left_json, right_json),
+            json_path_diff,
         });
         Ok(())
     }
@@ -413,6 +514,7 @@ impl eframe::App for MedOriginNativePreview {
                 ui.label("Both sources independently reverified · Negative FHIR statuses are expected test cases, not clinical conclusions");
                 ui.monospace(&comparison.byte_diff_summary);
                 ui.monospace(&comparison.byte_context);
+                ui.monospace(&comparison.json_path_diff);
                 ui.columns(2, |columns| {
                     let (left, right) = columns.split_at_mut(1);
                     for (column, fixture, raw) in [
@@ -629,6 +731,48 @@ mod tests {
             assert!(app.preview.is_none(), "never retain stale JSON");
             assert!(app.result.as_deref().unwrap().starts_with("FAIL CLOSED"));
         }
+    }
+
+    #[test]
+    fn fictional_json_path_summary_is_semantic_and_escapes_pointer_segments() {
+        let same = fictional_json_path_diff(r#"{"a":1,"b":2}"#, r#"{ "b":2, "a":1 }"#).unwrap();
+        assert!(same.contains("structurally identical"));
+        let changed = fictional_json_path_diff(
+            r#"{"resourceType":"Patient"}"#,
+            r#"{"resourceType":"Observation"}"#,
+        )
+        .unwrap();
+        assert!(changed.contains("/resourceType (value differs)"));
+        let escaped = fictional_json_path_diff(r#"{"a/b~c":[1,2]}"#, r#"{"a/b~c":[1,3]}"#).unwrap();
+        assert!(escaped.contains("/a~1b~0c/1 (value differs)"));
+        let missing = fictional_json_path_diff(r#"{"a":1}"#, r#"{"a":1,"b":2}"#).unwrap();
+        assert!(missing.contains("/b (field missing on one side)"));
+        let array = fictional_json_path_diff(r#"{"a":[1]}"#, r#"{"a":[1,2]}"#).unwrap();
+        assert!(array.contains("/a/1 (array length differs)"));
+        assert_eq!(
+            fictional_json_path_diff("not json", "{}"),
+            Err("fictional_json_parse_refused")
+        );
+    }
+
+    #[test]
+    fn fictional_json_path_comparison_is_verified_and_cleared_on_refusal() {
+        let mut app = MedOriginNativePreview {
+            selected: 0,
+            compare_with: 4,
+            ..Default::default()
+        };
+        app.compare_selected().unwrap();
+        assert!(
+            app.comparison
+                .as_ref()
+                .unwrap()
+                .json_path_diff
+                .contains("Fictional JSON path difference: /")
+        );
+        app.compare_with = usize::MAX;
+        assert!(app.compare_selected().is_err());
+        assert!(app.comparison.is_none());
     }
 
     #[test]

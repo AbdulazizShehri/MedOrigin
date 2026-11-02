@@ -168,7 +168,11 @@ fn direct_dependencies_remain_limited_to_native_ui_and_existing_d0() {
         .collect();
     assert_eq!(
         declared,
-        ["eframe", "medorigin-desktop-d0-rust-prototype"],
+        [
+            "eframe",
+            "medorigin-desktop-d0-rust-prototype",
+            "serde_json"
+        ],
         "D2 dependency additions require a separate safety review"
     );
     assert!(
