@@ -52,6 +52,22 @@ def network_preconditions(host_netns):
     return current
 
 
+def host_windows_broker_preconditions():
+    """Fail closed when WSL may launch a Windows process outside Linux netns.
+
+    Merely removing IPv4/IPv6 routes cannot contain WSLInterop PE execution.
+    Do not try to mutate global WSL configuration or assert that masking one
+    binfmt mount proves all Windows host escape paths are blocked.
+    """
+    kernel_release = os.uname().release.lower()
+    if (
+        "microsoft" in kernel_release
+        or os.environ.get("WSL_INTEROP")
+        or Path("/proc/sys/fs/binfmt_misc/WSLInterop").exists()
+    ):
+        raise RuntimeError("WSL_WINDOWS_PROCESS_INTEROP_UNCONFINED")
+
+
 def negative_controls():
     attempts = [
         ("tcp_ipv4", socket.AF_INET, socket.SOCK_STREAM, ("192.0.2.7", 9)),
@@ -96,6 +112,9 @@ def main():
         if os.environ.get("MEDORIGIN_D2_PRIVATE_NETNS_EXPERIMENT") != "1":
             raise RuntimeError("EXPLICIT_EXPERIMENT_OPT_IN_MISSING")
         guest_ns = network_preconditions(args.host_netns)
+        # Windows PE execution via WSLInterop escapes the Linux network namespace.
+        # This gate runs BEFORE any socket probe or native application launch.
+        host_windows_broker_preconditions()
         record["host_netns"] = args.host_netns
         record["guest_netns"] = guest_ns
         binary = Path(args.binary).resolve(strict=True)
