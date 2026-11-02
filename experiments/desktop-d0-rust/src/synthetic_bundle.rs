@@ -108,6 +108,32 @@ mod tests {
     use serde_json::{Value, json};
 
     #[test]
+    fn refuses_duplicate_json_object_keys_at_every_depth() {
+        let raw = std::str::from_utf8(include_bytes!("../fixtures/bundle-valid.json")).unwrap();
+        assert_eq!(inspect_fictional_bundle(raw.as_bytes()), "BUNDLE_GRAPH_OK");
+        let duplicate_root = raw.replace(
+            "\"resourceType\":\"Bundle\"",
+            "\"resourceType\":\"Patient\",\"resourceType\":\"Bundle\"",
+        );
+        assert_ne!(duplicate_root, raw);
+        assert_eq!(inspect_fictional_bundle(duplicate_root.as_bytes()), "INVALID_JSON");
+
+        let duplicate_nested = raw.replace(
+            "\"resourceType\":\"Patient\"",
+            "\"resourceType\":\"Observation\",\"resourceType\":\"Patient\"",
+        );
+        assert_ne!(duplicate_nested, raw);
+        assert_eq!(inspect_fictional_bundle(duplicate_nested.as_bytes()), "INVALID_JSON");
+
+        let duplicate_escaped = raw.replace(
+            "\"resourceType\":\"Bundle\"",
+            "\"\\u0072esourceType\":\"Patient\",\"resourceType\":\"Bundle\"",
+        );
+        assert_ne!(duplicate_escaped, raw);
+        assert_eq!(inspect_fictional_bundle(duplicate_escaped.as_bytes()), "INVALID_JSON");
+    }
+
+    #[test]
     fn rejects_manipulated_local_graph_instead_of_dereferencing() {
         let raw = include_bytes!("../fixtures/bundle-valid.json");
         let mut parsed: Value = serde_json::from_slice(raw).unwrap();
