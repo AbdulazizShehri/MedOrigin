@@ -137,6 +137,9 @@ def main():
             time.sleep(0.35)
         if not window_found:
             raise RuntimeError("NATIVE_X11_WINDOW_NOT_FOUND")
+        # Repeat independent TCP/UDP denial probes *while* the real native
+        # GUI is alive, not just before its startup.
+        record["negative_controls_while_app_running"] = negative_controls()
         time.sleep(1)
         if app.poll() is not None:
             raise RuntimeError("NATIVE_APP_EXITED_AFTER_WINDOW")
