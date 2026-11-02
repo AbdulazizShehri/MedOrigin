@@ -200,6 +200,10 @@ pub fn inspect_named_synthetic_fhir_envelope_v1(
         }
         if name.starts_with("bundle-") {
             synthetic_bundle::inspect_fictional_bundle(&payload)
+        } else if std::str::from_utf8(&payload).is_err() {
+            "INVALID_UTF8"
+        } else if synthetic_bundle::reject_duplicate_object_keys(&payload).is_err() {
+            "INVALID_JSON"
         } else {
             match serde_json::from_slice::<serde_json::Value>(&payload) {
                 Ok(value)
