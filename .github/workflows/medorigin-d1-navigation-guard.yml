@@ -6,11 +6,16 @@ on:
       - security/medorigin-d1-deny-external-navigation-20261102
       - feat/medorigin-d1-fhir-envelope-20261102
       - feat/medorigin-d1-synthetic-observation-20261102
+      - feat/medorigin-d1-synthetic-bundle-20261102
   pull_request:
     paths:
       - 'experiments/desktop-d0-rust/Cargo.toml'
       - 'experiments/desktop-d0-rust/Cargo.lock'
       - 'experiments/desktop-d0-rust/src/lib.rs'
+      - 'experiments/desktop-d0-rust/src/synthetic_bundle.rs'
+      - 'experiments/desktop-d0-rust/fixtures/**'
+      - 'experiments/desktop-d0-rust/tools/generate_fictional_bundles.py'
+      - 'experiments/desktop-d0-rust/tests/fhir_bundle.rs'
       - 'experiments/desktop-d0-rust/tests/fhir_envelope.rs'
       - 'experiments/desktop-d0-rust/tests/synthetic_observation.rs'
       - 'experiments/desktop-d1-tauri/src-tauri/Cargo.lock'
@@ -72,6 +77,9 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
+      - name: Verify fixed fictional Bundle bytes without mutation
+        working-directory: experiments/desktop-d0-rust
+        run: python3 tools/generate_fictional_bundles.py --check
       - name: Native synthetic FHIR envelope Rust tests
         working-directory: experiments/desktop-d0-rust
         run: cargo test --locked --all-targets

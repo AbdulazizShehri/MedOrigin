@@ -25,7 +25,11 @@ MOCK_BRIDGE = r"""
     "patient-over-limit": ["b929f15ca4f3fa28f54991ed0cb8ac5f430e388ee08bf401a853d8af91e44538", 32769, "RESOURCE_TOO_LARGE"],
     "patient-exact-limit": ["ea711ce560191a81c0722c4a26592e0e2d9abb2186b6fd3af6897cd89d417d4e", 32768, "FHIR_ENVELOPE_OK"],
     "observation-minimal": ["527806e5427cc45e55424d1b8dc8ddcdc86a2b37df2ae116735e6832268b5e19", 251, "FHIR_ENVELOPE_OK"],
-    "observation-bad-subject": ["d2332ed753a59b46d19a11849cccd96a4250120ad3eab455580ce45b1d91b838", 253, "INVALID_REFERENCE"]
+    "observation-bad-subject": ["d2332ed753a59b46d19a11849cccd96a4250120ad3eab455580ce45b1d91b838", 253, "INVALID_REFERENCE"],
+    "bundle-valid": ["3a530a66c0f2b71908b1282985432e405f0f2f412c7ccc0143aa1972d9447983", 531, "BUNDLE_GRAPH_OK"],
+    "bundle-bad-reference": ["4aabcfa54309c83052d62b4fdcf1c6635a6cd3d937551e2ab947899345f9f082", 528, "INVALID_REFERENCE"],
+    "bundle-duplicate": ["813f8a3b8fee59ba74abdb293c6cac5cca103b390153730e6e3bc4656540f15b", 531, "DUPLICATE_ENTRY"],
+    "bundle-wrong-type": ["293c10c8abf055e8c1f84bae4913c7246bf9be5bf53dee0fb3c918e32a8346a7", 532, "INVALID_BUNDLE_TYPE"]
   };
   window.__testInspectCalls = 0;
   window.__testForgeEnvelope = false;
@@ -33,7 +37,7 @@ MOCK_BRIDGE = r"""
   window.__TAURI_INTERNALS__ = {
     invoke: async (command, args = {}) => {
       if (command === "preview_status") {
-        return {mode: "SYNTHETIC_DEVELOPER_PREVIEW", data_access: "six_allowlisted_in_memory_fixtures_only",
+        return {mode: "SYNTHETIC_DEVELOPER_PREVIEW", data_access: "ten_allowlisted_in_memory_fixtures_only",
           release_authorized: false, production_parity_qualified: false,
           app_network_plugins_enabled: false, webview_runtime_egress_qualified: false};
       }
@@ -112,7 +116,7 @@ class PreviewBrowserChecks(unittest.TestCase):
         self.page.get_by_role("button", name="Verify with Rust").click()
 
     def test_valid_and_broken_subject_responses(self) -> None:
-        self.assertEqual(self.page.locator(".fixture").count(), 6)
+        self.assertEqual(self.page.locator(".fixture").count(), 10)
         self.choose_and_verify("Fictional Observation")
         expect(self.page.locator(".envelope-result")).to_contain_text(
             "Basic fictional resource fields found"
@@ -120,6 +124,19 @@ class PreviewBrowserChecks(unittest.TestCase):
         self.choose_and_verify("Broken patient reference")
         expect(self.page.locator(".envelope-result")).to_contain_text("INVALID REFERENCE")
         expect(self.page.locator(".outcome-success")).to_have_count(1)
+
+    def test_bundle_graph_success_and_rejection_cases(self) -> None:
+        self.choose_and_verify("Linked fictional Bundle")
+        expect(self.page.locator(".envelope-result")).to_contain_text(
+            "Basic fictional resource fields found"
+        )
+        for label, expected in [
+            ("Bundle missing patient", "INVALID REFERENCE"),
+            ("Duplicate Bundle entry", "DUPLICATE ENTRY"),
+            ("Unsupported Bundle type", "INVALID BUNDLE TYPE"),
+        ]:
+            self.choose_and_verify(label)
+            expect(self.page.locator(".envelope-result")).to_contain_text(expected)
 
     def test_forged_second_bridge_response_never_shows_success(self) -> None:
         self.page.evaluate("window.__testForgeEnvelope = true")

@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import "./App.css";
 
-type FixtureId = "patient-minimal" | "patient-invalid-utf8" | "patient-over-limit" | "patient-exact-limit" | "observation-minimal" | "observation-bad-subject";
+type FixtureId = "patient-minimal" | "patient-invalid-utf8" | "patient-over-limit" | "patient-exact-limit" | "observation-minimal" | "observation-bad-subject" | "bundle-valid" | "bundle-bad-reference" | "bundle-duplicate" | "bundle-wrong-type";
 type PreviewStatus = {
   mode: string;
   data_access: string;
@@ -15,7 +15,7 @@ type EnvelopeResult = {
   contract: string;
   fixture_id: FixtureId;
   bytes: number;
-  status: "FHIR_ENVELOPE_OK" | "INVALID_UTF8" | "INVALID_JSON" | "INVALID_FHIR_ENVELOPE" | "INVALID_REFERENCE" | "RESOURCE_TOO_LARGE";
+  status: "FHIR_ENVELOPE_OK" | "INVALID_UTF8" | "INVALID_JSON" | "INVALID_FHIR_ENVELOPE" | "INVALID_REFERENCE" | "RESOURCE_TOO_LARGE" | "BUNDLE_GRAPH_OK" | "DUPLICATE_ENTRY" | "INVALID_BUNDLE_TYPE" | "INVALID_BUNDLE_ENVELOPE";
   synthetic_only: boolean;
   full_fhir_r4_validated: boolean;
   release_authorized: boolean;
@@ -35,6 +35,10 @@ const FIXTURES: readonly { id: FixtureId; title: string; kind: string; size: str
   { id: "patient-exact-limit", title: "Exact limit", kind: "BOUNDARY CASE", size: "32,768 B", description: "A synthetic Patient padded with whitespace to the limit.", sha: "ea711ce560191a81c0722c4a26592e0e2d9abb2186b6fd3af6897cd89d417d4e" },
   { id: "observation-minimal", title: "Fictional Observation", kind: "VALID SYNTHETIC", size: "251 B", description: "A fictional Observation referencing Patient/synthetic.", sha: "527806e5427cc45e55424d1b8dc8ddcdc86a2b37df2ae116735e6832268b5e19" },
   { id: "observation-bad-subject", title: "Broken patient reference", kind: "NEGATIVE CASE", size: "253 B", description: "An Observation with a missing fictional Patient reference.", sha: "d2332ed753a59b46d19a11849cccd96a4250120ad3eab455580ce45b1d91b838" },
+  { id: "bundle-valid", title: "Linked fictional Bundle", kind: "VALID SYNTHETIC", size: "531 B", description: "A local, fictional Patient and Observation linked in one collection.", sha: "3a530a66c0f2b71908b1282985432e405f0f2f412c7ccc0143aa1972d9447983" },
+  { id: "bundle-bad-reference", title: "Bundle missing patient", kind: "NEGATIVE CASE", size: "528 B", description: "An Observation points to a fictional patient not in the bundle.", sha: "4aabcfa54309c83052d62b4fdcf1c6635a6cd3d937551e2ab947899345f9f082" },
+  { id: "bundle-duplicate", title: "Duplicate Bundle entry", kind: "NEGATIVE CASE", size: "531 B", description: "Two resource entries share the same fictional fullUrl.", sha: "813f8a3b8fee59ba74abdb293c6cac5cca103b390153730e6e3bc4656540f15b" },
+  { id: "bundle-wrong-type", title: "Unsupported Bundle type", kind: "NEGATIVE CASE", size: "532 B", description: "Transaction bundles are intentionally not accepted by this offline preview.", sha: "293c10c8abf055e8c1f84bae4913c7246bf9be5bf53dee0fb3c918e32a8346a7" },
 ];
 const EXPECTED_ENVELOPE_STATUS: Record<FixtureId, EnvelopeResult["status"]> = {
   "patient-minimal": "FHIR_ENVELOPE_OK",
@@ -43,6 +47,10 @@ const EXPECTED_ENVELOPE_STATUS: Record<FixtureId, EnvelopeResult["status"]> = {
   "patient-exact-limit": "FHIR_ENVELOPE_OK",
   "observation-minimal": "FHIR_ENVELOPE_OK",
   "observation-bad-subject": "INVALID_REFERENCE",
+  "bundle-valid": "BUNDLE_GRAPH_OK",
+  "bundle-bad-reference": "INVALID_REFERENCE",
+  "bundle-duplicate": "DUPLICATE_ENTRY",
+  "bundle-wrong-type": "INVALID_BUNDLE_TYPE",
 };
 
 export default function App() {
@@ -148,7 +156,7 @@ export default function App() {
             {envelope && (
               <div className="envelope-result" role="status">
                 <div className="mini-label">FICTIONAL FHIR ENVELOPE CHECK</div>
-                <strong>{envelope.status === "FHIR_ENVELOPE_OK" ? "Basic fictional resource fields found" : envelope.status.replace(/_/g, " ")}</strong>
+                <strong>{["FHIR_ENVELOPE_OK", "BUNDLE_GRAPH_OK"].includes(envelope.status) ? "Basic fictional resource fields found" : envelope.status.replace(/_/g, " ")}</strong>
                 <p>{envelope.bytes.toLocaleString()} bytes checked. Not a full FHIR R4, clinical, or profile validation.</p>
               </div>
             )}
@@ -156,7 +164,7 @@ export default function App() {
         </div>
         <footer className="notice">
           <span className="notice-icon">i</span>
-          <div><strong>Unreleased engineering preview</strong><p>{status ? "Rust command bridge active. Six fixed synthetic cases only." : "Local native bridge not yet confirmed."} No clinician workflows, health records, application network plugins, installer qualification, or publishing authorization. WebView2 runtime egress is unqualified.</p></div>
+          <div><strong>Unreleased engineering preview</strong><p>{status ? "Rust command bridge active. Ten fixed synthetic cases only." : "Local native bridge not yet confirmed."} No clinician workflows, health records, application network plugins, installer qualification, or publishing authorization. WebView2 runtime egress is unqualified.</p></div>
         </footer>
       </main>
     </div>
