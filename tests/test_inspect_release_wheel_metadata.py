@@ -329,3 +329,25 @@ def test_core_only_rejects_metadata_directory_spoof(tmp_path: Path) -> None:
     result = inspect_wheel(tampered, require_core_only=True)
     assert "core wheel METADATA path disagrees with distribution/version" in result["issues"]
     assert result["core_only_verified"] is False
+
+
+@pytest.mark.parametrize(
+    "member",
+    [
+        "medscale/_native.pyd",
+        "medscale/embedded.so",
+        "medscale/startup.pth",
+        "medscale/setup.ps1",
+        "medscale-0.3.0.data/scripts/launch",
+    ],
+)
+def test_core_wheel_rejects_unexpected_native_or_install_payload(
+    tmp_path: Path, member: str
+) -> None:
+    wheel = _wheel(tmp_path / "native.whl")
+    with zipfile.ZipFile(wheel, "a") as archive:
+        archive.writestr(member, b"synthetic-untrusted-payload")
+    result = inspect_wheel(wheel, require_core_only=True)
+    assert "core wheel contains native executable or installer payload" in result["issues"]
+    assert result["core_only_verified"] is False
+    assert result["publication_authorized"] is False

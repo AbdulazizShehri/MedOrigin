@@ -19,6 +19,20 @@ MAX_MEMBERS = 10000
 MAX_TOTAL_UNCOMPRESSED = 256 * 1024 * 1024
 MAX_MEMBER_UNCOMPRESSED = 16 * 1024 * 1024
 MAX_METADATA = 65536
+FORBIDDEN_PAYLOAD_SUFFIXES = (
+    ".pyd",
+    ".dll",
+    ".so",
+    ".dylib",
+    ".exe",
+    ".pth",
+    ".pyc",
+    ".pyo",
+    ".bat",
+    ".cmd",
+    ".ps1",
+    ".sh",
+)
 
 
 def inspect_core_wheel_archive(
@@ -57,6 +71,10 @@ def inspect_core_wheel_archive(
         folded.add(path.casefold())
         if stat.S_IFMT(info.external_attr >> 16) == stat.S_IFLNK:
             issues.append("core wheel contains symbolic link")
+        if not info.is_dir() and not path.startswith(prefix):
+            lowered = path.casefold()
+            if lowered.endswith(FORBIDDEN_PAYLOAD_SUFFIXES) or ".data/" in lowered:
+                issues.append("core wheel contains native executable or installer payload")
         if info.file_size > MAX_MEMBER_UNCOMPRESSED:
             issues.append("core wheel member exceeds size bound")
         total_size += info.file_size
