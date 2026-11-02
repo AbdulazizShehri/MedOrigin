@@ -36,6 +36,8 @@ MOCK_BRIDGE = r"""
   window.__testInspectCalls = 0;
   window.__testForgeEnvelope = false;
   window.__testForgeHash = false;
+  window.__testForgeHashReceipt = "";
+  window.__testForgeEnvelopeReceipt = "";
   window.__TAURI_INTERNALS__ = {
     invoke: async (command, args = {}) => {
       if (command === "preview_status") {
@@ -51,15 +53,23 @@ MOCK_BRIDGE = r"""
       const item = samples[args.fixtureId];
       if (!item || args.maxInputBytes !== 65536) throw "unknown_fixture";
       if (command === "hash_fixture") {
-        return {contract: "medorigin-desktop-d0-raw-sha256-v1", fixture_id: args.fixtureId,
+        const receipt = {contract: "medorigin-desktop-d0-raw-sha256-v1", fixture_id: args.fixtureId,
           bytes: item[1], sha256_hex: window.__testForgeHash ? "0".repeat(64) : item[0],
           synthetic_only: true, release_authorized: false};
+        if (window.__testForgeHashReceipt === "extra") receipt.webview_runtime_egress_qualified = true;
+        if (window.__testForgeHashReceipt === "missing") delete receipt.contract;
+        if (window.__testForgeHashReceipt === "type") receipt.synthetic_only = "true";
+        return receipt;
       }
       if (command === "inspect_fhir_fixture_envelope") {
         window.__testInspectCalls++;
-        return {contract: "medorigin-d0-synthetic-fhir-envelope-v1", fixture_id: args.fixtureId,
+        const receipt = {contract: "medorigin-d0-synthetic-fhir-envelope-v1", fixture_id: args.fixtureId,
           bytes: item[1], status: window.__testForgeEnvelope ? "INVALID_REFERENCE" : item[2],
           synthetic_only: true, full_fhir_r4_validated: false, release_authorized: false};
+        if (window.__testForgeEnvelopeReceipt === "extra") receipt.webview_runtime_egress_qualified = true;
+        if (window.__testForgeEnvelopeReceipt === "missing") delete receipt.contract;
+        if (window.__testForgeEnvelopeReceipt === "type") receipt.synthetic_only = "true";
+        return receipt;
       }
       throw "unexpected_command";
     }
@@ -175,6 +185,32 @@ class PreviewBrowserChecks(unittest.TestCase):
         expect(self.page.locator(".outcome-error")).to_contain_text(
             "The local Rust command refused this request"
         )
+
+    def test_unexpected_hash_receipt_fields_cannot_claim_success(self) -> None:
+        for variant in ("extra", "missing", "type"):
+            with self.subTest(variant=variant):
+                self.page.evaluate("window.__testInspectCalls = 0")
+                self.page.evaluate("variant => window.__testForgeHashReceipt = variant", variant)
+                self.choose_and_verify("Fictional Observation")
+                expect(self.page.locator(".outcome-success")).to_have_count(0)
+                expect(self.page.locator(".envelope-result")).to_have_count(0)
+                expect(self.page.locator(".outcome-error")).to_contain_text(
+                    "The local Rust command refused this request"
+                )
+                self.assertEqual(self.page.evaluate("window.__testInspectCalls"), 0)
+                self.page.evaluate("window.__testForgeHashReceipt = ''")
+
+    def test_unexpected_envelope_receipt_fields_cannot_claim_success(self) -> None:
+        for variant in ("extra", "missing", "type"):
+            with self.subTest(variant=variant):
+                self.page.evaluate("variant => window.__testForgeEnvelopeReceipt = variant", variant)
+                self.choose_and_verify("Fictional Observation")
+                expect(self.page.locator(".outcome-success")).to_have_count(0)
+                expect(self.page.locator(".envelope-result")).to_have_count(0)
+                expect(self.page.locator(".outcome-error")).to_contain_text(
+                    "The local Rust command refused this request"
+                )
+                self.page.evaluate("window.__testForgeEnvelopeReceipt = ''")
 
     def test_hash_mismatch_never_invokes_structural_check(self) -> None:
         self.page.evaluate("window.__testForgeHash = true")
