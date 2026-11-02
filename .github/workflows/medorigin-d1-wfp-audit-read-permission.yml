@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - test/medorigin-d1-wfp-audit-read-permission-20261102
+      - test/medorigin-d1-audit-mutant-20261102
   pull_request:
     branches:
       - test/medorigin-d1-native-passive-wfp-inventory-20261102
