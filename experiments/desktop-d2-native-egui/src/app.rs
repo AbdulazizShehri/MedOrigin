@@ -98,6 +98,29 @@ struct FictionalComparison {
     right: FixtureSpec,
     left_json: &'static str,
     right_json: &'static str,
+    byte_diff_summary: String,
+}
+
+/// Byte offsets are intentionally zero-based source bytes, not UTF-8 characters.
+/// The two inputs have already passed the fixed fictional SHA/envelope contracts.
+fn fictional_byte_diff_summary(left: &str, right: &str) -> String {
+    let a = left.as_bytes();
+    let b = right.as_bytes();
+    let prefix = a.iter().zip(b).take_while(|(x, y)| x == y).count();
+    if prefix == a.len() && prefix == b.len() {
+        return format!("Fictional byte comparison: identical ({} bytes)", a.len());
+    }
+    let suffix = a[prefix..]
+        .iter()
+        .rev()
+        .zip(b[prefix..].iter().rev())
+        .take_while(|(x, y)| x == y)
+        .count();
+    format!(
+        "Fictional byte difference: first differing byte offset {prefix} (zero-based); common suffix {suffix} bytes; left {} bytes, right {} bytes. Original source bytes unchanged.",
+        a.len(),
+        b.len()
+    )
 }
 
 #[derive(Default)]
@@ -262,6 +285,7 @@ impl MedOriginNativePreview {
             right,
             left_json,
             right_json,
+            byte_diff_summary: fictional_byte_diff_summary(left_json, right_json),
         });
         Ok(())
     }
@@ -360,6 +384,7 @@ impl eframe::App for MedOriginNativePreview {
             }
             if let Some(comparison) = &self.comparison {
                 ui.label("Both sources independently reverified · Negative FHIR statuses are expected test cases, not clinical conclusions");
+                ui.monospace(&comparison.byte_diff_summary);
                 ui.columns(2, |columns| {
                     let (left, right) = columns.split_at_mut(1);
                     for (column, fixture, raw) in [
@@ -502,11 +527,37 @@ mod tests {
         assert_eq!(pair.right.status, "INVALID_REFERENCE");
         assert_ne!(pair.left_json, pair.right_json);
         assert_ne!(pair.left.sha256, pair.right.sha256);
+        assert!(
+            pair.byte_diff_summary
+                .contains("first differing byte offset")
+        );
+        assert!(
+            pair.byte_diff_summary
+                .contains("Original source bytes unchanged.")
+        );
         assert!(app.hash_selected().is_ok());
         assert!(
             app.comparison.is_none(),
             "new verification clears stale pair"
         );
+    }
+
+    #[test]
+    fn fictional_byte_diff_uses_exact_bytes_and_never_overlaps_prefix_and_suffix() {
+        assert_eq!(
+            fictional_byte_diff_summary("abc", "abc"),
+            "Fictional byte comparison: identical (3 bytes)"
+        );
+        let inserted = fictional_byte_diff_summary("abc", "abXc");
+        assert!(inserted.contains("first differing byte offset 2 (zero-based)"));
+        assert!(inserted.contains("common suffix 1 bytes"));
+        assert!(inserted.contains("left 3 bytes, right 4 bytes"));
+        let unicode = fictional_byte_diff_summary("éX", "éY");
+        assert!(unicode.contains("first differing byte offset 2 (zero-based)"));
+        assert!(unicode.contains("common suffix 0 bytes"));
+        let prefix_only = fictional_byte_diff_summary("abc", "abcd");
+        assert!(prefix_only.contains("first differing byte offset 3 (zero-based)"));
+        assert!(prefix_only.contains("common suffix 0 bytes"));
     }
 
     #[test]
