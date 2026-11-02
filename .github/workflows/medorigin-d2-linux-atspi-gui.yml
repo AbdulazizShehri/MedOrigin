@@ -1,0 +1,58 @@
+# Native Linux synthetic D2 AT-SPI test in isolated CI Xvfb + D-Bus.
+# NOT a Linux zbus6 fix, a kernel packet isolation audit or screen-reader signoff.
+name: D2 Linux actual AT-SPI fictional UI qualification
+on:
+  push:
+    branches:
+      - test/medorigin-d2-linux-atspi-native-20261102
+  pull_request:
+    paths:
+      - 'experiments/desktop-d2-native-egui/tests/linux-native-fhir-atspi-qualification.py'
+      - '.github/workflows/medorigin-d2-linux-atspi-gui.yml'
+permissions:
+  contents: read
+jobs:
+  linux-atspi-native-gui:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Checkout exact candidate SHA without persisted credentials
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - name: Install native toolkit, virtual X11 and AT-SPI from runner repositories
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            libgtk-3-dev libxkbcommon-dev libwayland-dev libegl1-mesa-dev \
+            libgl1-mesa-dev pkg-config xvfb xauth dbus-x11 at-spi2-core \
+            python3-pyatspi
+      - name: Compile and lint bounded Python AT-SPI acceptance source
+        run: |
+          python3 -m py_compile experiments/desktop-d2-native-egui/tests/linux-native-fhir-atspi-qualification.py
+          /usr/bin/python3 -c 'import pyatspi; print("AT_SPI_PYTHON_SYSTEM_AVAILABLE")'
+      - name: Install original pinned Rust toolchain without source changes
+        run: |
+          rustup toolchain install 1.97.1 --profile minimal --component rustfmt --component clippy
+          rustup default 1.97.1
+      - name: Build actual synthetic-only Rust D2 executable
+        run: cargo build --locked --manifest-path experiments/desktop-d2-native-egui/Cargo.toml
+      - name: Run real AT-SPI D2 UI on a disposable Xvfb and D-Bus desktop
+        shell: bash
+        env:
+          NO_AT_BRIDGE: "0"
+          QT_LINUX_ACCESSIBILITY_ALWAYS_ON: "1"
+          GTK_MODULES: "gail:atk-bridge"
+          LIBGL_ALWAYS_SOFTWARE: "1"
+          RUST_BACKTRACE: "1"
+        run: |
+          set -euo pipefail
+          binary="$PWD/experiments/desktop-d2-native-egui/target/debug/medorigin-desktop-d2-native-egui"
+          sha="$(sha256sum "$binary" | cut -d' ' -f1)"
+          test "${#sha}" -eq 64
+          dbus-run-session -- xvfb-run -a -s '-screen 0 1280x1024x24' \
+            /usr/bin/python3 experiments/desktop-d2-native-egui/tests/linux-native-fhir-atspi-qualification.py \
+            "$binary" "$sha"
+      - name: Confirm no source or lockfile drift
+        run: git diff --exit-code
