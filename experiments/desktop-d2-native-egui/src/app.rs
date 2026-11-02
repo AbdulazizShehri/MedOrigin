@@ -2,7 +2,8 @@
 // Synthetic-only, in-process native Rust eframe + D0; no browser, EHR, PHI or network.
 use eframe::egui;
 use medorigin_desktop_d0_rust_prototype::{
-    hash_fixture_raw_v1, inspect_named_synthetic_fhir_envelope_v1,
+    HashError, fictional_json_preview_v1, hash_fixture_raw_v1,
+    inspect_named_synthetic_fhir_envelope_v1,
 };
 #[cfg(test)]
 use std::collections::HashSet;
@@ -95,6 +96,8 @@ pub const FIXTURES: [FixtureSpec; 12] = [
 pub struct MedOriginNativePreview {
     selected: usize,
     result: Option<String>,
+    preview: Option<String>,
+    preview_notice: Option<&'static str>,
 }
 
 impl MedOriginNativePreview {
@@ -104,6 +107,8 @@ impl MedOriginNativePreview {
     /// not a clinically validated resource.
     pub fn hash_selected(&mut self) -> Result<&str, &'static str> {
         self.result = None;
+        self.preview = None;
+        self.preview_notice = None;
         let Some(fixture) = FIXTURES.get(self.selected) else {
             self.result = Some("FAIL CLOSED: invalid synthetic selection".to_owned());
             return Err("invalid_synthetic_selection");
@@ -139,6 +144,49 @@ impl MedOriginNativePreview {
             .as_deref()
             .expect("just assigned verified result"))
     }
+
+    /// Expose ONLY source-compiled fictional JSON, after re-verifying the raw
+    /// SHA and limited envelope contract for this exact selected fixture.
+    /// This neither loads real user files nor exports a resource.
+    pub fn preview_selected(&mut self) -> Result<&str, &'static str> {
+        // Must reset stale data even when a preceding selection is invalid.
+        self.preview = None;
+        self.preview_notice = None;
+        if self.hash_selected().is_err() {
+            return Err("synthetic_verification_failed");
+        }
+        let fixture = FIXTURES
+            .get(self.selected)
+            .ok_or("invalid_synthetic_selection")?;
+        let payload = match fictional_json_preview_v1(fixture.id) {
+            Ok(payload) => payload,
+            Err(HashError::PreviewUnavailable) => {
+                self.preview_notice =
+                    Some("No JSON preview for this raw-byte boundary test fixture.");
+                return Err("preview_unavailable");
+            }
+            Err(_) => {
+                self.result = Some("FAIL CLOSED: fictional preview refused".to_owned());
+                return Err("synthetic_preview_refused");
+            }
+        };
+        if payload.contract != "medorigin-d0-fictional-json-preview-v1"
+            || payload.fixture_id != fixture.id
+            || payload.bytes != fixture.bytes
+            || payload.sha256_hex != fixture.sha256
+            || payload.raw_json.len() != fixture.bytes
+            || !payload.synthetic_only
+            || payload.release_authorized
+        {
+            self.result = Some("FAIL CLOSED: fictional preview bytes mismatch".to_owned());
+            return Err("synthetic_preview_mismatch");
+        }
+        self.preview = Some(payload.raw_json.to_owned());
+        Ok(self
+            .preview
+            .as_deref()
+            .expect("just assigned bounded fictional JSON"))
+    }
 }
 
 impl eframe::App for MedOriginNativePreview {
@@ -155,6 +203,8 @@ impl eframe::App for MedOriginNativePreview {
                 if ui.selectable_label(self.selected == index, format!("{} ({} bytes)", fixture.id, fixture.bytes)).clicked() {
                     self.selected = index;
                     self.result = None;
+                    self.preview = None;
+                    self.preview_notice = None;
                 }
             }
             if ui.button("Verify synthetic SHA-256").clicked() {
@@ -175,9 +225,28 @@ impl eframe::App for MedOriginNativePreview {
                         if ui.selectable_label(self.selected == index, format!("{} ({} bytes)", fixture.id, fixture.bytes)).clicked() {
                             self.selected = index;
                             self.result = None;
+                            self.preview = None;
+                            self.preview_notice = None;
                         }
                     }
                 });
+            // An explicit opt-in source-only read-only preview, never a user
+            // file import. Preserve existing 4 primary controls and Verify
+            // order for UIA, AX and AT-SPI keyboard qualification.
+            if ui.button("Inspect fictional JSON (verified, read-only)").clicked() {
+                let _ = self.preview_selected();
+            }
+            if let Some(notice) = self.preview_notice {
+                ui.label(notice);
+            }
+            if let Some(raw) = &self.preview {
+                ui.label("Raw fictional source JSON - no normalization or FHIR R4 validation");
+                egui::ScrollArea::vertical()
+                    .max_height(160.0)
+                    .show(ui, |ui| {
+                        ui.monospace(raw);
+                    });
+            }
             ui.separator();
             ui.label("FHIR structural checks only · Release: NO-GO · Network isolation: UNQUALIFIED · PHI: PROHIBITED");
         });
@@ -232,6 +301,47 @@ mod tests {
             assert!(hash_fixture_raw_v1(id, 65_536).is_err());
             assert!(inspect_named_synthetic_fhir_envelope_v1(id, 65_536).is_err());
         }
+    }
+
+    #[test]
+    fn nine_fictional_previews_are_raw_exact_verified_and_read_only() {
+        let mut app = MedOriginNativePreview::default();
+        for (index, fixture) in FIXTURES.iter().enumerate() {
+            app.selected = index;
+            if [
+                "patient-invalid-utf8",
+                "patient-over-limit",
+                "patient-exact-limit",
+            ]
+            .contains(&fixture.id)
+            {
+                assert_eq!(app.preview_selected(), Err("preview_unavailable"));
+                assert!(app.preview.is_none());
+                assert!(app.preview_notice.is_some());
+            } else {
+                let json = app.preview_selected().expect("approved fictional JSON");
+                assert_eq!(json.len(), fixture.bytes);
+                assert!(json.contains("resourceType"));
+                assert!(app.preview_notice.is_none());
+                assert!(app.result.as_deref().unwrap().contains(fixture.sha256));
+            }
+        }
+    }
+
+    #[test]
+    fn invalid_selection_or_new_verification_clears_stale_json_preview() {
+        let mut app = MedOriginNativePreview {
+            selected: 6, // in-memory fictional bundle
+            ..Default::default()
+        };
+        assert!(app.preview_selected().unwrap().contains("Bundle"));
+        assert!(app.preview.is_some());
+        let _ = app.hash_selected().expect("same synthetic fixture");
+        assert!(app.preview.is_none(), "verification must hide old JSON");
+        app.selected = usize::MAX;
+        assert_eq!(app.preview_selected(), Err("synthetic_verification_failed"));
+        assert!(app.preview.is_none());
+        assert!(!app.result.as_deref().unwrap().contains("SHA-256 verified"));
     }
 
     #[test]

@@ -296,13 +296,78 @@ def verify_linux_keyboard_only(window: object, pyatspi: object) -> None:
     print("LINUX_D2_KEYBOARD_4_OF_4_PASS_NONPUBLISHING", flush=True)
 
 
+def verify_linux_fictional_json_preview(window: object) -> None:
+    """Real source-only native UI preview on an isolated Linux AT-SPI desktop."""
+
+    def exact_text_present(text: str) -> bool:
+        return sum(1 for node in tree(window) if role(node) == "label" and name(node) == text) == 1
+
+    button = "Inspect fictional JSON (verified, read-only)"
+    patient = '{"resourceType":"Patient","id":"synthetic","active":true}'
+    header = "Raw fictional source JSON - no normalization or FHIR R4 validation"
+    notice = "No JSON preview for this raw-byte boundary test fixture."
+
+    press(unique(window, button, ("push", "button")), button)
+    wait_for(
+        lambda: exact_text_present(patient) and exact_text_present(header),
+        "native Patient raw fictional JSON preview",
+    )
+    print("LINUX_D2_JSON_PREVIEW_PATIENT_PASS", flush=True)
+
+    press(
+        unique(window, "patient-invalid-utf8 (1 bytes)", ("toggle", "check")),
+        "fictional invalid UTF-8 boundary",
+    )
+    wait_for(lambda: not exact_text_present(patient), "clear previous raw fictional preview")
+    press(unique(window, button, ("push", "button")), button)
+    wait_for(
+        lambda: exact_text_present(notice) and not exact_text_present(patient),
+        "refuse invalid UTF-8 fictional preview",
+    )
+    print("LINUX_D2_JSON_PREVIEW_INVALID_UTF8_REFUSAL_PASS", flush=True)
+
+    press(
+        unique(
+            window,
+            "Additional fictional FHIR/Bundle cases (8)",
+            ("push", "button", "check", "toggle"),
+        ),
+        "expand fictional cases",
+    )
+    selector = wait_for(
+        lambda: find(window, "bundle-valid (531 bytes)", ("check", "toggle")),
+        "fictional Bundle selector",
+    )
+    if len(selector) != 1:
+        refuse("ambiguous bundled fictional preview selector")
+    press(selector[0], "bundle-valid")
+    wait_for(lambda: not exact_text_present(notice), "clear prior raw preview refusal")
+    press(unique(window, button, ("push", "button")), button)
+
+    # Test reads a fixed source fixture; the native GUI itself does NOT
+    # accept paths or open any filesystem data.
+    bundle_path = Path(__file__).resolve().parents[2] / (
+        "desktop-d0-rust/fixtures/bundle-valid.json"
+    )
+    expected_bundle = bundle_path.read_bytes().decode("utf-8").strip()
+    wait_for(
+        lambda: exact_text_present(expected_bundle) and not exact_text_present(patient),
+        "native exact bounded fictional Bundle source bytes",
+    )
+    print("LINUX_D2_JSON_PREVIEW_BUNDLE_PASS", flush=True)
+    print("LINUX_D2_JSON_PREVIEW_3_OF_3_PASS_NONPUBLISHING", flush=True)
+
+
 def main() -> int:
-    if len(sys.argv) not in (3, 4) or (len(sys.argv) == 4 and sys.argv[3] != "--keyboard"):
+    if len(sys.argv) not in (3, 4) or (
+        len(sys.argv) == 4 and sys.argv[3] not in ("--keyboard", "--preview")
+    ):
         refuse(
             "usage: linux-native-fhir-atspi-qualification.py ABSOLUTE_BINARY "
-            "EXACT_SHA256 [--keyboard]"
+            "EXACT_SHA256 [--keyboard|--preview]"
         )
-    keyboard_mode = len(sys.argv) == 4
+    keyboard_mode = len(sys.argv) == 4 and sys.argv[3] == "--keyboard"
+    preview_mode = len(sys.argv) == 4 and sys.argv[3] == "--preview"
     path = Path(sys.argv[1])
     sha = sys.argv[2].lower()
     if (
@@ -501,6 +566,9 @@ def main() -> int:
             ) and find(window, "Verify synthetic SHA-256", ("push", "button"))
 
         wait_for(existing_controls, "original native D2 AT-SPI controls")
+        if preview_mode:
+            verify_linux_fictional_json_preview(window)
+            return 0
         if keyboard_mode:
             verify_linux_keyboard_only(window, pyatspi)
             return 0

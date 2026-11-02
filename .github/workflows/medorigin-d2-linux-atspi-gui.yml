@@ -6,6 +6,7 @@ on:
     branches:
       - test/medorigin-d2-linux-atspi-native-20261102
       - test/medorigin-d2-linux-keyboard-20261102
+      - feat/medorigin-d2-fictional-json-preview-20261102
   pull_request:
     paths:
       - 'experiments/desktop-d2-native-egui/tests/linux-native-fhir-atspi-qualification.py'
@@ -75,5 +76,21 @@ jobs:
           dbus-run-session -- xvfb-run -a -s '-screen 0 1280x1024x24' \
             /usr/bin/python3 experiments/desktop-d2-native-egui/tests/linux-native-fhir-atspi-qualification.py \
             "$binary" "$sha" --keyboard
+      - name: Inspect real raw fictional JSON in native Linux AT-SPI GUI
+        shell: bash
+        env:
+          NO_AT_BRIDGE: "0"
+          QT_LINUX_ACCESSIBILITY_ALWAYS_ON: "1"
+          GTK_MODULES: "gail:atk-bridge"
+          LIBGL_ALWAYS_SOFTWARE: "1"
+          RUST_BACKTRACE: "1"
+        run: |
+          set -euo pipefail
+          binary="$PWD/experiments/desktop-d2-native-egui/target/debug/medorigin-desktop-d2-native-egui"
+          sha="$(sha256sum "$binary" | cut -d' ' -f1)"
+          test "${#sha}" -eq 64
+          dbus-run-session -- xvfb-run -a -s '-screen 0 1280x1024x24' \
+            /usr/bin/python3 experiments/desktop-d2-native-egui/tests/linux-native-fhir-atspi-qualification.py \
+            "$binary" "$sha" --preview
       - name: Confirm no source or lockfile drift
         run: git diff --exit-code

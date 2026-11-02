@@ -104,6 +104,25 @@ class LinuxATSPITestHarness(unittest.TestCase):
         )
         self.assertTrue(APP.verification_receipts_cleared(new))
 
+    def test_preview_mode_refuses_bad_executable_digest_before_atspi_import(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "medorigin-desktop-d2-native-egui"
+            path.write_bytes(b"fictional-only-byte-content")
+            with (
+                patch.object(APP.sys, "argv", ["test", str(path), "0" * 64, "--preview"]),
+                self.assertRaisesRegex(APP.FatalQualificationError, "binary identity mismatch"),
+            ):
+                APP.main()
+
+    def test_preview_only_uses_exact_synthetic_ui_literals(self) -> None:
+        import inspect
+
+        source = inspect.getsource(APP.verify_linux_fictional_json_preview)
+        self.assertIn("Inspect fictional JSON (verified, read-only)", source)
+        self.assertIn("Raw fictional source JSON - no normalization or FHIR R4 validation", source)
+        self.assertIn("No JSON preview for this raw-byte boundary test fixture.", source)
+        self.assertIn("LINUX_D2_JSON_PREVIEW_3_OF_3_PASS_NONPUBLISHING", source)
+
     def test_keyboard_mode_rejects_unknown_action_before_app_launch(self) -> None:
         with (
             patch.object(APP.sys, "argv", ["test", "/missing/file", "0" * 64, "--unsafe"]),

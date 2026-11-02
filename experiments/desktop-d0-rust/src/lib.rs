@@ -27,6 +27,7 @@ pub enum HashError {
     UnknownFixture,
     InvalidLimit,
     InputTooLarge,
+    PreviewUnavailable,
 }
 
 impl HashError {
@@ -36,6 +37,7 @@ impl HashError {
             Self::UnknownFixture => "unknown_fixture",
             Self::InvalidLimit => "invalid_limit",
             Self::InputTooLarge => "input_too_large",
+            Self::PreviewUnavailable => "preview_unavailable",
         }
     }
 }
@@ -46,6 +48,53 @@ pub struct HashOutcome {
     pub fixture_id: &'static str,
     pub bytes: usize,
     pub sha256_hex: String,
+}
+
+/// Bounded, source-only RAW JSON preview. This is not a file importer or
+/// clinical parser. Explicitly excludes malformed UTF-8 and large boundary
+/// test cases. Never normalizes or repairs intentionally negative JSON.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FictionalJsonPreview {
+    pub contract: &'static str,
+    pub fixture_id: &'static str,
+    pub bytes: usize,
+    pub sha256_hex: String,
+    pub raw_json: &'static str,
+    pub synthetic_only: bool,
+    pub release_authorized: bool,
+}
+
+pub fn fictional_json_preview_v1(id: &str) -> Result<FictionalJsonPreview, HashError> {
+    let (canonical, bytes): (&'static str, &'static [u8]) = match id {
+        "patient-minimal" => ("patient-minimal", PATIENT),
+        "observation-minimal" => ("observation-minimal", OBSERVATION),
+        "observation-bad-subject" => ("observation-bad-subject", OBSERVATION_BAD_SUBJECT),
+        "bundle-valid" => ("bundle-valid", BUNDLE_VALID),
+        "bundle-bad-reference" => ("bundle-bad-reference", BUNDLE_BAD_REFERENCE),
+        "bundle-duplicate" => ("bundle-duplicate", BUNDLE_DUPLICATE),
+        "bundle-wrong-type" => ("bundle-wrong-type", BUNDLE_WRONG_TYPE),
+        "bundle-linked" => ("bundle-linked", BUNDLE_LINKED),
+        "bundle-dangling" => ("bundle-dangling", BUNDLE_DANGLING),
+        "patient-invalid-utf8" | "patient-over-limit" | "patient-exact-limit" => {
+            return Err(HashError::PreviewUnavailable);
+        }
+        _ => return Err(HashError::UnknownFixture),
+    };
+    const MAX_VISIBLE_FICTIONAL_JSON_BYTES: usize = 2048;
+    if bytes.len() > MAX_VISIBLE_FICTIONAL_JSON_BYTES {
+        return Err(HashError::PreviewUnavailable);
+    }
+    let raw_json = std::str::from_utf8(bytes).map_err(|_| HashError::PreviewUnavailable)?;
+    let digest = hash_fixture_raw_v1(canonical, MAX_VISIBLE_FICTIONAL_JSON_BYTES)?;
+    Ok(FictionalJsonPreview {
+        contract: "medorigin-d0-fictional-json-preview-v1",
+        fixture_id: canonical,
+        bytes: bytes.len(),
+        sha256_hex: digest.sha256_hex,
+        raw_json,
+        synthetic_only: true,
+        release_authorized: false,
+    })
 }
 
 /// Return the SHA-256 of exact raw fixture bytes. Never JSON-canonicalize.
