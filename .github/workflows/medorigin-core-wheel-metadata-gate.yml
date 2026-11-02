@@ -7,6 +7,7 @@ on:
     branches:
       - security/medorigin-core-wheel-no-extras-20261102
       - security/medorigin-core-wheel-record-integrity-20261102
+      - security/medorigin-core-wheel-expected-digest-20261102
     paths:
       - 'scripts/inspect_release_wheel_metadata.py'
       - 'scripts/verify_core_wheel_archive.py'
