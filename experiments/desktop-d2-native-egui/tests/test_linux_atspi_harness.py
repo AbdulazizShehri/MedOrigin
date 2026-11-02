@@ -1,10 +1,11 @@
 """Pure source and negative-path tests; never open X11 or alter real D-Bus."""
+
 from __future__ import annotations
 
 import importlib.util
-from pathlib import Path
 import tempfile
 import unittest
+from pathlib import Path
 from unittest.mock import patch
 
 SOURCE = Path(__file__).resolve().parent / "linux-native-fhir-atspi-qualification.py"
@@ -15,7 +16,79 @@ APP = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(APP)
 
 
+class FakeAccessible:
+    """Tiny read-only AT-SPI tree double for exact application/frame matching."""
+
+    def __init__(
+        self,
+        accessible_name: str,
+        accessible_role: str,
+        children: list[FakeAccessible] | None = None,
+    ) -> None:
+        self.name = accessible_name
+        self._role = accessible_role
+        self._children = children or []
+        self.childCount = len(self._children)
+
+    def getRoleName(self) -> str:  # noqa: N802 - external pyatspi interface
+        return self._role
+
+    def getChildAtIndex(self, index: int) -> FakeAccessible:  # noqa: N802 - pyatspi
+        return self._children[index]
+
+
 class LinuxATSPITestHarness(unittest.TestCase):
+    def test_real_linux_accesskit_frame_may_be_unnamed(self) -> None:
+        # Source-bound hosted log: process-name APPLICATION, unnamed FRAME,
+        # GUI title as its child LABEL. Never use Windows/macOS frame title.
+        frame = FakeAccessible(
+            "",
+            "frame",
+            [
+                FakeAccessible("MedOrigin — Native Rust Experiment", "label"),
+                FakeAccessible("patient-minimal (57 bytes)", "toggle button"),
+                FakeAccessible("Verify synthetic SHA-256", "push button"),
+            ],
+        )
+        app = FakeAccessible("medorigin-desktop-d2-native-egui", "application", [frame])
+        desktop = FakeAccessible("main", "desktop frame", [app])
+        self.assertIs(APP.find_native_frame(desktop), frame)
+
+    def test_ambiguous_or_forged_native_accessibility_identity_is_refused(self) -> None:
+        def genuine_frame() -> FakeAccessible:
+            return FakeAccessible(
+                "",
+                "frame",
+                [
+                    FakeAccessible("MedOrigin — Native Rust Experiment", "label"),
+                    FakeAccessible("patient-minimal (57 bytes)", "toggle button"),
+                    FakeAccessible("Verify synthetic SHA-256", "push button"),
+                ],
+            )
+
+        wrong_app = FakeAccessible("other-desktop-app", "application", [genuine_frame()])
+        self.assertIsNone(
+            APP.find_native_frame(FakeAccessible("main", "desktop frame", [wrong_app]))
+        )
+        untrusted = FakeAccessible(
+            "medorigin-desktop-d2-native-egui",
+            "application",
+            [
+                FakeAccessible(
+                    "", "frame", [FakeAccessible("patient-minimal (57 bytes)", "toggle button")]
+                )
+            ],
+        )
+        self.assertIsNone(
+            APP.find_native_frame(FakeAccessible("main", "desktop frame", [untrusted]))
+        )
+        duplicated = FakeAccessible(
+            "medorigin-desktop-d2-native-egui", "application", [genuine_frame(), genuine_frame()]
+        )
+        self.assertIsNone(
+            APP.find_native_frame(FakeAccessible("main", "desktop frame", [duplicated]))
+        )
+
     def test_fatal_acceptance_failure_never_retried_or_obscured(self) -> None:
         called = 0
 
@@ -38,24 +111,29 @@ class LinuxATSPITestHarness(unittest.TestCase):
                 raise RuntimeError("AT-SPI initialization race")
             return "native accessible window"
 
-        self.assertEqual(APP.wait_for(transient_then_present, "window", 2),
-                         "native accessible window")
+        self.assertEqual(
+            APP.wait_for(transient_then_present, "window", 2), "native accessible window"
+        )
         self.assertEqual(called, 2)
 
     def test_invalid_expected_binary_digest_rejected_before_importing_atspi(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             path = Path(temporary) / "medorigin-desktop-d2-native-egui"
             path.write_bytes(b"fictional-only-fixture")
-            with patch.object(APP.sys, "argv", ["test", str(path), "0" * 64]):
-                with self.assertRaisesRegex(APP.FatalQualificationError, "binary identity mismatch"):
-                    APP.main()
+            with (
+                patch.object(APP.sys, "argv", ["test", str(path), "0" * 64]),
+                self.assertRaisesRegex(APP.FatalQualificationError, "binary identity mismatch"),
+            ):
+                APP.main()
 
     def test_missing_binary_refused_before_any_service_or_app_is_started(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             path = Path(temporary) / "medorigin-desktop-d2-native-egui"
-            with patch.object(APP.sys, "argv", ["test", str(path), "0" * 64]):
-                with self.assertRaisesRegex(APP.FatalQualificationError, "explicit native"):
-                    APP.main()
+            with (
+                patch.object(APP.sys, "argv", ["test", str(path), "0" * 64]),
+                self.assertRaisesRegex(APP.FatalQualificationError, "explicit native"),
+            ):
+                APP.main()
 
     def test_only_fixed_fictional_catalog_is_present(self) -> None:
         self.assertEqual(len(APP.CASES), 12)
