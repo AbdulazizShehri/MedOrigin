@@ -26,4 +26,4 @@ The tool does **not** create, change or delete any firewall rules, disable updat
 2. Capture independent packet/WFP/DNS attribution across startup, interaction, crash, restart and shutdown, plus deliberately injected negative controls. Read-only socket polls miss transient attempts.
 3. Independent security sign-off, Linux RustSec #673, macOS spoken VoiceOver #676, optional extras #622, owner signing/release #574 and D1/WebView2 #662 remain unresolved. Do not merge/release, import PHI or claim clinical/offline readiness.
 
-References: Windows PowerShell NetSecurity cmdlet documentation for Get-NetFirewallRule, Get-NetFirewallApplicationFilter, Get-NetFirewallPortFilter, Get-NetFirewallAddressFilter, and policy ActiveStore behavior. 
+References: Windows PowerShell NetSecurity cmdlet documentation for Get-NetFirewallRule, Get-NetFirewallApplicationFilter, Get-NetFirewallPortFilter, Get-NetFirewallAddressFilter, and policy ActiveStore behavior.
