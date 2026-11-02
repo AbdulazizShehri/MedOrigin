@@ -51,17 +51,49 @@ fn hash_fixture(fixture_id: String, max_input_bytes: usize) -> Result<FixtureHas
     })
 }
 
+/// Reject app-host navigation to remote destinations, embedded credentials and
+/// unexpected ports. This is webview-level defense in depth only, not OS egress proof.
+fn allow_preview_navigation(url: &tauri::Url) -> bool {
+    if !url.username().is_empty() || url.password().is_some() {
+        return false;
+    }
+    match (url.scheme(), url.host_str(), url.port()) {
+        ("http", Some("tauri.localhost"), None) => true,
+        ("tauri", Some("localhost"), None) => true,
+        ("http", Some("localhost"), Some(1420)) if cfg!(debug_assertions) => true,
+        _ => false,
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     // Windows D1 preview only: reject direct non-AppContainer launches
     // before creating Tauri or WebView2. An AppContainer token does not
     // independently establish that MXC or network-denial policy was used.
     #[cfg(windows)]
-    if let Err(reason) = medorigin_d1_windows_token_gate::require_windows_appcontainer_primary_token() {
+    if let Err(reason) =
+        medorigin_d1_windows_token_gate::require_windows_appcontainer_primary_token()
+    {
         eprintln!("D1_WINDOWS_APPCONTAINER_REQUIRED_NO_GO: {reason}");
         std::process::exit(76);
     }
     tauri::Builder::default()
+        // Do not auto-create the default WebView before hooks are registered.
+        // Deny all popups. Neither callback covers WebView2 broker background
+        // traffic: Windows packet-level OS verification remains mandatory.
+        .setup(|app| {
+            let config = app
+                .config()
+                .app
+                .windows
+                .first()
+                .ok_or("D1 window config missing")?;
+            tauri::WebviewWindowBuilder::from_config(app.handle(), config)?
+                .on_navigation(allow_preview_navigation)
+                .on_new_window(|_, _| tauri::webview::NewWindowResponse::Deny)
+                .build()?;
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![preview_status, hash_fixture])
         .run(tauri::generate_context!())
         .expect("MedOrigin D1 preview bootstrap failed");
@@ -70,6 +102,39 @@ pub fn run() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn preview_navigation_allows_only_local_app_origin() {
+        for raw in ["http://tauri.localhost/", "tauri://localhost/"] {
+            let url = tauri::Url::parse(raw).unwrap();
+            assert!(
+                allow_preview_navigation(&url),
+                "should allow local app: {raw}"
+            );
+        }
+        let dev_url = tauri::Url::parse("http://localhost:1420/").unwrap();
+        assert_eq!(allow_preview_navigation(&dev_url), cfg!(debug_assertions));
+    }
+
+    #[test]
+    fn preview_navigation_denies_remote_credentials_and_unexpected_schemes() {
+        for raw in [
+            "https://example.org/",
+            "http://example.org/",
+            "https://tauri.localhost/",
+            "http://tauri.localhost.evil.example/",
+            "http://evil@tauri.localhost/",
+            "http://tauri.localhost:1337/",
+            "http://localhost:1421/",
+            "http://127.0.0.1:1420/",
+            "file:///C:/sensitive.txt",
+            "data:text/html,external",
+            "javascript:alert(1)",
+        ] {
+            let url = tauri::Url::parse(raw).unwrap();
+            assert!(!allow_preview_navigation(&url), "must deny navigation");
+        }
+    }
 
     #[test]
     fn preview_is_nonpublishing_and_disclaims_runtime_network_isolation() {
