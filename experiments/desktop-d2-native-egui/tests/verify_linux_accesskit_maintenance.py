@@ -61,7 +61,9 @@ def evaluate(data):
         parent = {root: None}
         while queue:
             pid = queue.popleft()
-            for dep in adjacency.get(pid, ()):
+            if pid not in adjacency:
+                raise ValueError("REACHABLE_DEPENDENCY_NODE_MISSING")
+            for dep in adjacency[pid]:
                 if dep not in parent:
                     parent[dep] = pid
                     queue.append(dep)
