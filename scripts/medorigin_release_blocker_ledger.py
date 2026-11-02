@@ -14,6 +14,7 @@ import subprocess
 import sys
 from collections.abc import Callable
 from dataclasses import dataclass
+from datetime import datetime
 
 REPO = "AbdulazizShehri/MedOrigin"
 GATES = {
@@ -54,6 +55,31 @@ class Gate:
         }
 
 
+def reject_duplicate_keys(pairs: list[tuple[str, object]]) -> dict[str, object]:
+    """Reject ambiguous JSON members, including nested and escaped duplicates."""
+    result: dict[str, object] = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError("duplicate JSON object member")
+        result[key] = value
+    return result
+
+
+def reject_nonstandard_constant(value: str) -> object:
+    """GitHub JSON must not contain NaN or Infinity extensions."""
+    raise ValueError("nonstandard JSON constant")
+
+
+def valid_utc_timestamp(value: str) -> bool:
+    if not re.fullmatch(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z", value):
+        return False
+    try:
+        datetime.strptime(value, "%Y-%m-%dT%H:%M:%SZ")
+    except ValueError:
+        return False
+    return True
+
+
 def parse_issue(number: int, reason: str, payload: object) -> Gate:
     """Fail closed on incomplete/mismatched/PR data, even if state says closed."""
     url = f"https://github.com/{REPO}/issues/{number}"
@@ -72,9 +98,7 @@ def parse_issue(number: int, reason: str, payload: object) -> Gate:
             number, reason, "EVIDENCE_INVALID", "unknown", None, url, "invalid_issue_receipt"
         )
     updated = payload.get("updated_at")
-    if not isinstance(updated, str) or not re.fullmatch(
-        r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z", updated
-    ):
+    if not isinstance(updated, str) or not valid_utc_timestamp(updated):
         return Gate(
             number, reason, "EVIDENCE_INVALID", "unknown", None, url, "missing_or_invalid_timestamp"
         )
@@ -110,7 +134,11 @@ def load_live_issue(
             )
         # GitHub output is UTF-8. Parse bytes directly to avoid Windows cp1252
         # decoding crashes when an issue body contains Unicode characters.
-        payload = json.loads(receipt.stdout)
+        payload = json.loads(
+            receipt.stdout,
+            object_pairs_hook=reject_duplicate_keys,
+            parse_constant=reject_nonstandard_constant,
+        )
     except (OSError, ValueError, TypeError, UnicodeError, subprocess.TimeoutExpired):
         return Gate(
             number, reason, "EVIDENCE_UNAVAILABLE", "unknown", None, url, "github_read_failed"
