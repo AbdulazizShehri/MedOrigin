@@ -25,6 +25,11 @@ try {
   if(-not (Test-Path -LiteralPath $file -PathType Leaf)) { Refuse 'EXECUTABLE_NOT_FILE' 4 0 }
   $digest=(Get-FileHash -LiteralPath $file -Algorithm SHA256 -ErrorAction Stop).Hash
   if($digest -ine $ExpectedSha256) { Refuse 'EXECUTABLE_SHA_MISMATCH' 4 0 }
+  # Restrict qualification to the native D2 application, not arbitrary
+  # test tools whose exact digest happens to be supplied by a caller.
+  if([IO.Path]::GetFileName($file) -cne 'medorigin-desktop-d2-native-egui.exe') {
+    Refuse 'EXECUTABLE_NAME_MISMATCH' 4 0
+  }
   $profiles=@(Get-NetFirewallProfile -PolicyStore ActiveStore -ErrorAction Stop)
   $enabledNames=@($profiles | Where-Object { [bool]$_.Enabled } | ForEach-Object { [string]$_.Name })
   foreach($name in @('Domain','Private','Public')) {
