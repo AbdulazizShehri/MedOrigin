@@ -230,4 +230,20 @@ mod tests {
             "invalid_limit"
         );
     }
+
+    #[test]
+    fn native_batch_verifies_all_twelve_without_partial_or_clinical_claims() {
+        let result = verify_all_fixtures(65_536).expect("fixed fictional batch");
+        assert_eq!(result.contract, "medorigin-d1-native-fictional-batch-v1");
+        assert_eq!(result.rows.len(), 12);
+        assert_eq!(result.rows[0].fixture_id, "patient-minimal");
+        assert_eq!(result.rows[11].fixture_id, "bundle-dangling");
+        assert!(result.synthetic_only);
+        assert!(!result.release_authorized);
+        assert!(!result.full_fhir_r4_validated);
+        assert!(!result.webview_runtime_egress_qualified);
+        assert!(result.rows.iter().all(|row| row.sha256_hex.len() == 64));
+        assert_eq!(verify_all_fixtures(0).unwrap_err(), "invalid_limit");
+        assert_eq!(verify_all_fixtures(65_537).unwrap_err(), "invalid_limit");
+    }
 }
