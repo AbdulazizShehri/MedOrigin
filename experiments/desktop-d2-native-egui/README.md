@@ -72,6 +72,39 @@ An offline pass is dependent on the local advisory database age and is **not**
 a substitute for an online refreshed RustSec scan. This D2 policy does not
 remediate Python optional extras or historical research pins (issue #622).
 
+## Fictional JSON side-by-side comparison (nonclinical)
+
+The native GUI can compare **two distinct source-compiled fictional JSON**
+fixtures in two read-only columns. Each side independently rechecks its D0 raw
+SHA-256, byte length, allowlisted ID, limited FHIR envelope status, and
+synthetic-only/no-release contract before either text is displayed. The nine
+eligible fixtures are at most 2,048 bytes each. The three raw-byte boundary
+fixtures (invalid UTF-8, 32,768 and 32,769 bytes), forged indices, and comparing
+a fixture to itself fail closed without retaining a previous comparison.
+
+This is an educational developer aid for observing differences between
+**fictional** Patient, Observation and Bundle examples. Expected negative
+statuses are test outcomes, not clinical conclusions. No JSON is repaired,
+imported, normalized, exported, copied to the clipboard, persisted, transmitted
+or processed by a model. A new fixture selection, verification or preview
+clears stale comparisons. It does not validate FHIR R4 or prove network
+isolation; release remains NO-GO.
+
+The comparison selector uses accessible buttons rather than a ComboBox: a real
+Windows UIA probe found that the native ComboBox did not expose the required
+ExpandCollapsePattern. The source-controlled real Windows test exercises the
+button-based alternative on an exact SHA-256-pinned executable:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File tests/windows-native-fictional-compare-uia.ps1 `
+  -ExePath '<absolute path to approved native debug exe>' `
+  -ExpectedSha256 '<externally verified 64-hex SHA256>'
+```
+
+See [the nonpublishing Windows evidence](evidence/d2-fictional-json-comparison-20261102.md).
+This does not replace independent macOS VoiceOver or Linux AT-SPI acceptance
+for the new comparison UI.
+
 ## Build and qualification
 Use Rust 1.97.1 and checked-in Cargo.lock, from this folder:
 
