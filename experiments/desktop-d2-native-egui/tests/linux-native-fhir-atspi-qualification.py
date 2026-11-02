@@ -224,11 +224,24 @@ def main() -> int:
 
         try:
             window = wait_for(find_window, "native D2 AT-SPI frame", 20)
-        except FatalQualificationError:
-            raise
-        except RuntimeError as exc:
+        except FatalQualificationError as exc:
+            # Inspect only this disposable session, not the user's DBus.
             visible = [(name(n)[:90], role(n)) for n in tree(desktop)[:50]]
-            refuse(f"{exc}; AT-SPI desktop visible nodes={visible}")
+            services = subprocess.run(
+                ["dbus-send", "--session", "--print-reply",
+                 "--dest=org.freedesktop.DBus", "/org/freedesktop/DBus",
+                 "org.freedesktop.DBus.ListNames"],
+                capture_output=True, text=True, timeout=6, check=False,
+            )
+            atspi_status = subprocess.run(
+                ["dbus-send", "--session", "--print-reply", "--dest=org.a11y.Bus",
+                 "/org/a11y/bus", "org.freedesktop.DBus.Properties.Get",
+                 "string:org.a11y.Status", "string:ScreenReaderEnabled"],
+                capture_output=True, text=True, timeout=6, check=False,
+            )
+            refuse(f"{exc}; desktop_nodes={visible}; "
+                   f"screen_reader={atspi_status.stdout[-200:]!r}; "
+                   f"session_dbus_names={services.stdout[-1300:]!r}")
         def existing_controls():
             return find(window, "patient-minimal (57 bytes)", ("check", "radio", "toggle")) and find(
                 window, "Verify synthetic SHA-256", ("push", "button"))
