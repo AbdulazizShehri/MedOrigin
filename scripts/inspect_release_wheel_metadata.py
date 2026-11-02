@@ -16,6 +16,8 @@ from email.parser import BytesParser
 from email.policy import default
 from pathlib import Path
 
+from verify_core_wheel_archive import inspect_core_wheel_archive
+
 HOME = "https://github.com/AbdulazizShehri/MedOrigin"
 EXPECTED_URLS = {
     "Homepage": HOME,
@@ -74,6 +76,20 @@ def inspect_wheel(
                         message.get_all("Requires-Dist") or message.get_all("Provides-Extra")
                     ):
                         issues.append("core-only wheel advertises dependencies or extras")
+                    if require_core_only and (
+                        len(message.get_all("Name", [])) != 1
+                        or len(message.get_all("Version", [])) != 1
+                    ):
+                        issues.append("core wheel has duplicate identity metadata")
+                    if require_core_only and version:
+                        issues.extend(
+                            inspect_core_wheel_archive(
+                                archive,
+                                metadata_path=metadata_paths[0],
+                                distribution=distribution,
+                                version=version,
+                            )
+                        )
                     for item in message.get_all("Project-URL", []):
                         key, sep, value = str(item).partition(",")
                         key, value = key.strip(), value.strip()
