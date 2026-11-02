@@ -89,6 +89,21 @@ class LinuxATSPITestHarness(unittest.TestCase):
             APP.find_native_frame(FakeAccessible("main", "desktop frame", [duplicated]))
         )
 
+    def test_fictional_fixture_switch_must_clear_previous_receipt_before_verify(self) -> None:
+        sha = FakeAccessible("Synthetic raw SHA-256 verified: earlier", "label")
+        status = FakeAccessible("Fictional FHIR envelope: INVALID_REFERENCE", "label")
+        old = FakeAccessible("fake native frame", "frame", [sha, status])
+        self.assertFalse(APP.verification_receipts_cleared(old))
+        self.assertFalse(
+            APP.verification_receipts_cleared(FakeAccessible("fake native frame", "frame", [sha]))
+        )
+        new = FakeAccessible(
+            "fake native frame",
+            "frame",
+            [FakeAccessible("patient-minimal (57 bytes)", "toggle button")],
+        )
+        self.assertTrue(APP.verification_receipts_cleared(new))
+
     def test_keyboard_mode_rejects_unknown_action_before_app_launch(self) -> None:
         with (
             patch.object(APP.sys, "argv", ["test", "/missing/file", "0" * 64, "--unsafe"]),

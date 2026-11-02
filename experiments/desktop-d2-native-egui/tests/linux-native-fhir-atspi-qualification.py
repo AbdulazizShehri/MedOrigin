@@ -214,6 +214,16 @@ def wait_for(fn, label: str, seconds: float = 12) -> object:
     refuse(f"timed out: {label}; last={last}")
 
 
+def verification_receipts_cleared(window: object) -> bool:
+    """No stale result may survive a fixture selection before Verify."""
+    labels = [name(n) for n in tree(window) if role(n) == "label"]
+    return not any(
+        item.startswith("Synthetic raw SHA-256 verified:")
+        or item.startswith("Fictional FHIR envelope:")
+        for item in labels
+    )
+
+
 def verify_linux_keyboard_only(window: object, pyatspi: object) -> None:
     """Exercise real XTest Tab/Shift+Tab/Space, NEVER AT-SPI Action.
 
@@ -510,6 +520,13 @@ def main() -> int:
             if len(control) != 1:
                 refuse(f"ambiguous AT-SPI selector {label}")
             press(control[0], label)
+            # This UI redraws asynchronously. The previous fixture's result
+            # must have disappeared *before* the next Verify action; without
+            # this guard back-to-back AT-SPI clicks can race eframe rendering.
+            wait_for(
+                lambda: verification_receipts_cleared(window),
+                f"clear prior receipt before {case_id}",
+            )
             verify = unique(window, "Verify synthetic SHA-256", ("push", "button"))
             press(verify, "Verify synthetic SHA-256")
             sha_text = f"Synthetic raw SHA-256 verified: {digest}"
