@@ -28,6 +28,20 @@ type HashResult = {
   synthetic_only: boolean;
   release_authorized: boolean;
 };
+type NativeBatchRow = {
+  fixture_id: FixtureId;
+  bytes: number;
+  sha256_hex: string;
+  status: EnvelopeResult["status"];
+};
+type NativeBatchResponse = {
+  contract: string;
+  rows: NativeBatchRow[];
+  synthetic_only: boolean;
+  full_fhir_r4_validated: boolean;
+  release_authorized: boolean;
+  webview_runtime_egress_qualified: boolean;
+};
 const FIXTURES: readonly { id: FixtureId; title: string; kind: string; size: string; sha: string; description: string }[] = [
   { id: "patient-minimal", title: "Minimal Patient", kind: "VALID SYNTHETIC", size: "57 B", description: "A fictional FHIR-shaped resource. No clinical information.", sha: "747e1e038d6cc9a39a9cee209f621841cf6a9748d82be42fa545f19cfd6877a0" },
   { id: "patient-invalid-utf8", title: "Invalid encoding", kind: "NEGATIVE CASE", size: "1 B", description: "A single 0xFF byte. Hashing is independent of FHIR parsing.", sha: "a8100ae6aa1940d0b663bb31cd466142ebbdbd5187131b92d93818987832eb89" },
@@ -101,6 +115,25 @@ const EXPECTED_ENVELOPE_STATUS: Record<FixtureId, EnvelopeResult["status"]> = {
   "bundle-dangling": "INVALID_REFERENCE",
 };
 
+
+// A single native command owns the batch. Reject extra fields, missing rows,
+// reordered/duplicated fixtures, forged status, or invented security approval.
+function isSafeNativeBatchReceipt(value: unknown): value is NativeBatchResponse {
+  if (!hasExactFields(value, ["contract", "rows", "synthetic_only", "full_fhir_r4_validated", "release_authorized", "webview_runtime_egress_qualified"])) return false;
+  if (value.contract !== "medorigin-d1-native-fictional-batch-v1" ||
+      value.synthetic_only !== true || value.full_fhir_r4_validated !== false ||
+      value.release_authorized !== false || value.webview_runtime_egress_qualified !== false ||
+      !Array.isArray(value.rows) || value.rows.length !== FIXTURES.length) return false;
+  return value.rows.every((row: unknown, index: number) => {
+    const fixture = FIXTURES[index];
+    return hasExactFields(row, ["fixture_id", "bytes", "sha256_hex", "status"]) &&
+      row.fixture_id === fixture.id &&
+      row.bytes === Number(fixture.size.replace(/[^0-9]/g, "")) &&
+      row.sha256_hex === fixture.sha &&
+      row.status === EXPECTED_ENVELOPE_STATUS[fixture.id];
+  });
+}
+
 export default function App() {
   const [status, setStatus] = useState<PreviewStatus | null>(null);
   const [selected, setSelected] = useState<FixtureId>("patient-minimal");
@@ -170,8 +203,8 @@ export default function App() {
     }
   }
 
-  // Atomic UI reporting: no partial batch result is displayed until all
-  // twelve separate native hash AND structural receipts have passed.
+  // One atomic native IPC receipt, rather than 24 independently forgeable
+  // WebView IPC replies. No partial rows are exposed on any failure.
   async function verifyAll() {
     if (flight.current || !status) return;
     flight.current = true;
@@ -183,19 +216,13 @@ export default function App() {
     setBatchProgress(0);
     setBusy(true);
     try {
-      const rows: { id: FixtureId; title: string; status: EnvelopeResult["status"] }[] = [];
-      for (const fixture of FIXTURES) {
-        const checked = await invoke<unknown>("hash_fixture", { fixtureId: fixture.id, maxInputBytes: 65536 });
-        if (!isSafeHashReceipt(checked, fixture.id, Number(fixture.size.replace(/[^0-9]/g, ""))) || checked.sha256_hex !== fixture.sha) {
-          throw new Error("Batch raw-byte receipt rejected");
-        }
-        const inspected = await invoke<unknown>("inspect_fhir_fixture_envelope", { fixtureId: fixture.id, maxInputBytes: 65536 });
-        if (!isSafeEnvelopeReceipt(inspected, fixture.id, checked.bytes, EXPECTED_ENVELOPE_STATUS[fixture.id])) {
-          throw new Error("Batch structural receipt rejected");
-        }
-        rows.push({ id: fixture.id, title: fixture.title, status: inspected.status });
-        setBatchProgress(rows.length);
+      const checked = await invoke<unknown>("verify_all_fixtures", { maxInputBytes: 65536 });
+      if (!isSafeNativeBatchReceipt(checked)) {
+        throw new Error("Native batch receipt rejected");
       }
+      const rows = checked.rows.map((row, index) => ({
+        id: row.fixture_id, title: FIXTURES[index].title, status: row.status,
+      }));
       setBatchRows(rows);
       setBatchComplete(true);
     } catch {

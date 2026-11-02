@@ -12,7 +12,7 @@ const core=readFileSync(resolve(root,'../desktop-d0-rust/src/lib.rs'),'utf8');
 test('new FHIR envelope bridge is explicitly synthetic-only and refuses full conformance claim',()=>{
  assert.match(rust,/inspect_named_synthetic_fhir_envelope_v1/);
  assert.match(rust,/#\[tauri::command\]\s*fn inspect_fhir_fixture_envelope\(/);
- assert.match(rust,/generate_handler!\[\s*preview_status,\s*hash_fixture,\s*inspect_fhir_fixture_envelope\s*\]/);
+ assert.match(rust,/generate_handler!\[\s*preview_status,\s*hash_fixture,\s*inspect_fhir_fixture_envelope,\s*verify_all_fixtures\s*\]/);
  assert.match(rust,/full_fhir_r4_validated:\s*false/);
  assert.match(rust,/release_authorized:\s*false/);
  assert.match(core,/pub fn inspect_named_synthetic_fhir_envelope_v1\(/);
