@@ -1,0 +1,66 @@
+# Synthetic-only native Rust D2 integration, no GUI launch or publication.
+name: D2 native fictional FHIR and offline source qualification
+on:
+  push:
+    branches:
+      - feat/medorigin-d2-native-fhir-bundle-20261102
+  pull_request:
+    paths:
+      - 'experiments/desktop-d0-rust/**'
+      - 'experiments/desktop-d2-native-egui/**'
+      - '.github/workflows/medorigin-d2-native-fhir-qualification.yml'
+permissions:
+  contents: read
+jobs:
+  native-offline:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-2025, ubuntu-24.04]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    steps:
+      - name: Checkout candidate by exact head SHA without persisted credentials
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - name: Install pinned Rust with formatter and Clippy
+        shell: pwsh
+        run: |
+          rustup toolchain install 1.97.1 --profile minimal --component rustfmt --component clippy
+          if ($LASTEXITCODE -ne 0) { throw 'Rust install failed' }
+          rustup default 1.97.1
+          if ($LASTEXITCODE -ne 0) { throw 'Rust version selection failed' }
+      - name: Linux graphical build dependencies (no GUI launched)
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends libgtk-3-dev libxkbcommon-dev libwayland-dev libegl1-mesa-dev libgl1-mesa-dev pkg-config
+      - name: Verify exact fixed fictional Bundle JSON with no writes
+        shell: pwsh
+        run: |
+          $py = if ($IsWindows) { 'python' } else { 'python3' }
+          & $py experiments/desktop-d0-rust/tools/generate_fictional_bundles.py --check
+          if ($LASTEXITCODE -ne 0) { throw 'Fictional fixture bytes drifted' }
+      - name: Test actual D0 parser and fictional reference graph
+        shell: pwsh
+        run: |
+          cargo test --locked --all-targets --manifest-path experiments/desktop-d0-rust/Cargo.toml
+          if ($LASTEXITCODE -ne 0) { throw 'D0 Rust tests failed' }
+      - name: Compile native D2 and run real Rust view model plus source boundary
+        shell: pwsh
+        run: |
+          cargo fmt --all --manifest-path experiments/desktop-d2-native-egui/Cargo.toml -- --check
+          if ($LASTEXITCODE -ne 0) { throw 'D2 Rust format failed' }
+          cargo test --locked --all-targets --manifest-path experiments/desktop-d2-native-egui/Cargo.toml
+          if ($LASTEXITCODE -ne 0) { throw 'D2 native Rust tests failed' }
+          cargo clippy --locked --all-targets --manifest-path experiments/desktop-d2-native-egui/Cargo.toml -- -D warnings
+          if ($LASTEXITCODE -ne 0) { throw 'D2 Clippy failed' }
+      - name: Verify checks did not alter tracked code or lockfiles
+        shell: pwsh
+        run: |
+          git diff --exit-code
+          if ($LASTEXITCODE -ne 0) { throw 'Tracked source or lockfile changed' }
+          Write-Output 'NATIVE_D2_SYNTHETIC_ONLY_NOT_RELEASED_NOT_PACKET_ISOLATION_OR_ACCESSIBILITY_APPROVAL'
