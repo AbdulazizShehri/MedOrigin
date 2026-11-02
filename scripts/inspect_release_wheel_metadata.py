@@ -11,6 +11,7 @@ import hashlib
 import json
 import sys
 import zipfile
+from contextlib import ExitStack
 from email.parser import BytesParser
 from email.policy import default
 from pathlib import Path
@@ -29,14 +30,24 @@ def inspect_wheel(
     *,
     expected_version: str | None = None,
     distribution: str = "medscale",
+    require_core_only: bool = False,
 ) -> dict[str, object]:
     """Inspect the bytes to be installed, never source pyproject or inferred URLs."""
     issues: list[str] = []
     version: str | None = None
     actual: dict[str, str] = {}
-    digest = hashlib.sha256(path.read_bytes()).hexdigest()
+    digest: str | None = None
     try:
-        with zipfile.ZipFile(path) as archive:
+        # Use one opened file descriptor to avoid hashing a different path
+        # target than the Wheel whose metadata is subsequently inspected.
+        with ExitStack() as resources:
+            source = resources.enter_context(path.open("rb"))
+            hasher = hashlib.sha256()
+            for chunk in iter(lambda: source.read(1024 * 1024), b""):
+                hasher.update(chunk)
+            digest = hasher.hexdigest()
+            source.seek(0)
+            archive = resources.enter_context(zipfile.ZipFile(source))
             metadata_paths = [
                 name for name in archive.namelist() if name.endswith(".dist-info/METADATA")
             ]
@@ -57,6 +68,12 @@ def inspect_wheel(
                         issues.append("wheel version missing")
                     elif expected_version is not None and version != expected_version:
                         issues.append("wheel version disagrees with expected candidate")
+                    # This stricter, opt-in developer-Core gate checks the actual
+                    # artifact. Frozen research optional dependencies are untouched.
+                    if require_core_only and (
+                        message.get_all("Requires-Dist") or message.get_all("Provides-Extra")
+                    ):
+                        issues.append("core-only wheel advertises dependencies or extras")
                     for item in message.get_all("Project-URL", []):
                         key, sep, value = str(item).partition(",")
                         key, value = key.strip(), value.strip()
@@ -67,6 +84,14 @@ def inspect_wheel(
                     for key, url in EXPECTED_URLS.items():
                         if actual.get(key) != url:
                             issues.append(f"{key}: missing or noncanonical URL")
+            # Detect in-place Wheel mutation during this read-only check.
+            # The digest is not a signature or a complete race-free identity.
+            source.seek(0)
+            after_hasher = hashlib.sha256()
+            for chunk in iter(lambda: source.read(1024 * 1024), b""):
+                after_hasher.update(chunk)
+            if after_hasher.hexdigest() != digest:
+                issues.append("wheel bytes changed during inspection")
     except (OSError, zipfile.BadZipFile, RuntimeError, EOFError, ValueError) as exc:
         issues.append(f"wheel unreadable: {type(exc).__name__}")
 
@@ -77,6 +102,7 @@ def inspect_wheel(
         "version": version,
         "status": "METADATA_QUALIFIED_ONLY" if not issues else "BLOCKED",
         "publication_authorized": False,
+        "core_only_verified": require_core_only and not issues,
         "issues": issues,
     }
 
@@ -85,6 +111,11 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--wheel", required=True, type=Path)
     parser.add_argument("--expected-version", default=None)
+    parser.add_argument(
+        "--require-core-only",
+        action="store_true",
+        help="fail closed unless shipped Wheel METADATA has no dependencies or extras",
+    )
     parser.add_argument(
         "--distribution", choices=("medscale", "medscale-workspace"), default="medscale"
     )
@@ -96,6 +127,7 @@ def main(argv: list[str] | None = None) -> int:
         args.wheel,
         expected_version=args.expected_version,
         distribution=args.distribution,
+        require_core_only=args.require_core_only,
     )
     encoded = json.dumps(result, sort_keys=True, indent=2) + "\n"
     if args.json_out is not None:

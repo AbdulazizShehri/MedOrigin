@@ -23,7 +23,11 @@ SCRIPT = Path(__file__).resolve().parents[1] / "scripts" / "inspect_release_whee
 
 
 def inspect_wheel(
-    wheel: Path, *, expected_version: str | None = None, distribution: str = "medscale"
+    wheel: Path,
+    *,
+    expected_version: str | None = None,
+    distribution: str = "medscale",
+    require_core_only: bool = False,
 ) -> dict[str, Any]:
     """Exercise the operator CLI instead of importing scripts under an alias."""
     command = [
@@ -36,6 +40,8 @@ def inspect_wheel(
     ]
     if expected_version is not None:
         command.extend(["--expected-version", expected_version])
+    if require_core_only:
+        command.append("--require-core-only")
     completed = subprocess.run(command, check=False, text=True, capture_output=True)
     assert completed.returncode in (0, 2), completed.stderr
     data = json.loads(completed.stdout)
@@ -50,6 +56,8 @@ def _wheel(
     name: str = "medscale",
     version: str = "0.3.0",
     duplicate: bool = False,
+    requirements: tuple[str, ...] = (),
+    extras: tuple[str, ...] = (),
 ) -> Path:
     message = Message()
     message["Metadata-Version"] = "2.3"
@@ -59,6 +67,10 @@ def _wheel(
         message["Project-URL"] = f"{key}, {url}"
     if duplicate:
         message["Project-URL"] = f"Homepage, {EXPECTED_URLS['Homepage']}"
+    for requirement in requirements:
+        message["Requires-Dist"] = requirement
+    for extra in extras:
+        message["Provides-Extra"] = extra
     with zipfile.ZipFile(path, "w") as archive:
         archive.writestr(f"{name}-{version}.dist-info/METADATA", message.as_bytes())
     return path
@@ -170,3 +182,69 @@ def test_workspace_refuses_core_distribution_name(tmp_path: Path) -> None:
     core = _wheel(tmp_path / "core.whl")
     result = inspect_wheel(core, distribution="medscale-workspace")
     assert "distribution name must remain medscale-workspace" in result["issues"]
+
+
+@pytest.mark.parametrize(
+    ("requirements", "extras"),
+    [
+        (("pillow==12.3.0; extra == 'rq1-runtime-feasibility'",), ("rq1-runtime-feasibility",)),
+        (("certifi==2026.6.1",), ()),
+        ((), ("training-hf-sft",)),
+    ],
+)
+def test_core_only_gate_rejects_advertised_dependency_or_extra(
+    tmp_path: Path, requirements: tuple[str, ...], extras: tuple[str, ...]
+) -> None:
+    wheel = _wheel(tmp_path / "research-extras.whl", requirements=requirements, extras=extras)
+    checked = inspect_wheel(wheel, require_core_only=True)
+    assert checked["status"] == "BLOCKED"
+    assert checked["core_only_verified"] is False
+    assert "core-only wheel advertises dependencies or extras" in checked["issues"]
+    assert checked["publication_authorized"] is False
+    legacy = inspect_wheel(wheel)
+    assert legacy["core_only_verified"] is False
+    assert legacy["publication_authorized"] is False
+
+
+def test_core_only_gate_accepts_dependency_free_metadata_but_never_release(
+    tmp_path: Path,
+) -> None:
+    wheel = _wheel(tmp_path / "isolated-core.whl")
+    result = inspect_wheel(wheel, require_core_only=True, expected_version="0.3.0")
+    assert result["status"] == "METADATA_QUALIFIED_ONLY"
+    assert result["core_only_verified"] is True
+    assert result["publication_authorized"] is False
+    assert not result["issues"]
+
+
+def test_malformed_wheel_is_never_core_only_verified(tmp_path: Path) -> None:
+    path = tmp_path / "corrupt.whl"
+    path.write_bytes(b"not-a-wheel")
+    result = inspect_wheel(path, require_core_only=True)
+    assert result["status"] == "BLOCKED"
+    assert result["core_only_verified"] is False
+    assert result["publication_authorized"] is False
+
+
+def test_in_place_archive_mutation_during_inspection_fails_closed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """No report may bind a pre-read SHA to different post-read Wheel bytes."""
+    from runpy import run_path
+
+    wheel = _wheel(tmp_path / "mutable.whl")
+    inspector = run_path(str(SCRIPT))["inspect_wheel"]
+    original = zipfile.ZipFile
+
+    def mutate_after_digest(source: Any) -> zipfile.ZipFile:
+        # A ZIP permits trailing bytes, so metadata can still be parsed.
+        with wheel.open("ab") as dest:
+            dest.write(b"changed-after-first-hash")
+        return original(source)
+
+    monkeypatch.setattr(zipfile, "ZipFile", mutate_after_digest)
+    result = inspector(wheel, require_core_only=True)
+    assert result["status"] == "BLOCKED"
+    assert result["core_only_verified"] is False
+    assert "wheel bytes changed during inspection" in result["issues"]
+    assert result["publication_authorized"] is False
