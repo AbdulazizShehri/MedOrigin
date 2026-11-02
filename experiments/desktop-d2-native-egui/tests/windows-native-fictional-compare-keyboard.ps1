@@ -71,15 +71,17 @@ try {
  See 'SHA-256: 747e1e038d6cc9a39a9cee209f621841cf6a9748d82be42fa545f19cfd6877a0'
  See 'SHA-256: 527806e5427cc45e55424d1b8dc8ddcdc86a2b37df2ae116735e6832268b5e19'
  Write-Output 'KEYBOARD_REAL_COMPARE_TWO_SHA_PASS'
- SendKey '+{TAB}'
- $reverse=(Focused)
- Write-Output ('SHIFT_TAB_FOCUSED='+$reverse)
- if($reverse -cne 'Compare: bundle-dangling'){
+ $reverseReached=$false
+ for($step=0;$step -lt 6;$step++){
   SendKey '+{TAB}'
   $reverse=(Focused)
-  Write-Output ('SHIFT_TAB_REPEAT_FOCUSED='+$reverse)
+  Write-Output ('REVERSE_SHIFT_TAB_STEP='+$step+' NAME='+$reverse)
+  if($reverse -ceq 'Compare: bundle-dangling'){$reverseReached=$true;break}
+  if($reverse -cnotin @('Clear fictional output (Escape)','Compare verified fictional JSON (read-only)')){
+   throw ('REVERSE_SHIFT_TAB_UNEXPECTED_FOCUS='+$reverse)
+  }
  }
- if($reverse -cne 'Compare: bundle-dangling'){throw 'REVERSE_SHIFT_TAB_FOCUS_WRONG'}
+ if(-not $reverseReached){throw 'REVERSE_SHIFT_TAB_FOCUS_WRONG'}
  Write-Output 'KEYBOARD_REAL_REVERSE_SHIFT_TAB_PASS'
  SendKey '{ESC}'
  See 'SHA-256: 747e1e038d6cc9a39a9cee209f621841cf6a9748d82be42fa545f19cfd6877a0' $false
