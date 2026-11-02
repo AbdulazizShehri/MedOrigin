@@ -99,6 +99,7 @@ struct FictionalComparison {
     left_json: &'static str,
     right_json: &'static str,
     byte_diff_summary: String,
+    byte_context: String,
 }
 
 /// Byte offsets are intentionally zero-based source bytes, not UTF-8 characters.
@@ -120,6 +121,31 @@ fn fictional_byte_diff_summary(left: &str, right: &str) -> String {
         "Fictional byte difference: first differing byte offset {prefix} (zero-based); common suffix {suffix} bytes; left {} bytes, right {} bytes. Original source bytes unchanged.",
         a.len(),
         b.len()
+    )
+}
+
+/// Bounded HEX around the first changed UTF-8 source byte, not a JSON semantic diff.
+fn fictional_byte_context(left: &str, right: &str) -> String {
+    let a = left.as_bytes();
+    let b = right.as_bytes();
+    let offset = a.iter().zip(b).take_while(|(x, y)| x == y).count();
+    if offset == a.len() && offset == b.len() {
+        return "Fictional HEX context: identical source bytes".to_owned();
+    }
+    fn window(bytes: &[u8], offset: usize) -> String {
+        let start = offset.saturating_sub(8);
+        let end = bytes.len().min(offset.saturating_add(8));
+        let hex = bytes[start..end]
+            .iter()
+            .map(|byte| format!("{byte:02X}"))
+            .collect::<Vec<_>>()
+            .join(" ");
+        format!("bytes {start}..{end} [HEX {hex}]")
+    }
+    format!(
+        "Fictional HEX context at zero-based byte {offset}: left {}; right {}. Raw bytes only, not JSON semantics.",
+        window(a, offset),
+        window(b, offset)
     )
 }
 
@@ -286,6 +312,7 @@ impl MedOriginNativePreview {
             left_json,
             right_json,
             byte_diff_summary: fictional_byte_diff_summary(left_json, right_json),
+            byte_context: fictional_byte_context(left_json, right_json),
         });
         Ok(())
     }
@@ -385,6 +412,7 @@ impl eframe::App for MedOriginNativePreview {
             if let Some(comparison) = &self.comparison {
                 ui.label("Both sources independently reverified · Negative FHIR statuses are expected test cases, not clinical conclusions");
                 ui.monospace(&comparison.byte_diff_summary);
+                ui.monospace(&comparison.byte_context);
                 ui.columns(2, |columns| {
                     let (left, right) = columns.split_at_mut(1);
                     for (column, fixture, raw) in [
@@ -540,6 +568,24 @@ mod tests {
             app.comparison.is_none(),
             "new verification clears stale pair"
         );
+    }
+
+    #[test]
+    fn fictional_hex_context_is_bounded_and_byte_exact() {
+        assert_eq!(
+            fictional_byte_context("abc", "abc"),
+            "Fictional HEX context: identical source bytes"
+        );
+        let unicode = fictional_byte_context("\u{00E9}X", "\u{00E9}Y");
+        assert!(unicode.contains("zero-based byte 2"));
+        assert!(unicode.contains("left bytes 0..3 [HEX C3 A9 58]"));
+        assert!(unicode.contains("right bytes 0..3 [HEX C3 A9 59]"));
+        let inserted = fictional_byte_context("abc", "abXc");
+        assert!(inserted.contains("left bytes 0..3 [HEX 61 62 63]"));
+        assert!(inserted.contains("right bytes 0..4 [HEX 61 62 58 63]"));
+        let long = fictional_byte_context(&("a".repeat(100) + "x"), &("a".repeat(100) + "y"));
+        assert!(long.contains("left bytes 92..101"));
+        assert!(!long.contains("61 61 61 61 61 61 61 61 61 61"));
     }
 
     #[test]
