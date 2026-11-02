@@ -1,0 +1,52 @@
+# Synthetic-only real browser UI assertions with a MOCKED Tauri IPC bridge.
+# This explicitly does not launch Tauri/WebView2 or attest OS packet denial.
+name: D1 synthetic FHIR browser interaction (NO RELEASE)
+on:
+  push:
+    branches:
+      - test/medorigin-d1-browser-failclosed-20261102
+  pull_request:
+    paths:
+      - 'experiments/desktop-d1-tauri/tests/browser_fhir_preview_e2e.py'
+      - 'experiments/desktop-d1-tauri/src/App.tsx'
+      - 'experiments/desktop-d1-tauri/src/App.css'
+      - '.github/workflows/medorigin-d1-browser-fhir-e2e.yml'
+permissions:
+  contents: read
+jobs:
+  edge-synthetic:
+    runs-on: windows-2025
+    timeout-minutes: 15
+    steps:
+      - name: Checkout exact source candidate, never persist credentials
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - name: Install pinned uv without cache
+        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        with:
+          enable-cache: false
+      - name: Install Python 3.12
+        run: uv python install 3.12
+      - name: Build exact npm-locked synthetic UI
+        working-directory: experiments/desktop-d1-tauri
+        shell: pwsh
+        run: |
+          npm ci --no-audit --no-fund
+          if ($LASTEXITCODE -ne 0) { throw 'Locked UI install failed' }
+          npm run build
+          if ($LASTEXITCODE -ne 0) { throw 'Synthetic UI build failed' }
+      - name: Real Microsoft Edge checks with mocked synthetic Tauri API
+        working-directory: experiments/desktop-d1-tauri
+        shell: pwsh
+        run: |
+          uv run --no-project --python 3.12 --with playwright==1.64.1 python tests/browser_fhir_preview_e2e.py
+          if ($LASTEXITCODE -ne 0) { throw 'Synthetic Edge regression failed' }
+      - name: Fail closed on security and release semantics
+        shell: pwsh
+        run: |
+          Write-Output 'REAL_EDGE_RENDER_BUT_MOCK_TAURI_IPC_ONLY'
+          Write-Output 'LOCAL_HTTP_ONLY_BLOCK_ALL_NONLOCAL_REQUESTS'
+          Write-Output 'NOT_REAL_TAURI_APP_NOT_WEBVIEW2_OS_PACKET_NETWORK_DENIAL'
+          Write-Output 'NO_CLINICAL_USE_NO_PHI_NO_PUBLISH'
