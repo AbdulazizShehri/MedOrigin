@@ -89,6 +89,18 @@ try {
      -not [string]::Equals([string]$rootAfter[0].ExecutablePath,$absolute,[StringComparison]::OrdinalIgnoreCase)){
     Refuse 'D1_ROOT_IDENTITY_CHANGED_DURING_OBSERVATION' 4
   }
+  # Process IDs alone can be reused while the socket query is in flight.
+  # Never attribute sockets to a descendant if its lifetime is unverified.
+  foreach($entry in $before){
+    $childPid=[int]$entry.ProcessId
+    if($childPid -eq $RootPid -or -not $ids.Contains($childPid)){continue}
+    $afterChild=@($after | Where-Object {[int]$_.ProcessId -eq $childPid})
+    if([string]::IsNullOrWhiteSpace([string]$entry.CreationDate) -or
+       $afterChild.Count -ne 1 -or
+       [string]$afterChild[0].CreationDate -cne [string]$entry.CreationDate){
+      Refuse 'D1_DESCENDANT_IDENTITY_UNSTABLE_DURING_OBSERVATION' 4
+    }
+  }
   if($external.Count -gt 0){ Refuse 'D1_OBSERVED_EXTERNAL_TCP_NO_GO' 2 }
   Refuse 'NO_EXTERNAL_TCP_OBSERVED_PACKET_DNS_UNPROVEN' 3
 }
