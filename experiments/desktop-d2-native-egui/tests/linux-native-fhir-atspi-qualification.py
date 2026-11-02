@@ -200,12 +200,17 @@ def main() -> int:
             )
             refuse(f"{exc}; native_proc_poll={proc.poll()}, "
                    f"X11 tree={x11.stdout[-2400:]!r}")
+        # In headless Xvfb a minimal window manager may not publish the
+        # EWMH _NET_ACTIVE_WINDOW path required by windowactivate. First use
+        # the X11 core SetInputFocus fallback; do NOT call an attempted
+        # activation successful unless xdotool confirms the focus operation.
         focus = subprocess.run(
-            ["xdotool", "windowactivate", "--sync", str(x11_id)],
+            ["xdotool", "windowfocus", "--sync", str(x11_id)],
             capture_output=True, text=True, timeout=6, check=False,
         )
         if focus.returncode != 0:
-            refuse("X11 native window could not be focused on disposable display")
+            refuse(f"X11 native window focus refused on disposable display: "
+                   f"stdout={focus.stdout[-250:]!r} stderr={focus.stderr[-300:]!r}")
         print(f"DISPOSABLE_X11_WINDOW_FOCUSED={x11_id}", flush=True)
 
         def find_window():
