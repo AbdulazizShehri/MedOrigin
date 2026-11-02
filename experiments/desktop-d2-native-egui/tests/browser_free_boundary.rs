@@ -2,7 +2,7 @@
 //! HTTP client/server or explicit socket/process-launch APIs.
 //! This is NOT a runtime packet-capture proof or a transitive code audit.
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 const FORBIDDEN_PACKAGES: &[&str] = &[
     "tauri",
@@ -69,10 +69,51 @@ fn lockfile_package_names(lockfile: &str) -> Vec<&str> {
 }
 
 fn disallowed_source_api(source: &str) -> Option<&'static str> {
+    // Whitespace cannot turn an unsafe import into a safe one. This is a
+    // conservative tripwire, not a Rust parser or a complete code audit.
+    let compact: String = source.chars().filter(|c| !c.is_whitespace()).collect();
+    const INDIRECT_APIS: &[&str] = &[
+        "std::net",
+        "std::{net",
+        "std::process",
+        "std::{process",
+        "include!(",
+        "#[path=",
+        "path=",
+        "extern\"C\"",
+    ];
     FORBIDDEN_SOURCE_APIS
         .iter()
         .copied()
-        .find(|pattern| source.contains(pattern))
+        .chain(INDIRECT_APIS.iter().copied())
+        .find(|pattern| compact.contains(pattern))
+}
+
+// Freeze the entire authored source layout, not just the number of .rs files.
+// An uninspected nested module, symlink or non-Rust file is a review boundary.
+fn audited_native_source_files(root: &Path) -> Vec<PathBuf> {
+    let mut names = Vec::new();
+    for entry in fs::read_dir(root).expect("native D2 source directory") {
+        let entry = entry.expect("native source entry");
+        let kind = entry.file_type().expect("native source file type");
+        assert!(
+            kind.is_file() && !kind.is_symlink(),
+            "unexpected native D2 source directory, symlink or special entry"
+        );
+        let name = entry
+            .file_name()
+            .into_string()
+            .expect("UTF-8 native source filename");
+        assert!(name.ends_with(".rs"), "unexpected non-Rust native source");
+        names.push(name);
+    }
+    names.sort();
+    assert_eq!(
+        names,
+        ["app.rs", "lib.rs", "main.rs"],
+        "new, missing or nested native D2 source requires explicit review"
+    );
+    names.into_iter().map(|name| root.join(name)).collect()
 }
 
 #[test]
@@ -97,23 +138,14 @@ fn runtime_lock_has_no_known_browser_or_network_stack() {
 #[test]
 fn authored_native_source_has_no_network_or_browser_entrypoints() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
-    let mut count = 0;
-    for entry in fs::read_dir(root).expect("native D2 source directory") {
-        let path = entry.expect("source entry").path();
-        if path.extension().is_some_and(|ext| ext == "rs") {
-            count += 1;
-            let source = fs::read_to_string(&path).expect("UTF-8 native source");
-            assert!(
-                disallowed_source_api(&source).is_none(),
-                "D2 source {} acquired forbidden networking/browser/process entrypoint",
-                path.display(),
-            );
-        }
+    for path in audited_native_source_files(&root) {
+        let source = fs::read_to_string(&path).expect("UTF-8 native source");
+        assert!(
+            disallowed_source_api(&source).is_none(),
+            "D2 source {} acquired forbidden networking/browser/process entrypoint",
+            path.display(),
+        );
     }
-    assert_eq!(
-        count, 3,
-        "review new native source layout before extending D2"
-    );
 }
 
 #[test]
@@ -192,4 +224,28 @@ fn guard_rejects_aliased_socket_imports_and_external_rust_inclusion() {
             "source-only guard missed dangerous indirection: {source}"
         );
     }
+}
+
+#[test]
+fn guard_refuses_unreviewed_nested_module_layout() {
+    use std::time::{SystemTime, UNIX_EPOCH};
+    let unique = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("clock")
+        .as_nanos();
+    let root = std::env::temp_dir().join(format!(
+        "medorigin-d2-layout-{}-{unique}",
+        std::process::id()
+    ));
+    fs::create_dir(&root).expect("create owned test directory");
+    for name in ["app.rs", "lib.rs", "main.rs"] {
+        fs::write(root.join(name), "// synthetic, no execution").expect("fixture");
+    }
+    assert_eq!(audited_native_source_files(&root).len(), 3);
+    let nested = root.join("hidden");
+    fs::create_dir(&nested).expect("create nested fixture");
+    fs::write(nested.join("socket.rs"), "// unreviewed nested source").expect("fixture");
+    let refused = std::panic::catch_unwind(|| audited_native_source_files(&root)).is_err();
+    fs::remove_dir_all(&root).expect("remove only owned test fixture");
+    assert!(refused, "nested source directory must fail closed");
 }
