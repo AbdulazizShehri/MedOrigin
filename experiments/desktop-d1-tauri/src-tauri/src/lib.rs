@@ -3,7 +3,6 @@
 
 use medorigin_desktop_d0_rust_prototype::hash_fixture_raw_v1;
 use serde::Serialize;
-use tauri::Manager;
 
 #[derive(Serialize)]
 struct PreviewStatus {

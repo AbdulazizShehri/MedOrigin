@@ -12,7 +12,7 @@ The repair changes the window configuration to create=false. The existing Window
 
 The pure URL policy allows only the Tauri production origin http://tauri.localhost with no non-default port, the tauri://localhost app origin, and (only in debug builds) the configured development origin http://localhost:1420. It rejects external hosts, userinfo, unexpected ports, other schemes and external popups. It does not accept arbitrary 127.0.0.1 or remote HTTPS. URLs are never logged.
 
-Source contract then passed 2/2 (GREEN). Rust unit tests cover allowed and rejected origins. Build-time checks use locked frontend npm install/build and cargo test --locked --lib. The Windows hosted workflow is nonpublishing, requires a source-only contract and a native Rust compilation without application launch.
+Source contract then passed 2/2 (GREEN), and the combined Windows source/AppContainer contract passed 7/7. Real Windows npm ci --no-audit --no-fund and npm run build completed successfully (Vite v8.3.5, 18 modules transformed). Native Rust cargo test --locked --lib built Tauri 2.12.5 and WebView2 dependencies and ran 4/4 genuine Rust unit tests successfully; one unused import warning from the first run was removed before final SHA qualification. cargo fmt -- --check also passed. The Windows hosted workflow is nonpublishing, requires a source-only contract and a native Rust compilation without application launch; exact final-head hosted checks must be read separately.
 
 ## Restrictions and genuine remaining blockers
 
