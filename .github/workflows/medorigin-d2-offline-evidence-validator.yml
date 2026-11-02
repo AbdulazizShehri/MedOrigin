@@ -7,6 +7,10 @@ on:
     paths:
       - 'experiments/desktop-d2-native-egui/tests/verify_offline_evidence.py'
       - 'experiments/desktop-d2-native-egui/tests/test_verify_offline_evidence.py'
+      - 'experiments/desktop-d2-native-egui/tests/linux-private-netns-smoke.py'
+      - 'experiments/desktop-d2-native-egui/tests/linux-private-netns-smoke.sh'
+      - 'experiments/desktop-d2-native-egui/tests/linux-wsl-interop-refusal-integration.sh'
+      - 'experiments/desktop-d2-native-egui/tests/test_linux_private_netns_host_interop.py'
       - '.github/workflows/medorigin-d2-offline-evidence-validator.yml'
 permissions:
   contents: read
@@ -19,6 +23,13 @@ jobs:
       - name: Verify evidence packet always fails closed on missing inputs
         working-directory: experiments/desktop-d2-native-egui/tests
         run: python3 -m unittest -v test_verify_offline_evidence.py
+      - name: Reject Windows process-broker escape in Linux netns evidence
+        working-directory: experiments/desktop-d2-native-egui/tests
+        run: |
+          python3 -m unittest -v test_linux_private_netns_host_interop.py
+          bash -n linux-private-netns-smoke.sh
+          bash -n linux-wsl-interop-refusal-integration.sh
+          bash -n linux-private-netns-negative-gates.sh
       - name: Compile script source
         run: python3 -m py_compile experiments/desktop-d2-native-egui/tests/verify_offline_evidence.py experiments/desktop-d2-native-egui/tests/test_verify_offline_evidence.py
       - name: Verify no tracked code changed
