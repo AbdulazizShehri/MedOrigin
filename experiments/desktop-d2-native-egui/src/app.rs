@@ -111,6 +111,15 @@ pub struct MedOriginNativePreview {
 }
 
 impl MedOriginNativePreview {
+    /// Remove all previously rendered synthetic content while keeping only
+    /// allowlisted selection indices. This is not secure memory erasure.
+    pub fn clear_fictional_output(&mut self) {
+        self.result = None;
+        self.preview = None;
+        self.preview_notice = None;
+        self.comparison = None;
+    }
+
     /// Fail closed if either the trusted raw digest OR the independent
     /// structural outcome differs from the compiled fictional fixture catalog.
     /// A structurally invalid fixture is a correctly identified NEGATIVE test,
@@ -269,6 +278,9 @@ impl MedOriginNativePreview {
 
 impl eframe::App for MedOriginNativePreview {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
+        if ui.input(|input| input.key_pressed(egui::Key::Escape)) {
+            self.clear_fictional_output();
+        }
         egui::CentralPanel::default().show(ui, |ui| {
             ui.heading("MedOrigin — Native Rust Experiment");
             ui.strong("Synthetic developer preview only · No EHR · No clinical use");
@@ -377,6 +389,10 @@ impl eframe::App for MedOriginNativePreview {
                     }
                 });
             }
+            if ui.button("Clear fictional output (Escape)").clicked() {
+                self.clear_fictional_output();
+            }
+            ui.label("Keyboard: Tab/Shift+Tab to navigate, Space to activate, Escape to clear synthetic output.");
             ui.separator();
             ui.label("FHIR structural checks only · Release: NO-GO · Network isolation: UNQUALIFIED · PHI: PROHIBITED");
         });
@@ -386,6 +402,39 @@ impl eframe::App for MedOriginNativePreview {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn clear_fictional_output_removes_all_rendered_state_without_mutating_choices() {
+        let mut app = MedOriginNativePreview {
+            selected: 0,
+            compare_with: 4,
+            ..Default::default()
+        };
+        assert!(app.compare_selected().is_ok());
+        assert!(app.comparison.is_some());
+        app.clear_fictional_output();
+        assert_eq!((app.selected, app.compare_with), (0, 4));
+        assert!(app.result.is_none());
+        assert!(app.preview.is_none());
+        assert!(app.preview_notice.is_none());
+        assert!(app.comparison.is_none());
+
+        assert!(app.preview_selected().is_ok());
+        assert!(app.preview.is_some());
+        app.clear_fictional_output();
+        assert!(app.result.is_none());
+        assert!(app.preview.is_none());
+        assert!(app.preview_notice.is_none());
+        assert!(app.comparison.is_none());
+
+        app.selected = 1; // synthetic invalid UTF-8 boundary fixture
+        assert_eq!(app.preview_selected(), Err("preview_unavailable"));
+        assert!(app.preview_notice.is_some());
+        app.clear_fictional_output();
+        assert!(app.result.is_none());
+        assert!(app.preview_notice.is_none());
+        assert!(app.comparison.is_none());
+    }
 
     #[test]
     fn all_twelve_fictional_vectors_match_compiled_sha_and_expected_envelope_status() {
