@@ -124,18 +124,27 @@ def main() -> int:
         refuse("requires disposable Xvfb and private D-Bus session")
     import pyatspi  # type: ignore[import-not-found]
 
+    # Start the private AT-SPI Registry BEFORE the native eframe program:
+    # AccessKit may decide whether to register its adapter at startup.
+    desktop = pyatspi.Registry.getDesktop(0)
     proc = subprocess.Popen([str(path)], stdout=subprocess.DEVNULL,
-                            stderr=subprocess.DEVNULL, close_fds=True)
+                            stderr=subprocess.PIPE, close_fds=True)
     try:
-        desktop = pyatspi.Registry.getDesktop(0)
 
         def find_window():
+            if proc.poll() is not None:
+                err = proc.stderr.read(2500).decode("utf-8", errors="replace") if proc.stderr else ""
+                refuse(f"native GUI exited unexpectedly rc={proc.returncode} stderr={err[-900:]!r}")
             found = [n for n in tree(desktop)
                      if "MedOrigin Native Rust" in name(n)
-                     and "frame" in role(n)]
+                     and ("frame" in role(n) or "window" in role(n))]
             return found[0] if len(found) == 1 else None
 
-        window = wait_for(find_window, "native D2 AT-SPI frame", 20)
+        try:
+            window = wait_for(find_window, "native D2 AT-SPI frame", 20)
+        except RuntimeError as exc:
+            visible = [(name(n)[:90], role(n)) for n in tree(desktop)[:50]]
+            refuse(f"{exc}; AT-SPI desktop visible nodes={visible}")
         def existing_controls():
             return find(window, "patient-minimal (57 bytes)", ("check", "radio", "toggle")) and find(
                 window, "Verify synthetic SHA-256", ("push", "button"))
