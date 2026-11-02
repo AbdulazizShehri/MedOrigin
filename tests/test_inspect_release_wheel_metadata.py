@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+import base64
+import csv
+import hashlib
+import io
 import json
 import subprocess
 import sys
@@ -71,8 +75,22 @@ def _wheel(
         message["Requires-Dist"] = requirement
     for extra in extras:
         message["Provides-Extra"] = extra
+    root = f"{name.replace('-', '_')}-{version}.dist-info/"
+    payloads = {
+        root + "METADATA": message.as_bytes(),
+        root + "WHEEL": b"Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
+        name.replace("-", "_") + "/__init__.py": b"\n",
+    }
+    record = io.StringIO(newline="")
+    writer = csv.writer(record, lineterminator="\n")
+    for member, contents in payloads.items():
+        digest = base64.urlsafe_b64encode(hashlib.sha256(contents).digest()).rstrip(b"=").decode()
+        writer.writerow((member, "sha256=" + digest, len(contents)))
+    writer.writerow((root + "RECORD", "", ""))
     with zipfile.ZipFile(path, "w") as archive:
-        archive.writestr(f"{name}-{version}.dist-info/METADATA", message.as_bytes())
+        for member, contents in payloads.items():
+            archive.writestr(member, contents)
+        archive.writestr(root + "RECORD", record.getvalue())
     return path
 
 
@@ -233,6 +251,7 @@ def test_in_place_archive_mutation_during_inspection_fails_closed(
     from runpy import run_path
 
     wheel = _wheel(tmp_path / "mutable.whl")
+    monkeypatch.syspath_prepend(str(SCRIPT.parent))
     inspector = run_path(str(SCRIPT))["inspect_wheel"]
     original = zipfile.ZipFile
 
@@ -247,4 +266,88 @@ def test_in_place_archive_mutation_during_inspection_fails_closed(
     assert result["status"] == "BLOCKED"
     assert result["core_only_verified"] is False
     assert "wheel bytes changed during inspection" in result["issues"]
+    assert result["publication_authorized"] is False
+
+
+@pytest.mark.parametrize(
+    ("member", "reason"),
+    [
+        ("../escape.py", "unsafe member path"),
+        ("medscale/../escape.py", "unsafe member path"),
+        ("MEDSCALE/__init__.py", "duplicate or case-colliding members"),
+    ],
+)
+def test_core_only_rejects_unsafe_or_case_colliding_zip_entries(
+    tmp_path: Path, member: str, reason: str
+) -> None:
+    wheel = _wheel(tmp_path / "unsafe.whl")
+    with zipfile.ZipFile(wheel, "a") as archive:
+        archive.writestr(member, b"synthetic")
+    result = inspect_wheel(wheel, require_core_only=True)
+    assert result["status"] == "BLOCKED"
+    assert result["core_only_verified"] is False
+    assert any(reason in issue for issue in result["issues"])
+
+
+def test_core_only_rejects_unix_symlink_member(tmp_path: Path) -> None:
+    wheel = _wheel(tmp_path / "symlink.whl")
+    entry = zipfile.ZipInfo("medscale/link")
+    entry.create_system = 3
+    entry.external_attr = 0o120777 << 16
+    with zipfile.ZipFile(wheel, "a") as archive:
+        archive.writestr(entry, b"../other")
+    result = inspect_wheel(wheel, require_core_only=True)
+    assert "core wheel contains symbolic link" in result["issues"]
+    assert result["core_only_verified"] is False
+
+
+def test_core_only_detects_payload_with_stale_record_hash(tmp_path: Path) -> None:
+    original = _wheel(tmp_path / "original.whl")
+    with zipfile.ZipFile(original) as archive:
+        contents = {name: archive.read(name) for name in archive.namelist()}
+    contents["medscale/__init__.py"] = b"X"
+    tampered = tmp_path / "tampered.whl"
+    with zipfile.ZipFile(tampered, "w") as archive:
+        for name, payload in contents.items():
+            archive.writestr(name, payload)
+    result = inspect_wheel(tampered, require_core_only=True)
+    assert "core wheel RECORD digest mismatch" in result["issues"]
+    assert result["core_only_verified"] is False
+    assert result["publication_authorized"] is False
+
+
+def test_core_only_rejects_metadata_directory_spoof(tmp_path: Path) -> None:
+    original = _wheel(tmp_path / "original.whl")
+    with zipfile.ZipFile(original) as archive:
+        contents = {name: archive.read(name) for name in archive.namelist()}
+    metadata = contents.pop("medscale-0.3.0.dist-info/METADATA")
+    contents["other-0.3.0.dist-info/METADATA"] = metadata
+    tampered = tmp_path / "spoof.whl"
+    with zipfile.ZipFile(tampered, "w") as archive:
+        for name, payload in contents.items():
+            archive.writestr(name, payload)
+    result = inspect_wheel(tampered, require_core_only=True)
+    assert "core wheel METADATA path disagrees with distribution/version" in result["issues"]
+    assert result["core_only_verified"] is False
+
+
+@pytest.mark.parametrize(
+    "member",
+    [
+        "medscale/_native.pyd",
+        "medscale/embedded.so",
+        "medscale/startup.pth",
+        "medscale/setup.ps1",
+        "medscale-0.3.0.data/scripts/launch",
+    ],
+)
+def test_core_wheel_rejects_unexpected_native_or_install_payload(
+    tmp_path: Path, member: str
+) -> None:
+    wheel = _wheel(tmp_path / "native.whl")
+    with zipfile.ZipFile(wheel, "a") as archive:
+        archive.writestr(member, b"synthetic-untrusted-payload")
+    result = inspect_wheel(wheel, require_core_only=True)
+    assert "core wheel contains native executable or installer payload" in result["issues"]
+    assert result["core_only_verified"] is False
     assert result["publication_authorized"] is False
