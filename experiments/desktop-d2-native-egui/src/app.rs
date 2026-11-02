@@ -160,19 +160,51 @@ fn fictional_json_path_diff(left: &str, right: &str) -> Result<String, &'static 
         key.replace('~', "~0").replace('/', "~1")
     }
 
+    fn json_type(value: &Value) -> &'static str {
+        match value {
+            Value::Null => "null",
+            Value::Bool(_) => "boolean",
+            Value::Number(_) => "number",
+            Value::String(_) => "string",
+            Value::Array(_) => "array",
+            Value::Object(_) => "object",
+        }
+    }
+
+    // Only source-compiled, SHA-verified fictional data reaches this function.
+    // Keep the UI hint bounded and escape control characters; never print
+    // arbitrary nested objects or the complete source into a difference label.
+    fn value_hint(value: &Value) -> String {
+        match value {
+            Value::Null => "null".to_owned(),
+            Value::Bool(value) => value.to_string(),
+            Value::Number(value) => value.to_string(),
+            Value::String(value) => {
+                let prefix: String = value.chars().take(48).collect();
+                let truncated = if value.chars().count() > 48 {
+                    "..."
+                } else {
+                    ""
+                };
+                format!("{prefix:?}{truncated}")
+            }
+            Value::Array(value) => format!("array ({} elements)", value.len()),
+            Value::Object(value) => format!("object ({} fields)", value.len()),
+        }
+    }
+
     fn first_diff(
         a: &Value,
         b: &Value,
         path: &str,
         depth: usize,
-    ) -> Result<Option<(String, &'static str)>, &'static str> {
+    ) -> Result<Option<(String, String)>, &'static str> {
         if depth > 32 {
             return Err("fictional_json_depth_exceeded");
         }
         match (a, b) {
             (Value::Object(left), Value::Object(right)) => {
-                // Shared keys first, sorted by name, so differences in the
-                // same field take precedence over unrelated missing fields.
+                // Compare shared fields before missing fields, sorted by name.
                 let mut shared: Vec<_> =
                     left.keys().filter(|key| right.contains_key(*key)).collect();
                 shared.sort();
@@ -182,16 +214,32 @@ fn fictional_json_path_diff(left: &str, right: &str) -> Result<String, &'static 
                         return Ok(Some(diff));
                     }
                 }
-                let mut missing: Vec<_> = left
+                // Preserve direction: missing on left and missing on right
+                // have different developer meanings.
+                let mut missing: Vec<(&str, bool)> = left
                     .keys()
-                    .chain(right.keys())
-                    .filter(|key| !left.contains_key(*key) || !right.contains_key(*key))
+                    .filter(|key| !right.contains_key(*key))
+                    .map(|key| (key.as_str(), false))
+                    .chain(
+                        right
+                            .keys()
+                            .filter(|key| !left.contains_key(*key))
+                            .map(|key| (key.as_str(), true)),
+                    )
                     .collect();
-                missing.sort();
-                if let Some(key) = missing.first() {
+                missing.sort_by(|a, b| a.0.cmp(b.0));
+                if let Some((key, missing_on_left)) = missing.first() {
+                    let (source, side) = if *missing_on_left {
+                        (right, "field missing on left; right")
+                    } else {
+                        (left, "field missing on right; left")
+                    };
+                    let value = source
+                        .get(*key)
+                        .ok_or("fictional_json_missing_field_refused")?;
                     return Ok(Some((
                         format!("{path}/{}", pointer_segment(key)),
-                        "field missing on one side",
+                        format!("{side}={}", value_hint(value)),
                     )));
                 }
                 Ok(None)
@@ -206,25 +254,37 @@ fn fictional_json_path_diff(left: &str, right: &str) -> Result<String, &'static 
                 if left.len() != right.len() {
                     return Ok(Some((
                         format!("{path}/{}", left.len().min(right.len())),
-                        "array length differs",
+                        format!(
+                            "array length differs: left={}, right={}",
+                            left.len(),
+                            right.len()
+                        ),
                     )));
                 }
                 Ok(None)
             }
             _ if a == b => Ok(None),
             _ => {
-                let kind = if std::mem::discriminant(a) == std::mem::discriminant(b) {
-                    "value differs"
+                let detail = if std::mem::discriminant(a) == std::mem::discriminant(b) {
+                    format!(
+                        "value differs: left={}, right={}",
+                        value_hint(a),
+                        value_hint(b)
+                    )
                 } else {
-                    "JSON type differs"
+                    format!(
+                        "JSON type differs: left={}, right={}",
+                        json_type(a),
+                        json_type(b)
+                    )
                 };
                 Ok(Some((
                     if path.is_empty() {
-                        "/".to_owned()
+                        "(root)".to_owned()
                     } else {
                         path.to_owned()
                     },
-                    kind,
+                    detail,
                 )))
             }
         }
@@ -233,8 +293,8 @@ fn fictional_json_path_diff(left: &str, right: &str) -> Result<String, &'static 
     let a: Value = serde_json::from_str(left).map_err(|_| "fictional_json_parse_refused")?;
     let b: Value = serde_json::from_str(right).map_err(|_| "fictional_json_parse_refused")?;
     let summary = match first_diff(&a, &b, "", 0)? {
-        Some((pointer, kind)) => format!(
-            "Fictional JSON path difference: {pointer} ({kind}). Structural developer hint only; original source bytes unchanged."
+        Some((pointer, detail)) => format!(
+            "Fictional JSON path difference: {pointer} ({detail}). Structural developer hint only; original source bytes unchanged."
         ),
         None => "Fictional JSON path difference: structurally identical; original source bytes may differ.".to_owned(),
     };
@@ -742,13 +802,27 @@ mod tests {
             r#"{"resourceType":"Observation"}"#,
         )
         .unwrap();
-        assert!(changed.contains("/resourceType (value differs)"));
+        assert!(
+            changed
+                .contains(r#"/resourceType (value differs: left="Patient", right="Observation")"#)
+        );
         let escaped = fictional_json_path_diff(r#"{"a/b~c":[1,2]}"#, r#"{"a/b~c":[1,3]}"#).unwrap();
-        assert!(escaped.contains("/a~1b~0c/1 (value differs)"));
+        assert!(escaped.contains("/a~1b~0c/1 (value differs: left=2, right=3)"));
         let missing = fictional_json_path_diff(r#"{"a":1}"#, r#"{"a":1,"b":2}"#).unwrap();
-        assert!(missing.contains("/b (field missing on one side)"));
+        assert!(missing.contains("/b (field missing on left; right=2)"));
+        let reverse_missing = fictional_json_path_diff(r#"{"a":1,"b":2}"#, r#"{"a":1}"#).unwrap();
+        assert!(reverse_missing.contains("/b (field missing on right; left=2)"));
         let array = fictional_json_path_diff(r#"{"a":[1]}"#, r#"{"a":[1,2]}"#).unwrap();
-        assert!(array.contains("/a/1 (array length differs)"));
+        assert!(array.contains("/a/1 (array length differs: left=1, right=2)"));
+        let reverse_array = fictional_json_path_diff(r#"{"a":[1,2]}"#, r#"{"a":[1]}"#).unwrap();
+        assert!(reverse_array.contains("/a/1 (array length differs: left=2, right=1)"));
+        let types = fictional_json_path_diff(r#"{"a":true}"#, r#"{"a":"true"}"#).unwrap();
+        assert!(types.contains("/a (JSON type differs: left=boolean, right=string)"));
+        let long = format!(r#"{{"a":"{}"}}"#, "x".repeat(300));
+        let bounded = fictional_json_path_diff(&long, r#"{"a":"y"}"#).unwrap();
+        assert!(bounded.len() < 400, "never emit an unbounded scalar hint");
+        let root = fictional_json_path_diff("true", "false").unwrap();
+        assert!(root.contains("(root) (value differs: left=true, right=false)"));
         assert_eq!(
             fictional_json_path_diff("not json", "{}"),
             Err("fictional_json_parse_refused")
