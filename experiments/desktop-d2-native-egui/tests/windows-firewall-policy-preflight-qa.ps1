@@ -36,7 +36,7 @@ if([string]::IsNullOrWhiteSpace($NativeExecutable) -xor [string]::IsNullOrWhiteS
   throw 'Both exact native executable and SHA-256 are required together'
 }
 if(-not [string]::IsNullOrWhiteSpace($NativeExecutable)) {
-  if($NativeSha256 -notmatch '^[0-9A-Fa-f]{64}) { throw 'INVALID_PINNED_NATIVE_SHA' }
+  if($NativeSha256.Length -ne 64 -or $NativeSha256 -match '[^0-9A-Fa-f]') { throw 'INVALID_PINNED_NATIVE_SHA' }
   # Actual app test (not a PowerShell control): verify the preflight rejects
   # an incorrect caller-pinned digest *before* consulting the host policy.
   Test-Rejection $NativeExecutable ('0'*64) 'EXECUTABLE_SHA_MISMATCH'
