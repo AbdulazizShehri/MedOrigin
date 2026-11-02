@@ -147,6 +147,16 @@ def main() -> int:
     )
     if readback.returncode != 0 or "boolean true" not in readback.stdout:
         refuse(f"private AT-SPI bus IsEnabled did not attest TRUE: {readback.stdout[:300]!r}")
+    # Mark the isolated test session as having an assistive client so
+    # AccessKit does not suppress lazy accessibility initialization.
+    screen_reader = subprocess.run(
+        ["dbus-send", "--session", "--print-reply", "--dest=org.a11y.Bus",
+         "/org/a11y/bus", "org.freedesktop.DBus.Properties.Set",
+         "string:org.a11y.Status", "string:ScreenReaderEnabled", "variant:boolean:true"],
+        capture_output=True, text=True, timeout=8, check=False,
+    )
+    if screen_reader.returncode != 0:
+        refuse("private AT-SPI bus declined ScreenReaderEnabled")
     print("PRIVATE_ATSPI_BUS_ENABLED_IN_DISPOSABLE_RUNNER_ONLY", flush=True)
     # Some AccessKit/X11 adapters publish the tree only after WM mapping.
     # This manager lives solely inside the Xvfb environment of this CI job.
@@ -160,6 +170,27 @@ def main() -> int:
     proc = subprocess.Popen([str(path)], stdout=subprocess.DEVNULL,
                             stderr=subprocess.PIPE, close_fds=True)
     try:
+        # Real X11 window mapping is distinct from AT-SPI registration.
+        # Trigger a focus event solely on this disposable virtual display.
+        def x11_window():
+            if proc.poll() is not None:
+                err = proc.stderr.read(2000).decode("utf-8", errors="replace") if proc.stderr else ""
+                refuse(f"native app exited rc={proc.returncode} stderr={err[-900:]!r}")
+            found = subprocess.run(
+                ["xdotool", "search", "--onlyvisible", "--pid", str(proc.pid),
+                 "--name", "MedOrigin Native Rust"],
+                capture_output=True, text=True, timeout=3, check=False,
+            )
+            ids = [i.strip() for i in found.stdout.splitlines() if i.strip().isdigit()]
+            return ids[0] if found.returncode == 0 and len(ids) == 1 else None
+        x11_id = wait_for(x11_window, "native window mapped on disposable X11", 15)
+        focus = subprocess.run(
+            ["xdotool", "windowactivate", "--sync", str(x11_id)],
+            capture_output=True, text=True, timeout=6, check=False,
+        )
+        if focus.returncode != 0:
+            refuse("X11 native window could not be focused on disposable display")
+        print(f"DISPOSABLE_X11_WINDOW_FOCUSED={x11_id}", flush=True)
 
         def find_window():
             if proc.poll() is not None:
