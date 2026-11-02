@@ -127,6 +127,36 @@ def main() -> int:
     # Start the private AT-SPI Registry BEFORE the native eframe program:
     # AccessKit may decide whether to register its adapter at startup.
     desktop = pyatspi.Registry.getDesktop(0)
+    # AccessKit/AT-SPI does not publish UI controls while the *private CI*
+    # org.a11y.Status.IsEnabled property is false. Set this only on the
+    # dbus-run-session bus in a disposable hosted runner, NEVER on the
+    # user's system bus or persistent desktop settings.
+    command = [
+        "dbus-send", "--session", "--print-reply", "--dest=org.a11y.Bus",
+        "/org/a11y/bus", "org.freedesktop.DBus.Properties.Set",
+        "string:org.a11y.Status", "string:IsEnabled", "variant:boolean:true",
+    ]
+    enabled = subprocess.run(command, capture_output=True, text=True, timeout=8, check=False)
+    if enabled.returncode != 0:
+        refuse("private AT-SPI bus declined enabling IsEnabled; no app launched")
+    readback = subprocess.run(
+        ["dbus-send", "--session", "--print-reply", "--dest=org.a11y.Bus",
+         "/org/a11y/bus", "org.freedesktop.DBus.Properties.Get",
+         "string:org.a11y.Status", "string:IsEnabled"],
+        capture_output=True, text=True, timeout=8, check=False,
+    )
+    if readback.returncode != 0 or "boolean true" not in readback.stdout:
+        refuse(f"private AT-SPI bus IsEnabled did not attest TRUE: {readback.stdout[:300]!r}")
+    print("PRIVATE_ATSPI_BUS_ENABLED_IN_DISPOSABLE_RUNNER_ONLY", flush=True)
+    # Some AccessKit/X11 adapters publish the tree only after WM mapping.
+    # This manager lives solely inside the Xvfb environment of this CI job.
+    wm = subprocess.Popen(["fluxbox", "-display", os.environ["DISPLAY"]],
+                          stdout=subprocess.DEVNULL, stderr=subprocess.PIPE,
+                          close_fds=True)
+    time.sleep(0.6)
+    if wm.poll() is not None:
+        details = wm.stderr.read(1000).decode("utf-8", errors="replace") if wm.stderr else ""
+        refuse(f"disposable X11 window manager exited rc={wm.returncode}: {details[-500:]!r}")
     proc = subprocess.Popen([str(path)], stdout=subprocess.DEVNULL,
                             stderr=subprocess.PIPE, close_fds=True)
     try:
@@ -181,6 +211,12 @@ def main() -> int:
         except subprocess.TimeoutExpired:
             proc.kill()
             proc.wait(timeout=4)
+        wm.terminate()
+        try:
+            wm.wait(timeout=4)
+        except subprocess.TimeoutExpired:
+            wm.kill()
+            wm.wait(timeout=4)
 
 
 if __name__ == "__main__":
