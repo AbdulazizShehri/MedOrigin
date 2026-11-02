@@ -1,0 +1,53 @@
+# Read-only, unpublished Developer Beta Wheel metadata control.
+# No release artifacts, downloads, tags, or publication rights.
+name: MedOrigin core-only Wheel metadata gate (nonpublishing)
+
+on:
+  push:
+    branches:
+      - security/medorigin-core-wheel-no-extras-20261102
+    paths:
+      - 'scripts/inspect_release_wheel_metadata.py'
+      - 'tests/test_inspect_release_wheel_metadata.py'
+      - '.github/workflows/medorigin-core-wheel-metadata-gate.yml'
+  pull_request:
+    paths:
+      - 'scripts/inspect_release_wheel_metadata.py'
+      - 'tests/test_inspect_release_wheel_metadata.py'
+      - '.github/workflows/medorigin-core-wheel-metadata-gate.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  metadata-only:
+    runs-on: windows-2025
+    timeout-minutes: 12
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ['3.11', '3.12']
+    steps:
+      - name: Checkout exact PR head without persistent credentials
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - name: Install pinned uv action
+        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        with:
+          enable-cache: false
+      - name: Install Python
+        run: uv python install ${{ matrix.python-version }}
+      - name: Run read-only synthetic Wheel tests
+        shell: pwsh
+        env:
+          PYTHONPATH: src
+        run: |
+          uv run --no-project --python ${{ matrix.python-version }} --with pytest==8.4.2 python -m pytest -q --tb=short --basetemp "$env:RUNNER_TEMP\medorigin-wheel-metadata-tests" tests/test_inspect_release_wheel_metadata.py
+          if ($LASTEXITCODE -ne 0) { throw 'Wheel metadata security gate tests failed' }
+      - name: Confirm no publication authority
+        shell: pwsh
+        run: |
+          Write-Output 'SYNTHETIC_WHEEL_METADATA_ONLY_NO_PUBLISH'
+          Write-Output 'ACTUAL_WHEEL_REQUIRES_SEPARATE_READ_ONLY_LOCAL_QUALIFICATION'
