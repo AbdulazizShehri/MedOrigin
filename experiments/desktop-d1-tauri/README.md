@@ -282,3 +282,23 @@ Native optional capture returned E_NOTIMPL in #765 on this host. Keep
 issue #662 OPEN/NO-GO and all other release gates #574/#603/#622/#673/#676
 OPEN. No product Rust/React source, frozen Python root/lock, global firewall,
 OS network policy, publication, tag, PHI or protected main was changed.
+
+## Eight fixed fictional fixtures: two-entry Bundle preview (nonpublishing)
+
+The D0 Rust library now has two additional immutable in-memory Bundle-shaped
+fixtures: `bundle-linked` and `bundle-dangling`. Both are exactly 535 raw
+bytes. Each has exactly two entries: a fictional Patient and a fictional
+Observation, using fixed URN UUID fullUrls. The first Observation points to
+the exact Patient entry URN and returns `FHIR_ENVELOPE_OK`; the second points
+to an absent URN and returns `INVALID_REFERENCE`. The raw SHA-256 goldens
+are `390c5ef339b785294d5f20a707b4909d2a316d676d5450a7a76397afb29e5089`
+and `def250325fb64858d2083550cf42b5fc4b680dc94a9d8d0b162801562d2adf02`.
+The Tauri command, React fixture chooser, and simulated-bridge Edge regression
+cover both outcomes. No arbitrary JSON, files, network, FHIR server,
+patient data, general Bundle reference resolver, FHIR R4/profile conformance,
+or clinical workflows are supported. These are exact fictional bytes only.
+
+Test-first native RED was `UnknownFixture` before implementation; this is
+not a release-security or WebView2 egress result. The separate source-bound
+qualification report records final SHA, Windows tests and hosted CI. Keep
+#662 and the other security/release gates OPEN.

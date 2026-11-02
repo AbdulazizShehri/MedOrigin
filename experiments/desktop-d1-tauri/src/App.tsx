@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import "./App.css";
 
-type FixtureId = "patient-minimal" | "patient-invalid-utf8" | "patient-over-limit" | "patient-exact-limit" | "observation-minimal" | "observation-bad-subject";
+type FixtureId = "patient-minimal" | "patient-invalid-utf8" | "patient-over-limit" | "patient-exact-limit" | "observation-minimal" | "observation-bad-subject" | "bundle-linked" | "bundle-dangling";
 type PreviewStatus = {
   mode: string;
   data_access: string;
@@ -35,6 +35,8 @@ const FIXTURES: readonly { id: FixtureId; title: string; kind: string; size: str
   { id: "patient-exact-limit", title: "Exact limit", kind: "BOUNDARY CASE", size: "32,768 B", description: "A synthetic Patient padded with whitespace to the limit.", sha: "ea711ce560191a81c0722c4a26592e0e2d9abb2186b6fd3af6897cd89d417d4e" },
   { id: "observation-minimal", title: "Fictional Observation", kind: "VALID SYNTHETIC", size: "251 B", description: "A fictional Observation referencing Patient/synthetic.", sha: "527806e5427cc45e55424d1b8dc8ddcdc86a2b37df2ae116735e6832268b5e19" },
   { id: "observation-bad-subject", title: "Broken patient reference", kind: "NEGATIVE CASE", size: "253 B", description: "An Observation with a missing fictional Patient reference.", sha: "d2332ed753a59b46d19a11849cccd96a4250120ad3eab455580ce45b1d91b838" },
+  { id: "bundle-linked", title: "Linked fictional Bundle", kind: "VALID SYNTHETIC", size: "535 B", description: "Two fixed fictional resources with an exact in-bundle Patient reference.", sha: "390c5ef339b785294d5f20a707b4909d2a316d676d5450a7a76397afb29e5089" },
+  { id: "bundle-dangling", title: "Dangling Bundle reference", kind: "NEGATIVE CASE", size: "535 B", description: "The fictional Observation references a missing Bundle entry.", sha: "def250325fb64858d2083550cf42b5fc4b680dc94a9d8d0b162801562d2adf02" },
 ];
 const EXPECTED_ENVELOPE_STATUS: Record<FixtureId, EnvelopeResult["status"]> = {
   "patient-minimal": "FHIR_ENVELOPE_OK",
@@ -43,6 +45,8 @@ const EXPECTED_ENVELOPE_STATUS: Record<FixtureId, EnvelopeResult["status"]> = {
   "patient-exact-limit": "FHIR_ENVELOPE_OK",
   "observation-minimal": "FHIR_ENVELOPE_OK",
   "observation-bad-subject": "INVALID_REFERENCE",
+  "bundle-linked": "FHIR_ENVELOPE_OK",
+  "bundle-dangling": "INVALID_REFERENCE",
 };
 
 export default function App() {
@@ -156,7 +160,7 @@ export default function App() {
         </div>
         <footer className="notice">
           <span className="notice-icon">i</span>
-          <div><strong>Unreleased engineering preview</strong><p>{status ? "Rust command bridge active. Six fixed synthetic cases only." : "Local native bridge not yet confirmed."} No clinician workflows, health records, application network plugins, installer qualification, or publishing authorization. WebView2 runtime egress is unqualified.</p></div>
+          <div><strong>Unreleased engineering preview</strong><p>{status ? "Rust command bridge active. Eight fixed synthetic cases only." : "Local native bridge not yet confirmed."} No clinician workflows, health records, application network plugins, installer qualification, or publishing authorization. WebView2 runtime egress is unqualified.</p></div>
         </footer>
       </main>
     </div>

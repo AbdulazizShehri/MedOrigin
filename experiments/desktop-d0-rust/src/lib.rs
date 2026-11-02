@@ -1,4 +1,4 @@
-//! Offline-only experimental SHA-256 on six exact, fictional D0 fixture byte sequences.
+//! Offline-only experimental SHA-256 on eight exact, fictional D0 fixture byte sequences.
 //!
 //! This module accepts ONLY named in-memory, synthetic fixtures. It never opens
 //! paths, executes commands, starts servers, reads secrets, or emits telemetry.
@@ -10,6 +10,10 @@ use sha2::{Digest, Sha256};
 const PATIENT: &[u8] = br#"{"resourceType":"Patient","id":"synthetic","active":true}"#;
 const OBSERVATION: &[u8] = br#"{"resourceType":"Observation","id":"synthetic-observation","status":"final","code":{"coding":[{"system":"urn:synthetic:code","code":"fictional-measurement"}]},"subject":{"reference":"Patient/synthetic"},"valueQuantity":{"value":37,"unit":"fictional"}}"#;
 const OBSERVATION_BAD_SUBJECT: &[u8] = br#"{"resourceType":"Observation","id":"synthetic-observation","status":"final","code":{"coding":[{"system":"urn:synthetic:code","code":"fictional-measurement"}]},"subject":{"reference":"Patient/nonexistent"},"valueQuantity":{"value":37,"unit":"fictional"}}"#;
+const BUNDLE_LINKED: &[u8] = br#"{"resourceType":"Bundle","type":"collection","entry":[{"fullUrl":"urn:uuid:00000000-0000-4000-8000-000000000001","resource":{"resourceType":"Patient","id":"synthetic","active":true}},{"fullUrl":"urn:uuid:00000000-0000-4000-8000-000000000002","resource":{"resourceType":"Observation","id":"synthetic-observation","status":"final","code":{"coding":[{"system":"urn:synthetic:code","code":"fictional-measurement"}]},"subject":{"reference":"urn:uuid:00000000-0000-4000-8000-000000000001"},"valueQuantity":{"value":37,"unit":"fictional"}}}]}"#;
+const BUNDLE_DANGLING: &[u8] = br#"{"resourceType":"Bundle","type":"collection","entry":[{"fullUrl":"urn:uuid:00000000-0000-4000-8000-000000000001","resource":{"resourceType":"Patient","id":"synthetic","active":true}},{"fullUrl":"urn:uuid:00000000-0000-4000-8000-000000000002","resource":{"resourceType":"Observation","id":"synthetic-observation","status":"final","code":{"coding":[{"system":"urn:synthetic:code","code":"fictional-measurement"}]},"subject":{"reference":"urn:uuid:00000000-0000-4000-8000-000000000099"},"valueQuantity":{"value":37,"unit":"fictional"}}}]}"#;
+const BUNDLE_PATIENT_URN: &str = "urn:uuid:00000000-0000-4000-8000-000000000001";
+const BUNDLE_OBSERVATION_URN: &str = "urn:uuid:00000000-0000-4000-8000-000000000002";
 const MAX_PROTOTYPE_INPUT_BYTES: usize = 65_536;
 const FHIR_RESOURCE_LIMIT_BYTES: usize = 32_768;
 
@@ -53,6 +57,8 @@ pub fn hash_fixture_raw_v1(
     let (identity, required_bytes) = match fixture_id {
         "observation-minimal" => ("observation-minimal", OBSERVATION.len()),
         "observation-bad-subject" => ("observation-bad-subject", OBSERVATION_BAD_SUBJECT.len()),
+        "bundle-linked" => ("bundle-linked", BUNDLE_LINKED.len()),
+        "bundle-dangling" => ("bundle-dangling", BUNDLE_DANGLING.len()),
         "patient-minimal" => ("patient-minimal", PATIENT.len()),
         "patient-invalid-utf8" => ("patient-invalid-utf8", 1),
         "patient-over-limit" => ("patient-over-limit", FHIR_RESOURCE_LIMIT_BYTES + 1),
@@ -67,6 +73,8 @@ pub fn hash_fixture_raw_v1(
         "patient-minimal" => PATIENT.to_vec(),
         "observation-minimal" => OBSERVATION.to_vec(),
         "observation-bad-subject" => OBSERVATION_BAD_SUBJECT.to_vec(),
+        "bundle-linked" => BUNDLE_LINKED.to_vec(),
+        "bundle-dangling" => BUNDLE_DANGLING.to_vec(),
         "patient-invalid-utf8" => vec![0xff],
         "patient-over-limit" => vec![b' '; required_bytes],
         "patient-exact-limit" => {
@@ -91,10 +99,10 @@ pub fn hash_fixture_raw_v1(
     })
 }
 
-/// A narrow offline envelope check for six BUILT-IN fictional test fixtures.
+/// A narrow offline envelope check for eight BUILT-IN fictional test fixtures.
 ///
 /// This does not implement FHIR R4 conformance, terminology, profiles,
-/// terminology, profiles, clinical validation, or arbitrary user-file parsing.
+/// clinical validation, or arbitrary user-file parsing.
 /// The only allowed Observation subject is the built-in synthetic Patient.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SyntheticFhirEnvelope {
@@ -117,6 +125,8 @@ pub fn inspect_named_synthetic_fhir_envelope_v1(
     let (name, len) = match fixture_id {
         "observation-minimal" => ("observation-minimal", OBSERVATION.len()),
         "observation-bad-subject" => ("observation-bad-subject", OBSERVATION_BAD_SUBJECT.len()),
+        "bundle-linked" => ("bundle-linked", BUNDLE_LINKED.len()),
+        "bundle-dangling" => ("bundle-dangling", BUNDLE_DANGLING.len()),
         "patient-minimal" => ("patient-minimal", PATIENT.len()),
         "patient-invalid-utf8" => ("patient-invalid-utf8", 1),
         "patient-exact-limit" => ("patient-exact-limit", FHIR_RESOURCE_LIMIT_BYTES),
@@ -135,6 +145,8 @@ pub fn inspect_named_synthetic_fhir_envelope_v1(
             "patient-invalid-utf8" => vec![0xff],
             "observation-minimal" => OBSERVATION.to_vec(),
             "observation-bad-subject" => OBSERVATION_BAD_SUBJECT.to_vec(),
+            "bundle-linked" => BUNDLE_LINKED.to_vec(),
+            "bundle-dangling" => BUNDLE_DANGLING.to_vec(),
             _ => unreachable!("allowlisted fixture"),
         };
         if name == "patient-exact-limit" {
@@ -180,6 +192,68 @@ pub fn inspect_named_synthetic_fhir_envelope_v1(
                     "FHIR_ENVELOPE_OK"
                 }
             }
+            Ok(value) if value.get("resourceType").and_then(|v| v.as_str()) == Some("Bundle") => {
+                // Only the two exact built-in entries are inspected. This is NOT
+                // general FHIR Bundle resolution or FHIR R4 validation.
+                let entries = value.get("entry").and_then(|v| v.as_array());
+                let patient = value.pointer("/entry/0/resource");
+                let observation = value.pointer("/entry/1/resource");
+                let structure_ok = value.get("type").and_then(|v| v.as_str()) == Some("collection")
+                    && entries.is_some_and(|items| items.len() == 2)
+                    && value.pointer("/entry/0/fullUrl").and_then(|v| v.as_str())
+                        == Some(BUNDLE_PATIENT_URN)
+                    && value.pointer("/entry/1/fullUrl").and_then(|v| v.as_str())
+                        == Some(BUNDLE_OBSERVATION_URN)
+                    && patient
+                        .and_then(|v| v.get("resourceType"))
+                        .and_then(|v| v.as_str())
+                        == Some("Patient")
+                    && patient.and_then(|v| v.get("id")).and_then(|v| v.as_str())
+                        == Some("synthetic")
+                    && patient
+                        .and_then(|v| v.get("active"))
+                        .and_then(|v| v.as_bool())
+                        == Some(true)
+                    && observation
+                        .and_then(|v| v.get("resourceType"))
+                        .and_then(|v| v.as_str())
+                        == Some("Observation")
+                    && observation
+                        .and_then(|v| v.get("id"))
+                        .and_then(|v| v.as_str())
+                        == Some("synthetic-observation")
+                    && observation
+                        .and_then(|v| v.get("status"))
+                        .and_then(|v| v.as_str())
+                        == Some("final")
+                    && value
+                        .pointer("/entry/1/resource/code/coding/0/system")
+                        .and_then(|v| v.as_str())
+                        == Some("urn:synthetic:code")
+                    && value
+                        .pointer("/entry/1/resource/code/coding/0/code")
+                        .and_then(|v| v.as_str())
+                        == Some("fictional-measurement")
+                    && value
+                        .pointer("/entry/1/resource/valueQuantity/value")
+                        .and_then(|v| v.as_i64())
+                        == Some(37)
+                    && value
+                        .pointer("/entry/1/resource/valueQuantity/unit")
+                        .and_then(|v| v.as_str())
+                        == Some("fictional");
+                if !structure_ok {
+                    "INVALID_FHIR_ENVELOPE"
+                } else if value
+                    .pointer("/entry/1/resource/subject/reference")
+                    .and_then(|v| v.as_str())
+                    != Some(BUNDLE_PATIENT_URN)
+                {
+                    "INVALID_REFERENCE"
+                } else {
+                    "FHIR_ENVELOPE_OK"
+                }
+            }
             Ok(_) => "INVALID_FHIR_ENVELOPE",
             Err(_) if std::str::from_utf8(&payload).is_err() => "INVALID_UTF8",
             Err(_) => "INVALID_JSON",
@@ -199,6 +273,38 @@ pub fn inspect_named_synthetic_fhir_envelope_v1(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn two_fixed_bundle_entries_require_exact_local_patient_reference() {
+        for (id, digest, status) in [
+            (
+                "bundle-linked",
+                "390c5ef339b785294d5f20a707b4909d2a316d676d5450a7a76397afb29e5089",
+                "FHIR_ENVELOPE_OK",
+            ),
+            (
+                "bundle-dangling",
+                "def250325fb64858d2083550cf42b5fc4b680dc94a9d8d0b162801562d2adf02",
+                "INVALID_REFERENCE",
+            ),
+        ] {
+            let hashed = hash_fixture_raw_v1(id, 535).expect("allowlisted in-memory Bundle");
+            assert_eq!(hashed.bytes, 535);
+            assert_eq!(hashed.sha256_hex, digest);
+            let inspected = inspect_named_synthetic_fhir_envelope_v1(id, 535).unwrap();
+            assert_eq!(inspected.status, status);
+            assert!(!inspected.full_fhir_r4_validated);
+            assert!(!inspected.release_authorized);
+            assert_eq!(
+                inspect_named_synthetic_fhir_envelope_v1(id, 534),
+                Err(HashError::InputTooLarge)
+            );
+        }
+        assert_eq!(
+            inspect_named_synthetic_fhir_envelope_v1("bundle-external", 65_536),
+            Err(HashError::UnknownFixture)
+        );
+    }
 
     #[test]
     fn all_four_synthetic_golden_raw_byte_vectors_match_python() {

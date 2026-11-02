@@ -25,7 +25,9 @@ MOCK_BRIDGE = r"""
     "patient-over-limit": ["b929f15ca4f3fa28f54991ed0cb8ac5f430e388ee08bf401a853d8af91e44538", 32769, "RESOURCE_TOO_LARGE"],
     "patient-exact-limit": ["ea711ce560191a81c0722c4a26592e0e2d9abb2186b6fd3af6897cd89d417d4e", 32768, "FHIR_ENVELOPE_OK"],
     "observation-minimal": ["527806e5427cc45e55424d1b8dc8ddcdc86a2b37df2ae116735e6832268b5e19", 251, "FHIR_ENVELOPE_OK"],
-    "observation-bad-subject": ["d2332ed753a59b46d19a11849cccd96a4250120ad3eab455580ce45b1d91b838", 253, "INVALID_REFERENCE"]
+    "observation-bad-subject": ["d2332ed753a59b46d19a11849cccd96a4250120ad3eab455580ce45b1d91b838", 253, "INVALID_REFERENCE"],
+    "bundle-linked": ["390c5ef339b785294d5f20a707b4909d2a316d676d5450a7a76397afb29e5089", 535, "FHIR_ENVELOPE_OK"],
+    "bundle-dangling": ["def250325fb64858d2083550cf42b5fc4b680dc94a9d8d0b162801562d2adf02", 535, "INVALID_REFERENCE"]
   };
   window.__testInspectCalls = 0;
   window.__testForgeEnvelope = false;
@@ -33,7 +35,7 @@ MOCK_BRIDGE = r"""
   window.__TAURI_INTERNALS__ = {
     invoke: async (command, args = {}) => {
       if (command === "preview_status") {
-        return {mode: "SYNTHETIC_DEVELOPER_PREVIEW", data_access: "six_allowlisted_in_memory_fixtures_only",
+        return {mode: "SYNTHETIC_DEVELOPER_PREVIEW", data_access: "eight_allowlisted_in_memory_fixtures_only",
           release_authorized: false, production_parity_qualified: false,
           app_network_plugins_enabled: false, webview_runtime_egress_qualified: false};
       }
@@ -112,12 +114,21 @@ class PreviewBrowserChecks(unittest.TestCase):
         self.page.get_by_role("button", name="Verify with Rust").click()
 
     def test_valid_and_broken_subject_responses(self) -> None:
-        self.assertEqual(self.page.locator(".fixture").count(), 6)
+        self.assertEqual(self.page.locator(".fixture").count(), 8)
         self.choose_and_verify("Fictional Observation")
         expect(self.page.locator(".envelope-result")).to_contain_text(
             "Basic fictional resource fields found"
         )
         self.choose_and_verify("Broken patient reference")
+        expect(self.page.locator(".envelope-result")).to_contain_text("INVALID REFERENCE")
+        expect(self.page.locator(".outcome-success")).to_have_count(1)
+
+    def test_linked_and_dangling_bundle_entries_are_distinguished(self) -> None:
+        self.choose_and_verify("Linked fictional Bundle")
+        expect(self.page.locator(".envelope-result")).to_contain_text(
+            "Basic fictional resource fields found"
+        )
+        self.choose_and_verify("Dangling Bundle reference")
         expect(self.page.locator(".envelope-result")).to_contain_text("INVALID REFERENCE")
         expect(self.page.locator(".outcome-success")).to_have_count(1)
 

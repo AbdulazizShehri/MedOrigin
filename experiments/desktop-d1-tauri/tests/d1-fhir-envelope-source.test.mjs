@@ -30,3 +30,15 @@ test('UI presents a truthful and fail-closed nonclinical result after a matching
  assert.match(ui,/inspected\.contract !== "medorigin-d0-synthetic-fhir-envelope-v1"/);
  assert.match(ui,/Not a full FHIR R4, clinical, or profile validation/);
 });
+
+test('two built-in fictional Bundle entries have exact local-only reference checks',()=>{
+ assert.match(core,/BUNDLE_LINKED/);
+ assert.match(core,/BUNDLE_DANGLING/);
+ assert.match(core,/BUNDLE_PATIENT_URN/);
+ assert.match(core,/entry\/1\/resource\/subject\/reference/);
+ assert.match(core,/entries\.is_some_and\(\|items\| items\.len\(\) == 2\)/);
+ assert.match(ui,/"bundle-linked": "FHIR_ENVELOPE_OK"/);
+ assert.match(ui,/"bundle-dangling": "INVALID_REFERENCE"/);
+ assert.match(rust,/\("bundle-linked", "FHIR_ENVELOPE_OK"\)/);
+ assert.match(rust,/\("bundle-dangling", "INVALID_REFERENCE"\)/);
+});

@@ -1,0 +1,74 @@
+# Source-only and synthetic native/browser tests; never a production release.
+name: D1 fixed fictional Bundle preview (NO RELEASE)
+on:
+  push:
+    branches:
+      - test/medorigin-d1-fhir-bundle-20261102
+  pull_request:
+    paths:
+      - 'experiments/desktop-d0-rust/**'
+      - 'experiments/desktop-d1-tauri/**'
+      - '.github/workflows/medorigin-d1-fictional-bundle.yml'
+permissions:
+  contents: read
+jobs:
+  synthetic-native:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-2025, ubuntu-24.04]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    steps:
+      - name: Checkout exact PR source, no credentials
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Install pinned Rust tools
+        shell: bash
+        run: rustup toolchain install 1.97.1 --profile minimal --component rustfmt --component clippy
+      - name: D0 format, Clippy, and exact fictional bytes
+        shell: bash
+        run: |
+          cargo +1.97.1 fmt --all --manifest-path experiments/desktop-d0-rust/Cargo.toml -- --check
+          cargo +1.97.1 clippy --locked --all-targets --manifest-path experiments/desktop-d0-rust/Cargo.toml -- -D warnings
+          cargo +1.97.1 test --locked --all-targets --manifest-path experiments/desktop-d0-rust/Cargo.toml
+      - name: D1 native command and source contract (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          cargo +1.97.1 fmt --all --manifest-path experiments/desktop-d1-tauri/src-tauri/Cargo.toml -- --check
+          if ($LASTEXITCODE -ne 0) { throw 'D1 fmt failed' }
+          cargo +1.97.1 test --locked --manifest-path experiments/desktop-d1-tauri/src-tauri/Cargo.toml
+          if ($LASTEXITCODE -ne 0) { throw 'D1 native failed' }
+          node --test experiments/desktop-d1-tauri/tests/d1-fhir-envelope-source.test.mjs
+          if ($LASTEXITCODE -ne 0) { throw 'D1 source contract failed' }
+      - name: Build locked fictional UI (Windows)
+        if: runner.os == 'Windows'
+        working-directory: experiments/desktop-d1-tauri
+        shell: pwsh
+        run: |
+          npm ci --no-audit --no-fund
+          if ($LASTEXITCODE -ne 0) { throw 'npm ci failed' }
+          npm run build
+          if ($LASTEXITCODE -ne 0) { throw 'UI build failed' }
+      - name: Install pinned uv for Edge test (Windows)
+        if: runner.os == 'Windows'
+        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        with:
+          enable-cache: false
+      - name: Real Edge with simulated Tauri IPC, local HTTP only (Windows)
+        if: runner.os == 'Windows'
+        working-directory: experiments/desktop-d1-tauri
+        shell: pwsh
+        run: |
+          uv python install 3.12
+          uv run --no-project --python 3.12 --with playwright==1.64.1 python tests/browser_fhir_preview_e2e.py
+          if ($LASTEXITCODE -ne 0) { throw 'Synthetic Edge test failed' }
+      - name: Explicit NO-GO boundary
+        shell: bash
+        run: |
+          echo 'FIXED_SYNTHETIC_BUNDLE_ONLY_NOT_FHIR_R4_VALIDATION'
+          echo 'REAL_EDGE_MOCK_IPC_ONLY_NOT_REAL_TAURI_OR_OS_EGRESS_DENIAL'
+          echo 'NO_PHI_NO_PUBLISH_NO_RELEASE'
