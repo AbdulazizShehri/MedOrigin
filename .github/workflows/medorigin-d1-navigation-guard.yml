@@ -4,11 +4,20 @@ on:
   push:
     branches:
       - security/medorigin-d1-deny-external-navigation-20261102
+      - feat/medorigin-d1-fhir-envelope-20261102
   pull_request:
     paths:
+      - 'experiments/desktop-d0-rust/Cargo.toml'
+      - 'experiments/desktop-d0-rust/Cargo.lock'
+      - 'experiments/desktop-d0-rust/src/lib.rs'
+      - 'experiments/desktop-d0-rust/tests/fhir_envelope.rs'
+      - 'experiments/desktop-d1-tauri/src-tauri/Cargo.lock'
       - 'experiments/desktop-d1-tauri/src-tauri/src/lib.rs'
+      - 'experiments/desktop-d1-tauri/src/App.tsx'
+      - 'experiments/desktop-d1-tauri/src/App.css'
       - 'experiments/desktop-d1-tauri/src-tauri/tauri.conf.json'
       - 'experiments/desktop-d1-tauri/tests/d1-navigation-policy-source.test.mjs'
+      - 'experiments/desktop-d1-tauri/tests/d1-fhir-envelope-source.test.mjs'
       - '.github/workflows/medorigin-d1-navigation-guard.yml'
 permissions:
   contents: read
@@ -25,7 +34,7 @@ jobs:
       - name: Source contract RED-GREEN guard
         shell: pwsh
         run: |
-          node --test experiments/desktop-d1-tauri/tests/d1-navigation-policy-source.test.mjs
+          node --test experiments/desktop-d1-tauri/tests/d1-navigation-policy-source.test.mjs experiments/desktop-d1-tauri/tests/d1-fhir-envelope-source.test.mjs
           if ($LASTEXITCODE -ne 0) { throw 'D1 navigation source contract failed' }
       - name: Install locked frontend for compile-only qualification
         shell: pwsh
@@ -52,3 +61,17 @@ jobs:
         run: |
           Write-Output 'D1_WEBVIEW_NAVIGATION_ONLY_NOT_WEBVIEW2_BACKGROUND_PACKET_DENIAL'
           Write-Output 'NO_PHI_NO_RELEASE_G3_BLOCKED_G4_G5_NOT_RUN_G7_BLOCKED'
+  linux-core:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - name: Checkout exact candidate without retained credentials
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - name: Native synthetic FHIR envelope Rust tests
+        working-directory: experiments/desktop-d0-rust
+        run: cargo test --locked --all-targets
+      - name: Explicit source-only qualification
+        run: echo 'SYNTHETIC_FHIR_ENVELOPE_ONLY_NOT_FULL_R4_VALIDATION_NO_RELEASE'

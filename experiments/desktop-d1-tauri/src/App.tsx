@@ -11,6 +11,15 @@ type PreviewStatus = {
   app_network_plugins_enabled: boolean;
   webview_runtime_egress_qualified: boolean;
 };
+type EnvelopeResult = {
+  contract: string;
+  fixture_id: FixtureId;
+  bytes: number;
+  status: "FHIR_ENVELOPE_OK" | "INVALID_UTF8" | "INVALID_JSON" | "INVALID_FHIR_ENVELOPE" | "RESOURCE_TOO_LARGE";
+  synthetic_only: boolean;
+  full_fhir_r4_validated: boolean;
+  release_authorized: boolean;
+};
 type HashResult = {
   contract: string;
   fixture_id: FixtureId;
@@ -30,6 +39,7 @@ export default function App() {
   const [status, setStatus] = useState<PreviewStatus | null>(null);
   const [selected, setSelected] = useState<FixtureId>("patient-minimal");
   const [result, setResult] = useState<HashResult | null>(null);
+  const [envelope, setEnvelope] = useState<EnvelopeResult | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   useEffect(() => {
@@ -44,6 +54,7 @@ export default function App() {
   async function verify() {
     setError("");
     setResult(null);
+    setEnvelope(null);
     setBusy(true);
     try {
       const checked = await invoke<HashResult>("hash_fixture", { fixtureId: selected, maxInputBytes: 65536 });
@@ -51,6 +62,20 @@ export default function App() {
         throw new Error("Unexpected native response contract");
       }
       setResult(checked);
+      if (checked.sha256_hex === chosen.sha) {
+        const inspected = await invoke<EnvelopeResult>("inspect_fhir_fixture_envelope", {
+          fixtureId: selected, maxInputBytes: 65536,
+        });
+        if (
+          inspected.fixture_id !== selected || !inspected.synthetic_only ||
+          inspected.release_authorized || inspected.full_fhir_r4_validated ||
+          inspected.contract !== "medorigin-d0-synthetic-fhir-envelope-v1" ||
+          !["FHIR_ENVELOPE_OK", "INVALID_UTF8", "INVALID_JSON", "INVALID_FHIR_ENVELOPE", "RESOURCE_TOO_LARGE"].includes(inspected.status)
+        ) {
+          throw new Error("Unexpected synthetic FHIR envelope response contract");
+        }
+        setEnvelope(inspected);
+      }
     } catch (reason) {
       setError(typeof reason === "string" ? reason : "The local Rust command refused this request.");
     } finally {
@@ -78,7 +103,7 @@ export default function App() {
             <p className="section-help">Each sample is constructed in memory. Paths and uploaded files are not supported.</p>
             <div className="fixture-list">
               {FIXTURES.map((fixture) => (
-                <button className={"fixture" + (selected === fixture.id ? " fixture-selected" : "")} type="button" disabled={busy} onClick={() => { setSelected(fixture.id); setResult(null); setError(""); }} aria-pressed={selected === fixture.id} key={fixture.id}>
+                <button className={"fixture" + (selected === fixture.id ? " fixture-selected" : "")} type="button" disabled={busy} onClick={() => { setSelected(fixture.id); setResult(null); setEnvelope(null); setError(""); }} aria-pressed={selected === fixture.id} key={fixture.id}>
                   <span className="fixture-radio" aria-hidden="true" />
                   <span className="fixture-body"><strong>{fixture.title}</strong><small>{fixture.kind}</small></span>
                   <span className="fixture-size">{fixture.size}</span>
@@ -101,6 +126,13 @@ export default function App() {
                 <><span className={"outcome " + (result.sha256_hex === chosen.sha ? "outcome-success" : "outcome-error")}>{result.sha256_hex === chosen.sha ? "✓ MATCHES REFERENCE" : "✕ MISMATCH — BLOCKED"}</span><div className="mini-label">RAW SHA-256 DIGEST</div><code>{result.sha256_hex}</code><div className="output-footnote">Contract: {result.contract}</div></>
               ) : error ? <span className="outcome outcome-error">{error}</span> : <span className="output-placeholder">A local verification result will appear here.</span>}
             </div>
+            {envelope && (
+              <div className="envelope-result" role="status">
+                <div className="mini-label">FICTIONAL FHIR ENVELOPE CHECK</div>
+                <strong>{envelope.status === "FHIR_ENVELOPE_OK" ? "Basic Patient JSON fields found" : envelope.status.replace(/_/g, " ")}</strong>
+                <p>{envelope.bytes.toLocaleString()} bytes checked. Not a full FHIR R4, clinical, or profile validation.</p>
+              </div>
+            )}
           </section>
         </div>
         <footer className="notice">
