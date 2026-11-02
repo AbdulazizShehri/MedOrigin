@@ -68,6 +68,20 @@ class TestOfflineEvidence(unittest.TestCase):
         del p["clinical_data_used"]
         self.assertEqual(evaluate(p)["decision"], "NO_GO")
 
+    def test_self_attested_pass_packet_cli_is_nonzero(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "packet.json"
+            path.write_text(json.dumps(packet()), encoding="utf-8")
+            result = subprocess.run(
+                [sys.executable, str(Path(__file__).with_name("verify_offline_evidence.py")), str(path)],
+                capture_output=True, text=True, check=False,
+            )
+            self.assertEqual(result.returncode, 3)
+            output = json.loads(result.stdout)
+            self.assertEqual(output["decision"], "EVIDENCE_COMPLETE_REVIEW_REQUIRED")
+            self.assertFalse(output["release_authorized"])
+            self.assertFalse(output["zero_egress_proven"])
+
     def test_malformed_json_cli_fails(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "packet.json"
