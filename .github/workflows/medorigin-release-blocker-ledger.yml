@@ -9,6 +9,7 @@ on:
     paths:
       - 'scripts/medorigin_release_blocker_ledger.py'
       - 'tests/test_medorigin_release_blocker_ledger.py'
+      - 'tests/test_medorigin_release_blocker_ledger_ambiguity.py'
       - 'tests/test_medorigin_release_workflow_no_go.py'
       - 'scripts/__init__.py'
       - '.github/workflows/release.yml'
