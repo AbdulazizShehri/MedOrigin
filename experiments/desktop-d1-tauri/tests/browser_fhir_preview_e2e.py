@@ -42,6 +42,8 @@ MOCK_BRIDGE = r"""
   window.__testFailHashFixture = "";
   window.__testBatchCalls = 0;
   window.__testForgeBatchReceipt = "";
+  window.__testHangCommand = "";
+  window.__testResolveHungCommand = null;
   window.__TAURI_INTERNALS__ = {
     invoke: async (command, args = {}) => {
       if (command === "preview_status") {
@@ -53,6 +55,9 @@ MOCK_BRIDGE = r"""
         if (forged === "egress") status.webview_runtime_egress_qualified = true;
         if (forged === "missing") delete status.app_network_plugins_enabled;
         return status;
+      }
+      if (window.__testHangCommand === command) {
+        return new Promise(resolve => { window.__testResolveHungCommand = resolve; });
       }
       if (command === "verify_all_fixtures") {
         window.__testBatchCalls++;
@@ -242,6 +247,31 @@ class PreviewBrowserChecks(unittest.TestCase):
                     "The local Rust command refused this request"
                 )
                 self.page.evaluate("window.__testForgeEnvelopeReceipt = ''")
+
+    def test_hung_native_hash_disables_verification_without_late_success(self) -> None:
+        self.page.clock.install()
+        self.page.evaluate("window.__testHangCommand = 'hash_fixture'")
+        self.page.get_by_role("button", name="Verify with Rust").click()
+        self.page.clock.fast_forward(30_100)
+        expect(self.page.locator(".verification-output")).to_contain_text("timed out")
+        expect(self.page.get_by_role("button", name="Verify with Rust")).to_be_disabled()
+        expect(self.page.get_by_role("button", name="Verify all 12 fictional fixtures")).to_be_disabled()
+        self.page.evaluate("""() => window.__testResolveHungCommand({
+            contract: "medorigin-desktop-d0-raw-sha256-v1", fixture_id: "patient-minimal",
+            bytes: 57, sha256_hex: "747e1e038d6cc9a39a9cee209f621841cf6a9748d82be42fa545f19cfd6877a0",
+            synthetic_only: true, release_authorized: false
+        })""")
+        expect(self.page.locator(".outcome-success")).to_have_count(0)
+
+    def test_hung_native_batch_disables_verification_without_partial_success(self) -> None:
+        self.page.clock.install()
+        self.page.evaluate("window.__testHangCommand = 'verify_all_fixtures'")
+        self.page.get_by_role("button", name="Verify all 12 fictional fixtures").click()
+        self.page.clock.fast_forward(30_100)
+        expect(self.page.locator(".verification-output")).to_contain_text("timed out")
+        expect(self.page.get_by_role("button", name="Verify with Rust")).to_be_disabled()
+        expect(self.page.get_by_role("button", name="Verify all 12 fictional fixtures")).to_be_disabled()
+        expect(self.page.locator(".batch-summary")).to_have_count(0)
 
     def test_batch_verifies_all_twelve_fictional_fixtures(self) -> None:
         self.page.get_by_role("button", name="Verify all 12 fictional fixtures").click()
