@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import "./App.css";
 
@@ -108,6 +108,10 @@ export default function App() {
   const [envelope, setEnvelope] = useState<EnvelopeResult | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [batchRows, setBatchRows] = useState<{ id: FixtureId; title: string; status: EnvelopeResult["status"] }[]>([]);
+  const [batchComplete, setBatchComplete] = useState(false);
+  const [batchProgress, setBatchProgress] = useState(0);
+  const flight = useRef(false);
   useEffect(() => {
     let alive = true;
     invoke<unknown>("preview_status")
@@ -130,6 +134,11 @@ export default function App() {
 
   const chosen = FIXTURES.find((fixture) => fixture.id === selected)!;
   async function verify() {
+    if (flight.current || !status) return;
+    flight.current = true;
+    setBatchRows([]);
+    setBatchComplete(false);
+    setBatchProgress(0);
     setError("");
     setResult(null);
     setEnvelope(null);
@@ -156,6 +165,45 @@ export default function App() {
     } catch (reason) {
       setError(typeof reason === "string" ? reason : "The local Rust command refused this request.");
     } finally {
+      flight.current = false;
+      setBusy(false);
+    }
+  }
+
+  // Atomic UI reporting: no partial batch result is displayed until all
+  // twelve separate native hash AND structural receipts have passed.
+  async function verifyAll() {
+    if (flight.current || !status) return;
+    flight.current = true;
+    setError("");
+    setResult(null);
+    setEnvelope(null);
+    setBatchRows([]);
+    setBatchComplete(false);
+    setBatchProgress(0);
+    setBusy(true);
+    try {
+      const rows: { id: FixtureId; title: string; status: EnvelopeResult["status"] }[] = [];
+      for (const fixture of FIXTURES) {
+        const checked = await invoke<unknown>("hash_fixture", { fixtureId: fixture.id, maxInputBytes: 65536 });
+        if (!isSafeHashReceipt(checked, fixture.id, Number(fixture.size.replace(/[^0-9]/g, ""))) || checked.sha256_hex !== fixture.sha) {
+          throw new Error("Batch raw-byte receipt rejected");
+        }
+        const inspected = await invoke<unknown>("inspect_fhir_fixture_envelope", { fixtureId: fixture.id, maxInputBytes: 65536 });
+        if (!isSafeEnvelopeReceipt(inspected, fixture.id, checked.bytes, EXPECTED_ENVELOPE_STATUS[fixture.id])) {
+          throw new Error("Batch structural receipt rejected");
+        }
+        rows.push({ id: fixture.id, title: fixture.title, status: inspected.status });
+        setBatchProgress(rows.length);
+      }
+      setBatchRows(rows);
+      setBatchComplete(true);
+    } catch {
+      setBatchRows([]);
+      setBatchComplete(false);
+      setError("The local Rust command refused this request.");
+    } finally {
+      flight.current = false;
       setBusy(false);
     }
   }
@@ -180,7 +228,7 @@ export default function App() {
             <p className="section-help">Each sample is constructed in memory. Paths and uploaded files are not supported.</p>
             <div className="fixture-list">
               {FIXTURES.map((fixture) => (
-                <button className={"fixture" + (selected === fixture.id ? " fixture-selected" : "")} type="button" disabled={busy} onClick={() => { setSelected(fixture.id); setResult(null); setEnvelope(null); setError(""); }} aria-pressed={selected === fixture.id} key={fixture.id}>
+                <button className={"fixture" + (selected === fixture.id ? " fixture-selected" : "")} type="button" disabled={busy} onClick={() => { setSelected(fixture.id); setResult(null); setEnvelope(null); setBatchRows([]); setBatchComplete(false); setBatchProgress(0); setError(""); }} aria-pressed={selected === fixture.id} key={fixture.id}>
                   <span className="fixture-radio" aria-hidden="true" />
                   <span className="fixture-body"><strong>{fixture.title}</strong><small>{fixture.kind}</small></span>
                   <span className="fixture-size">{fixture.size}</span>
@@ -198,11 +246,20 @@ export default function App() {
               <div className="preview-meta"><span>SHA-256</span><span>{chosen.size}</span></div>
             </div>
             <button className="primary-action" type="button" onClick={verify} disabled={busy || !status}>{busy ? "Verifying locally…" : "Verify with Rust"}<span aria-hidden="true">↗</span></button>
+            <button className="secondary-action" type="button" onClick={verifyAll} disabled={busy || !status}>Verify all 12 fictional fixtures</button>
+            {busy && batchProgress > 0 && <p role="status">Batch checking {batchProgress}/12 fictional fixtures…</p>}
             <div className="verification-output" aria-live="polite">
               {result ? (
                 <><span className={"outcome " + (result.sha256_hex === chosen.sha ? "outcome-success" : "outcome-error")}>{result.sha256_hex === chosen.sha ? "✓ MATCHES REFERENCE" : "✕ MISMATCH — BLOCKED"}</span><div className="mini-label">RAW SHA-256 DIGEST</div><code>{result.sha256_hex}</code><div className="output-footnote">Contract: {result.contract}</div></>
               ) : error ? <span className="outcome outcome-error">{error}</span> : <span className="output-placeholder">A local verification result will appear here.</span>}
             </div>
+            {batchComplete && batchRows.length === FIXTURES.length && (
+              <div className="batch-summary" role="status">
+                <strong>12/12 fictional fixtures verified</strong>
+                <p>Raw SHA-256 and expected fictional envelope status matched for each allowlisted sample. Not FHIR R4 or clinical validation.</p>
+                <ul>{batchRows.map((row) => <li className="batch-row" key={row.id}>{row.title}: {row.status.replace(/_/g, " ")}</li>)}</ul>
+              </div>
+            )}
             {envelope && (
               <div className="envelope-result" role="status">
                 <div className="mini-label">FICTIONAL FHIR ENVELOPE CHECK</div>

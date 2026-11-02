@@ -39,6 +39,7 @@ MOCK_BRIDGE = r"""
   window.__testForgeHashReceipt = "";
   window.__testForgeEnvelopeReceipt = "";
   window.__testFailFixture = "";
+  window.__testFailHashFixture = "";
   window.__TAURI_INTERNALS__ = {
     invoke: async (command, args = {}) => {
       if (command === "preview_status") {
@@ -55,7 +56,7 @@ MOCK_BRIDGE = r"""
       if (!item || args.maxInputBytes !== 65536) throw "unknown_fixture";
       if (command === "hash_fixture") {
         const receipt = {contract: "medorigin-desktop-d0-raw-sha256-v1", fixture_id: args.fixtureId,
-          bytes: item[1], sha256_hex: window.__testForgeHash ? "0".repeat(64) : item[0],
+          bytes: item[1], sha256_hex: (window.__testForgeHash || window.__testFailHashFixture === args.fixtureId) ? "0".repeat(64) : item[0],
           synthetic_only: true, release_authorized: false};
         if (window.__testForgeHashReceipt === "extra") receipt.webview_runtime_egress_qualified = true;
         if (window.__testForgeHashReceipt === "missing") delete receipt.contract;
@@ -149,6 +150,7 @@ class PreviewBrowserChecks(unittest.TestCase):
                 expect(self.page.locator(".outcome-error")).to_contain_text(
                     "Native desktop bridge status rejected"
                 )
+                expect(self.page.get_by_role("button", name="Verify all 12 fictional fixtures")).to_be_disabled()
 
     def test_valid_and_broken_subject_responses(self) -> None:
         self.assertEqual(self.page.locator(".fixture").count(), 12)
@@ -232,6 +234,16 @@ class PreviewBrowserChecks(unittest.TestCase):
         expect(self.page.locator(".batch-summary")).to_have_count(0)
         expect(self.page.locator(".batch-row")).to_have_count(0)
         self.assertEqual(self.page.evaluate("window.__testInspectCalls"), 12)
+
+    def test_batch_late_hash_mismatch_stops_before_structural_inspection(self) -> None:
+        self.page.evaluate("window.__testFailHashFixture = 'bundle-dangling'")
+        self.page.get_by_role("button", name="Verify all 12 fictional fixtures").click()
+        expect(self.page.locator(".outcome-error")).to_contain_text(
+            "The local Rust command refused this request"
+        )
+        expect(self.page.locator(".batch-summary")).to_have_count(0)
+        expect(self.page.locator(".batch-row")).to_have_count(0)
+        self.assertEqual(self.page.evaluate("window.__testInspectCalls"), 11)
 
     def test_hash_mismatch_never_invokes_structural_check(self) -> None:
         self.page.evaluate("window.__testForgeHash = true")
