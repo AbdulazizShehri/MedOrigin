@@ -23,7 +23,8 @@ try {
     @{name='cim-error';code=4;reason='D1_OBSERVATION_ERROR'},
     @{name='tcp-error';code=4;reason='D1_OBSERVATION_ERROR'},
     @{name='udp-error';code=4;reason='D1_OBSERVATION_ERROR'},
-    @{name='wrong-sha';code=4;reason='D1_EXECUTABLE_SHA256_MISMATCH'}
+    @{name='wrong-sha';code=4;reason='D1_EXECUTABLE_SHA256_MISMATCH'},
+    @{name='binary-replaced';code=4;reason='D1_EXECUTABLE_HASH_CHANGED_DURING_OBSERVATION'}
   )
   foreach($case in $tests){
     $harness=Join-Path $work ($case.name+'.ps1')
@@ -51,6 +52,9 @@ function Get-CimInstance {
 function Get-NetTCPConnection {
  [CmdletBinding()]param()
  if('__CASE__' -eq 'tcp-error'){throw 'MOCK_TCP_UNREADABLE'}
+ if('__CASE__' -eq 'binary-replaced'){
+   [IO.File]::AppendAllText('__EXE__', 'synthetic tamper during socket query')
+ }
  if('__CASE__' -eq 'unrelated-tcp'){
    [pscustomobject]@{OwningProcess=99999;RemoteAddress='2001:db8::b';RemotePort=443;State='Established'}
  }
@@ -87,4 +91,4 @@ exit $LASTEXITCODE
   }
 }
 finally { Remove-Item -LiteralPath $work -Recurse -Force -ErrorAction SilentlyContinue }
-Write-Output 'D1_PINNED_ATTRIBUTION_13_OF_13_MOCK_PASS_NO_RELEASE'
+Write-Output 'D1_PINNED_ATTRIBUTION_14_OF_14_MOCK_PASS_NO_RELEASE'
