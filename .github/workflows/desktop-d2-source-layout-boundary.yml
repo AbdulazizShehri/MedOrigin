@@ -1,0 +1,59 @@
+# Source-only D2 boundary regression; no GUI, network capture or release.
+name: D2 native source-layout boundary (nonpublishing)
+
+on:
+  push:
+    branches:
+      - test/medorigin-d2-recursive-source-guard-20261102
+  pull_request:
+    branches:
+      - test/medorigin-d2-windows-native-uia-20261031
+    paths:
+      - 'experiments/desktop-d2-native-egui/tests/browser_free_boundary.rs'
+      - '.github/workflows/desktop-d2-source-layout-boundary.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  strict-source-boundary:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    steps:
+      - name: Read-only pinned checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+          fetch-tags: false
+      - name: Install pinned Rust compiler and formatter
+        shell: pwsh
+        run: |
+          rustup toolchain install 1.97.1 --profile minimal --component rustfmt
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          rustup default 1.97.1
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+      - name: Compile and run std-only source guard
+        shell: pwsh
+        run: |
+          $env:CARGO_MANIFEST_DIR = (Resolve-Path 'experiments/desktop-d2-native-egui').Path
+          $source = Join-Path $env:CARGO_MANIFEST_DIR 'tests/browser_free_boundary.rs'
+          $exe = Join-Path $env:RUNNER_TEMP $(if ($IsWindows) { 'd2-guard.exe' } else { 'd2-guard' })
+          rustfmt --edition 2024 --check $source
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          rustc --edition=2024 --test $source -o $exe
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          & $exe
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          Write-Output 'D2_SOURCE_LAYOUT_BOUNDARY_TESTS_PASS_SOURCE_ONLY_NOT_PACKET_PROOF'
+      - name: No changed tracked files
+        shell: pwsh
+        run: |
+          git diff --exit-code
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          git diff --check
+          if ($LASTEXITCODE -ne 0) { exit 1 }
