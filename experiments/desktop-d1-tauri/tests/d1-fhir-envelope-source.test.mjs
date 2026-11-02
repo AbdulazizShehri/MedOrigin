@@ -12,7 +12,7 @@ const core=readFileSync(resolve(root,'../desktop-d0-rust/src/lib.rs'),'utf8');
 test('new FHIR envelope bridge is explicitly synthetic-only and refuses full conformance claim',()=>{
  assert.match(rust,/inspect_named_synthetic_fhir_envelope_v1/);
  assert.match(rust,/#\[tauri::command\]\s*fn inspect_fhir_fixture_envelope\(/);
- assert.match(rust,/generate_handler!\[\s*preview_status,\s*hash_fixture,\s*inspect_fhir_fixture_envelope\s*\]/);
+ assert.match(rust,/generate_handler!\[\s*preview_status,\s*hash_fixture,\s*inspect_fhir_fixture_envelope,\s*verify_all_fixtures\s*\]/);
  assert.match(rust,/full_fhir_r4_validated:\s*false/);
  assert.match(rust,/release_authorized:\s*false/);
  assert.match(core,/pub fn inspect_named_synthetic_fhir_envelope_v1\(/);
@@ -58,13 +58,20 @@ test('UI presents a truthful and fail-closed nonclinical result after a matching
  assert.match(ui,/Not a full FHIR R4, clinical, or profile validation/);
 });
 
-test('twelve-case batch remains sequential, bounded, and atomic on rejected receipts', () => {
+test('native fictional batch is single IPC, strict and atomic with no clinical claims', () => {
+ assert.match(rust,/fn verify_all_fixtures\(/);
+ assert.match(rust,/NATIVE_BATCH_GOLDENS/);
+ assert.match(rust,/batch_integrity_mismatch/);
+ assert.match(rust,/webview_runtime_egress_qualified:\s*false/);
+ assert.match(rust,/inspect_named_synthetic_fhir_envelope_v1\(id, max_input_bytes\)/);
+ assert.match(rust,/verify_all_fixtures\s*\]/);
  assert.match(ui,/async function verifyAll\(\)/);
- assert.match(ui,/if \(flight\.current \|\| !status\) return/);
- assert.match(ui,/for \(const fixture of FIXTURES\)/);
- assert.match(ui,/isSafeHashReceipt\(checked, fixture\.id/);
- assert.match(ui,/checked\.sha256_hex !== fixture\.sha/);
- assert.match(ui,/isSafeEnvelopeReceipt\(inspected, fixture\.id/);
+ assert.match(ui,/invoke<unknown>\("verify_all_fixtures"/);
+ assert.match(ui,/function isSafeNativeBatchReceipt\(value: unknown\)/);
+ assert.match(ui,/value\.rows\.length !== FIXTURES\.length/);
+ assert.match(ui,/row\.fixture_id === fixture\.id/);
+ assert.match(ui,/row\.sha256_hex === fixture\.sha/);
+ assert.match(ui,/row\.status === EXPECTED_ENVELOPE_STATUS\[fixture\.id\]/);
  assert.match(ui,/setBatchRows\(rows\)/);
  assert.match(ui,/setBatchComplete\(true\)/);
  assert.match(ui,/setBatchRows\(\[\]\)/);

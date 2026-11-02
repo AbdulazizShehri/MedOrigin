@@ -40,6 +40,8 @@ MOCK_BRIDGE = r"""
   window.__testForgeEnvelopeReceipt = "";
   window.__testFailFixture = "";
   window.__testFailHashFixture = "";
+  window.__testBatchCalls = 0;
+  window.__testForgeBatchReceipt = "";
   window.__TAURI_INTERNALS__ = {
     invoke: async (command, args = {}) => {
       if (command === "preview_status") {
@@ -51,6 +53,29 @@ MOCK_BRIDGE = r"""
         if (forged === "egress") status.webview_runtime_egress_qualified = true;
         if (forged === "missing") delete status.app_network_plugins_enabled;
         return status;
+      }
+      if (command === "verify_all_fixtures") {
+        window.__testBatchCalls++;
+        if (args.maxInputBytes !== 65536) throw "invalid_limit";
+        const rows = [];
+        for (const [id, item] of Object.entries(samples)) {
+          if (window.__testFailHashFixture === id) throw "batch_integrity_mismatch";
+          window.__testInspectCalls++;
+          if (window.__testFailFixture === id) throw "batch_integrity_mismatch";
+          rows.push({fixture_id: id, bytes: item[1], sha256_hex: item[0], status: item[2]});
+        }
+        const receipt = {contract: "medorigin-d1-native-fictional-batch-v1", rows,
+          synthetic_only: true, full_fhir_r4_validated: false,
+          release_authorized: false, webview_runtime_egress_qualified: false};
+        const forge = window.__testForgeBatchReceipt;
+        if (forge === "extra") receipt.packet_deny_proven = true;
+        if (forge === "missing") delete receipt.contract;
+        if (forge === "type") receipt.synthetic_only = "true";
+        if (forge === "reordered") receipt.rows.reverse();
+        if (forge === "duplicate") receipt.rows[11] = {...receipt.rows[0]};
+        if (forge === "wrongStatus") receipt.rows[11].status = "FHIR_ENVELOPE_OK";
+        if (forge === "wrongDigest") receipt.rows[11].sha256_hex = "0".repeat(64);
+        return receipt;
       }
       const item = samples[args.fixtureId];
       if (!item || args.maxInputBytes !== 65536) throw "unknown_fixture";
@@ -244,6 +269,18 @@ class PreviewBrowserChecks(unittest.TestCase):
         expect(self.page.locator(".batch-summary")).to_have_count(0)
         expect(self.page.locator(".batch-row")).to_have_count(0)
         self.assertEqual(self.page.evaluate("window.__testInspectCalls"), 11)
+
+    def test_forged_atomic_native_batch_receipts_are_never_displayed(self) -> None:
+        for variant in ("extra", "missing", "type", "reordered", "duplicate", "wrongStatus", "wrongDigest"):
+            with self.subTest(variant=variant):
+                self.page.evaluate("variant => window.__testForgeBatchReceipt = variant", variant)
+                self.page.get_by_role("button", name="Verify all 12 fictional fixtures").click()
+                expect(self.page.locator(".outcome-error")).to_contain_text(
+                    "The local Rust command refused this request"
+                )
+                expect(self.page.locator(".batch-summary")).to_have_count(0)
+                expect(self.page.locator(".batch-row")).to_have_count(0)
+                self.page.evaluate("window.__testForgeBatchReceipt = ''")
 
     def test_hash_mismatch_never_invokes_structural_check(self) -> None:
         self.page.evaluate("window.__testForgeHash = true")

@@ -84,6 +84,141 @@ fn hash_fixture(fixture_id: String, max_input_bytes: usize) -> Result<FixtureHas
     })
 }
 
+// One Rust IPC call owns the complete, fixed fictional batch. It cannot accept
+// WebView-supplied fixture names, arbitrary JSON, paths, or network destinations.
+#[derive(Debug, Serialize)]
+struct NativeBatchRow {
+    fixture_id: &'static str,
+    bytes: usize,
+    sha256_hex: String,
+    status: &'static str,
+}
+
+#[derive(Debug, Serialize)]
+struct NativeBatchResponse {
+    contract: &'static str,
+    rows: Vec<NativeBatchRow>,
+    synthetic_only: bool,
+    full_fhir_r4_validated: bool,
+    release_authorized: bool,
+    webview_runtime_egress_qualified: bool,
+}
+
+const NATIVE_BATCH_GOLDENS: [(&str, usize, &str, &str); 12] = [
+    (
+        "patient-minimal",
+        57,
+        "747e1e038d6cc9a39a9cee209f621841cf6a9748d82be42fa545f19cfd6877a0",
+        "FHIR_ENVELOPE_OK",
+    ),
+    (
+        "patient-invalid-utf8",
+        1,
+        "a8100ae6aa1940d0b663bb31cd466142ebbdbd5187131b92d93818987832eb89",
+        "INVALID_UTF8",
+    ),
+    (
+        "patient-over-limit",
+        32769,
+        "b929f15ca4f3fa28f54991ed0cb8ac5f430e388ee08bf401a853d8af91e44538",
+        "RESOURCE_TOO_LARGE",
+    ),
+    (
+        "patient-exact-limit",
+        32768,
+        "ea711ce560191a81c0722c4a26592e0e2d9abb2186b6fd3af6897cd89d417d4e",
+        "FHIR_ENVELOPE_OK",
+    ),
+    (
+        "observation-minimal",
+        251,
+        "527806e5427cc45e55424d1b8dc8ddcdc86a2b37df2ae116735e6832268b5e19",
+        "FHIR_ENVELOPE_OK",
+    ),
+    (
+        "observation-bad-subject",
+        253,
+        "d2332ed753a59b46d19a11849cccd96a4250120ad3eab455580ce45b1d91b838",
+        "INVALID_REFERENCE",
+    ),
+    (
+        "bundle-valid",
+        531,
+        "3a530a66c0f2b71908b1282985432e405f0f2f412c7ccc0143aa1972d9447983",
+        "BUNDLE_GRAPH_OK",
+    ),
+    (
+        "bundle-bad-reference",
+        528,
+        "4aabcfa54309c83052d62b4fdcf1c6635a6cd3d937551e2ab947899345f9f082",
+        "INVALID_REFERENCE",
+    ),
+    (
+        "bundle-duplicate",
+        531,
+        "813f8a3b8fee59ba74abdb293c6cac5cca103b390153730e6e3bc4656540f15b",
+        "DUPLICATE_ENTRY",
+    ),
+    (
+        "bundle-wrong-type",
+        532,
+        "293c10c8abf055e8c1f84bae4913c7246bf9be5bf53dee0fb3c918e32a8346a7",
+        "INVALID_BUNDLE_TYPE",
+    ),
+    (
+        "bundle-linked",
+        559,
+        "1d24976b74ab0481ce2acc1010d58ec5e4b9da9ba93071e1042afeb299a03d88",
+        "BUNDLE_GRAPH_OK",
+    ),
+    (
+        "bundle-dangling",
+        559,
+        "1bbc0bac94b3ff19dce3502164f3243748cf5aa7e869433bdb09e7ec2266b229",
+        "INVALID_REFERENCE",
+    ),
+];
+
+#[tauri::command]
+fn verify_all_fixtures(max_input_bytes: usize) -> Result<NativeBatchResponse, String> {
+    if max_input_bytes == 0 || max_input_bytes > 65_536 {
+        return Err("invalid_limit".to_string());
+    }
+    let mut rows = Vec::with_capacity(NATIVE_BATCH_GOLDENS.len());
+    for (id, expected_bytes, expected_sha, expected_status) in NATIVE_BATCH_GOLDENS {
+        let hash =
+            hash_fixture_raw_v1(id, max_input_bytes).map_err(|err| err.code().to_string())?;
+        if hash.bytes != expected_bytes || hash.sha256_hex != expected_sha {
+            return Err("batch_integrity_mismatch".to_string());
+        }
+        let inspected = inspect_named_synthetic_fhir_envelope_v1(id, max_input_bytes)
+            .map_err(|err| err.code().to_string())?;
+        if inspected.bytes != expected_bytes
+            || inspected.status != expected_status
+            || !inspected.synthetic_only
+            || inspected.full_fhir_r4_validated
+            || inspected.release_authorized
+        {
+            return Err("batch_integrity_mismatch".to_string());
+        }
+        rows.push(NativeBatchRow {
+            fixture_id: id,
+            bytes: hash.bytes,
+            sha256_hex: hash.sha256_hex,
+            status: inspected.status,
+        });
+    }
+    // No intermediate rows escape Rust if any one check fails.
+    Ok(NativeBatchResponse {
+        contract: "medorigin-d1-native-fictional-batch-v1",
+        rows,
+        synthetic_only: true,
+        full_fhir_r4_validated: false,
+        release_authorized: false,
+        webview_runtime_egress_qualified: false,
+    })
+}
+
 /// Reject app-host navigation to remote destinations, embedded credentials and
 /// unexpected ports. This is webview-level defense in depth only, not OS egress proof.
 fn allow_preview_navigation(url: &tauri::Url) -> bool {
@@ -130,7 +265,8 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             preview_status,
             hash_fixture,
-            inspect_fhir_fixture_envelope
+            inspect_fhir_fixture_envelope,
+            verify_all_fixtures
         ])
         .run(tauri::generate_context!())
         .expect("MedOrigin D1 preview bootstrap failed");
@@ -229,5 +365,21 @@ mod tests {
             hash_fixture("patient-minimal".to_owned(), 0).unwrap_err(),
             "invalid_limit"
         );
+    }
+
+    #[test]
+    fn native_batch_verifies_all_twelve_without_partial_or_clinical_claims() {
+        let result = verify_all_fixtures(65_536).expect("fixed fictional batch");
+        assert_eq!(result.contract, "medorigin-d1-native-fictional-batch-v1");
+        assert_eq!(result.rows.len(), 12);
+        assert_eq!(result.rows[0].fixture_id, "patient-minimal");
+        assert_eq!(result.rows[11].fixture_id, "bundle-dangling");
+        assert!(result.synthetic_only);
+        assert!(!result.release_authorized);
+        assert!(!result.full_fhir_r4_validated);
+        assert!(!result.webview_runtime_egress_qualified);
+        assert!(result.rows.iter().all(|row| row.sha256_hex.len() == 64));
+        assert_eq!(verify_all_fixtures(0).unwrap_err(), "invalid_limit");
+        assert_eq!(verify_all_fixtures(65_537).unwrap_err(), "invalid_limit");
     }
 }
