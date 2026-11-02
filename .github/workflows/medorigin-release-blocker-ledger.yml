@@ -9,6 +9,7 @@ on:
     paths:
       - 'scripts/medorigin_release_blocker_ledger.py'
       - 'tests/test_medorigin_release_blocker_ledger.py'
+      - 'tests/test_medorigin_release_blocker_ledger_ambiguity.py'
       - '.github/workflows/medorigin-release-blocker-ledger.yml'
   workflow_dispatch:
 permissions:
@@ -24,7 +25,7 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
       - name: Run fail-closed mocked issue tests
-        run: python3 -m unittest discover -s tests -p test_medorigin_release_blocker_ledger.py -v
+        run: python3 -m unittest discover -s tests -p 'test_medorigin_release_blocker_ledger*.py' -v
       - name: Prove strict mode returns NO-GO under mocked open issues
         run: echo 'UNIT_TESTS_ONLY_DO_NOT_ATTEST_RELEASE_AUTHORIZATION'
   live-read-only:
