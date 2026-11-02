@@ -128,3 +128,15 @@ test('no secret metadata, live event body, endpoint or packet success field in r
  assert.doesNotMatch(j,/hostname|username|application|ipAddress|endpoint|eventMessage|packetPayload|queryName/i);
  assert.equal(v.osPacketDenyProven,false);
 });
+
+test('all read-only audit-state combinations remain NO-GO even when metadata is visible',()=>{
+ for(const connectionAuditState of ['PRIVILEGE_DENIED','READABLE_UNVERIFIED','OTHER_ERROR'])
+  for(const packetDropAuditState of ['PRIVILEGE_DENIED','READABLE_UNVERIFIED','OTHER_ERROR'])
+   for(const securityLogMetadata of ['ACCESS_DENIED','AVAILABLE_METADATA']){
+    const v=validateAuditVisibility({...fixture(),connectionAuditState,packetDropAuditState,securityLogMetadata},sha);
+    assert.equal(v.osPacketDenyProven,false);
+    assert.equal(v.wfpAuditPolicyAttested,false);
+    assert.equal(v.eventRecordsRead,false);
+    assert.equal(v.policyChanged,false);
+   }
+});
