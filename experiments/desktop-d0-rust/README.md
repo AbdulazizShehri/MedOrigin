@@ -4,9 +4,9 @@
 
 ## Purpose and trust boundary
 
-The user-directed future direction is a Rust-first local desktop, with Python remaining canonical for research and Health AI. This tiny crate experiments with only the first pure-data Rust capability: `hash_fixture_raw_v1(fixture_id, max_input_bytes)`. It uses a closed set of four *fictional* in-memory byte fixtures from [D0 issue #657](https://github.com/AbdulazizShehri/MedOrigin/issues/657) and [Draft PR #658](https://github.com/AbdulazizShehri/MedOrigin/pull/658).
+The user-directed future direction is a Rust-first local desktop, with Python remaining canonical for research and Health AI. This tiny crate experiments with only the first pure-data Rust capability: `hash_fixture_raw_v1(fixture_id, max_input_bytes)`. The original SHA reference uses four *fictional* in-memory byte fixtures, now extended by eight additional fixed synthetic FHIR-shaped test cases from [D0 issue #657](https://github.com/AbdulazizShehri/MedOrigin/issues/657) and [Draft PR #658](https://github.com/AbdulazizShehri/MedOrigin/pull/658).
 
-The implementation does **not** parse FHIR, open filesystem paths, execute OS commands, start a service, collect telemetry, load a model, or process real patient records. It returns the SHA-256 of **raw bytes**, which must not be mistaken for FHIR canonical JSON or a signed/authenticated receipt. It enforces an upper bound before allocation, has no `unsafe` code, and rejects all fixture IDs not on its explicit allowlist. Unknown Windows paths, Unix paths, traversal and embedded-NUL strings are negative tests, not accepted file paths.
+The raw SHA-256 operation does not parse FHIR. A separate, deliberately narrow in-memory serde_json envelope checker handles only the fixed fictional Patient/Observation/Bundle cases. The crate does **not** open filesystem paths, execute OS commands, start a service, collect telemetry, load a model, or process real patient records. It returns the SHA-256 of **raw bytes**, which must not be mistaken for FHIR canonical JSON or a signed/authenticated receipt. It enforces an upper bound before allocation, has no `unsafe` code, and rejects all fixture IDs not on its explicit allowlist. Unknown Windows paths, Unix paths, traversal and embedded-NUL strings are negative tests, not accepted file paths.
 
 ## Dependencies and reproducibility limitations
 

@@ -503,3 +503,12 @@ or published artifact is created. Linux zbus transitive maintenance
 #673, macOS spoken VoiceOver #676, independent release-security #603
 and owner/ADR #574 remain separate NO-GO; #662 Windows D1 egress
 remains OPEN. Protect frozen research roots and historical data.
+
+
+## D2 native Rust FHIR-shaped fictional preview extension (2026-11-02)
+
+The newest **Draft-only** D2 experiment imports the fixed, non-clinical D0 Rust JSON-envelope corpus from the independent D1 synthetic Bundle work (source reference Draft #840, exact SHA `0997e713941f90cb2ede7366521d20b3ac153224`). The D0 helper accepts twelve **compiled-in, fictional fixture IDs**: the original four Patient byte fixtures, two fake Observations, and six fake Bundles testing relative and Bundle-local URN references, missing Patient references, duplicate fullUrl, and unsupported Bundle type. It uses `serde_json` in memory for *limited* exact-field/graph checks and continues to hash original raw bytes. This does not validate real FHIR R4 profiles, clinical content, terminology, external references or arbitrary data, and there is no EHR or file importer.
+
+The first four selectors and `Verify synthetic SHA-256` button remain in their original order and visible without expansion for the existing one-device Windows UIA and macOS AX/keyboard tests. The additional eight fiction-only cases live under an **initially collapsed** section after the original Verify button. Each local Rust verification requires the SHA contract, digest, exact byte length, fixed synthetic fixture identity, FHIR-envelope result status and negative permission flags to agree before showing a result; a negative sample is explicitly labeled as a negative *test*, not real patient/FHIR validity. No WebView2 or Tauri IPC is involved.
+
+This is a new **native D2 product feasibility** capability, not a migration of the D1 application or a full product feature. The source-defined crate graph continues to include AccessKit for accessibility; the transitive Linux `zbus 5` maintenance notices (#673) are **not resolved**. Native OS packet-drop proof (#662), actual spoken VoiceOver (#676), independent security review (#603), owner release decisions (#574), and optional research advisories (#622) all remain NO-GO. Existing Mac AX tests have not been re-run on the expanded UI; only the four unchanged visible labels/button order has been preserved by source review. No release, tag, installer, PHI or protected-main merge.
