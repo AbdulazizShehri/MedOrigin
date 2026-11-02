@@ -1,3 +1,5 @@
+> **SECURITY CORRECTION — 2026-11-03 (supersedes all broad WSL isolation inferences below):** Actual WSL2 WindowsInterop executed `cmd.exe /d /c echo` successfully from inside an otherwise isolated Linux network namespace with no IPv4/IPv6 routes. This is a *host-process broker escape* from Linux namespace constraints. The eight socket-denial observations below remain true for **direct Linux sockets only**, but the previous `LINUX_NETNS_NEGATIVE_CONTROL_PASS_NOT_RELEASE` must **not** be treated as end-to-end MedOrigin offline containment. Updated source-controlled launcher and Python gate now **refuse WSL** with `WSL_WINDOWS_PROCESS_INTEROP_UNCONFINED` before network probes or GUI. New canonical proof: `evidence/d2-wsl-interop-escape-and-fail-closed-20261103.md`. Release stays **NO-GO**.
+
 # MedOrigin D2 — real Linux network-namespace negative controls (2026-11-02)
 
 **Scope: actual native Linux GUI inside WSL2 Ubuntu private user/network namespace. Qualified local experiment, not a release.**
