@@ -64,12 +64,15 @@ try {
   ExpectText $observation
   ExpectText 'SHA-256: 747e1e038d6cc9a39a9cee209f621841cf6a9748d82be42fa545f19cfd6877a0'
   ExpectText 'SHA-256: 527806e5427cc45e55424d1b8dc8ddcdc86a2b37df2ae116735e6832268b5e19'
+  $byteDiff='Fictional byte difference: first differing byte offset 17 (zero-based); common suffix 1 bytes; left 57 bytes, right 251 bytes. Original source bytes unchanged.'
+  ExpectText $byteDiff
   Write-Output 'D2_COMPARE_TWO_REAL_UIA_PASS'
 
   Press (One 'Compare: patient-minimal')
   Press (One 'Compare verified fictional JSON (read-only)')
   ExpectText 'FAIL CLOSED: choose two distinct fictional fixtures'
   ExpectText $observation $false
+  ExpectText $byteDiff $false
   Write-Output 'D2_COMPARE_SAME_FIXTURE_REFUSAL_PASS'
 
   Press (One 'Compare: observation-minimal')
@@ -77,6 +80,7 @@ try {
   ExpectText $observation
   Press (One 'Verify synthetic SHA-256')
   ExpectText $observation $false
+  ExpectText $byteDiff $false
   Write-Output 'D2_COMPARE_STALE_CLEAR_PASS'
   Write-Output 'D2_COMPARE_WINDOWS_UIA_3_OF_3_PASS_NONPUBLISHING'
 }catch{
