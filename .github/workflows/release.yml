@@ -120,9 +120,33 @@ jobs:
           print("Installed wheel public project URLs: canonical MedOrigin")
           PY
 
+  publication-readiness:
+    name: independent release authorization not yet attested
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 6
+    permissions:
+      contents: read
+      issues: read
+    steps:
+      - name: Checkout exact tag commit without credentials
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Fail closed until independently signed release approval
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # This is an intentional HARD NO-GO. The read-only ledger cannot grant
+          # publication authority even if every issue is closed or CI is green.
+          # An owner-approved governance change, independently reviewed and
+          # merged via protected main, is required before any release.
+          python3 scripts/medorigin_release_blocker_ledger.py --strict
+
   github-release:
     name: GitHub Release
-    needs: [quality, build, install-smoke]
+    needs: [quality, build, install-smoke, publication-readiness]
     runs-on: ubuntu-latest
     # Explicit operator-controlled activation is required in addition to a tag.
     # A passing build is never equivalent to permission to publish.
