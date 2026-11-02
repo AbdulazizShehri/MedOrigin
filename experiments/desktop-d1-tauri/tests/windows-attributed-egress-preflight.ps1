@@ -101,6 +101,12 @@ try {
       Refuse 'D1_DESCENDANT_IDENTITY_UNSTABLE_DURING_OBSERVATION' 4
     }
   }
+  # Hash the on-disk image twice to detect replacement while attribution is
+  # running. This still does not attest Windows-loaded PE memory or WFP egress.
+  $finalDigest=(Get-FileHash -Algorithm SHA256 -LiteralPath $absolute -ErrorAction Stop).Hash
+  if($finalDigest -ine $digest){
+    Refuse 'D1_EXECUTABLE_HASH_CHANGED_DURING_OBSERVATION' 4
+  }
   if($external.Count -gt 0){ Refuse 'D1_OBSERVED_EXTERNAL_TCP_NO_GO' 2 }
   Refuse 'NO_EXTERNAL_TCP_OBSERVED_PACKET_DNS_UNPROVEN' 3
 }
