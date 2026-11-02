@@ -4,6 +4,7 @@
 An issue being closed is NOT an approval, independent review or signed artifact.
 This program can never authorize publication and performs no mutation/API writes.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -11,8 +12,8 @@ import json
 import re
 import subprocess
 import sys
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Callable
 
 REPO = "AbdulazizShehri/MedOrigin"
 GATES = {
@@ -29,6 +30,7 @@ REQUIRED_APPROVALS = (
     "approved package identity and ADR-0044/0045 disposition",
     "platform-specific OS network and accessibility evidence",
 )
+
 
 @dataclass(frozen=True)
 class Gate:
@@ -66,35 +68,53 @@ def parse_issue(number: int, reason: str, payload: object) -> Gate:
         or not isinstance(payload.get("html_url"), str)
         or payload["html_url"] != url
     ):
-        return Gate(number, reason, "EVIDENCE_INVALID", "unknown", None, url, "invalid_issue_receipt")
+        return Gate(
+            number, reason, "EVIDENCE_INVALID", "unknown", None, url, "invalid_issue_receipt"
+        )
     updated = payload.get("updated_at")
     if not isinstance(updated, str) or not re.fullmatch(
         r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z", updated
     ):
-        return Gate(number, reason, "EVIDENCE_INVALID", "unknown", None, url, "missing_or_invalid_timestamp")
+        return Gate(
+            number, reason, "EVIDENCE_INVALID", "unknown", None, url, "missing_or_invalid_timestamp"
+        )
     state = payload["state"]
     return Gate(
-        number, reason,
+        number,
+        reason,
         "OPEN_BLOCKER" if state == "open" else "CLOSED_REQUIRES_INDEPENDENT_ATTESTATION",
-        state, updated, url,
+        state,
+        updated,
+        url,
     )
 
 
-def load_live_issue(number: int, reason: str, runner: Callable[..., object] = subprocess.run) -> Gate:
+def load_live_issue(
+    number: int,
+    reason: str,
+    runner: Callable[..., subprocess.CompletedProcess[bytes]] = subprocess.run,
+) -> Gate:
     """Only the fixed repository issue-read endpoint; never shell or write verbs."""
     url = f"https://github.com/{REPO}/issues/{number}"
     try:
         receipt = runner(
             ["gh", "api", "--method", "GET", f"repos/{REPO}/issues/{number}"],
-            capture_output=True, text=False, timeout=20, check=False,
+            capture_output=True,
+            text=False,
+            timeout=20,
+            check=False,
         )
         if receipt.returncode != 0:
-            return Gate(number, reason, "EVIDENCE_UNAVAILABLE", "unknown", None, url, "github_read_failed")
+            return Gate(
+                number, reason, "EVIDENCE_UNAVAILABLE", "unknown", None, url, "github_read_failed"
+            )
         # GitHub output is UTF-8. Parse bytes directly to avoid Windows cp1252
         # decoding crashes when an issue body contains Unicode characters.
         payload = json.loads(receipt.stdout)
     except (OSError, ValueError, TypeError, UnicodeError, subprocess.TimeoutExpired):
-        return Gate(number, reason, "EVIDENCE_UNAVAILABLE", "unknown", None, url, "github_read_failed")
+        return Gate(
+            number, reason, "EVIDENCE_UNAVAILABLE", "unknown", None, url, "github_read_failed"
+        )
     return parse_issue(number, reason, payload)
 
 
@@ -111,21 +131,31 @@ def build_report(reader: Callable[[int, str], Gate] = load_live_issue) -> dict[s
         "independent_security_review_attested": False,
         "required_approvals_not_attested": list(REQUIRED_APPROVALS),
         "gates": [g.to_dict() for g in gates],
-        "disclaimer": "Closing issues or passing CI cannot itself authorize a tag, merge, installer, registry upload or clinical use.",
+        "disclaimer": (
+            "Closing issues or passing CI cannot authorize a tag, merge, installer, "
+            "registry upload or clinical use."
+        ),
     }
 
 
-def main(argv: list[str] | None = None, reader: Callable[[int, str], Gate] = load_live_issue) -> int:
+def main(
+    argv: list[str] | None = None, reader: Callable[[int, str], Gate] = load_live_issue
+) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--json", action="store_true", help="emit structured read-only JSON")
-    parser.add_argument("--strict", action="store_true", help="exit nonzero while release is blocked")
+    parser.add_argument(
+        "--strict", action="store_true", help="exit nonzero while release is blocked"
+    )
     args = parser.parse_args(argv)
     report = build_report(reader)
     if args.json:
         print(json.dumps(report, sort_keys=True, indent=2))
     else:
         print(f"{report['state']} — MedOrigin Developer Beta (no publication authority)")
-        for g in report["gates"]:
+        gates = report["gates"]
+        assert isinstance(gates, list)
+        for g in gates:
+            assert isinstance(g, dict)
             print(f"#{g['issue']}: {g['status']} — {g['reason']}")
         print("Independent approvals and signed artifact authority NOT ATTESTED.")
     # Strict mode is useful as a negative control; it is expected to fail until
