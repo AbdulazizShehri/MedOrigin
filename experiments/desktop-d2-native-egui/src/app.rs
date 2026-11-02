@@ -527,8 +527,14 @@ mod tests {
         assert_eq!(pair.right.status, "INVALID_REFERENCE");
         assert_ne!(pair.left_json, pair.right_json);
         assert_ne!(pair.left.sha256, pair.right.sha256);
-        assert!(pair.byte_diff_summary.contains("first differing byte offset"));
-        assert!(pair.byte_diff_summary.contains("Original source bytes unchanged."));
+        assert!(
+            pair.byte_diff_summary
+                .contains("first differing byte offset")
+        );
+        assert!(
+            pair.byte_diff_summary
+                .contains("Original source bytes unchanged.")
+        );
         assert!(app.hash_selected().is_ok());
         assert!(
             app.comparison.is_none(),
