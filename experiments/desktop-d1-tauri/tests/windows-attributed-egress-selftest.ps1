@@ -17,6 +17,7 @@ try {
     @{name='grandchild-established';code=2;reason='D1_OBSERVED_EXTERNAL_TCP_NO_GO'},
     @{name='wrong-root-image';code=4;reason='D1_ROOT_IMAGE_PATH_MISMATCH'},
     @{name='pid-reused';code=4;reason='D1_ROOT_IDENTITY_CHANGED_DURING_OBSERVATION'},
+    @{name='descendant-pid-reused';code=4;reason='D1_DESCENDANT_IDENTITY_UNSTABLE_DURING_OBSERVATION'},
     @{name='root-missing';code=4;reason='D1_ROOT_ABSENT_OR_AMBIGUOUS'},
     @{name='birth-missing';code=4;reason='D1_ROOT_IMAGE_OR_BIRTH_UNREADABLE'},
     @{name='cim-error';code=4;reason='D1_OBSERVATION_ERROR'},
@@ -41,7 +42,9 @@ function Get-CimInstance {
   if('__CASE__' -eq 'wrong-root-image'){$img='C:\Windows\System32\not-medorigin.exe'}
   [pscustomobject]@{ProcessId=12345;ParentProcessId=0;CreationDate=$birth;ExecutablePath=$img}
  }
- [pscustomobject]@{ProcessId=23456;ParentProcessId=12345;CreationDate='2026-11-03T00:00:00Z';ExecutablePath='C:\Program Files\WebView2\msedgewebview2.exe'}
+ $childBirth='2026-11-03T00:00:00Z'
+ if('__CASE__' -eq 'descendant-pid-reused' -and $script:cimReads -gt 1){$childBirth='2026-11-03T00:02:00Z'}
+ [pscustomobject]@{ProcessId=23456;ParentProcessId=12345;CreationDate=$childBirth;ExecutablePath='C:\Program Files\WebView2\msedgewebview2.exe'}
  [pscustomobject]@{ProcessId=34567;ParentProcessId=23456;CreationDate='2026-11-03T00:00:00Z';ExecutablePath='C:\Program Files\WebView2\msedgewebview2.exe'}
  [pscustomobject]@{ProcessId=99999;ParentProcessId=0;CreationDate='2026-11-03T00:00:00Z';ExecutablePath='C:\Other\app.exe'}
 }
@@ -84,4 +87,4 @@ exit $LASTEXITCODE
   }
 }
 finally { Remove-Item -LiteralPath $work -Recurse -Force -ErrorAction SilentlyContinue }
-Write-Output 'D1_PINNED_ATTRIBUTION_12_OF_12_MOCK_PASS_NO_RELEASE'
+Write-Output 'D1_PINNED_ATTRIBUTION_13_OF_13_MOCK_PASS_NO_RELEASE'
