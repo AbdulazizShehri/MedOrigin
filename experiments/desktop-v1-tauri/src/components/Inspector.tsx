@@ -29,7 +29,7 @@ export function Inspector({ route, onHide }: InspectorProps) {
       <div className="detail">
         <strong>State · status</strong>
         <p>
-          {route.status === 'fixture-only' && 'Connected to the Slice-1 native fixture command only. Everything else is unmounted by design.'}
+          {route.status === 'fixture-only' && 'Connected to native Rust fixture verification and read-only fictional source inspection (Slices 1-2). Every other capability remains unmounted.'}
           {route.status === 'foundation' && 'Python foundation exists and is contract-tested; the desktop route is intentionally not wired yet.'}
           {route.status === 'gated' && 'Blocked behind a separate authorization. The desktop must not fake an enabled control.'}
           {route.status === 'deferred' && 'Outside the currently authorized scope.'}

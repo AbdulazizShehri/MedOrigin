@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { VerifiedFixtureSource } from '../components/VerifiedFixtureSource';
 import { CircleCheck, CircleX, FileSearch, ShieldAlert } from 'lucide-react';
 import {
   CONTRACT_LIST,
@@ -25,6 +26,7 @@ export function FixtureInspectorScreen() {
   const [list, setList] = useState<ListState>({ kind: 'loading' });
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [verify, setVerify] = useState<VerifyState>({ kind: 'idle' });
+  const verificationGeneration = useRef(0);
   // DEV-only affordance (visible, never styled as active): probe an unknown id to prove the host fails closed.
   const [probeId, setProbeId] = useState('');
 
@@ -50,16 +52,24 @@ export function FixtureInspectorScreen() {
   const [probeState, setProbeState] = useState<VerifyState>({ kind: 'idle' });
 
   function selectFixture(f: FixtureMeta) {
+    verificationGeneration.current += 1;
     setSelectedId(f.id);
     setVerify({ kind: 'idle' });
   }
 
   async function runVerify(id: string, expectedSha256: string) {
+    const requestId = ++verificationGeneration.current;
     setVerify({ kind: 'verifying' });
     try {
       const result = await verifySyntheticFixture({ fixture_id: id });
-      if (result.contract !== CONTRACT_VERIFY) {
+      if (requestId !== verificationGeneration.current) return;
+      if (result.contract !== CONTRACT_VERIFY || result.fixture_id !== id) {
         setVerify({ kind: 'error', code: 'contract_mismatch' });
+        return;
+      }
+      const listed = list.kind === 'ready' ? list.fixtures.find((item) => item.id === id) : undefined;
+      if (!listed || result.byte_len !== listed.byte_len || result.synthetic_only !== true || result.release_authorized !== false) {
+        setVerify({ kind: 'error', code: 'verification_contract_mismatch' });
         return;
       }
       if (result.sha256_hex !== expectedSha256) {
@@ -68,7 +78,9 @@ export function FixtureInspectorScreen() {
       }
       setVerify({ kind: 'ready', result, expectedSha256 });
     } catch (err) {
-      setVerify({ kind: 'error', code: errorCode(err) });
+      if (requestId === verificationGeneration.current) {
+        setVerify({ kind: 'error', code: errorCode(err) });
+      }
     }
   }
 
@@ -88,7 +100,7 @@ export function FixtureInspectorScreen() {
 
   return (
     <>
-      <span className="eyebrow">MEDORIGIN / SYNTHETIC FHIR FIXTURE INSPECTOR / SLICE 1</span>
+      <span className="eyebrow">MEDORIGIN / SYNTHETIC FHIR FIXTURE INSPECTOR / SLICES 1-2</span>
       <h1 className="page-title">FHIR fixture inspector</h1>
       <p className="sub">
         FICTIONAL fixtures, hash-verified by the native Rust host over committed bytes. This is <b>not</b> FHIR validation,
@@ -174,7 +186,7 @@ export function FixtureInspectorScreen() {
                     <b>{String(verify.result.synthetic_only)}</b> · release_authorized <b>{String(verify.result.release_authorized)}</b>
                   </p>
                   {selected.id === 'fixture-bundle-delta' && (
-                    <p className="sub-spaced">Hash-verified only — no FHIR structural validation in slice 1.</p>
+                    <p className="sub-spaced">Hash-verified only — no FHIR structural or clinical validation.</p>
                   )}
                 </div>
               )}
@@ -189,6 +201,9 @@ export function FixtureInspectorScreen() {
                 </div>
               )}
             </div>
+            {verify.kind === 'ready' && verify.result.fixture_id === selected.id && (
+              <VerifiedFixtureSource key={selected.id} fixture={selected} />
+            )}
           </>
         )}
 

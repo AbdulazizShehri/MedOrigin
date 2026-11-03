@@ -72,3 +72,21 @@ test('no popups or new pages from crafted links', async ({ page, context }) => {
   expect(popup).toBeNull();
   expect(context.pages()).toHaveLength(1);
 });
+
+test('fictional JSON source is revealed only after verification and browser-side SHA checking', async ({ page }) => {
+  await page.goto('/#/fhir-inspector');
+  const inspect = page.getByRole('button', { name: 'Inspect verified fictional JSON source' });
+  await expect(inspect).toHaveCount(0);
+  await page.getByRole('button', { name: 'Fixture fixture-patient-alpha' }).click();
+  await expect(inspect).toHaveCount(0);
+  await page.getByRole('button', { name: 'Verify fixture with native Rust' }).click();
+  await expect(page.getByRole('status', { name: 'Verification result' })).toBeVisible();
+  await inspect.click();
+  const region = page.getByRole('region', { name: 'Verified fictional JSON text' });
+  await expect(region).toBeVisible();
+  await expect(region).toContainText('"resourceType": "Patient"');
+  await expect(region).toContainText('FICTIONAL');
+  await page.getByRole('button', { name: 'Fixture fixture-allergy-beta' }).click();
+  await expect(region).toHaveCount(0);
+  await expect(inspect).toHaveCount(0);
+});

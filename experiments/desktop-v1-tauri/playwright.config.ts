@@ -17,7 +17,7 @@ export default defineConfig({
     screenshot: 'only-on-failure',
   },
   projects: [
-    { name: 'chromium', use: { ...devices['Desktop Chrome'] } },
+    { name: 'chromium', use: { ...devices['Desktop Chrome'], ...(process.env.MO_PLAYWRIGHT_EXECUTABLE ? { launchOptions: { executablePath: process.env.MO_PLAYWRIGHT_EXECUTABLE } } : {}) } },
   ],
   webServer: {
     command: 'npm run build && npm run preview -- --port 4173 --strictPort',

@@ -1,0 +1,10 @@
+Slice 2 native Windows UIA verification record
+Date: 2026-11-03 Asia/Riyadh
+Build command: npx tauri build --debug --no-bundle (nonpublishing unsigned debug binary)
+PASS: Rust native fixture hash response
+PASS: Read-only native JSON source returned and verified against fictional fixture hash
+PASS: Windows UIA found FICTIONAL SOURCE / EXAMPLEPERSON / resourceType
+PASS: Dark/light screenshots captured at logical 1280x800 and 1440x900 (125% DPI)
+NOT TESTED: native 1920x1080, 100/150/200% scaling, macOS/Linux
+NO-GO: WebView2 external network egress observed in Slice 1, still unresolved
+No clinical, PHI, FHIR validation or release authorization.

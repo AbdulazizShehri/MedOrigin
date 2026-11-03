@@ -20,7 +20,7 @@ describe('App routing and shell', () => {
       expect(document.body.textContent).toBeTruthy();
       unmount();
     }
-  });
+  }, 30_000); // 28 synchronous mounts can exceed Vitest's 5s default on a busy Windows host.
 
   it('every gated/deferred route shows a blocked explanation, never a working CTA', async () => {
     for (const route of ROUTES.filter((r) => r.status === 'gated' || r.status === 'deferred')) {

@@ -14,6 +14,7 @@ const MAX_FIXTURE_ID_BYTES: usize = 64;
 const CONTRACT_STATUS: &str = "medorigin-desktop-status-v1";
 const CONTRACT_LIST: &str = "medorigin-fixtures-list-v1";
 const CONTRACT_VERIFY: &str = "medorigin-fixture-verify-v1";
+const CONTRACT_SOURCE: &str = "medorigin-fixture-source-v1";
 
 /// Fixture byte strings are committed under `src-tauri/fixtures/` (LF, see
 /// `.gitattributes`) and hashed as raw bytes. Never re-serialized.
@@ -82,6 +83,22 @@ pub struct FixtureVerification {
     pub fixture_id: &'static str,
     pub byte_len: usize,
     pub sha256_hex: String,
+    pub synthetic_only: bool,
+    pub release_authorized: bool,
+}
+
+/// Read-only content of a bundled fictional fixture. Neither arbitrary paths nor
+/// caller-provided bytes can enter this API. Parsing is JSON syntax-only:
+/// this does NOT establish FHIR semantic validity or clinical suitability.
+#[derive(Serialize, Debug)]
+#[serde(deny_unknown_fields)]
+pub struct FixtureSource {
+    pub contract: &'static str,
+    pub fixture_id: &'static str,
+    pub media_type: &'static str,
+    pub byte_len: usize,
+    pub sha256_hex: String,
+    pub text: &'static str,
     pub synthetic_only: bool,
     pub release_authorized: bool,
 }
@@ -168,6 +185,45 @@ fn verify_synthetic_fixture(
     })
 }
 
+/// Return source bytes ONLY for exact, compile-time allowlisted fictional IDs.
+/// Never take a path or a caller-side hash. No filesystem, network, sidecar or
+/// research-workspace operations are invoked by this command.
+#[tauri::command]
+fn read_synthetic_fixture_source(req: VerifyFixtureRequest) -> Result<FixtureSource, CommandError> {
+    let id = req.fixture_id;
+    if id.len() > MAX_FIXTURE_ID_BYTES {
+        return Err(CommandError::new("invalid_input"));
+    }
+    let (fixture_id, _, bytes) =
+        fixture_entry(&id).ok_or_else(|| CommandError::new("unknown_fixture"))?;
+    if bytes.len() > MAX_INPUT_BYTES {
+        return Err(CommandError::new("input_limit_exceeded"));
+    }
+    let text = std::str::from_utf8(bytes).map_err(|_| CommandError::new("invalid_fixture"))?;
+    let document: serde_json::Value =
+        serde_json::from_str(text).map_err(|_| CommandError::new("invalid_fixture"))?;
+    // A shape sanity check is not a FHIR parser or semantic validation.
+    if !document.is_object()
+        || document
+            .get("resourceType")
+            .and_then(serde_json::Value::as_str)
+            .is_none()
+        || !text.contains("FICTIONAL")
+    {
+        return Err(CommandError::new("invalid_fixture"));
+    }
+    Ok(FixtureSource {
+        contract: CONTRACT_SOURCE,
+        fixture_id,
+        media_type: "application/fhir+json",
+        byte_len: bytes.len(),
+        sha256_hex: sha256_hex(bytes),
+        text,
+        synthetic_only: true,
+        release_authorized: false,
+    })
+}
+
 /// Deny-all navigation: the webview may only host the bundled app origin.
 /// This is webview-level defense in depth only, not OS egress proof.
 fn allow_desktop_navigation(url: &tauri::Url) -> bool {
@@ -201,7 +257,8 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             get_desktop_status,
             list_synthetic_fixtures,
-            verify_synthetic_fixture
+            verify_synthetic_fixture,
+            read_synthetic_fixture_source
         ])
         .run(tauri::generate_context!())
         .expect("MedOrigin Desktop v1 bootstrap failed");
@@ -333,6 +390,56 @@ mod tests {
                 | "input_limit_exceeded"
                 | "internal"
         ));
+    }
+
+    #[test]
+    fn source_view_returns_only_pinned_fictional_json() {
+        for fixture in list_synthetic_fixtures().fixtures {
+            let source = read_synthetic_fixture_source(VerifyFixtureRequest {
+                fixture_id: fixture.id.to_owned(),
+            })
+            .unwrap();
+            assert_eq!(source.contract, CONTRACT_SOURCE);
+            assert_eq!(source.fixture_id, fixture.id);
+            assert_eq!(source.media_type, "application/fhir+json");
+            assert_eq!(source.sha256_hex, fixture.sha256_hex);
+            assert_eq!(source.byte_len, fixture.byte_len);
+            assert_eq!(sha256_hex(source.text.as_bytes()), fixture.sha256_hex);
+            assert_eq!(source.text.len(), fixture.byte_len);
+            assert!(source.text.contains("FICTIONAL"));
+            assert!(source.synthetic_only);
+            assert!(!source.release_authorized);
+            let parsed: serde_json::Value = serde_json::from_str(source.text).unwrap();
+            assert!(parsed.get("resourceType").is_some());
+        }
+    }
+
+    #[test]
+    fn source_view_refuses_unknown_traversal_and_oversized_input() {
+        for id in [
+            "../secret",
+            "fixture-unknown",
+            "",
+            "fixture-patient-alpha/../other",
+        ] {
+            let err = read_synthetic_fixture_source(VerifyFixtureRequest {
+                fixture_id: id.to_owned(),
+            })
+            .unwrap_err();
+            assert_eq!(err.code, "unknown_fixture");
+            if !id.is_empty() {
+                assert!(!serde_json::to_string(&err).unwrap().contains(id));
+            }
+        }
+        let err = read_synthetic_fixture_source(VerifyFixtureRequest {
+            fixture_id: "x".repeat(65),
+        })
+        .unwrap_err();
+        assert_eq!(err.code, "invalid_input");
+        let forged: Result<VerifyFixtureRequest, _> = serde_json::from_str(
+            r#"{"fixture_id":"fixture-patient-alpha","path":"C:/users/private"}"#,
+        );
+        assert!(forged.is_err());
     }
 
     #[test]

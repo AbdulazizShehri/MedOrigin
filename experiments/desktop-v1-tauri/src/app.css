@@ -259,3 +259,29 @@ h1.page-title { font-size: 22px; line-height: 1.2; font-weight: 600; letter-spac
 
 .search-box::placeholder { color: var(--mo-text-muted); opacity: 1; }
 .honesty-banner { text-wrap: pretty; }
+
+/* Slice 2: strictly read-only, provenance-first fictional JSON viewer. */
+.fixture-source-section { margin-top: 18px; }
+.fixture-source-section .sub { margin: 9px 0 16px; }
+.source-provenance {
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--mo-text-secondary);
+  margin: 0 0 14px;
+}
+.fixture-source-pre {
+  max-height: 380px;
+  max-width: 100%;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  border: 1px solid var(--mo-border);
+  border-radius: 6px;
+  padding: 16px;
+  color: var(--mo-text);
+  background: var(--mo-raised);
+  font-size: 12px;
+  line-height: 1.6;
+  tab-size: 2;
+}
+.fixture-source-pre code { font: inherit; }
