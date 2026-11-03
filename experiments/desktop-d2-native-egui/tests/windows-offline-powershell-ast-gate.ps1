@@ -6,7 +6,10 @@ $scriptFiles=@(
   'windows-network-socket-observation.ps1',
   'windows-native-d2-socket-smoke.ps1',
   'windows-firewall-policy-preflight.ps1',
-  'windows-firewall-policy-preflight-qa.ps1'
+  'windows-firewall-policy-preflight-qa.ps1',
+  'windows-native-fictional-compare-uia.ps1',
+  'windows-native-fictional-compare-keyboard.ps1',
+  'windows-native-fictional-json-pointer-uia.ps1'
 )
 foreach($name in $scriptFiles){
   $path=Join-Path $PSScriptRoot $name
@@ -19,4 +22,4 @@ foreach($name in $scriptFiles){
   }
   Write-Output ('PS_AST_PASS: '+$name)
 }
-Write-Output 'MEDORIGIN_WINDOWS_OFFLINE_POWERSHELL_AST_4_OF_4_PASS_NONPUBLISHING'
+Write-Output 'MEDORIGIN_WINDOWS_OFFLINE_POWERSHELL_AST_7_OF_7_PASS_NONPUBLISHING'
