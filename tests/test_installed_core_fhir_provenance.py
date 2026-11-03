@@ -5,6 +5,7 @@ from __future__ import annotations
 import importlib.util
 import json
 import subprocess
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -187,6 +188,76 @@ def test_untrusted_cli_output_never_leaks_into_error(
     with pytest.raises(gate.QualificationError) as error:
         gate.call(Path("fake"), ["--version"], tmp_path)
     assert "FICTIONAL-SECRET" not in str(error.value)
+
+
+def test_cli_subprocess_strips_python_startup_and_dynamic_loader_overrides(
+    gate: Any, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    for name, value in (
+        ("PYTHONPATH", "FICTIONAL-OUTSIDE-PACKAGE"),
+        ("PYTHONHOME", "FICTIONAL-HOME"),
+        ("PYTHONUSERBASE", "FICTIONAL-USER-SITE"),
+        ("PYTHONWARNINGS", "error::Warning:FICTIONAL-UNTRUSTED"),
+        ("PYTHONINSPECT", "1"),
+        ("PYTHONSTARTUP", "FICTIONAL-STARTUP"),
+        ("LD_PRELOAD", "FICTIONAL-SHARED-OBJECT"),
+        ("LD_LIBRARY_PATH", "FICTIONAL-DYNAMIC-LIBRARY"),
+        ("DYLD_INSERT_LIBRARIES", "FICTIONAL-INJECTED-LIBRARY"),
+    ):
+        monkeypatch.setenv(name, value)
+    observed: list[dict[str, str]] = []
+
+    def fake_run(*_args: object, **kwargs: object) -> subprocess.CompletedProcess[str]:
+        env = kwargs["env"]
+        assert isinstance(env, dict)
+        observed.append(env)
+        return subprocess.CompletedProcess([], 0, "synthetic", "")
+
+    monkeypatch.setattr(gate.subprocess, "run", fake_run)
+    result = gate.call(Path("fictional-cli"), ["--version"], tmp_path)
+    assert result.returncode == 0
+    assert len(observed) == 1
+    env = observed[0]
+    for key in (
+        "PYTHONPATH",
+        "PYTHONHOME",
+        "PYTHONUSERBASE",
+        "PYTHONWARNINGS",
+        "PYTHONINSPECT",
+        "PYTHONSTARTUP",
+        "LD_PRELOAD",
+        "LD_LIBRARY_PATH",
+        "DYLD_INSERT_LIBRARIES",
+    ):
+        assert key not in env
+    for key in ("PYTHONNOUSERSITE", "PYTHONSAFEPATH", "PYTHONDONTWRITEBYTECODE"):
+        assert env[key] == "1"
+    for key in ("PIP_NO_INDEX", "HF_HUB_OFFLINE", "TRANSFORMERS_OFFLINE"):
+        assert env[key] == "1"
+
+
+def test_real_python_process_does_not_execute_inherited_sitecustomize(
+    gate: Any, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    external = tmp_path / "fictional-ambient-python"
+    external.mkdir()
+    marker = tmp_path / "must-not-exist.txt"
+    (external / "sitecustomize.py").write_text(
+        "import os\n"
+        "from pathlib import Path\n"
+        "Path(os.environ['MEDORIGIN_QA_MARKER']).write_text('ambient executed')\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("PYTHONPATH", str(external))
+    monkeypatch.setenv("MEDORIGIN_QA_MARKER", str(marker))
+    result = gate.call(
+        Path(sys.executable),
+        ["-c", "import sys; print('ISOLATED', sys.version_info.minor)"],
+        tmp_path,
+    )
+    assert result.returncode == 0
+    assert result.stdout.startswith("ISOLATED ")
+    assert not marker.exists(), "outside-Wheel sitecustomize must not execute"
 
 
 def test_subprocess_timeout_is_a_bounded_failure(
