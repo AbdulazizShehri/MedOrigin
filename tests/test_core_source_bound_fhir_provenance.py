@@ -33,9 +33,20 @@ def paths(tmp_path: Path) -> tuple[Path, Path, Path, Path, Path]:
     wheel.write_bytes(b"fictional wheel witness")
     sdist = tmp_path / "medscale-0.3.0.tar.gz"
     sdist.write_bytes(b"fictional source witness")
-    for n in ("env311", "env312"):
-        bin_dir = tmp_path / n / ("Scripts" if sys.platform == "win32" else "bin")
+    for n, minor in (("env311", 11), ("env312", 12)):
+        root = tmp_path / n
+        bin_dir = root / ("Scripts" if sys.platform == "win32" else "bin")
         bin_dir.mkdir(parents=True)
+        (root / "pyvenv.cfg").write_text(
+            "home = fictional-python\ninclude-system-site-packages = false\n",
+            encoding="utf-8",
+        )
+        site_dir = (
+            root / "Lib" / "site-packages"
+            if sys.platform == "win32"
+            else root / "lib" / f"python3.{minor}" / "site-packages"
+        )
+        site_dir.mkdir(parents=True)
         (bin_dir / ("medscale.exe" if sys.platform == "win32" else "medscale")).write_bytes(
             b"fictional CLI"
         )
@@ -157,6 +168,76 @@ def test_refuses_failed_source_artifact_verifier(
     with pytest.raises(gate.QualificationError) as error:
         gate.qualify(*paths)
     assert "fictional private" not in str(error.value)
+
+
+@pytest.mark.parametrize(
+    "kind",
+    [
+        "pth",
+        "pth_upper",
+        "sitecustomize",
+        "sitecustomize_package",
+        "usercustomize",
+        "system_site",
+        "missing_config",
+        "duplicate_config",
+        "missing_site",
+    ],
+)
+def test_unreviewed_installed_startup_hook_refused_before_runtime_execution(
+    gate: Any,
+    paths: tuple[Path, Path, Path, Path, Path],
+    monkeypatch: pytest.MonkeyPatch,
+    kind: str,
+) -> None:
+    _accept_fake_gates(gate, monkeypatch, paths[1])
+    root = paths[3].parent.parent
+    site = (
+        root / "Lib" / "site-packages"
+        if sys.platform == "win32"
+        else root / "lib" / "python3.11" / "site-packages"
+    )
+    config = root / "pyvenv.cfg"
+    if kind in {"pth", "pth_upper"}:
+        suffix = "pth" if kind == "pth" else "PTH"
+        (site / f"zz_fictional_startup.{suffix}").write_text(
+            "import fictional_outside_wheel\n", encoding="utf-8"
+        )
+    elif kind == "sitecustomize":
+        (site / "sitecustomize.py").write_text("import fictional_code\n", encoding="utf-8")
+    elif kind == "sitecustomize_package":
+        (site / "sitecustomize").mkdir()
+    elif kind == "usercustomize":
+        (site / "usercustomize.py").write_text("import fictional_code\n", encoding="utf-8")
+    elif kind == "system_site":
+        config.write_text("include-system-site-packages = true\n", encoding="utf-8")
+    elif kind == "missing_config":
+        config.unlink()
+    elif kind == "duplicate_config":
+        config.write_text(
+            "include-system-site-packages = false\ninclude-system-site-packages = false\n",
+            encoding="utf-8",
+        )
+    else:
+        site.rmdir()
+
+    invoked: list[str] = []
+
+    def never_run(*_args: object, **_kwargs: object) -> int:
+        invoked.append("installed-runtime")
+        raise AssertionError("unqualified startup hook must be refused before Python")
+
+    monkeypatch.setattr(gate.artifact_gate, "installed_wheel_matches", never_run)
+    with pytest.raises(gate.QualificationError, match=r"site-packages|startup hook|venv"):
+        gate.qualify(*paths)
+    assert invoked == []
+
+
+def test_clean_synthetic_virtualenv_startup_surface_is_accepted(
+    gate: Any, paths: tuple[Path, Path, Path, Path, Path]
+) -> None:
+    gate._reject_venv_startup_hooks(paths[3], 11)
+    gate._reject_venv_startup_hooks(paths[4], 12)
 
 
 @pytest.mark.parametrize("bad", ["wheel_commit", "wheel_digest", "wheel_version"])

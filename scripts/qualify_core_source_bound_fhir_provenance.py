@@ -37,6 +37,59 @@ def _require_gate(
         raise QualificationError("source-bound verifier did not qualify the artifact") from exc
 
 
+def _reject_venv_startup_hooks(python: Path, minor: int) -> None:
+    """Check executable Python startup surfaces BEFORE invoking the venv.
+
+    Python's -E/-s/-P flags and clean subprocess environment do not prevent
+    .pth import lines inside venv site-packages from executing at startup.
+    This is intentionally strict: any unqualified startup hook requires
+    a separately reviewed environment rather than silently being trusted.
+    """
+    venv = python.parent.parent
+    config = venv / "pyvenv.cfg"
+    if config.is_symlink() or not config.is_file() or config.stat().st_size > 16_384:
+        raise QualificationError("installed Python venv configuration not qualified")
+    try:
+        lines = config.read_text(encoding="utf-8").splitlines()
+    except (OSError, UnicodeError) as exc:
+        raise QualificationError("installed Python venv configuration not readable") from exc
+    inherited = [
+        line.split("=", 1)[1].strip().casefold()
+        for line in lines
+        if "=" in line
+        and line.split("=", 1)[0].strip().casefold() == "include-system-site-packages"
+    ]
+    if inherited != ["false"]:
+        raise QualificationError("installed Python must not inherit system site-packages")
+
+    if sys.platform == "win32":
+        candidates = (venv / "Lib" / "site-packages",)
+    else:
+        candidates = tuple(
+            venv / lib / f"python3.{minor}" / "site-packages" for lib in ("lib", "lib64")
+        )
+    if not candidates[0].is_dir() or candidates[0].is_symlink():
+        raise QualificationError("installed Python site-packages not qualified")
+    scanned: set[Path] = set()
+    for directory in candidates:
+        if not directory.exists() and not directory.is_symlink():
+            continue
+        if not directory.is_dir() or directory.is_symlink():
+            raise QualificationError("installed Python site-packages not qualified")
+        resolved = directory.resolve()
+        if resolved in scanned:
+            continue
+        scanned.add(resolved)
+        for member in directory.iterdir():
+            name = member.name.casefold()
+            if (
+                name.endswith(".pth")
+                or name in {"sitecustomize", "usercustomize"}
+                or name.startswith(("sitecustomize.", "usercustomize."))
+            ):
+                raise QualificationError("unreviewed installed Python startup hook")
+
+
 def qualify(
     checkout: Path, wheel: Path, sdist: Path, python311: Path, python312: Path
 ) -> dict[str, Any]:
@@ -78,6 +131,11 @@ def qualify(
     digest = hashlib.sha256(wheel.read_bytes()).hexdigest()
     if metadata.get("version") != EXPECTED_VERSION or metadata.get("sha256") != digest:
         raise QualificationError("Wheel metadata and actual artifact digest disagree")
+    # Inspect startup-hook files without running either interpreter first.
+    # Checking only the Wheel's expected .py bytes does not detect an extra
+    # executable .pth file or sitecustomize module in site-packages.
+    _reject_venv_startup_hooks(python311, 11)
+    _reject_venv_startup_hooks(python312, 12)
     try:
         count311 = artifact_gate.installed_wheel_matches(wheel, python311, 11)
         count312 = artifact_gate.installed_wheel_matches(wheel, python312, 12)
