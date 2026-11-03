@@ -67,6 +67,10 @@ def catalog(source: str) -> dict[str, tuple[int, str, str]]:
         result[name] = (int(length), digest, status)
     require(len(entries) == 12 and set(result) == set(EXPECTED_STATUS),
             "INCOMPLETE_OR_UNREVIEWED_FIXTURE_SET")
+    # Fixture indices are a native keyboard and UIA selection contract.
+    # Hash-correct entries reordered into different indices are not safe.
+    require(tuple(result) == tuple(EXPECTED_STATUS),
+            "CHANGED_FICTIONAL_FIXTURE_ORDER")
     return result
 
 
