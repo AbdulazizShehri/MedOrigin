@@ -1,0 +1,21 @@
+[package]
+name = "medorigin-desktop-d1-preview"
+version = "0.0.0"
+description = "Unreleased synthetic-only MedOrigin Desktop D1 Tauri experiment"
+edition = "2024"
+publish = false
+
+[lib]
+name = "medorigin_desktop_d1_preview_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+serde = { version = "1", features = ["derive"] }
+medorigin-desktop-d0-rust-prototype = { path = "../../desktop-d0-rust" }
+
+[lints.rust]
+unsafe_code = "forbid"
