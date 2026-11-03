@@ -1,6 +1,7 @@
 // Adapted from emilk/eframe_template under Apache-2.0, see UPSTREAM-NOTICE.md.
 // Synthetic-only, in-process native Rust eframe + D0; no browser, EHR, PHI or network.
 use eframe::egui;
+use sha2::{Digest, Sha256};
 use medorigin_desktop_d0_rust_prototype::{
     HashError, fictional_json_preview_v1, hash_fixture_raw_v1,
     inspect_named_synthetic_fhir_envelope_v1,
@@ -98,6 +99,223 @@ struct FictionalComparison {
     right: FixtureSpec,
     left_json: &'static str,
     right_json: &'static str,
+    byte_diff_summary: String,
+    byte_context: String,
+    json_path_diff: String,
+}
+
+/// Byte offsets are intentionally zero-based source bytes, not UTF-8 characters.
+/// The two inputs have already passed the fixed fictional SHA/envelope contracts.
+fn fictional_byte_diff_summary(left: &str, right: &str) -> String {
+    let a = left.as_bytes();
+    let b = right.as_bytes();
+    let prefix = a.iter().zip(b).take_while(|(x, y)| x == y).count();
+    if prefix == a.len() && prefix == b.len() {
+        return format!("Fictional byte comparison: identical ({} bytes)", a.len());
+    }
+    let suffix = a[prefix..]
+        .iter()
+        .rev()
+        .zip(b[prefix..].iter().rev())
+        .take_while(|(x, y)| x == y)
+        .count();
+    format!(
+        "Fictional byte difference: first differing byte offset {prefix} (zero-based); common suffix {suffix} bytes; left {} bytes, right {} bytes. Original source bytes unchanged.",
+        a.len(),
+        b.len()
+    )
+}
+
+/// Bounded HEX around the first changed UTF-8 source byte, not a JSON semantic diff.
+fn fictional_byte_context(left: &str, right: &str) -> String {
+    let a = left.as_bytes();
+    let b = right.as_bytes();
+    let offset = a.iter().zip(b).take_while(|(x, y)| x == y).count();
+    if offset == a.len() && offset == b.len() {
+        return "Fictional HEX context: identical source bytes".to_owned();
+    }
+    fn window(bytes: &[u8], offset: usize) -> String {
+        let start = offset.saturating_sub(8);
+        let end = bytes.len().min(offset.saturating_add(8));
+        let hex = bytes[start..end]
+            .iter()
+            .map(|byte| format!("{byte:02X}"))
+            .collect::<Vec<_>>()
+            .join(" ");
+        format!("bytes {start}..{end} [HEX {hex}]")
+    }
+    format!(
+        "Fictional HEX context at zero-based byte {offset}: left {}; right {}. Raw bytes only, not JSON semantics.",
+        window(a, offset),
+        window(b, offset)
+    )
+}
+
+/// A deterministic, bounded JSON Pointer summary for already verified
+/// source-compiled fictional payloads. Never loads external JSON or treats
+/// structural comparisons as clinical FHIR validation.
+fn fictional_json_path_diff(left: &str, right: &str) -> Result<String, &'static str> {
+    use serde_json::Value;
+
+    fn pointer_segment(key: &str) -> String {
+        key.replace('~', "~0").replace('/', "~1")
+    }
+
+    fn json_type(value: &Value) -> &'static str {
+        match value {
+            Value::Null => "null",
+            Value::Bool(_) => "boolean",
+            Value::Number(_) => "number",
+            Value::String(_) => "string",
+            Value::Array(_) => "array",
+            Value::Object(_) => "object",
+        }
+    }
+
+    // Only source-compiled, SHA-verified fictional data reaches this function.
+    // Keep the UI hint bounded and escape control characters; never print
+    // arbitrary nested objects or the complete source into a difference label.
+    fn value_hint(value: &Value) -> String {
+        match value {
+            Value::Null => "null".to_owned(),
+            Value::Bool(value) => value.to_string(),
+            Value::Number(value) => value.to_string(),
+            Value::String(value) => {
+                let prefix: String = value.chars().take(48).collect();
+                let truncated = if value.chars().count() > 48 {
+                    "..."
+                } else {
+                    ""
+                };
+                format!("{prefix:?}{truncated}")
+            }
+            Value::Array(value) => format!("array ({} elements)", value.len()),
+            Value::Object(value) => format!("object ({} fields)", value.len()),
+        }
+    }
+
+    fn first_diff(
+        a: &Value,
+        b: &Value,
+        path: &str,
+        depth: usize,
+    ) -> Result<Option<(String, String)>, &'static str> {
+        if depth > 32 {
+            return Err("fictional_json_depth_exceeded");
+        }
+        match (a, b) {
+            (Value::Object(left), Value::Object(right)) => {
+                // Compare shared fields before missing fields, sorted by name.
+                let mut shared: Vec<_> =
+                    left.keys().filter(|key| right.contains_key(*key)).collect();
+                shared.sort();
+                for key in shared {
+                    let next = format!("{path}/{}", pointer_segment(key));
+                    if let Some(diff) = first_diff(&left[key], &right[key], &next, depth + 1)? {
+                        return Ok(Some(diff));
+                    }
+                }
+                // Preserve direction: missing on left and missing on right
+                // have different developer meanings.
+                let mut missing: Vec<(&str, bool)> = left
+                    .keys()
+                    .filter(|key| !right.contains_key(*key))
+                    .map(|key| (key.as_str(), false))
+                    .chain(
+                        right
+                            .keys()
+                            .filter(|key| !left.contains_key(*key))
+                            .map(|key| (key.as_str(), true)),
+                    )
+                    .collect();
+                missing.sort_by(|a, b| a.0.cmp(b.0));
+                if let Some((key, missing_on_left)) = missing.first() {
+                    let (source, side) = if *missing_on_left {
+                        (right, "field missing on left; right")
+                    } else {
+                        (left, "field missing on right; left")
+                    };
+                    let value = source
+                        .get(*key)
+                        .ok_or("fictional_json_missing_field_refused")?;
+                    return Ok(Some((
+                        format!("{path}/{}", pointer_segment(key)),
+                        format!("{side}={}", value_hint(value)),
+                    )));
+                }
+                Ok(None)
+            }
+            (Value::Array(left), Value::Array(right)) => {
+                for (index, (a, b)) in left.iter().zip(right).enumerate() {
+                    let next = format!("{path}/{index}");
+                    if let Some(diff) = first_diff(a, b, &next, depth + 1)? {
+                        return Ok(Some(diff));
+                    }
+                }
+                if left.len() != right.len() {
+                    return Ok(Some((
+                        format!("{path}/{}", left.len().min(right.len())),
+                        format!(
+                            "array length differs: left={}, right={}",
+                            left.len(),
+                            right.len()
+                        ),
+                    )));
+                }
+                Ok(None)
+            }
+            _ if a == b => Ok(None),
+            _ => {
+                let detail = if std::mem::discriminant(a) == std::mem::discriminant(b) {
+                    format!(
+                        "value differs: left={}, right={}",
+                        value_hint(a),
+                        value_hint(b)
+                    )
+                } else {
+                    format!(
+                        "JSON type differs: left={}, right={}",
+                        json_type(a),
+                        json_type(b)
+                    )
+                };
+                Ok(Some((
+                    if path.is_empty() {
+                        "(root)".to_owned()
+                    } else {
+                        path.to_owned()
+                    },
+                    detail,
+                )))
+            }
+        }
+    }
+
+    let a: Value = serde_json::from_str(left).map_err(|_| "fictional_json_parse_refused")?;
+    let b: Value = serde_json::from_str(right).map_err(|_| "fictional_json_parse_refused")?;
+    let summary = match first_diff(&a, &b, "", 0)? {
+        Some((pointer, detail)) => format!(
+            "Fictional JSON path difference: {pointer} ({detail}). Structural developer hint only; original source bytes unchanged."
+        ),
+        None => "Fictional JSON path difference: structurally identical; original source bytes may differ.".to_owned(),
+    };
+    Ok(summary)
+}
+
+/// Independently hash the exact UTF-8 bytes displayed or compared by D2.
+/// A provider's SHA metadata matching the fixture table is not sufficient:
+/// its returned raw string must also match that digest. No normalization,
+/// arbitrary input or filesystem access is permitted here.
+fn verified_fictional_preview_bytes(fixture: FixtureSpec, raw: &str) -> bool {
+    if raw.len() != fixture.bytes || raw.len() > 2_048 {
+        return false;
+    }
+    use std::fmt::Write as _;
+    let mut actual = String::with_capacity(64);
+    for byte in Sha256::digest(raw.as_bytes()) {
+        write!(&mut actual, "{byte:02x}").expect("writing to String is infallible");
+    }
+    actual == fixture.sha256
 }
 
 #[derive(Default)]
@@ -195,6 +413,7 @@ impl MedOriginNativePreview {
             || payload.bytes != fixture.bytes
             || payload.sha256_hex != fixture.sha256
             || payload.raw_json.len() != fixture.bytes
+            || !verified_fictional_preview_bytes(*fixture, payload.raw_json)
             || !payload.synthetic_only
             || payload.release_authorized
         {
@@ -236,6 +455,7 @@ impl MedOriginNativePreview {
             || payload.bytes != fixture.bytes
             || payload.sha256_hex != fixture.sha256
             || payload.raw_json.len() != fixture.bytes
+            || !verified_fictional_preview_bytes(*fixture, payload.raw_json)
             || !payload.synthetic_only
             || payload.release_authorized
         {
@@ -266,11 +486,22 @@ impl MedOriginNativePreview {
         };
         let left = FIXTURES[self.selected];
         let right = FIXTURES[self.compare_with];
+        let json_path_diff = match fictional_json_path_diff(left_json, right_json) {
+            Ok(summary) => summary,
+            Err(_) => {
+                self.result =
+                    Some("FAIL CLOSED: fictional JSON path comparison refused".to_owned());
+                return Err("synthetic_json_path_refused");
+            }
+        };
         self.comparison = Some(FictionalComparison {
             left,
             right,
             left_json,
             right_json,
+            byte_diff_summary: fictional_byte_diff_summary(left_json, right_json),
+            byte_context: fictional_byte_context(left_json, right_json),
+            json_path_diff,
         });
         Ok(())
     }
@@ -372,6 +603,9 @@ impl eframe::App for MedOriginNativePreview {
             }
             if let Some(comparison) = &self.comparison {
                 ui.label("Both sources independently reverified · Negative FHIR statuses are expected test cases, not clinical conclusions");
+                ui.monospace(&comparison.byte_diff_summary);
+                ui.monospace(&comparison.byte_context);
+                ui.monospace(&comparison.json_path_diff);
                 ui.columns(2, |columns| {
                     let (left, right) = columns.split_at_mut(1);
                     for (column, fixture, raw) in [
@@ -437,6 +671,46 @@ mod tests {
     }
 
     #[test]
+    fn directional_semantic_and_hex_details_are_cleared_before_recomparing() {
+        let mut app = MedOriginNativePreview {
+            selected: 0,
+            compare_with: 4,
+            ..Default::default()
+        };
+        app.compare_selected().expect("first fictional comparison");
+        let first = app.comparison.as_ref().expect("first comparison state");
+        assert_eq!(first.left.id, "patient-minimal");
+        assert_eq!(first.right.id, "observation-minimal");
+        assert!(first.json_path_diff.contains("Fictional JSON path difference: /"));
+        assert!(first.byte_diff_summary.contains("Fictional byte difference:"));
+        assert!(first.byte_context.contains("Fictional HEX context at zero-based byte"));
+        let previous_pointer = first.json_path_diff.clone();
+        let previous_bytes = first.byte_diff_summary.clone();
+        let previous_hex = first.byte_context.clone();
+
+        app.clear_fictional_output();
+        assert_eq!((app.selected, app.compare_with), (0, 4));
+        assert!(app.result.is_none());
+        assert!(app.preview.is_none());
+        assert!(app.preview_notice.is_none());
+        assert!(app.comparison.is_none());
+
+        // A changed selection must compute *new* directional evidence rather
+        // than resurrecting the previous JSON Pointer or raw byte context.
+        app.compare_with = 6;
+        app.compare_selected().expect("second fictional comparison");
+        let second = app.comparison.as_ref().expect("second comparison state");
+        assert_eq!(second.left.id, "patient-minimal");
+        assert_eq!(second.right.id, "bundle-valid");
+        assert!(second.json_path_diff.contains("Fictional JSON path difference: /"));
+        assert!(second.byte_diff_summary.contains("Fictional byte difference:"));
+        assert!(second.byte_context.contains("Fictional HEX context at zero-based byte"));
+        assert_ne!(second.json_path_diff, previous_pointer, "stale JSON Pointer");
+        assert_ne!(second.byte_diff_summary, previous_bytes, "stale byte comparison");
+        assert_ne!(second.byte_context, previous_hex, "stale HEX context");
+    }
+
+    #[test]
     fn all_twelve_fictional_vectors_match_compiled_sha_and_expected_envelope_status() {
         assert_eq!(FIXTURES.len(), 12);
         let mut seen = HashSet::new();
@@ -479,6 +753,44 @@ mod tests {
         ] {
             assert!(hash_fixture_raw_v1(id, 65_536).is_err());
             assert!(inspect_named_synthetic_fhir_envelope_v1(id, 65_536).is_err());
+        }
+    }
+
+    #[test]
+    fn fictional_preview_hash_checks_returned_bytes_not_only_provider_metadata() {
+        let original = fictional_json_preview_v1("patient-minimal")
+            .expect("compiled fictional Patient");
+        assert!(verified_fictional_preview_bytes(FIXTURES[0], original.raw_json));
+
+        // Same byte count and unchanged metadata, different actual source data.
+        let modified = original.raw_json.replacen("synthetic", "synthetix", 1);
+        assert_eq!(modified.len(), original.raw_json.len());
+        assert!(!verified_fictional_preview_bytes(FIXTURES[0], &modified));
+
+        // A forged metadata/catalog pairing cannot authorize a different hash.
+        let wrong_digest = FixtureSpec {
+            sha256: FIXTURES[4].sha256,
+            ..FIXTURES[0]
+        };
+        assert!(!verified_fictional_preview_bytes(wrong_digest, original.raw_json));
+
+        // Even if a catalog entry advertises 2,049 bytes, no oversized raw
+        // preview can pass the independent D2 display/compare boundary.
+        let oversized = "a".repeat(2_049);
+        let oversized_spec = FixtureSpec {
+            bytes: oversized.len(),
+            ..FIXTURES[0]
+        };
+        assert!(!verified_fictional_preview_bytes(oversized_spec, &oversized));
+
+        for fixture in FIXTURES {
+            if let Ok(payload) = fictional_json_preview_v1(fixture.id) {
+                assert!(
+                    verified_fictional_preview_bytes(fixture, payload.raw_json),
+                    "compiled fictional preview must match digest: {}",
+                    fixture.id
+                );
+            }
         }
     }
 
@@ -551,11 +863,55 @@ mod tests {
         assert_eq!(pair.right.status, "INVALID_REFERENCE");
         assert_ne!(pair.left_json, pair.right_json);
         assert_ne!(pair.left.sha256, pair.right.sha256);
+        assert!(
+            pair.byte_diff_summary
+                .contains("first differing byte offset")
+        );
+        assert!(
+            pair.byte_diff_summary
+                .contains("Original source bytes unchanged.")
+        );
         assert!(app.hash_selected().is_ok());
         assert!(
             app.comparison.is_none(),
             "new verification clears stale pair"
         );
+    }
+
+    #[test]
+    fn fictional_hex_context_is_bounded_and_byte_exact() {
+        assert_eq!(
+            fictional_byte_context("abc", "abc"),
+            "Fictional HEX context: identical source bytes"
+        );
+        let unicode = fictional_byte_context("\u{00E9}X", "\u{00E9}Y");
+        assert!(unicode.contains("zero-based byte 2"));
+        assert!(unicode.contains("left bytes 0..3 [HEX C3 A9 58]"));
+        assert!(unicode.contains("right bytes 0..3 [HEX C3 A9 59]"));
+        let inserted = fictional_byte_context("abc", "abXc");
+        assert!(inserted.contains("left bytes 0..3 [HEX 61 62 63]"));
+        assert!(inserted.contains("right bytes 0..4 [HEX 61 62 58 63]"));
+        let long = fictional_byte_context(&("a".repeat(100) + "x"), &("a".repeat(100) + "y"));
+        assert!(long.contains("left bytes 92..101"));
+        assert!(!long.contains("61 61 61 61 61 61 61 61 61 61"));
+    }
+
+    #[test]
+    fn fictional_byte_diff_uses_exact_bytes_and_never_overlaps_prefix_and_suffix() {
+        assert_eq!(
+            fictional_byte_diff_summary("abc", "abc"),
+            "Fictional byte comparison: identical (3 bytes)"
+        );
+        let inserted = fictional_byte_diff_summary("abc", "abXc");
+        assert!(inserted.contains("first differing byte offset 2 (zero-based)"));
+        assert!(inserted.contains("common suffix 1 bytes"));
+        assert!(inserted.contains("left 3 bytes, right 4 bytes"));
+        let unicode = fictional_byte_diff_summary("éX", "éY");
+        assert!(unicode.contains("first differing byte offset 2 (zero-based)"));
+        assert!(unicode.contains("common suffix 0 bytes"));
+        let prefix_only = fictional_byte_diff_summary("abc", "abcd");
+        assert!(prefix_only.contains("first differing byte offset 3 (zero-based)"));
+        assert!(prefix_only.contains("common suffix 0 bytes"));
     }
 
     #[test]
@@ -581,6 +937,74 @@ mod tests {
             assert!(app.preview.is_none(), "never retain stale JSON");
             assert!(app.result.as_deref().unwrap().starts_with("FAIL CLOSED"));
         }
+    }
+
+    #[test]
+    fn fictional_json_path_summary_is_semantic_and_escapes_pointer_segments() {
+        let same = fictional_json_path_diff(r#"{"a":1,"b":2}"#, r#"{ "b":2, "a":1 }"#).unwrap();
+        assert!(same.contains("structurally identical"));
+        let changed = fictional_json_path_diff(
+            r#"{"resourceType":"Patient"}"#,
+            r#"{"resourceType":"Observation"}"#,
+        )
+        .unwrap();
+        assert!(
+            changed
+                .contains(r#"/resourceType (value differs: left="Patient", right="Observation")"#)
+        );
+        let escaped = fictional_json_path_diff(r#"{"a/b~c":[1,2]}"#, r#"{"a/b~c":[1,3]}"#).unwrap();
+        assert!(escaped.contains("/a~1b~0c/1 (value differs: left=2, right=3)"));
+        let missing = fictional_json_path_diff(r#"{"a":1}"#, r#"{"a":1,"b":2}"#).unwrap();
+        assert!(missing.contains("/b (field missing on left; right=2)"));
+        let reverse_missing = fictional_json_path_diff(r#"{"a":1,"b":2}"#, r#"{"a":1}"#).unwrap();
+        assert!(reverse_missing.contains("/b (field missing on right; left=2)"));
+        let array = fictional_json_path_diff(r#"{"a":[1]}"#, r#"{"a":[1,2]}"#).unwrap();
+        assert!(array.contains("/a/1 (array length differs: left=1, right=2)"));
+        let reverse_array = fictional_json_path_diff(r#"{"a":[1,2]}"#, r#"{"a":[1]}"#).unwrap();
+        assert!(reverse_array.contains("/a/1 (array length differs: left=2, right=1)"));
+        let types = fictional_json_path_diff(r#"{"a":true}"#, r#"{"a":"true"}"#).unwrap();
+        assert!(types.contains("/a (JSON type differs: left=boolean, right=string)"));
+        let long = format!(r#"{{"a":"{}"}}"#, "x".repeat(300));
+        let bounded = fictional_json_path_diff(&long, r#"{"a":"y"}"#).unwrap();
+        assert!(bounded.len() < 400, "never emit an unbounded scalar hint");
+        let root = fictional_json_path_diff("true", "false").unwrap();
+        assert!(root.contains("(root) (value differs: left=true, right=false)"));
+        assert_eq!(
+            fictional_json_path_diff("not json", "{}"),
+            Err("fictional_json_parse_refused")
+        );
+    }
+
+    #[test]
+    fn pinned_fictional_patient_observation_pointer_matches_windows_uia_contract() {
+        let left = MedOriginNativePreview::verified_json_for(0)
+            .expect("pinned fictional Patient bytes");
+        let right = MedOriginNativePreview::verified_json_for(4)
+            .expect("pinned fictional Observation bytes");
+        assert_eq!(
+            fictional_json_path_diff(left, right).expect("synthetic JSON Pointer"),
+            "Fictional JSON path difference: /id (value differs: left=\"synthetic\", right=\"synthetic-observation\"). Structural developer hint only; original source bytes unchanged."
+        );
+    }
+
+    #[test]
+    fn fictional_json_path_comparison_is_verified_and_cleared_on_refusal() {
+        let mut app = MedOriginNativePreview {
+            selected: 0,
+            compare_with: 4,
+            ..Default::default()
+        };
+        app.compare_selected().unwrap();
+        assert!(
+            app.comparison
+                .as_ref()
+                .unwrap()
+                .json_path_diff
+                .contains("Fictional JSON path difference: /")
+        );
+        app.compare_with = usize::MAX;
+        assert!(app.compare_selected().is_err());
+        assert!(app.comparison.is_none());
     }
 
     #[test]
