@@ -232,6 +232,8 @@ def qualify(
             or inspected.get("runtime_minor") != i
             or inspected.get("installed_python_source_matches_base") is not True
             or inspected.get("installed_base_executable_matches_local_pin") is not True
+            or inspected.get("installed_base_runtime_dlls_verified") != 4
+            or inspected.get("unqualified_venv_loader_shadow_files_rejected") is not True
             or any(
                 inspected.get(key) is not False
                 for key in (
@@ -326,6 +328,8 @@ def qualify(
         "runtimes": ["3.11", "3.12"],
         "installed_python_executable_profiles_checked": 2,
         "installed_python_executable_profile": python_gate.PROFILE,
+        "installed_base_runtime_dlls_verified_per_runtime": 4,
+        "installed_python_loader_shadow_directories_checked_per_runtime": 2,
         "python_vendor_authenticity_verified": False,
         "python_code_signature_verified": False,
         "entrypoint_execution_mode": "source_verified_python_module",
