@@ -622,3 +622,9 @@ The native comparison shows at most eight original UTF-8 bytes before and after 
 D2 now offers **Inspect verified fictional relationships (read-only)** for exactly three compiled-in, positive-test fictional D0 resources: `observation-minimal`, `bundle-valid`, and `bundle-linked`. The native Rust UI rechecks exact D0 source SHA-256 and the bounded FHIR-shaped envelope, then displays only reviewed JSON Pointers, membership/reference targets, source byte counts, and fixed SHA-256. Invalid, changed or unreviewed inputs fail closed; selection changes and re-verification clear stale results.
 
 **No event dates exist in this D0 corpus, so the native UI explicitly refuses to infer a medical timeline.** This feature adds no new dependencies, browser, Python service, network, arbitrary file inputs, patient data or FHIR R4/clinical validity claims. Existing native Windows UIA scripts and the new source-bound relationship UIA are qualified in [the Slice 7 evidence](evidence/d2-native-fictional-relations-20261104.md). Prior D2 release/security blockers remain NO-GO.
+
+## Cross-platform portable synthetic builds (Windows / macOS / Linux)
+
+A source-pinned, strictly nonpublishing packaging workflow now builds **native portable developer-preview archives** across Windows x86-64, macOS Apple Silicon (and host-supported Intel), and Linux x86-64. It packages the verified executable with the original Apache-2.0 license, upstream notice, explicit *NOT FOR PATIENT DATA* instructions, and a SHA-256 source manifest. It does **not** make this D2 experiment a finished healthcare product, trusted offline sandbox, signed installer, notarized DMG, or app-store release.
+
+Read [Cross-platform preview instructions](docs/CROSS_PLATFORM_PREVIEW.md). The accompanying GitHub Actions workflow uploads only private, short-lived synthetic artifacts; there is no publish or release action. Full Core/Workspace functionality and medical-security gates remain open.

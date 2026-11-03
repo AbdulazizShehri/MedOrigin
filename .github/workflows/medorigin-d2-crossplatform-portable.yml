@@ -1,0 +1,118 @@
+# Only private, nonpublishing synthetic developer-previews, NEVER clinical releases.
+name: MedOrigin D2 portable synthetic previews (NO RELEASE)
+
+on:
+  pull_request:
+    branches:
+      - feat/medorigin-d2-slice7-source-timeline-20261104
+    paths:
+      - "experiments/desktop-d2-native-egui/**"
+      - ".github/workflows/medorigin-d2-crossplatform-portable.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: medorigin-d2-portable-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  native-portable:
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    name: Synthetic portable (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-2025, ubuntu-24.04, macos-15]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 65
+    defaults:
+      run:
+        working-directory: experiments/desktop-d2-native-egui
+    steps:
+      - name: Checkout exact PR commit without persisted credentials
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+
+      - name: Install pinned Rust toolchain
+        shell: bash
+        run: |
+          rustup toolchain install 1.97.1 --profile minimal --component rustfmt --component clippy
+          rustc +1.97.1 -vV
+
+      - name: Install Linux windowing headers
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev libxkbcommon-dev libwayland-dev libssl-dev
+
+      - name: Test packaging and native-header contracts on Windows
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: python -m unittest discover -s scripts -p test_package_preview.py -v
+
+      - name: Test packaging and native-header contracts on Unix
+        if: runner.os != 'Windows'
+        shell: bash
+        run: python3 -m unittest discover -s scripts -p test_package_preview.py -v
+
+      - name: Check lockfile and formatting
+        shell: bash
+        run: |
+          cargo +1.97.1 metadata --locked --no-deps --format-version 1 > /dev/null
+          cargo +1.97.1 fmt --all -- --check
+
+      - name: Test native Rust host and browserless guards
+        shell: bash
+        run: cargo +1.97.1 test --locked --all-targets
+
+      - name: Deny Rust/Clippy warnings
+        shell: bash
+        run: cargo +1.97.1 clippy --locked --all-targets -- -D warnings
+
+      - name: Build synthetic native DEBUG executable
+        shell: bash
+        run: cargo +1.97.1 build --locked
+
+      - name: Remove Linux debug symbols before portable packaging
+        if: runner.os == 'Linux'
+        shell: bash
+        run: strip --strip-debug target/debug/medorigin-desktop-d2-native-egui
+
+      - name: Windows private ZIP and integrity verification
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $out = Join-Path $env:RUNNER_TEMP 'medorigin-d2-preview'
+          python scripts/package_preview.py --binary target/debug/medorigin-desktop-d2-native-egui.exe --output $out
+          if ($LASTEXITCODE -ne 0) { throw 'Windows package refused' }
+          $archives = @(Get-ChildItem $out -Filter '*.zip')
+          if ($archives.Count -ne 1) { throw 'Missing exact single Windows archive' }
+          python scripts/verify_preview.py --archive $archives[0].FullName
+          if ($LASTEXITCODE -ne 0) { throw 'Windows archive integrity failed' }
+
+      - name: macOS unsigned .app ZIP or Linux tar.gz, verify integrity
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="$RUNNER_TEMP/medorigin-d2-preview"
+          python3 scripts/package_preview.py --binary target/debug/medorigin-desktop-d2-native-egui --output "$out"
+          for archive in "$out"/*; do
+            test -f "$archive"
+            python3 scripts/verify_preview.py --archive "$archive"
+          done
+
+      - name: Upload PRIVATE short-lived synthetic-only preview archives
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: MedOrigin-D2-SYNTHETIC-ONLY-${{ runner.os }}-${{ runner.arch }}
+          path: ${{ runner.temp }}/medorigin-d2-preview/*
+          if-no-files-found: error
+          retention-days: 3
+
+# No public release, deployment, installer, signing, notarization or medical data.
