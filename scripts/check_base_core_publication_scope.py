@@ -33,6 +33,11 @@ _MAX_TOTAL_DECLARED_BYTES = 50_000_000
 _MAX_TAR_INFLATED_BYTES = _MAX_TOTAL_DECLARED_BYTES + _MAX_MEMBERS * 2048
 _WHEEL_METADATA = re.compile(r"medscale-[^/]+[.]dist-info/METADATA")
 _SDIST_METADATA = re.compile(r"medscale-[^/]+/PKG-INFO")
+_WINDOWS_RESERVED_DEVICE = re.compile(
+    r"(?:CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9]|CONIN\$|CONOUT\$)", re.IGNORECASE
+)
+
+
 _ZIP_EOCD = struct.Struct("<4s4H2LH")
 _ZIP_LOCAL_HEADER = struct.Struct("<4s5H3L2H")
 
@@ -114,8 +119,13 @@ def _verify_wheel_member_inventory(members: list[zipfile.ZipInfo]) -> None:
             not path
             or path.startswith("/")
             or "\\" in path
+            or any(ord(char) < 32 or ord(char) == 127 for char in path)
             or any(
-                not part or part in {".", ".."} or ":" in part or part.endswith((" ", "."))
+                not part
+                or part in {".", ".."}
+                or ":" in part
+                or part.endswith((" ", "."))
+                or _WINDOWS_RESERVED_DEVICE.fullmatch(part.split(".", 1)[0]) is not None
                 for part in parts
             )
         ):
@@ -246,11 +256,6 @@ def _wheel(path: Path) -> EmailMessage:
         if isinstance(exc, PublicationScopeError):
             raise
         raise PublicationScopeError("wheel: invalid archive") from exc
-
-
-_WINDOWS_RESERVED_DEVICE = re.compile(
-    r"(?:CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9]|CONIN\$|CONOUT\$)", re.IGNORECASE
-)
 
 
 def _verify_sdist_member_inventory_entry(item: tarfile.TarInfo, seen: set[str]) -> None:
