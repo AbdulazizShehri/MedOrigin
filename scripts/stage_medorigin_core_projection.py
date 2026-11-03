@@ -157,9 +157,7 @@ def stage(target: Path) -> dict[str, object]:
     # Allocate the private scratch directory beside the requested target,
     # keeping the pre-existing all-or-nothing destination admission checks.
     target.parent.mkdir(parents=True, exist_ok=True)
-    with tempfile.TemporaryDirectory(
-        prefix="medorigin-projection-", dir=target.parent
-    ) as scratch:
+    with tempfile.TemporaryDirectory(prefix="medorigin-projection-", dir=target.parent) as scratch:
         work = Path(scratch) / "package"
         work.mkdir()
         for p, value in files.items():
