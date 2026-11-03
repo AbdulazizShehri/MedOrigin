@@ -279,6 +279,50 @@ def test_comment_free_compressed_wheel_still_passes_scope_gate(
     assert result["publication_authorized"] is False
 
 
+@pytest.mark.parametrize(
+    ("tamper", "expected"),
+    [
+        ("local-filename", "wheel: local ZIP filename mismatch"),
+        ("local-crc", "wheel: local ZIP header mismatch"),
+        ("local-flags", "wheel: local ZIP header mismatch"),
+    ],
+)
+def test_wheel_local_header_matches_central_directory_for_every_member(
+    checker: Any, tmp_path: Path, tamper: str, expected: str
+) -> None:
+    folder = make_dist(tmp_path / tamper)
+    wheel = folder / "medscale-0.3.0-py3-none-any.whl"
+    with zipfile.ZipFile(wheel, "a") as archive:
+        archive.writestr("medscale/qualified.py", b"fictional-only")
+    assert checker.inspect(folder)["status"] == "BASE_CORE_PUBLICATION_SCOPE_CLEAN"
+    with zipfile.ZipFile(wheel) as archive:
+        target = archive.getinfo("medscale/qualified.py")
+        assert archive.read("medscale-0.3.0.dist-info/METADATA") == metadata()
+    raw = bytearray(wheel.read_bytes())
+    if tamper == "local-filename":
+        name_offset = target.header_offset + checker._ZIP_LOCAL_HEADER.size
+        original = b"medscale/qualified.py"
+        replacement = b"medscale/untrusted.py"
+        assert len(original) == len(replacement)
+        assert raw[name_offset : name_offset + len(original)] == original
+        raw[name_offset : name_offset + len(original)] = replacement
+    elif tamper == "local-crc":
+        # ZIP local CRC32 begins 14 bytes after the local signature.
+        struct.pack_into("<I", raw, target.header_offset + 14, target.CRC ^ 1)
+    else:
+        # Only the local flags change. The central header remains unchanged.
+        struct.pack_into("<H", raw, target.header_offset + 6, target.flag_bits ^ 0x800)
+    wheel.write_bytes(raw)
+    # The metadata entry was not modified; the old scope gate accepted the
+    # malformed extra member without reading its local header identity.
+    with zipfile.ZipFile(wheel) as archive:
+        assert archive.read("medscale-0.3.0.dist-info/METADATA") == metadata()
+    result = checker.inspect(folder)
+    assert result["status"] == "BLOCKED"
+    assert any(expected in issue for issue in result["issues"])
+    assert result["publication_authorized"] is False
+
+
 def test_sdist_forged_inflated_size_fails_before_extraction(checker: Any, tmp_path: Path) -> None:
     folder = make_dist(tmp_path / "bomb")
     oversized = tarfile.TarInfo("medscale-0.3.0/huge-data.bin")
