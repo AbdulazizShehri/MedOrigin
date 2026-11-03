@@ -28,6 +28,9 @@ EXPECTED_STATUS = {
     "bundle-linked": "BUNDLE_GRAPH_OK",
     "bundle-dangling": "INVALID_REFERENCE",
 }
+PREVIEW_BOUNDARY_NAMES = (
+    "patient-invalid-utf8", "patient-over-limit", "patient-exact-limit",
+)
 PREVIEW_EXCLUDED = frozenset((
     "patient-invalid-utf8", "patient-over-limit", "patient-exact-limit",
 ))
@@ -123,6 +126,32 @@ def verify(experiments_root: Path) -> dict:
                 f"CHANGED_D0_BYTE_DISPATCH_{name}")
         require(preview_dispatch.count(f'"{name}" => ("{name}", {const}),') == 1,
                 f"CHANGED_D0_PREVIEW_DISPATCH_{name}")
+    # These three negative/boundary vectors are constructed inside D0
+    # instead of residing in include_bytes! files. Do not audit assumed
+    # bytes without verifying D0 still constructs *those same bytes*.
+    require(source.count("const FHIR_RESOURCE_LIMIT_BYTES: usize = 32_768;") == 1,
+            "CHANGED_D0_RESOURCE_LIMIT")
+    boundary_size_arms = (
+        '"patient-invalid-utf8" => ("patient-invalid-utf8", 1),',
+        '"patient-over-limit" => ("patient-over-limit", FHIR_RESOURCE_LIMIT_BYTES + 1),',
+        '"patient-exact-limit" => ("patient-exact-limit", FHIR_RESOURCE_LIMIT_BYTES),',
+    )
+    for name, arm in zip(PREVIEW_BOUNDARY_NAMES, boundary_size_arms):
+        require(hash_dispatch.count(arm) == 1, f"CHANGED_D0_BOUNDARY_SIZE_{name}")
+    boundary_byte_arms = {
+        "patient-invalid-utf8": '"patient-invalid-utf8" => vec![0xff],',
+        "patient-over-limit": '''"patient-over-limit" => vec![b' '; required_bytes],''',
+    }
+    for name, arm in boundary_byte_arms.items():
+        require(byte_dispatch.count(arm) == 1, f"CHANGED_D0_BOUNDARY_BYTES_{name}")
+    exact_limit = re.findall(
+        r'"patient-exact-limit"\s*=>\s*\{(.*?)\}',
+        byte_dispatch, re.DOTALL,
+    )
+    require(len(exact_limit) == 1 and re.sub(r"\s+", " ", exact_limit[0]).strip()
+            == "let mut padded = PATIENT.to_vec(); "
+               "padded.resize(required_bytes, b' '); padded",
+            "CHANGED_D0_BOUNDARY_BYTES_patient-exact-limit")
     for name in BUNDLE_NAMES:
         const = name.upper().replace("-", "_")
         declaration = (f'const {const}: &[u8] = '
