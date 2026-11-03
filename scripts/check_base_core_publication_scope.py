@@ -113,7 +113,7 @@ def _verify_wheel_member_inventory(members: list[zipfile.ZipInfo]) -> None:
         if (
             not path
             or path.startswith("/")
-            or "\\" in path
+        or "\\" in path
             or any(
                 not part or part in {".", ".."} or ":" in part or part.endswith((" ", "."))
                 for part in parts
