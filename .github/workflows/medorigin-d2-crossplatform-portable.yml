@@ -6,6 +6,7 @@ on:
     branches:
       - feat/medorigin-d2-slice7-source-timeline-20261104
       - feat/medorigin-d2-crossplatform-preview-20261104
+      - security/medorigin-d2-archive-member-contract-20261104
     paths:
       - "experiments/desktop-d2-native-egui/**"
       - ".github/workflows/medorigin-d2-crossplatform-portable.yml"
