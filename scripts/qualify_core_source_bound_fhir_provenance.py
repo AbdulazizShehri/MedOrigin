@@ -18,6 +18,7 @@ import zipfile
 from pathlib import Path, PurePosixPath
 from typing import Any
 
+import check_installed_core_console_launcher as launcher_gate
 import check_installed_core_fhir_provenance as fhir_gate
 import qualify_medorigin_developer_beta as artifact_gate
 
@@ -239,6 +240,23 @@ def qualify(
     cli312 = python312.parent / ("medscale" + suffix)
     if not cli311.is_file() or not cli312.is_file():
         raise QualificationError("installed Core console entry points are missing")
+    # Check the separately generated launcher bytes without executing them.
+    # The source-verified FHIR smoke must STILL invoke the verified interpreter
+    # directly; this pinned template is not independent vendor signoff.
+    try:
+        launcher311 = launcher_gate.qualify(cli311, python311)
+        launcher312 = launcher_gate.qualify(cli312, python312)
+    except (launcher_gate.QualificationError, OSError, ValueError) as exc:
+        raise QualificationError("installed Core console launcher template not qualified") from exc
+    for inspected in (launcher311, launcher312):
+        if (
+            inspected.get("status") != launcher_gate.STATUS
+            or inspected.get("publication_authorized") is not False
+            or inspected.get("independent_security_review_complete") is not False
+        ):
+            raise QualificationError("installed launcher template receipt overstates authority")
+    if launcher311.get("profile") != launcher312.get("profile"):
+        raise QualificationError("installed console launcher template profiles differ")
     try:
         receipt = fhir_gate.qualify([cli311, cli312], interpreters=[python311, python312])
     except (fhir_gate.QualificationError, OSError, ValueError) as exc:
@@ -273,6 +291,10 @@ def qualify(
         "installed_python_source_files_verified_per_runtime": count311,
         "runtimes": ["3.11", "3.12"],
         "entrypoint_execution_mode": "source_verified_python_module",
+        "installed_console_launcher_templates_checked": 2,
+        "installed_console_launcher_profile": launcher311["profile"],
+        "launcher_vendor_authenticity_verified": False,
+        "launcher_code_signature_verified": False,
         "known_report_sha256": receipt["known_report_sha256"],
         "unknown_report_sha256": receipt["unknown_report_sha256"],
         "fhir_conformance_validated": False,

@@ -91,6 +91,16 @@ def _accept_fake_gates(
     monkeypatch.setattr(gate.artifact_gate, "installed_wheel_matches", lambda *_a: 250)
     monkeypatch.setattr(gate, "_verify_installed_package_inventory", lambda *_a: 250)
     monkeypatch.setattr(
+        gate.launcher_gate,
+        "qualify",
+        lambda *_a: {
+            "status": gate.launcher_gate.STATUS,
+            "profile": "synthetic-pinned-launcher-template",
+            "publication_authorized": False,
+            "independent_security_review_complete": False,
+        },
+    )
+    monkeypatch.setattr(
         gate.fhir_gate,
         "qualify",
         lambda _clis, **_kwargs: {
@@ -118,6 +128,10 @@ def test_exact_valid_receipts_are_still_explicitly_nonreleasing(
     assert result["installed_python_source_files_verified_per_runtime"] == 250
     assert result["runtimes"] == ["3.11", "3.12"]
     assert result["entrypoint_execution_mode"] == "source_verified_python_module"
+    assert result["installed_console_launcher_templates_checked"] == 2
+    assert result["installed_console_launcher_profile"] == "synthetic-pinned-launcher-template"
+    assert result["launcher_vendor_authenticity_verified"] is False
+    assert result["launcher_code_signature_verified"] is False
     for field in (
         "fhir_conformance_validated",
         "publication_authorized",
@@ -323,6 +337,43 @@ def test_rejects_overstated_or_ambiguous_core_fhir_receipt(
     monkeypatch.setattr(gate.fhir_gate, "qualify", fake)
     with pytest.raises(gate.QualificationError):
         gate.qualify(*paths)
+
+
+@pytest.mark.parametrize("failure", ["blocked", "false_publication", "mixed_profiles"])
+def test_unqualified_console_launcher_refuses_before_executing_fhir(
+    gate: Any,
+    paths: tuple[Path, Path, Path, Path, Path],
+    monkeypatch: pytest.MonkeyPatch,
+    failure: str,
+) -> None:
+    _accept_fake_gates(gate, monkeypatch, paths[1])
+    invoked: list[str] = []
+
+    def cannot_execute(*_args: object, **_kw: object) -> dict[str, Any]:
+        invoked.append("fhir")
+        raise AssertionError("unqualified shim must never precede FHIR smoke")
+
+    monkeypatch.setattr(gate.fhir_gate, "qualify", cannot_execute)
+    count = 0
+
+    def launcher(*_args: object) -> dict[str, Any]:
+        nonlocal count
+        count += 1
+        if failure == "blocked":
+            raise gate.launcher_gate.QualificationError("fictional launcher tampering")
+        return {
+            "status": gate.launcher_gate.STATUS,
+            "profile": ("fictional-one" if count == 1 else "fictional-two")
+            if failure == "mixed_profiles"
+            else "fictional-one",
+            "publication_authorized": failure == "false_publication",
+            "independent_security_review_complete": False,
+        }
+
+    monkeypatch.setattr(gate.launcher_gate, "qualify", launcher)
+    with pytest.raises(gate.QualificationError, match=r"console launcher|launcher template"):
+        gate.qualify(*paths)
+    assert invoked == []
 
 
 def test_missing_source_or_runtime_blocks_without_running_any_verifier(
