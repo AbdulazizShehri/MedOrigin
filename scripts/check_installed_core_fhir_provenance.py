@@ -142,7 +142,10 @@ def _report_case(
     if len(reports) != 1 or reports[0].is_symlink():
         raise QualificationError("one local content-addressed report required")
     stored = reports[0].read_bytes()
-    if stored != completed.stdout.encode("utf-8"):
+    # The public CLI prints report_to_json (already newline terminated) via
+    # print(), adding exactly one extra newline to stdout. The stored JSON
+    # has just its canonical trailing newline; compare those exact bytes.
+    if completed.stdout.encode("utf-8") != stored + b"\n":
         raise QualificationError("saved report differs from installed CLI receipt")
     return _hash(stored)
 
