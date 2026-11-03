@@ -241,6 +241,21 @@ fn inspect_synthetic_fixture_structure(
     structural::analyze_fixture(fixture_id, bytes)
 }
 
+/// Read-only lineage of four compiled-in fictional fixtures with pinned JSON
+/// Pointers and source checksums. Never a general FHIR graph or EHR connector.
+#[tauri::command]
+fn inspect_fictional_fixture_lineage(
+    req: VerifyFixtureRequest,
+) -> Result<structural::FictionalLineage, CommandError> {
+    let id = req.fixture_id;
+    if id.len() > MAX_FIXTURE_ID_BYTES {
+        return Err(CommandError::new("invalid_input"));
+    }
+    let (fixture_id, _, _) =
+        fixture_entry(&id).ok_or_else(|| CommandError::new("unknown_fixture"))?;
+    structural::inspect_lineage(fixture_id)
+}
+
 /// Deny-all navigation: the webview may only host the bundled app origin.
 /// This is webview-level defense in depth only, not OS egress proof.
 fn allow_desktop_navigation(url: &tauri::Url) -> bool {
@@ -276,7 +291,8 @@ pub fn run() {
             list_synthetic_fixtures,
             verify_synthetic_fixture,
             read_synthetic_fixture_source,
-            inspect_synthetic_fixture_structure
+            inspect_synthetic_fixture_structure,
+            inspect_fictional_fixture_lineage
         ])
         .run(tauri::generate_context!())
         .expect("MedOrigin Desktop v1 bootstrap failed");
@@ -490,6 +506,35 @@ mod tests {
             assert_eq!(evidence.resource_id, *id);
             assert!(!evidence.fhir_semantics_validated);
             assert!(!evidence.release_authorized);
+        }
+    }
+
+    #[test]
+    fn lineage_command_rejects_untrusted_ids_and_keeps_clinical_flags_off() {
+        for id in ["../secrets", "", "http://host", "unknown"] {
+            let err = inspect_fictional_fixture_lineage(VerifyFixtureRequest {
+                fixture_id: id.to_string(),
+            })
+            .unwrap_err();
+            assert_eq!(err.code, "unknown_fixture");
+        }
+        assert_eq!(
+            inspect_fictional_fixture_lineage(VerifyFixtureRequest {
+                fixture_id: "x".repeat(65)
+            })
+            .unwrap_err()
+            .code,
+            "invalid_input"
+        );
+        for (id, _, _) in FIXTURES {
+            let graph = inspect_fictional_fixture_lineage(VerifyFixtureRequest {
+                fixture_id: (*id).to_string(),
+            })
+            .unwrap();
+            assert_eq!(graph.focus_id, *id);
+            assert!(!graph.fhir_semantics_validated);
+            assert!(!graph.release_authorized);
+            assert!(graph.synthetic_only);
         }
     }
 

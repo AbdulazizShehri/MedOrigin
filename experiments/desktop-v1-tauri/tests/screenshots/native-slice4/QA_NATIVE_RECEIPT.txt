@@ -1,0 +1,11 @@
+MedOrigin Desktop Slice 4, Windows synthetic developer preview
+Verification date: 2026-11-03 Asia/Riyadh
+Implementation parent: Slice 3 b9937eb7f9d76a9245b83a34b01f14eb5a979faf
+Actual embedded Tauri CLI debug build PASS
+Tested binary SHA256: 1EB5745337E1FB0587AF1345221C1CBD7BA975D03524AA93C9713BDC888EAD49
+Actual Windows WebView2 UIAutomation: PASS fixture hash, source bytes, strict structural subset and pinned fictional lineage pointers
+Rust tests 21/21; React Vitest 55/55; Edge Playwright 46/46; fixture goldens 4/4
+Windows screenshots 4: dark and light at logical 1280x800 and 1440x900, 125pct OS DPI
+Not tested: physical 1920x1080, native DPI 100/150/200, macOS/Linux
+Not qualified: WebView2 zero-egress (NO-GO); PHI/clinical usage; EHR writes; full FHIR semantics; release
+No signed/installed/published artifact, no global firewall/policy mutation

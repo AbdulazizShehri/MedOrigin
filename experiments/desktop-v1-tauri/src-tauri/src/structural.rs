@@ -251,6 +251,246 @@ pub(super) fn analyze_fixture(
     })
 }
 
+/// An independently hash-bound node from the four *compile-time fictional* files.
+#[derive(Serialize, Debug)]
+pub(super) struct FictionalLineageNode {
+    pub fixture_id: &'static str,
+    pub resource_type: &'static str,
+    pub sha256_hex: String,
+    pub byte_len: usize,
+}
+
+/// The pointer is a JSON Pointer *into the committed source file*, not a URL
+/// or arbitrary path. Relationships are only the four prequalified examples.
+#[derive(Serialize, Debug)]
+pub(super) struct FictionalLineageEdge {
+    pub source_id: &'static str,
+    pub target_id: &'static str,
+    pub relationship: &'static str,
+    pub source_pointer: &'static str,
+}
+
+#[derive(Serialize, Debug)]
+#[serde(deny_unknown_fields)]
+pub(super) struct FictionalLineage {
+    pub contract: &'static str,
+    pub focus_id: &'static str,
+    pub nodes: Vec<FictionalLineageNode>,
+    pub edges: Vec<FictionalLineageEdge>,
+    pub scope: &'static str,
+    pub synthetic_only: bool,
+    pub fhir_semantics_validated: bool,
+    pub release_authorized: bool,
+}
+
+pub(super) const CONTRACT_LINEAGE: &str = "medorigin-four-fictional-fixtures-lineage-v1";
+const LINEAGE_SCOPE: &str = "FOUR_PINNED_SYNTHETIC_FIXTURES";
+const LINEAGE_REFERENCE: &str = "fictional_reference";
+const LINEAGE_MEMBER: &str = "fictional_bundle_member";
+
+/// These are fixed examples, not generic FHIR reference resolution.
+const PINNED_LINEAGE: &[(&str, &str, &str, &str)] = &[
+    (
+        "fixture-allergy-beta",
+        "fixture-patient-alpha",
+        LINEAGE_REFERENCE,
+        "/patient/reference",
+    ),
+    (
+        "fixture-observation-gamma",
+        "fixture-patient-alpha",
+        LINEAGE_REFERENCE,
+        "/subject/reference",
+    ),
+    (
+        "fixture-bundle-delta",
+        "fixture-patient-alpha",
+        LINEAGE_MEMBER,
+        "/entry/0/resource",
+    ),
+    (
+        "fixture-bundle-delta",
+        "fixture-observation-gamma",
+        LINEAGE_MEMBER,
+        "/entry/1/resource",
+    ),
+];
+
+fn validate_lineage_link(
+    bytes: &[u8],
+    target: &str,
+    relationship: &str,
+    pointer: &str,
+) -> Result<(), CommandError> {
+    // Fail closed on duplicate keys at every object depth, just like Slice 3.
+    let parsed = serde_json::from_slice::<UniqueJson>(bytes)
+        .map_err(|_| invalid())?
+        .0;
+    let value = parsed.pointer(pointer).ok_or_else(invalid)?;
+    let kind = known_kind(target).ok_or_else(invalid)?;
+    let expected = format!("{kind}/{target}");
+    match relationship {
+        LINEAGE_REFERENCE if value.as_str() == Some(expected.as_str()) => Ok(()),
+        LINEAGE_MEMBER
+            if value.get("resourceType").and_then(Value::as_str) == Some(kind)
+                && value.get("id").and_then(Value::as_str) == Some(target) =>
+        {
+            Ok(())
+        }
+        _ => Err(invalid()),
+    }
+}
+
+/// Scope and provenance are both limited to immutable bundled fictional bytes.
+/// No inputs other than a verified fixture ID; never accepts a user path.
+pub(super) fn inspect_lineage(focus: &'static str) -> Result<FictionalLineage, CommandError> {
+    if fixture_entry(focus).is_none() {
+        return Err(CommandError::new("unknown_fixture"));
+    }
+
+    // Check the *entire* pinned four-file fixture set, not only the focus.
+    // Prevents a partly validated graph from looking fully qualified.
+    for (id, _, bytes) in super::FIXTURES {
+        analyze_fixture(id, bytes)?;
+    }
+
+    let mut edges = Vec::new();
+    let mut involved = std::collections::HashSet::from([focus]);
+    for &(source_id, target_id, relationship, source_pointer) in PINNED_LINEAGE {
+        let (_, _, source_bytes) = fixture_entry(source_id).ok_or_else(invalid)?;
+        validate_lineage_link(source_bytes, target_id, relationship, source_pointer)?;
+        if source_id == focus || target_id == focus {
+            involved.insert(source_id);
+            involved.insert(target_id);
+            edges.push(FictionalLineageEdge {
+                source_id,
+                target_id,
+                relationship,
+                source_pointer,
+            });
+        }
+    }
+    if edges.len() > 8 || involved.len() > 4 || edges.is_empty() {
+        return Err(invalid());
+    }
+    let mut nodes = Vec::new();
+    for (id, _, bytes) in super::FIXTURES {
+        if involved.contains(id) {
+            nodes.push(FictionalLineageNode {
+                fixture_id: id,
+                resource_type: known_kind(id).ok_or_else(invalid)?,
+                sha256_hex: sha256_hex(bytes),
+                byte_len: bytes.len(),
+            });
+        }
+    }
+    Ok(FictionalLineage {
+        contract: CONTRACT_LINEAGE,
+        focus_id: focus,
+        nodes,
+        edges,
+        scope: LINEAGE_SCOPE,
+        synthetic_only: true,
+        fhir_semantics_validated: false,
+        release_authorized: false,
+    })
+}
+
+#[cfg(test)]
+mod lineage_tests {
+    use super::*;
+
+    #[test]
+    fn all_four_fictional_focus_nodes_emit_pinned_local_lineage() {
+        let counts = [
+            ("fixture-patient-alpha", 4, 3),
+            ("fixture-allergy-beta", 2, 1),
+            ("fixture-observation-gamma", 3, 2),
+            ("fixture-bundle-delta", 3, 2),
+        ];
+        for (id, nodes, edges) in counts {
+            let graph = inspect_lineage(id).unwrap();
+            assert_eq!(graph.focus_id, id);
+            assert_eq!(graph.nodes.len(), nodes);
+            assert_eq!(graph.edges.len(), edges);
+            assert_eq!(graph.scope, LINEAGE_SCOPE);
+            assert!(graph.synthetic_only);
+            assert!(!graph.fhir_semantics_validated);
+            assert!(!graph.release_authorized);
+            assert_eq!(graph.contract, CONTRACT_LINEAGE);
+            for node in &graph.nodes {
+                let (_, _, source) = fixture_entry(node.fixture_id).unwrap();
+                assert_eq!(node.sha256_hex, sha256_hex(source));
+                assert_eq!(node.byte_len, source.len());
+            }
+        }
+    }
+
+    #[test]
+    fn lineage_pointers_resolve_against_actual_bytes() {
+        for &(from, to, rel, pointer) in PINNED_LINEAGE {
+            let (_, _, bytes) = fixture_entry(from).unwrap();
+            validate_lineage_link(bytes, to, rel, pointer).unwrap();
+            assert!(pointer.starts_with('/'));
+            assert!(!pointer.contains(".."));
+            assert!(!pointer.contains("://"));
+        }
+    }
+
+    #[test]
+    fn forged_or_nonlocal_pointer_and_duplicate_json_member_rejected() {
+        let fixture = br#"{"resourceType":"Observation","subject":{"reference":"Patient/fixture-patient-alpha"}}"#;
+        assert!(
+            validate_lineage_link(
+                fixture,
+                "fixture-patient-alpha",
+                LINEAGE_REFERENCE,
+                "/subject/reference"
+            )
+            .is_ok()
+        );
+        for pointer in [
+            "/subject/no",
+            "https://example.com/path",
+            "/subject",
+            "../subject/reference",
+        ] {
+            assert!(
+                validate_lineage_link(fixture, "fixture-patient-alpha", LINEAGE_REFERENCE, pointer)
+                    .is_err()
+            );
+        }
+        let duplicate = br#"{"subject":{"reference":"Patient/fixture-patient-alpha","reference":"Patient/fixture-patient-alpha"}}"#;
+        assert!(
+            validate_lineage_link(
+                duplicate,
+                "fixture-patient-alpha",
+                LINEAGE_REFERENCE,
+                "/subject/reference"
+            )
+            .is_err()
+        );
+        assert!(
+            validate_lineage_link(
+                fixture,
+                "fixture-observation-gamma",
+                LINEAGE_REFERENCE,
+                "/subject/reference"
+            )
+            .is_err()
+        );
+        assert!(
+            validate_lineage_link(
+                fixture,
+                "fixture-patient-alpha",
+                LINEAGE_MEMBER,
+                "/subject/reference"
+            )
+            .is_err()
+        );
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::super::FIXTURES;

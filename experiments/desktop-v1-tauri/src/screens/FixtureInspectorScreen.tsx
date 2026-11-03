@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { VerifiedFixtureSource } from '../components/VerifiedFixtureSource';
 import { FixtureStructuralSubset } from '../components/FixtureStructuralSubset';
+import { FictionalFixtureLineage } from '../components/FictionalFixtureLineage';
 import { CircleCheck, CircleX, FileSearch, ShieldAlert } from 'lucide-react';
 import {
   CONTRACT_LIST,
@@ -101,7 +102,7 @@ export function FixtureInspectorScreen() {
 
   return (
     <>
-      <span className="eyebrow">MEDORIGIN / SYNTHETIC FHIR FIXTURE INSPECTOR / SLICES 1-3</span>
+      <span className="eyebrow">MEDORIGIN / SYNTHETIC FHIR FIXTURE INSPECTOR / SLICES 1-4</span>
       <h1 className="page-title">FHIR fixture inspector</h1>
       <p className="sub">
         FICTIONAL fixtures, hash-verified by the native Rust host over committed bytes. This is <b>not</b> FHIR validation,
@@ -113,7 +114,7 @@ export function FixtureInspectorScreen() {
         <span>
           <b>FICTIONAL — NOT CLINICAL DATA</b>
           <br />
-          Hash verification proves byte identity only. It does not validate FHIR semantics, references, or clinical content.
+          Hash verification proves byte identity only. The separate structural and lineage tools check four pinned fictional examples; they do not validate FHIR semantics or clinical content.
         </span>
       </div>
 
@@ -206,6 +207,15 @@ export function FixtureInspectorScreen() {
               <>
                 <VerifiedFixtureSource key={selected.id} fixture={selected} />
                 <FixtureStructuralSubset key={`${selected.id}-structure`} fixture={selected} />
+                <FictionalFixtureLineage
+                  key={`${selected.id}-lineage`}
+                  fixture={selected}
+                  fixtures={list.kind === 'ready' ? list.fixtures : []}
+                  onSelectFixture={(id) => {
+                    const target = list.kind === 'ready' ? list.fixtures.find((f) => f.id === id) : undefined;
+                    if (target) selectFixture(target);
+                  }}
+                />
               </>
             )}
           </>
