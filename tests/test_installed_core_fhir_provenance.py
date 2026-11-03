@@ -294,6 +294,7 @@ def test_trusted_python_invocation_bypasses_unqualified_console_shim(
             "-E",
             "-s",
             "-P",
+            "-B",
             "-c",
             "from medscale.cli import main; raise SystemExit(main())",
             "--version",

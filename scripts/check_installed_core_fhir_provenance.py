@@ -125,6 +125,7 @@ def call(
             "-E",
             "-s",
             "-P",
+            "-B",  # -E ignores PYTHONDONTWRITEBYTECODE; never create unqualified caches.
             "-c",
             "from medscale.cli import main; raise SystemExit(main())",
             *args,

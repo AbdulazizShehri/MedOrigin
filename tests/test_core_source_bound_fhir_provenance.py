@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import importlib.util
+import json
 import sys
 import zipfile
 from pathlib import Path
@@ -482,6 +483,25 @@ def test_source_bound_fhir_invokes_attested_python_not_console_shims(
         paths[3].parent / ("medscale.exe" if sys.platform == "win32" else "medscale"),
         paths[4].parent / ("medscale.exe" if sys.platform == "win32" else "medscale"),
     ]
+
+
+def test_installed_source_comparison_never_writes_unqualified_bytecode(
+    gate: Any, paths: tuple[Path, Path, Path, Path, Path], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    wheel, _package = _make_tiny_installed_package(gate, paths)
+    with zipfile.ZipFile(wheel, "a") as archive:
+        for index in range(55):
+            archive.writestr(f"medscale/synthetic_{index}.py", b"# fictional test-only module\n")
+    commands: list[list[str]] = []
+
+    def fake_run(args: list[str], **_kwargs: object) -> str:
+        commands.append(args)
+        return json.dumps({"python": [3, 11], "verified_source_files": 57})
+
+    monkeypatch.setattr(gate.artifact_gate, "run", fake_run)
+    assert gate.artifact_gate.installed_wheel_matches(wheel, paths[3], 11) == 57
+    assert len(commands) == 1
+    assert commands[0][:6] == [str(paths[3]), "-E", "-s", "-P", "-B", "-c"]
 
 
 def test_source_never_certifies_fhir_or_release_approval() -> None:

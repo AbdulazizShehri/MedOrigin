@@ -119,13 +119,14 @@ def installed_wheel_matches(wheel: Path, python: Path, expected_minor: int) -> i
         }
     if len(expected) < 50:
         raise QualificationError("no trustworthy Python source inventory in wheel")
-    # Explicit -E/-s/-P ignores Python environment overrides, user site
-    # packages and current working directory without hiding the managed
-    # virtualenv's installed distribution on supported Linux interpreters.
+    # -E/-s/-P ignores Python environment overrides, user site packages
+    # and the current working directory while preserving the managed venv.
+    # -B prevents the source inspection itself from creating unqualified .pyc.
+    # Existing package-code verification is still independent of the CLI shim.
     # The real CLI E2E below separately proves the package is executable.
     try:
         raw = run(
-            [str(python), "-E", "-s", "-P", "-c", INSTALLED_CHECK],
+            [str(python), "-E", "-s", "-P", "-B", "-c", INSTALLED_CHECK],
             stdin=json.dumps(expected),
         )
     except QualificationError as exc:
