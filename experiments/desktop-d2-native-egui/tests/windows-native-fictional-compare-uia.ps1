@@ -26,11 +26,17 @@ try {
   if(-not $window){throw 'native window not visible'}
   function Nodes { @($window.FindAll([System.Windows.Automation.TreeScope]::Descendants,[System.Windows.Automation.Condition]::TrueCondition)) }
   function One([string]$label){
-    $found=@(Nodes | Where-Object {
-      try {$_.Current.Name -ceq $label -and $_.Current.ControlType.ProgrammaticName -eq 'ControlType.Button' -and $_.Current.IsEnabled} catch {$false}
-    })
-    if($found.Count -ne 1){throw ('missing/ambiguous button '+$label+' count='+$found.Count)}
-    return $found[0]
+    # Native eframe redraws button trees asynchronously when changing a
+    # fictional comparison selection. Wait for a unique accessible button
+    # rather than interpreting a transient missing node as a product failure.
+    for($retry=0;$retry -lt 40;$retry++){
+      $found=@(Nodes | Where-Object {
+        try {$_.Current.Name -ceq $label -and $_.Current.ControlType.ProgrammaticName -eq 'ControlType.Button' -and $_.Current.IsEnabled} catch {$false}
+      })
+      if($found.Count -eq 1){return $found[0]}
+      Start-Sleep -Milliseconds 150
+    }
+    throw ('missing/ambiguous button '+$label+' count='+$found.Count)
   }
   function Press([System.Windows.Automation.AutomationElement]$element){
     try {$element.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern).Invoke()}

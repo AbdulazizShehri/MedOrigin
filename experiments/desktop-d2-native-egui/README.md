@@ -616,3 +616,9 @@ The independent Windows UIAutomation script `tests/windows-native-fictional-comp
 ## Bounded fictional first-difference HEX context (2026-11-02)
 
 The native comparison shows at most eight original UTF-8 bytes before and after the first difference, separately for each independently verified fixed fictional JSON. This is a byte-level developer aid, not JSON/FHIR semantic comparison. No arbitrary files, PHI, clipboard, persistence or network are involved. Stale results clear with selection and verification. Release remains NO-GO.
+
+## Native source-bound fictional relationships (2026-11-04, Slice 7)
+
+D2 now offers **Inspect verified fictional relationships (read-only)** for exactly three compiled-in, positive-test fictional D0 resources: `observation-minimal`, `bundle-valid`, and `bundle-linked`. The native Rust UI rechecks exact D0 source SHA-256 and the bounded FHIR-shaped envelope, then displays only reviewed JSON Pointers, membership/reference targets, source byte counts, and fixed SHA-256. Invalid, changed or unreviewed inputs fail closed; selection changes and re-verification clear stale results.
+
+**No event dates exist in this D0 corpus, so the native UI explicitly refuses to infer a medical timeline.** This feature adds no new dependencies, browser, Python service, network, arbitrary file inputs, patient data or FHIR R4/clinical validity claims. Existing native Windows UIA scripts and the new source-bound relationship UIA are qualified in [the Slice 7 evidence](evidence/d2-native-fictional-relations-20261104.md). Prior D2 release/security blockers remain NO-GO.
