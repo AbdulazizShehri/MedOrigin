@@ -171,7 +171,8 @@ fn direct_dependencies_remain_limited_to_native_ui_and_existing_d0() {
         [
             "eframe",
             "medorigin-desktop-d0-rust-prototype",
-            "serde_json"
+            "serde_json",
+            "sha2",
         ],
         "D2 dependency additions require a separate safety review"
     );
@@ -181,6 +182,31 @@ fn direct_dependencies_remain_limited_to_native_ui_and_existing_d0() {
             && dependencies.contains("\"glow\""),
         "D2 must preserve explicit native-only eframe features and AccessKit"
     );
+    // SHA-256 is an additional explicitly reviewed direct dependency for
+    // the two in-memory fictional preview byte checks. Do not silently admit
+    // another crate version, extra default features or a new network library.
+    assert!(
+        dependencies.lines().any(|line| {
+            line.trim() == "sha2 = { version = \"=0.11.1\", default-features = false }"
+        }),
+        "D2 SHA-256 source integrity requires reviewed, exact locked sha2"
+    );
+    let lock = fs::read_to_string(Path::new(env!("CARGO_MANIFEST_DIR")).join("Cargo.lock"))
+        .expect("committed Cargo lock");
+    assert!(
+        lock.contains("name = \"sha2\"\nversion = \"0.11.1\""),
+        "reviewed sha2 version absent from lockfile"
+    );
+    let own_package = lock
+        .split("[[package]]\nname = \"medorigin-desktop-d2-native-egui\"")
+        .nth(1)
+        .and_then(|s| s.split("[[package]]").next())
+        .expect("locked D2 root package");
+    assert!(
+        own_package.contains("\"sha2\""),
+        "D2 must pin its direct SHA-256 runtime dependency in Cargo.lock"
+    );
+
 }
 
 #[test]
