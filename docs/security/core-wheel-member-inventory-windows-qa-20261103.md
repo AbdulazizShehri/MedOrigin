@@ -42,6 +42,18 @@ All inputs were synthetic and local. No untrusted code, package, link, model, EH
 - A first partial sparse test run produced 54 PASS, 2 FAIL: one due to an omitted unchanged CI file needed by an existing regression test, and one due to the Windows ZipInfo filename-normalization artifact described above. The missing unchanged workflow was included in the sparse checkout and the test fixture corrected to force real raw ZIP backslash bytes; the subsequent exact-HEAD three-interpreter runs all passed 56/56. No production failure or release approval was inferred from the initial setup errors.
 - Python 3.11/3.12 reused existing Python3.14 `pytest 8.4.2` pure-Python site-packages via temporary process-local `PYTHONPATH`, with third-party plugin auto-loading disabled. These are actual independent Python interpreter executions, **not** hermetic separately installed pytest environments. The focused module was run using `--noconftest`, not the entire project test suite.
 
+## Real artifact non-regression on WSL/Linux ext4
+
+After the Windows tests, a second **task-owned** full source checkout was made of the same private Draft branch at documentation HEAD `bcbfaf4b0fd16e80c80c38d45be53e2f6951da7c`, containing the exact same corrected source/test blobs listed above. A fresh `/tmp` ext4 worktree was cloned locally from the authorized Windows Git checkout. Using existing WSL Python3.14 and `uv 0.12.21` with **`uv build --offline --no-create-gitignore`**, the immutable Git source projection staged and built real `medscale-0.3.0-py3-none-any.whl` and `medscale-0.3.0.tar.gz` on Linux, without network downloads. The output contained precisely these two files.
+
+On those **actual built artifact bytes**:
+
+- Independent `check_core_wheel_source_identity.py`: **exit 0**, status `SOURCE_BOUND_WHEEL_QUALIFIED_ONLY`.
+- Independent `check_sdist_publication_scope.py`: **exit 0**, status `SDIST_SCOPE_QUALIFIED_ONLY`.
+- Newly hardened `check_base_core_publication_scope.py`: **exit 2**, status `BLOCKED`, only because canonical proposed metadata still advertises **unqualified optional extras and third-party runtime dependencies**. The result retained `publication_authorized=false`, and did **not** produce any `unsafe member path`, `duplicate member path` or `unsupported member type` refusal against this authentic clean archive.
+
+Final WSL test script exit **0** required both identity gates to pass and the publication gate to fail for the documented real optional dependency policy. The one-off ext4 test directory was cleaned by its automatic task-owned cleanup trap. No real patient data, installer, signing, registry publishing or remote build service was used. This is a bounded local Linux artifact non-regression, **not** full hosted cross-OS CI, clinical or independent release approval.
+
 ## Release and safety status
 
 **Release NO-GO**. Full current-source hosted 20-job CI, independently attributable source/artifact security review #603, optional research/extras advisory #622, approved ADR-0045 and package/version decision #574, explicit owner publication authority and separate desktop #662/#673/#676 remain unresolved. No public tag, release, installer, signing, registry upload, protected-main merge, network build or PHI/clinical use. Every inspected artifact continues to return `publication_authorized=false` even when its internal synthetic-only scope is otherwise clean.
