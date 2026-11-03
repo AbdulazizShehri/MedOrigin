@@ -33,6 +33,11 @@ _MAX_TOTAL_DECLARED_BYTES = 50_000_000
 _MAX_TAR_INFLATED_BYTES = _MAX_TOTAL_DECLARED_BYTES + _MAX_MEMBERS * 2048
 _WHEEL_METADATA = re.compile(r"medscale-[^/]+[.]dist-info/METADATA")
 _SDIST_METADATA = re.compile(r"medscale-[^/]+/PKG-INFO")
+_WINDOWS_RESERVED_DEVICE = re.compile(
+    r"(?:CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9]|CONIN\$|CONOUT\$)", re.IGNORECASE
+)
+
+
 _ZIP_EOCD = struct.Struct("<4s4H2LH")
 _ZIP_LOCAL_HEADER = struct.Struct("<4s5H3L2H")
 
@@ -114,8 +119,13 @@ def _verify_wheel_member_inventory(members: list[zipfile.ZipInfo]) -> None:
             not path
             or path.startswith("/")
             or "\\" in path
+            or any(ord(char) < 32 or ord(char) == 127 for char in path)
             or any(
-                not part or part in {".", ".."} or ":" in part or part.endswith((" ", "."))
+                not part
+                or part in {".", ".."}
+                or ":" in part
+                or part.endswith((" ", "."))
+                or _WINDOWS_RESERVED_DEVICE.fullmatch(part.split(".", 1)[0]) is not None
                 for part in parts
             )
         ):
@@ -215,6 +225,39 @@ def _verify_wheel_physical_envelope(path: Path, members: list[zipfile.ZipInfo]) 
         raise PublicationScopeError("wheel: hidden ZIP member gap")
 
 
+def _verify_wheel_payload_integrity(
+    archive: zipfile.ZipFile, members: list[zipfile.ZipInfo]
+) -> None:
+    """Stream all members to verify actual decompression and CRC, not just headers.
+
+    Declared per-member and aggregate budgets are checked by the caller
+    before streaming; fixed-size reads avoid materializing the whole Wheel.
+    """
+    for member in members:
+        if member.is_dir():
+            if member.file_size or member.CRC:
+                raise PublicationScopeError("wheel: invalid directory payload")
+            continue
+        read_size = 0
+        try:
+            with archive.open(member) as reader:
+                while chunk := reader.read(65_536):
+                    read_size += len(chunk)
+                    if read_size > member.file_size:
+                        raise PublicationScopeError("wheel: inflated member size mismatch")
+        except (
+            OSError,
+            EOFError,
+            RuntimeError,
+            NotImplementedError,
+            zipfile.BadZipFile,
+            zlib.error,
+        ) as exc:
+            raise PublicationScopeError("wheel: invalid member payload") from exc
+        if read_size != member.file_size:
+            raise PublicationScopeError("wheel: inflated member size mismatch")
+
+
 def _wheel(path: Path) -> EmailMessage:
     try:
         with zipfile.ZipFile(path) as archive:
@@ -230,6 +273,7 @@ def _wheel(path: Path) -> EmailMessage:
                     raise PublicationScopeError("wheel: inflated archive exceeds budget")
             _verify_wheel_member_inventory(members)
             _verify_wheel_physical_envelope(path, members)
+            _verify_wheel_payload_integrity(archive, members)
             matches = [m for m in members if _WHEEL_METADATA.fullmatch(m.filename)]
             if len(matches) != 1 or matches[0].is_dir():
                 raise PublicationScopeError("wheel: exactly one METADATA required")
@@ -242,15 +286,18 @@ def _wheel(path: Path) -> EmailMessage:
             if item.filename != expected:
                 raise PublicationScopeError("wheel: dist-info version disagrees with metadata")
             return parsed
-    except (OSError, RuntimeError, zipfile.BadZipFile, ValueError) as exc:
+    except (
+        OSError,
+        EOFError,
+        RuntimeError,
+        NotImplementedError,
+        zipfile.BadZipFile,
+        zlib.error,
+        ValueError,
+    ) as exc:
         if isinstance(exc, PublicationScopeError):
             raise
         raise PublicationScopeError("wheel: invalid archive") from exc
-
-
-_WINDOWS_RESERVED_DEVICE = re.compile(
-    r"(?:CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9]|CONIN\$|CONOUT\$)", re.IGNORECASE
-)
 
 
 def _verify_sdist_member_inventory_entry(item: tarfile.TarInfo, seen: set[str]) -> None:
