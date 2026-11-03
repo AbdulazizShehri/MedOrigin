@@ -79,8 +79,10 @@ def _input_hash(payload: dict[str, Any]) -> str:
     return _hash(encoded)
 
 
-def call(cli: Path, args: list[str], cwd: Path) -> subprocess.CompletedProcess[str]:
-    """Bound the fixed, local CLI invocation; never include its output on failure."""
+def call(
+    cli: Path, args: list[str], cwd: Path, *, trusted_python: Path | None = None
+) -> subprocess.CompletedProcess[str]:
+    """Run legacy CLI or the source-verified Python module entry point."""
     # A source-matched installed Wheel is not sufficient if the CLI launcher
     # inherits PYTHONPATH/PYTHONHOME/PYTHONUSERBASE/PYTHONWARNINGS, etc. These
     # can execute attacker-controlled startup code outside the verified Wheel.
@@ -110,9 +112,28 @@ def call(cli: Path, args: list[str], cwd: Path) -> subprocess.CompletedProcess[s
             "PIP_NO_INDEX": "1",
         }
     )
+    # The installation-generated console shim is NOT a Wheel member. An
+    # unchecked medscale.exe or bin/medscale may run arbitrary startup code
+    # even if every installed medscale package file matches the Wheel. The
+    # strict source-bound caller provides the verified venv interpreter and
+    # dispatches the Git-pinned module entry point instead of the shim.
+    command = (
+        [str(cli), *args]
+        if trusted_python is None
+        else [
+            str(trusted_python),
+            "-E",
+            "-s",
+            "-P",
+            "-B",  # -E ignores PYTHONDONTWRITEBYTECODE; never create unqualified caches.
+            "-c",
+            "from medscale.cli import main; raise SystemExit(main())",
+            *args,
+        ]
+    )
     try:
         result = subprocess.run(
-            [str(cli), *args],
+            command,
             cwd=cwd,
             env=offline_env,
             capture_output=True,
@@ -128,11 +149,27 @@ def call(cli: Path, args: list[str], cwd: Path) -> subprocess.CompletedProcess[s
     return result
 
 
+def _call_verified(
+    cli: Path, args: list[str], cwd: Path, trusted_python: Path | None
+) -> subprocess.CompletedProcess[str]:
+    # Preserve the existing standalone CLI mock/test contract only when no
+    # independently attested interpreter was provided.
+    if trusted_python is None:
+        return call(cli, args, cwd)
+    return call(cli, args, cwd, trusted_python=trusted_python)
+
+
 def _report_case(
-    cli: Path, fixture: Path, payload: dict[str, Any], parent: Path, label: str
+    cli: Path,
+    fixture: Path,
+    payload: dict[str, Any],
+    parent: Path,
+    label: str,
+    *,
+    trusted_python: Path | None = None,
 ) -> str:
     destination = parent / label
-    completed = call(
+    completed = _call_verified(
         cli,
         [
             "fhir",
@@ -144,6 +181,7 @@ def _report_case(
             str(destination),
         ],
         parent,
+        trusted_python,
     )
     if completed.returncode != 2:
         raise QualificationError("local FHIR CLI must exit 2 without real validation")
@@ -173,10 +211,12 @@ def _report_case(
     return _hash(stored)
 
 
-def _run_one(cli: Path, root: Path, label: str) -> dict[str, str]:
+def _run_one(
+    cli: Path, root: Path, label: str, *, trusted_python: Path | None = None
+) -> dict[str, str]:
     if not cli.is_file():
         raise QualificationError("installed CLI executable not found")
-    version = call(cli, ["--version"], root)
+    version = _call_verified(cli, ["--version"], root, trusted_python)
     if version.returncode != 0 or version.stdout.strip() != VERSION:
         raise QualificationError("installed CLI version is not qualified")
     known_payload = _object(KNOWN.read_text(encoding="utf-8"))
@@ -190,36 +230,66 @@ def _run_one(cli: Path, root: Path, label: str) -> dict[str, str]:
         encoding="utf-8",
         newline="\n",
     )
-    known_sha = _report_case(cli, KNOWN, known_payload, root, label + "-known")
-    unknown_sha = _report_case(cli, unknown, unknown_payload, root, label + "-unknown")
+    known_sha = _report_case(
+        cli, KNOWN, known_payload, root, label + "-known", trusted_python=trusted_python
+    )
+    unknown_sha = _report_case(
+        cli, unknown, unknown_payload, root, label + "-unknown", trusted_python=trusted_python
+    )
     if known_sha == unknown_sha:
         raise QualificationError("different fictional inputs share a report digest")
 
-    summary = call(cli, ["fhir", "validate", str(KNOWN), "--summary-only"], root)
+    summary = _call_verified(
+        cli, ["fhir", "validate", str(KNOWN), "--summary-only"], root, trusted_python
+    )
     if summary.returncode != 0 or _object(summary.stdout) != known_payload:
         raise QualificationError("explicit summary-only behavior regressed")
-    malformed = call(cli, ["fhir", "validate", str(MALFORMED), "--summary-only"], root)
+    malformed = _call_verified(
+        cli, ["fhir", "validate", str(MALFORMED), "--summary-only"], root, trusted_python
+    )
     if malformed.returncode != 1 or malformed.stdout.strip():
         raise QualificationError("malformed JSON is not safely rejected")
     return {"known_report_sha256": known_sha, "unknown_report_sha256": unknown_sha}
 
 
-def qualify(clis: list[Path]) -> dict[str, Any]:
-    """Verify one or two source-bound *externally qualified* installed CLIs."""
+def qualify(clis: list[Path], *, interpreters: list[Path] | None = None) -> dict[str, Any]:
+    """Check provenance; strict callers bypass unqualified console shims."""
     if not 1 <= len(clis) <= 2:
         raise QualificationError("one or two installed CLIs required")
     if len({cli.resolve() for cli in clis}) != len(clis):
         raise QualificationError("independent installed CLI paths required")
+    if interpreters is not None:
+        if len(interpreters) != len(clis) or len({str(x.absolute()) for x in interpreters}) != len(
+            clis
+        ):
+            raise QualificationError("independent trusted interpreters required")
+        if any(
+            not python.is_file() or python.parent != cli.parent
+            for cli, python in zip(clis, interpreters, strict=True)
+        ):
+            raise QualificationError("verified interpreter must match installed CLI venv")
     if not KNOWN.is_file() or not MALFORMED.is_file():
         raise QualificationError("synthetic fixtures missing")
     with tempfile.TemporaryDirectory(prefix="medorigin-fhir-local-qa-") as directory:
         temp = Path(directory)
-        receipts = [_run_one(cli, temp, f"run_{i + 1}") for i, cli in enumerate(clis)]
+        receipts = [
+            (
+                _run_one(cli, temp, f"run_{i + 1}")
+                if interpreters is None
+                else _run_one(cli, temp, f"run_{i + 1}", trusted_python=interpreters[i])
+            )
+            for i, cli in enumerate(clis)
+        ]
     if len(receipts) == 2 and receipts[0] != receipts[1]:
         raise QualificationError("installed runtimes disagree on deterministic local receipts")
     return {
         "status": STATUS,
         "installed_cli_count": len(clis),
+        "execution_mode": (
+            "source_verified_python_module"
+            if interpreters is not None
+            else "unattested_installed_console_shim"
+        ),
         "known_report_sha256": receipts[0]["known_report_sha256"],
         "unknown_report_sha256": receipts[0]["unknown_report_sha256"],
         "fhir_conformance_validated": False,

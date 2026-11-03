@@ -140,6 +140,7 @@ def test_two_installed_receipts_match_but_never_authorize_release(
     receipt = gate.qualify([Path("first"), Path("second")])
     assert receipt["status"] == "LOCAL_FHIR_PROVENANCE_ONLY"
     assert receipt["installed_cli_count"] == 2
+    assert receipt["execution_mode"] == "unattested_installed_console_shim"
     assert receipt["known_report_sha256"] != receipt["unknown_report_sha256"]
     for field in (
         "fhir_conformance_validated",
@@ -269,6 +270,60 @@ def test_subprocess_timeout_is_a_bounded_failure(
     monkeypatch.setattr(gate.subprocess, "run", fake_run)
     with pytest.raises(gate.QualificationError, match="could not complete"):
         gate.call(Path("fake"), ["--version"], tmp_path)
+
+
+def test_trusted_python_invocation_bypasses_unqualified_console_shim(
+    gate: Any, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    fake_cli = tmp_path / ("medscale.exe" if sys.platform == "win32" else "medscale")
+    fake_cli.write_text("FICTIONAL-UNTRUSTED-EXECUTABLE", encoding="utf-8")
+    python = tmp_path / ("python.exe" if sys.platform == "win32" else "python")
+    python.write_text("FICTIONAL-PYTHON", encoding="utf-8")
+    captured: list[list[str]] = []
+
+    def spy(argv: list[str], **_kw: object) -> subprocess.CompletedProcess[str]:
+        captured.append(argv)
+        return subprocess.CompletedProcess(argv, 0, "synthetic", "")
+
+    monkeypatch.setattr(gate.subprocess, "run", spy)
+    result = gate.call(fake_cli, ["--version"], tmp_path, trusted_python=python)
+    assert result.returncode == 0
+    assert captured == [
+        [
+            str(python),
+            "-E",
+            "-s",
+            "-P",
+            "-B",
+            "-c",
+            "from medscale.cli import main; raise SystemExit(main())",
+            "--version",
+        ]
+    ]
+    assert str(fake_cli) not in captured[0]
+
+
+@pytest.mark.parametrize("invalid", ["missing", "mismatch", "duplicate"])
+def test_trusted_interpreters_must_match_each_installed_cli_venv(
+    gate: Any, tmp_path: Path, invalid: str
+) -> None:
+    first = tmp_path / "venv1" / "bin"
+    second = tmp_path / "venv2" / "bin"
+    first.mkdir(parents=True)
+    second.mkdir(parents=True)
+    cli1 = first / "medscale"
+    cli2 = second / "medscale"
+    python1 = first / "python"
+    python2 = second / "python"
+    for path in (cli1, cli2, python1, python2):
+        path.write_text("synthetic", encoding="utf-8")
+    interpreters = {
+        "missing": [python1],
+        "mismatch": [python2, python1],
+        "duplicate": [python1, python1],
+    }[invalid]
+    with pytest.raises(gate.QualificationError, match="interpreter"):
+        gate.qualify([cli1, cli2], interpreters=interpreters)
 
 
 def test_local_script_never_claims_validated_fhir_or_approved_release(gate: Any) -> None:

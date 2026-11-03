@@ -240,12 +240,13 @@ def qualify(
     if not cli311.is_file() or not cli312.is_file():
         raise QualificationError("installed Core console entry points are missing")
     try:
-        receipt = fhir_gate.qualify([cli311, cli312])
+        receipt = fhir_gate.qualify([cli311, cli312], interpreters=[python311, python312])
     except (fhir_gate.QualificationError, OSError, ValueError) as exc:
         raise QualificationError("installed Core FHIR provenance evidence not qualified") from exc
     if (
         receipt.get("status") != fhir_gate.STATUS
         or receipt.get("installed_cli_count") != 2
+        or receipt.get("execution_mode") != "source_verified_python_module"
         or any(
             receipt.get(key) is not False
             for key in (
@@ -271,6 +272,7 @@ def qualify(
         "wheel_sha256": digest,
         "installed_python_source_files_verified_per_runtime": count311,
         "runtimes": ["3.11", "3.12"],
+        "entrypoint_execution_mode": "source_verified_python_module",
         "known_report_sha256": receipt["known_report_sha256"],
         "unknown_report_sha256": receipt["unknown_report_sha256"],
         "fhir_conformance_validated": False,
