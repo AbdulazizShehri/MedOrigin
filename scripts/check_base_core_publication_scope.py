@@ -154,7 +154,7 @@ def _verify_wheel_physical_envelope(path: Path, members: list[zipfile.ZipInfo]) 
                 compression,
                 _time,
                 _date,
-                _crc,
+                local_crc,
                 compressed_size,
                 uncompressed_size,
                 filename_length,
@@ -163,11 +163,18 @@ def _verify_wheel_physical_envelope(path: Path, members: list[zipfile.ZipInfo]) 
             if (
                 signature != b"PK\x03\x04"
                 or flags & 0x08
+                or flags != member.flag_bits
                 or compression != member.compress_type
+                or local_crc != member.CRC
                 or compressed_size != member.compress_size
                 or uncompressed_size != member.file_size
             ):
                 raise PublicationScopeError("wheel: local ZIP header mismatch")
+            # The central directory is authoritative for Wheel membership.
+            # Do not allow a different local filename on an otherwise unread
+            # member to hide behind a valid dist-info/METADATA entry.
+            if stream.read(filename_length) != member.filename.encode("utf-8"):
+                raise PublicationScopeError("wheel: local ZIP filename mismatch")
             cursor += _ZIP_LOCAL_HEADER.size + filename_length + extra_length + member.compress_size
     if cursor != directory_offset:
         raise PublicationScopeError("wheel: hidden ZIP member gap")
