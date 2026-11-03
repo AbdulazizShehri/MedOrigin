@@ -5,7 +5,6 @@ from __future__ import annotations
 import importlib.util
 import json
 import subprocess
-import sys
 from pathlib import Path
 from typing import Any
 
@@ -96,7 +95,9 @@ def test_rejects_unsafe_or_ambiguous_installed_cli_reports(
         data["errors"] = ["hidden validation error"]
     blob = (json.dumps(data, sort_keys=True, separators=(",", ":")) + "\n").encode()
     if tamper == "duplicate_report_status":
-        raw = blob.decode().replace('"status":"not_validated"', '"status":"valid","status":"not_validated"')
+        raw = blob.decode().replace(
+            '"status":"not_validated"', '"status":"valid","status":"not_validated"'
+        )
         blob = raw.encode()
     saved = blob
     if tamper == "stored_report_modified":
