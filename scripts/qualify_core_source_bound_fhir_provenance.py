@@ -20,6 +20,7 @@ from typing import Any
 
 import check_installed_core_console_launcher as launcher_gate
 import check_installed_core_fhir_provenance as fhir_gate
+import check_installed_core_python_interpreter as python_gate
 import qualify_medorigin_developer_beta as artifact_gate
 
 EXPECTED_VERSION = "0.3.0"
@@ -215,6 +216,33 @@ def qualify(
     digest = hashlib.sha256(wheel.read_bytes()).hexdigest()
     if metadata.get("version") != EXPECTED_VERSION or metadata.get("sha256") != digest:
         raise QualificationError("Wheel metadata and actual artifact digest disagree")
+    # Verify the actual executable *before* running either installed Python.
+    # The launcher/venv root/CPython base binaries are pinned, not vendor signed.
+    try:
+        python_receipts = (
+            python_gate.qualify(python311, 11),
+            python_gate.qualify(python312, 12),
+        )
+    except (python_gate.QualificationError, OSError, ValueError) as exc:
+        raise QualificationError("installed Python executable source not qualified") from exc
+    for i, inspected in enumerate(python_receipts, start=11):
+        if (
+            inspected.get("status") != python_gate.STATUS
+            or inspected.get("profile") != python_gate.PROFILE
+            or inspected.get("runtime_minor") != i
+            or inspected.get("installed_python_source_matches_base") is not True
+            or inspected.get("installed_base_executable_matches_local_pin") is not True
+            or any(
+                inspected.get(key) is not False
+                for key in (
+                    "publication_authorized",
+                    "clinical_use_authorized",
+                    "python_vendor_authenticity_verified",
+                    "python_code_signature_verified",
+                )
+            )
+        ):
+            raise QualificationError("installed Python executable receipt not qualified")
     # Inspect startup-hook files without running either interpreter first.
     # Checking only the Wheel's expected .py bytes does not detect an extra
     # executable .pth file or sitecustomize module in site-packages.
@@ -296,6 +324,10 @@ def qualify(
         "wheel_sha256": digest,
         "installed_python_source_files_verified_per_runtime": count311,
         "runtimes": ["3.11", "3.12"],
+        "installed_python_executable_profiles_checked": 2,
+        "installed_python_executable_profile": python_gate.PROFILE,
+        "python_vendor_authenticity_verified": False,
+        "python_code_signature_verified": False,
         "entrypoint_execution_mode": "source_verified_python_module",
         "installed_console_launcher_templates_checked": 2,
         "installed_console_launcher_profile": launcher311["profile"],

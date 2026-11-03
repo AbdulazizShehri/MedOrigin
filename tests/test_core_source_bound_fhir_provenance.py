@@ -91,6 +91,21 @@ def _accept_fake_gates(
     monkeypatch.setattr(gate.artifact_gate, "installed_wheel_matches", lambda *_a: 250)
     monkeypatch.setattr(gate, "_verify_installed_package_inventory", lambda *_a: 250)
     monkeypatch.setattr(
+        gate.python_gate,
+        "qualify",
+        lambda _path, minor: {
+            "status": gate.python_gate.STATUS,
+            "profile": gate.python_gate.PROFILE,
+            "runtime_minor": minor,
+            "installed_python_source_matches_base": True,
+            "installed_base_executable_matches_local_pin": True,
+            "publication_authorized": False,
+            "clinical_use_authorized": False,
+            "python_vendor_authenticity_verified": False,
+            "python_code_signature_verified": False,
+        },
+    )
+    monkeypatch.setattr(
         gate.launcher_gate,
         "qualify",
         lambda *_a: {
@@ -131,6 +146,10 @@ def test_exact_valid_receipts_are_still_explicitly_nonreleasing(
     assert result["installed_python_source_files_verified_per_runtime"] == 250
     assert result["runtimes"] == ["3.11", "3.12"]
     assert result["entrypoint_execution_mode"] == "source_verified_python_module"
+    assert result["installed_python_executable_profiles_checked"] == 2
+    assert result["installed_python_executable_profile"] == gate.python_gate.PROFILE
+    assert result["python_vendor_authenticity_verified"] is False
+    assert result["python_code_signature_verified"] is False
     assert result["installed_console_launcher_templates_checked"] == 2
     assert result["installed_console_launcher_profile"] == "synthetic-pinned-launcher-template"
     assert result["installer_pip_resource_record_matched"] is True
@@ -389,6 +408,46 @@ def test_unqualified_console_launcher_refuses_before_executing_fhir(
 
     monkeypatch.setattr(gate.launcher_gate, "qualify", launcher)
     with pytest.raises(gate.QualificationError, match=r"console launcher|launcher template"):
+        gate.qualify(*paths)
+    assert invoked == []
+
+
+@pytest.mark.parametrize(
+    "defect",
+    ["rejected", "bad_source", "bad_base", "bad_minor", "overclaimed_signature"],
+)
+def test_unqualified_interpreter_refuses_before_any_installed_runtime(
+    gate: Any,
+    paths: tuple[Path, Path, Path, Path, Path],
+    monkeypatch: pytest.MonkeyPatch,
+    defect: str,
+) -> None:
+    _accept_fake_gates(gate, monkeypatch, paths[1])
+    invoked: list[str] = []
+
+    def never_run(*_args: object, **_kwargs: object) -> dict[str, Any]:
+        invoked.append("fhir")
+        raise AssertionError("unqualified Python must never be executed")
+
+    monkeypatch.setattr(gate.fhir_gate, "qualify", never_run)
+
+    def probe(_path: Path, minor: int) -> dict[str, Any]:
+        if defect == "rejected":
+            raise gate.python_gate.QualificationError("fictional untrusted interpreter")
+        return {
+            "status": gate.python_gate.STATUS,
+            "profile": gate.python_gate.PROFILE,
+            "runtime_minor": minor + (1 if defect == "bad_minor" else 0),
+            "installed_python_source_matches_base": defect != "bad_source",
+            "installed_base_executable_matches_local_pin": defect != "bad_base",
+            "publication_authorized": False,
+            "clinical_use_authorized": False,
+            "python_vendor_authenticity_verified": False,
+            "python_code_signature_verified": defect == "overclaimed_signature",
+        }
+
+    monkeypatch.setattr(gate.python_gate, "qualify", probe)
+    with pytest.raises(gate.QualificationError, match="Python executable"):
         gate.qualify(*paths)
     assert invoked == []
 
