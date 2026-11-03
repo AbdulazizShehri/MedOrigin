@@ -38,6 +38,7 @@ def synthesize(root: Path) -> tuple[Path, Path]:
         vectors[name] = raw
         d0_source += (f'const {dispatch[name]}: &[u8] = '
                       f'include_bytes!("../fixtures/{name}.json");\n')
+    d0_source += 'const FHIR_RESOURCE_LIMIT_BYTES: usize = 32_768;\n'
     d0_source += 'pub fn fictional_json_preview_v1(abc: &str) {\n'
     d0_source += "".join(f'"{name}" => ("{name}", {var}),\n'
                          for name, var in dispatch.items())
@@ -45,10 +46,24 @@ def synthesize(root: Path) -> tuple[Path, Path]:
     d0_source += 'let (identity, required_bytes) = match fixture_id {\n'
     d0_source += "".join(f'"{name}" => ("{name}", {var}.len()),\n'
                          for name, var in dispatch.items())
-    d0_source += '\n    };\nlet bytes = match identity {\n'
+    d0_source += (
+        '"patient-invalid-utf8" => ("patient-invalid-utf8", 1),\n'
+        '"patient-over-limit" => ("patient-over-limit", FHIR_RESOURCE_LIMIT_BYTES + 1),\n'
+        '"patient-exact-limit" => ("patient-exact-limit", FHIR_RESOURCE_LIMIT_BYTES),\n'
+        '    };\nlet bytes = match identity {\n'
+    )
     d0_source += "".join(f'"{name}" => {var}.to_vec(),\n'
                          for name, var in dispatch.items())
-    d0_source += '\n    };\n'
+    d0_source += (
+        '"patient-invalid-utf8" => vec![0xff],\n'
+        """patient-over-limit" => vec![b' '; required_bytes],\n"""
+        '"patient-exact-limit" => {\n'
+        '    let mut padded = PATIENT.to_vec();\n'
+        """    padded.resize(required_bytes, b' ');\n"""
+        '    padded\n'
+        '},\n'
+        '    };\n'
+    )
     (d0 / "src" / "lib.rs").write_text(d0_source, encoding="utf-8")
     d2_source = 'pub const FIXTURES: [FixtureSpec; 12] = [\n'
     for name, status in EXPECTED_STATUS.items():
@@ -88,6 +103,45 @@ class TestFullSourceTree(unittest.TestCase):
         ), encoding="utf-8")
         with self.assertRaisesRegex(ValueError, "CHANGED_D0_BYTE_DISPATCH_observation-minimal"):
             verify(self.root)
+
+    def _mutate_source(self, original: str, updated: str) -> None:
+        path = self.d0 / "src" / "lib.rs"
+        source = path.read_text(encoding="utf-8")
+        self.assertIn(original, source)
+        path.write_text(source.replace(original, updated, 1), encoding="utf-8")
+
+    def test_changed_resource_limit_refused(self):
+        self._mutate_source("const FHIR_RESOURCE_LIMIT_BYTES: usize = 32_768;",
+                            "const FHIR_RESOURCE_LIMIT_BYTES: usize = 31_000;")
+        with self.assertRaisesRegex(ValueError, "CHANGED_D0_RESOURCE_LIMIT"):
+            verify(self.root)
+
+    def test_changed_boundary_size_dispatch_refused(self):
+        self._mutate_source(
+            '"patient-over-limit" => ("patient-over-limit", FHIR_RESOURCE_LIMIT_BYTES + 1),',
+            '"patient-over-limit" => ("patient-over-limit", 32769),',
+        )
+        with self.assertRaisesRegex(ValueError, "CHANGED_D0_BOUNDARY_SIZE_patient-over-limit"):
+            verify(self.root)
+
+    def test_changed_invalid_utf8_constructor_refused(self):
+        self._mutate_source('"patient-invalid-utf8" => vec![0xff],',
+                            '"patient-invalid-utf8" => vec![0xfe],')
+        with self.assertRaisesRegex(ValueError, "CHANGED_D0_BOUNDARY_BYTES_patient-invalid-utf8"):
+            verify(self.root)
+
+    def test_changed_over_limit_filler_refused(self):
+        self._mutate_source(""" "patient-over-limit" => vec![b' '; required_bytes],""".strip(),
+                            """ "patient-over-limit" => vec![b'x'; required_bytes],""".strip())
+        with self.assertRaisesRegex(ValueError, "CHANGED_D0_BOUNDARY_BYTES_patient-over-limit"):
+            verify(self.root)
+
+    def test_changed_exact_limit_padding_refused(self):
+        self._mutate_source("padded.resize(required_bytes, b' ');",
+                            "padded.resize(required_bytes, b'0');")
+        with self.assertRaisesRegex(ValueError, "CHANGED_D0_BOUNDARY_BYTES_patient-exact-limit"):
+            verify(self.root)
+
 
 
 if __name__ == "__main__":
