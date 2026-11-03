@@ -87,7 +87,7 @@ All commands take/return serde structs with `#[serde(deny_unknown_fields)]`. **N
 |---|---|---|---|---|---|---|
 | 1 | `/` | Home | Workspace | designed | Shell route; honesty banner + inventory | apps/workspace/README.md |
 | 2 | `/patients` | Synthetic patients | Workspace | foundation | Identity/binding/graph modules exist; no desktop adapter yet | apps/workspace/src/medscale_workspace/identity.py; binding.py |
-| 3 | `/encounters/:id` | Encounter detail | Workspace | foundation | encounter/review modules; fixtures only, no live capture | apps/workspace/src/medscale_workspace/encounter.py; review.py |
+| 3 | `/encounters` | Encounter detail | Workspace | foundation | encounter/review modules; fixtures only, no live capture | apps/workspace/src/medscale_workspace/encounter.py; review.py |
 | 4 | `/audio` | Audio & transcript | Workspace | gated | Microphone + ASR capture not qualified; review-only contract | apps/workspace/src/medscale_workspace/asr.py |
 | 5 | `/notes` | Clinical note drafts | Workspace | foundation | draft/review contracts; synthetic-only editing | apps/workspace/src/medscale_workspace/draft.py; review.py |
 | 6 | `/orders` | Orders / tasks | Workspace | gated | No auto-submit; manual review gate; external write blocked | specs/medscale-clinical-workspace-v1/capability_map.md (4.2) |
