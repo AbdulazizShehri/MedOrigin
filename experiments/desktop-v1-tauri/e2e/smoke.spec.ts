@@ -135,3 +135,26 @@ test('fixture lineage shows verified JSON-pointer provenance and re-verifies on 
   await expect(next).toContainText('/entry/1/resource');
   await expect(next).not.toContainText('/patient/reference');
 });
+
+test('second connected timeline route uses exact fictional dates and requires re-verification at source', async ({ page }) => {
+  await page.goto('/#/timeline');
+  const region = page.getByRole('region', { name: 'Verified fictional timeline' });
+  await expect(region).toBeVisible();
+  await expect(region.getByText('2026-01-01')).toBeVisible();
+  await expect(region.getByText('1970-01-01')).toBeVisible();
+  await expect(region.getByText('Undated — no event date in source')).toBeVisible();
+  const events = page.getByRole('list', { name: 'Fictional date-only events' });
+  await expect(events.locator('li')).toHaveCount(3);
+  await page.getByRole('button', { name: 'Undated only (1)' }).click();
+  await expect(events.locator('li')).toHaveCount(1);
+  await page.getByRole('button', { name: 'Dated only (2)' }).click();
+  await expect(events.locator('li')).toHaveCount(2);
+  await page.getByRole('button', { name: 'All examples (3)' }).click();
+  await page.getByRole('button', { name: 'Review bundled fictional source fixture-allergy-beta' }).click();
+  await expect(page).toHaveURL(/#\/fhir-inspector\?fixture=fixture-allergy-beta/);
+  await expect(page.getByRole('button', { name: 'Fixture fixture-allergy-beta' })).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByRole('status', { name: 'Verification result' })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Inspect verified fictional JSON source' })).toHaveCount(0);
+  await page.getByRole('button', { name: 'Verify fixture with native Rust' }).click();
+  await expect(page.getByRole('status', { name: 'Verification result' })).toBeVisible();
+});

@@ -46,7 +46,7 @@ export function AboutScreen() {
         <div className="detail">
           <strong>What this is</strong>
           <p>
-            A synthetic developer preview of MedOrigin Desktop v1 (Slice 1). Design tokens and the capability model are drawn from
+            A synthetic developer preview of MedOrigin Desktop v1 (synthetic-only preview). Design tokens and the capability model are drawn from
             PR #870. The product identity (brand, name, icon) is a placeholder — Overlap Forward v2 remains pending separate optical
             approval and is not represented here.
           </p>

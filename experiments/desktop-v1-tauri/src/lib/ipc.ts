@@ -100,6 +100,30 @@ export interface FictionalLineage {
   release_authorized: boolean;
 }
 
+export interface FictionalTimelineEvent {
+  event_id: string;
+  event_kind: string;
+  source_fixture_id: string;
+  source_resource_type: string;
+  source_sha256_hex: string;
+  source_byte_len: number;
+  date: string | null;
+  date_json_pointer: string | null;
+  date_status: string;
+  label: string;
+}
+
+export interface FictionalPatientTimeline {
+  contract: string;
+  patient_fixture_id: string;
+  scope: string;
+  order: string;
+  events: FictionalTimelineEvent[];
+  synthetic_only: boolean;
+  fhir_semantics_validated: boolean;
+  release_authorized: boolean;
+}
+
 export interface CommandError {
   code: string;
 }
@@ -111,6 +135,7 @@ export const CONTRACT_SOURCE = 'medorigin-fixture-source-v1';
 export const CONTRACT_STRUCTURE = 'medorigin-fictional-structure-subset-v1';
 export const CONTRACT_LINEAGE = 'medorigin-four-fictional-fixtures-lineage-v1';
 export const LINEAGE_SCOPE = 'FOUR_PINNED_SYNTHETIC_FIXTURES';
+export const CONTRACT_TIMELINE = 'medorigin-three-fictional-timeline-entries-v1';
 
 // Golden values mirror src-tauri fixtures and are cross-checked by
 // tests/verify_goldens.py. Browser mock only — the native Rust host is the
@@ -314,6 +339,47 @@ export async function inspectFictionalFixtureLineage(req: VerifyFixtureRequest):
     };
   }
   return withStallGuard(invokeRaw<FictionalLineage>('inspect_fictional_fixture_lineage', { req }));
+}
+
+// Browser-only deterministic mock of the three pinned fictional dates/records.
+ // Actual native evidence is separately checked by Tauri + Windows UIA.
+export async function inspectFictionalPatientTimeline(req: VerifyFixtureRequest): Promise<FictionalPatientTimeline> {
+  if (!isTauri()) {
+    if (req.fixture_id !== 'fixture-patient-alpha') {
+      const err: CommandError = { code: 'unknown_patient_fixture' };
+      throw err;
+    }
+    const event = (
+      sourceId: string, event_id: string, event_kind: string, label: string,
+      resourceType: string, date: string | null, pointer: string | null, status: string,
+    ): FictionalTimelineEvent => {
+      const source = MOCK_FIXTURES.find((fixture) => fixture.id === sourceId);
+      if (!source) throw new Error('synthetic_fixture_metadata_unavailable');
+      return {
+        event_id, event_kind, label, source_fixture_id: source.id,
+        source_resource_type: resourceType, source_sha256_hex: source.sha256_hex,
+        source_byte_len: source.byte_len, date, date_json_pointer: pointer, date_status: status,
+      };
+    };
+    return {
+      contract: CONTRACT_TIMELINE,
+      patient_fixture_id: 'fixture-patient-alpha',
+      scope: LINEAGE_SCOPE,
+      order: 'dated_descending_then_undated',
+      synthetic_only: true,
+      fhir_semantics_validated: false,
+      release_authorized: false,
+      events: [
+        event('fixture-allergy-beta', 'fictional-allergy-recorded', 'fictional_recorded_date',
+          'Fictional allergy record date', 'AllergyIntolerance', '2026-01-01', '/recordedDate', 'source_date_only'),
+        event('fixture-patient-alpha', 'fictional-patient-dob', 'fictional_demographic_date',
+          'Fictional example birth date', 'Patient', '1970-01-01', '/birthDate', 'source_date_only'),
+        event('fixture-observation-gamma', 'fictional-observation-undated', 'fictional_undated_observation',
+          'Fictional observation (no recorded event date)', 'Observation', null, null, 'not_present_in_source'),
+      ],
+    };
+  }
+  return withStallGuard(invokeRaw<FictionalPatientTimeline>('inspect_fictional_patient_timeline', { req }));
 }
 
 export function isCommandError(err: unknown): err is CommandError {

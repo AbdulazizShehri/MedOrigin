@@ -1,0 +1,14 @@
+MedOrigin Desktop Slice 5 native synthetic-only qualification
+Date: 2026-11-04 Asia/Riyadh
+Parent: Slice 4 commit 46669903b4efea05a6bd7d3cadc5d78ea8c0ed75
+Exact Tauri debug embedded-frontend executable SHA-256 DA9F657E967BF880EA4F355801A9A1EE168C2089106B1E6FB68C65E665D9CE7D
+Rust unit tests: 26/26 PASS; React tests: 60/60 PASS
+Browser Playwright: 47/47 PASS; separate loaded /timeline axe 1/1 PASS
+Native Tauri Windows UIAutomation: PASS
+Checks: honest labels, fixture SHA, source JSON, recursive structure, synthetic lineage
+Timeline: 2026-01-01 allergy recordedDate; 1970-01-01 patient birthDate; observation explicitly undated
+Timeline: dated/undated filters work; source navigation forces fresh Rust fixture verification
+Dark/light native screenshots captured at logical 1280x800 and 1440x900 at 125pct DPI
+Native 1920x1080, DPI 100/150/200, Linux, macOS, independent clinical validation NOT RUN
+WebView2 outbound network egress NO-GO unresolved (issue #662), NO PHI/clinical release
+No signing, installer, main merge, external services, system firewall changes or public publication.

@@ -44,9 +44,10 @@ describe('route registry integrity', () => {
     expect(routeByPath('/definitely-not-a-route')).toBeUndefined();
   });
 
-  it('only the fixture inspector is connected to a native command', () => {
+  it('connects exactly the two reviewed synthetic-only Rust routes', () => {
     const connected = ROUTES.filter((r) => r.status === 'fixture-only');
-    expect(connected.map((r) => r.path)).toEqual(['/fhir-inspector']);
+    expect(connected.map((r) => r.path)).toEqual(['/fhir-inspector', '/timeline']);
+    for (const route of connected) expect(route.reason).toMatch(/synthetic|fictional/i);
   });
 
   it('gated and deferred routes carry a reason that mentions blocked or authorization', () => {
