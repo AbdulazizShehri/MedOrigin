@@ -1,0 +1,21 @@
+{
+  "brand": "MedOrigin",
+  "version": "2.0.0-review",
+  "status": "candidate-requires-founder-optical-approval",
+  "companyRelationship": {
+    "parent": "Minaret",
+    "activation": "future",
+    "showEndorsementNow": false
+  },
+  "colors": {
+    "originOrange": "#FE681B",
+    "ink": "#0B0C0C",
+    "night": "#101313",
+    "paper": "#FAF9F6",
+    "bone": "#F1F0ED",
+    "line": "#D8DAD5",
+    "minaretPink": "#FFC2EA",
+    "minaretBlue": "#A6DBFF",
+    "minaretMint": "#C3F0BF"
+  }
+}
