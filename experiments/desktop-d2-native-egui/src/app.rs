@@ -1,11 +1,11 @@
 // Adapted from emilk/eframe_template under Apache-2.0, see UPSTREAM-NOTICE.md.
 // Synthetic-only, in-process native Rust eframe + D0; no browser, EHR, PHI or network.
 use eframe::egui;
-use sha2::{Digest, Sha256};
 use medorigin_desktop_d0_rust_prototype::{
     HashError, fictional_json_preview_v1, hash_fixture_raw_v1,
     inspect_named_synthetic_fhir_envelope_v1,
 };
+use sha2::{Digest, Sha256};
 #[cfg(test)]
 use std::collections::HashSet;
 
@@ -681,9 +681,21 @@ mod tests {
         let first = app.comparison.as_ref().expect("first comparison state");
         assert_eq!(first.left.id, "patient-minimal");
         assert_eq!(first.right.id, "observation-minimal");
-        assert!(first.json_path_diff.contains("Fictional JSON path difference: /"));
-        assert!(first.byte_diff_summary.contains("Fictional byte difference:"));
-        assert!(first.byte_context.contains("Fictional HEX context at zero-based byte"));
+        assert!(
+            first
+                .json_path_diff
+                .contains("Fictional JSON path difference: /")
+        );
+        assert!(
+            first
+                .byte_diff_summary
+                .contains("Fictional byte difference:")
+        );
+        assert!(
+            first
+                .byte_context
+                .contains("Fictional HEX context at zero-based byte")
+        );
         let previous_pointer = first.json_path_diff.clone();
         let previous_bytes = first.byte_diff_summary.clone();
         let previous_hex = first.byte_context.clone();
@@ -702,11 +714,29 @@ mod tests {
         let second = app.comparison.as_ref().expect("second comparison state");
         assert_eq!(second.left.id, "patient-minimal");
         assert_eq!(second.right.id, "bundle-valid");
-        assert!(second.json_path_diff.contains("Fictional JSON path difference: /"));
-        assert!(second.byte_diff_summary.contains("Fictional byte difference:"));
-        assert!(second.byte_context.contains("Fictional HEX context at zero-based byte"));
-        assert_ne!(second.json_path_diff, previous_pointer, "stale JSON Pointer");
-        assert_ne!(second.byte_diff_summary, previous_bytes, "stale byte comparison");
+        assert!(
+            second
+                .json_path_diff
+                .contains("Fictional JSON path difference: /")
+        );
+        assert!(
+            second
+                .byte_diff_summary
+                .contains("Fictional byte difference:")
+        );
+        assert!(
+            second
+                .byte_context
+                .contains("Fictional HEX context at zero-based byte")
+        );
+        assert_ne!(
+            second.json_path_diff, previous_pointer,
+            "stale JSON Pointer"
+        );
+        assert_ne!(
+            second.byte_diff_summary, previous_bytes,
+            "stale byte comparison"
+        );
         assert_ne!(second.byte_context, previous_hex, "stale HEX context");
     }
 
@@ -758,9 +788,12 @@ mod tests {
 
     #[test]
     fn fictional_preview_hash_checks_returned_bytes_not_only_provider_metadata() {
-        let original = fictional_json_preview_v1("patient-minimal")
-            .expect("compiled fictional Patient");
-        assert!(verified_fictional_preview_bytes(FIXTURES[0], original.raw_json));
+        let original =
+            fictional_json_preview_v1("patient-minimal").expect("compiled fictional Patient");
+        assert!(verified_fictional_preview_bytes(
+            FIXTURES[0],
+            original.raw_json
+        ));
 
         // Same byte count and unchanged metadata, different actual source data.
         let modified = original.raw_json.replacen("synthetic", "synthetix", 1);
@@ -772,7 +805,10 @@ mod tests {
             sha256: FIXTURES[4].sha256,
             ..FIXTURES[0]
         };
-        assert!(!verified_fictional_preview_bytes(wrong_digest, original.raw_json));
+        assert!(!verified_fictional_preview_bytes(
+            wrong_digest,
+            original.raw_json
+        ));
 
         // Even if a catalog entry advertises 2,049 bytes, no oversized raw
         // preview can pass the independent D2 display/compare boundary.
@@ -781,7 +817,10 @@ mod tests {
             bytes: oversized.len(),
             ..FIXTURES[0]
         };
-        assert!(!verified_fictional_preview_bytes(oversized_spec, &oversized));
+        assert!(!verified_fictional_preview_bytes(
+            oversized_spec,
+            &oversized
+        ));
 
         for fixture in FIXTURES {
             if let Ok(payload) = fictional_json_preview_v1(fixture.id) {
@@ -977,8 +1016,8 @@ mod tests {
 
     #[test]
     fn pinned_fictional_patient_observation_pointer_matches_windows_uia_contract() {
-        let left = MedOriginNativePreview::verified_json_for(0)
-            .expect("pinned fictional Patient bytes");
+        let left =
+            MedOriginNativePreview::verified_json_for(0).expect("pinned fictional Patient bytes");
         let right = MedOriginNativePreview::verified_json_for(4)
             .expect("pinned fictional Observation bytes");
         assert_eq!(
