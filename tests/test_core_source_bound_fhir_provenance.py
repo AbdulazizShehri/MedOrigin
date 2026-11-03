@@ -38,7 +38,7 @@ def paths(tmp_path: Path) -> tuple[Path, Path, Path, Path, Path]:
         bin_dir = root / ("Scripts" if sys.platform == "win32" else "bin")
         bin_dir.mkdir(parents=True)
         (root / "pyvenv.cfg").write_text(
-            "home = fictional-python\\ninclude-system-site-packages = false\\n",
+            "home = fictional-python\ninclude-system-site-packages = false\n",
             encoding="utf-8",
         )
         site_dir = (
@@ -201,22 +201,22 @@ def test_unreviewed_installed_startup_hook_refused_before_runtime_execution(
     if kind in {"pth", "pth_upper"}:
         suffix = "pth" if kind == "pth" else "PTH"
         (site / f"zz_fictional_startup.{suffix}").write_text(
-            "import fictional_outside_wheel\\n", encoding="utf-8"
+            "import fictional_outside_wheel\n", encoding="utf-8"
         )
     elif kind == "sitecustomize":
-        (site / "sitecustomize.py").write_text("import fictional_code\\n", encoding="utf-8")
+        (site / "sitecustomize.py").write_text("import fictional_code\n", encoding="utf-8")
     elif kind == "sitecustomize_package":
         (site / "sitecustomize").mkdir()
     elif kind == "usercustomize":
-        (site / "usercustomize.py").write_text("import fictional_code\\n", encoding="utf-8")
+        (site / "usercustomize.py").write_text("import fictional_code\n", encoding="utf-8")
     elif kind == "system_site":
-        config.write_text("include-system-site-packages = true\\n", encoding="utf-8")
+        config.write_text("include-system-site-packages = true\n", encoding="utf-8")
     elif kind == "missing_config":
         config.unlink()
     elif kind == "duplicate_config":
         config.write_text(
-            "include-system-site-packages = false\\n"
-            "include-system-site-packages = false\\n",
+            "include-system-site-packages = false\n"
+            "include-system-site-packages = false\n",
             encoding="utf-8",
         )
     else:
@@ -229,7 +229,7 @@ def test_unreviewed_installed_startup_hook_refused_before_runtime_execution(
         raise AssertionError("unqualified startup hook must be refused before Python")
 
     monkeypatch.setattr(gate.artifact_gate, "installed_wheel_matches", never_run)
-    with pytest.raises(gate.QualificationError, match="site-packages|startup hook|venv"):
+    with pytest.raises(gate.QualificationError, match=r"site-packages|startup hook|venv"):
         gate.qualify(*paths)
     assert invoked == []
 
