@@ -64,6 +64,26 @@ $sha = (Get-FileHash -Algorithm SHA256 -LiteralPath $exe).Hash
 powershell -NoProfile -ExecutionPolicy Bypass -File tests/windows-attributed-egress-lifecycle.ps1 -ExePath $exe -ExpectedSha256 $sha -Snapshots 5 -IntervalMs 1000
 ```
 
+### Validate a Windows egress report without declaring network containment
+
+The Python 3 standard-library-only `tests/validate_d1_egress_series.py` verifies the **internal consistency** of a JSON report from the Windows lifecycle observer: the exact debug executable SHA-256, every sample index, complete sample count, process/socket counts, report decisions, an observed root-process shutdown, and the fact that *no* nested report claims a release or packet/DNS-denial PASS. It **cannot independently verify the OS observations**. Even a complete zero-socket report always returns `NO_GO` and **exit 2**; malformed, internally contradictory, or incomplete evidence returns `NO_GO` and **exit 4**. The optional report file should contain only the lifecycle tool's privacy-minimal aggregate JSON, not packet payloads or patient records.
+
+```powershell
+# Only on an authorized local Windows test host with a real, hash-pinned D1 exe.
+$exe = '<absolute local debug path>\medorigin-desktop-d1-preview.exe'
+$sha = (Get-FileHash -Algorithm SHA256 -LiteralPath $exe).Hash
+$report = Join-Path $env:TEMP 'medorigin-d1-egress-aggregate-no-phi.json'
+try {
+  & powershell.exe -NoProfile -ExecutionPolicy Bypass -File tests/windows-attributed-egress-lifecycle.ps1 -ExePath $exe -ExpectedSha256 $sha -Snapshots 5 -IntervalMs 1000 > $report
+  # The lifecycle tool intentionally returned nonzero NO_GO. Do not override it.
+  python tests/validate_d1_egress_series.py --input $report --expected-sha256 $sha
+  # Python will also intentionally exit nonzero, even for consistent results.
+}
+finally { Remove-Item -LiteralPath $report -Force -ErrorAction SilentlyContinue }
+```
+
+Run source-only adversarial consistency regressions without any Windows app or network: `python -m unittest discover -s tests -p test_validate_d1_egress_series.py -v` (**17 cases**). Separate existing Windows PowerShell mocked regressions remain `windows-egress-probe-selftest.ps1` (**9 cases**) and `windows-attributed-egress-selftest.ps1` (**14 cases**); these validate code, not runtime egress. Source-only checks were added to the existing nonpublishing GitHub workflow, but **no new hosted exact-head run or Windows runtime acceptance is asserted**. The release decision remains NO-GO, including when all three source-only suites pass.
+
 **Do not treat the deliberately nonzero exit status as a failure to find a vulnerability, or suppress it to enable publishing.** The script does not establish kernel-level packet/DNS denial, descendant broker teardown, update-path isolation, or full Windows egress confinement. It does not install/uninstall any security controls, elevate, block the shared `msedgewebview2.exe` binary globally, or disable Edge updates. Microsoft [WebView2 WebResourceRequested](https://learn.microsoft.com/en-us/microsoft-edge/webview2/how-to/webresourcerequested) can intercept website resource requests, but it is not an independent OS process-tree egress denial proof. This real-runtime lifecycle smoke is separate from the **14 mocked preflight cases** and must be reported separately; never describe the mock results as five live network observations.
 
 The UI Automation smoke test verifies all four fictional fixture IDs through **React → Tauri IPC → Rust → React** and checks exact SHA-256 goldens. The invalid-encoding and oversize samples are *expected to hash successfully*; this does **not** mean they pass FHIR validation. The egress audit inspects the root process and descendant WebView2 processes; it exits 2 on any observed non-loopback TCP state (including `SynSent`), and fails closed if process/socket enumeration fails. Its separate `tests/windows-egress-probe-selftest.ps1` runs nine mocked scenarios, including external TCP attempts from nested descendants, unrelated-process exclusion, missing-root fail-closed behavior, socket-enumeration errors, and loopback allowance. It does **not** exercise the actual OS network boundary. A clean snapshot is **not** proof of zero network activity.
