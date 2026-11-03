@@ -22,6 +22,16 @@ An independent local Python stdlib SHA-256 check using the exact fixed D0 fictio
 - Same-length mutation replacing `synthetic` with `synthetix` — **57 UTF-8 bytes**, SHA-256 `eb90a0d64dd27ecda3a2740cd9ece68d496e4524ad3c1c980c21283282f41961`, correctly distinct from the compiled SHA. This is an **independent test-vector check**, not proof that the unrun Rust test passes.
 - Current GitHub source confirmation: Rust helper is present; two call sites in `preview_selected` and `verified_json_for`; `Cargo.toml` exact pinned version and corresponding locked package dependency; source-authored Rust tests present. No rustc/cargo toolchain was available in the assistant's isolated sandbox, and owner PC Desktop Commander remains capped at monthly usage, so **no exact-integrated-HEAD `cargo test --offline --locked`, formatting, Clippy, real Windows UIA, Linux AT-SPI, or macOS native acceptance was executed**.
 
+## Important source test blocker corrected before native compilation
+
+After adding the direct `sha2` dependency, a fresh review of the existing `tests/browser_free_boundary.rs` discovered a concrete failing assertion in `direct_dependencies_remain_limited_to_native_ui_and_existing_d0`: it previously expected exactly **three** manifest direct dependencies, `eframe`, D0 and `serde_json`. The new fourth dependency would fail the safety test even though `sha2 0.11.1` was already resolved and locked transitively.
+
+The source-guard assertion was **updated to admit precisely one reviewed fourth dependency, `sha2`**, while continuing to reject unreviewed additions, browsers, HTTP clients, socket/process APIs, unexpected source modules, and changes to native eframe/AccessKit features. It also now checks the exact `sha2 = { version = "=0.11.1", default-features = false }` manifest line, the `sha2 0.11.1` locked package and the D2 root package's explicit `"sha2"` lock dependency. That preserves the existing fail-closed policy rather than weakening it to accept arbitrary crates.
+
+Independent GitHub-source checks against the *current* integration branch confirmed **7/7 static invariants**: four expected direct dependency names, the Rust test's expected allowlist, exact manifest pin, root lock wiring, existing locked package, continued browser/client refusal, and independent hashing at both raw preview exposure sites. The earlier **13/13 static source/lock assertions** from the initial SHA change also passed before this guard fix. These are independently executed **static source checks, not Cargo tests**.
+
+No actual `cargo test` or `cargo fmt --check` result is yet available at this branch head, since the authorized Windows device connector still has a monthly execution quota block. The code and tests remain unmerged in Draft #865; the change is not a release authorization.
+
 ## Follow-up acceptance and hard gates
 
 Before merging even into a development base, run on the **exact new #865 HEAD**: `cargo test --offline --locked --all-targets`, `cargo fmt --all -- --check`, `cargo clippy --offline --locked --all-targets -- -D warnings`, exact-hash Windows UIA four-case JSON Pointer and keyboard/clear flows, and Linux/macOS accessibility. Independent security review and OS-level packet isolation are still required before release. No hosted CI success is inferred from previous PRs or a successful file SHA comparison.
