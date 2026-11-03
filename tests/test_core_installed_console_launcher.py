@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 import hashlib
 import importlib.util
 import io
@@ -46,6 +47,93 @@ def _sample_windows(
     cli = base / "medscale.exe"
     cli.write_bytes(wrapper)
     return cli, python, wrapper
+
+
+def _fake_pip_distribution(
+    gate: Any, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> tuple[bytes, Path, Path, Path, Path]:
+    vendor = tmp_path / "Lib" / "site-packages" / "pip"
+    resource = vendor / "_vendor" / "distlib" / "t64.exe"
+    resource.parent.mkdir(parents=True)
+    stub = b"MZ" + b"0" * (gate.WIN64_PE_PREFIX_LENGTH - 2)
+    resource.write_bytes(stub)
+    monkeypatch.setattr(gate, "WIN64_PE_PREFIX_SHA256", hashlib.sha256(stub).hexdigest())
+    distinfo = vendor.parent / f"pip-{gate.PINNED_INSTALLER_PIP_VERSION}.dist-info"
+    distinfo.mkdir()
+    metadata = distinfo / "METADATA"
+    metadata.write_text(
+        "Metadata-Version: 2.4\nName: pip\nVersion: " + gate.PINNED_INSTALLER_PIP_VERSION + "\n",
+        encoding="utf-8",
+    )
+    record = distinfo / "RECORD"
+    encoded = base64.urlsafe_b64encode(hashlib.sha256(stub).digest()).rstrip(b"=").decode()
+    record.write_text(
+        f"pip/_vendor/distlib/t64.exe,sha256={encoded},{len(stub)}\n",
+        encoding="utf-8",
+    )
+    return stub, vendor, resource, metadata, record
+
+
+def test_pip_vendor_distribution_resource_matches_own_record(
+    gate: Any, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    stub, vendor, _resource, _metadata, _record = _fake_pip_distribution(
+        gate, monkeypatch, tmp_path
+    )
+    gate._verify_pip_record_bound_stub(stub, vendor)
+
+
+@pytest.mark.parametrize(
+    "fault",
+    [
+        "modified_stub",
+        "resource_differs_from_launcher",
+        "record_hash",
+        "record_size",
+        "duplicate_record",
+        "missing_record",
+        "wrong_version",
+        "wrong_name",
+        "wrong_distribution_dir",
+        "truncated_resource",
+    ],
+)
+def test_pip_vendor_record_integrity_fails_closed_before_launcher_execution(
+    gate: Any, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, fault: str
+) -> None:
+    stub, vendor, resource, metadata, record = _fake_pip_distribution(gate, monkeypatch, tmp_path)
+    if fault == "modified_stub":
+        data = bytearray(stub)
+        data[123] ^= 1
+        resource.write_bytes(data)
+    elif fault == "resource_differs_from_launcher":
+        stub = stub[:-1] + b"X"
+    elif fault == "record_hash":
+        record.write_text(
+            f"pip/_vendor/distlib/t64.exe,sha256={'A' * 43},{len(stub)}\n",
+            encoding="utf-8",
+        )
+    elif fault == "record_size":
+        record.write_text(
+            record.read_text(encoding="utf-8").replace(f",{len(stub)}", ",7"), encoding="utf-8"
+        )
+    elif fault == "duplicate_record":
+        record.write_text(record.read_text(encoding="utf-8") * 2, encoding="utf-8")
+    elif fault == "missing_record":
+        record.unlink()
+    elif fault == "wrong_version":
+        metadata.write_text("Name: pip\nVersion: 0.0.0\n", encoding="utf-8")
+    elif fault == "wrong_name":
+        metadata.write_text(
+            f"Name: fictional\nVersion: {gate.PINNED_INSTALLER_PIP_VERSION}\n",
+            encoding="utf-8",
+        )
+    elif fault == "wrong_distribution_dir":
+        vendor.rename(vendor.with_name("pip-bogus"))
+    elif fault == "truncated_resource":
+        resource.write_bytes(stub[:-1])
+    with pytest.raises(gate.QualificationError, match="pip vendor"):
+        gate._verify_pip_record_bound_stub(stub, vendor)
 
 
 def test_exact_synthetic_windows_template_passes_without_execution(
