@@ -6,6 +6,7 @@ import gzip
 import importlib.util
 import io
 import json
+import stat
 import struct
 import subprocess
 import sys
@@ -240,6 +241,56 @@ def test_no_independent_approval_or_publisher_code_in_gate() -> None:
     assert "github.event_name" not in source
     assert "gh release create" not in source
     assert "twine upload" not in source
+
+
+@pytest.mark.parametrize(
+    ("kind", "expected"),
+    [
+        ("symlink", "wheel: unsupported member type"),
+        ("traversal", "wheel: unsafe member path"),
+        ("backslash", "wheel: unsafe member path"),
+        ("absolute", "wheel: unsafe member path"),
+        ("drive", "wheel: unsafe member path"),
+        ("empty-component", "wheel: unsafe member path"),
+        ("duplicate", "wheel: duplicate member path"),
+        ("case-alias", "wheel: duplicate member path"),
+    ],
+)
+def test_wheel_rejects_unsafe_members_even_with_clean_metadata(
+    checker: Any, tmp_path: Path, kind: str, expected: str
+) -> None:
+    folder = make_dist(tmp_path / kind)
+    assert checker.inspect(folder)["status"] == "BASE_CORE_PUBLICATION_SCOPE_CLEAN"
+    wheel = folder / "medscale-0.3.0-py3-none-any.whl"
+    with zipfile.ZipFile(wheel, "a") as archive:
+        if kind == "symlink":
+            member = zipfile.ZipInfo("medscale/unread-link.py")
+            member.create_system = 3
+            member.external_attr = (stat.S_IFLNK | 0o777) << 16
+            archive.writestr(member, b"../../outside")
+        elif kind == "traversal":
+            archive.writestr("medscale/../outside.py", b"synthetic")
+        elif kind == "backslash":
+            archive.writestr("medscale\\outside.py", b"synthetic")
+        elif kind == "absolute":
+            archive.writestr("/medscale/outside.py", b"synthetic")
+        elif kind == "drive":
+            archive.writestr("C:/medscale/outside.py", b"synthetic")
+        elif kind == "empty-component":
+            archive.writestr("medscale//outside.py", b"synthetic")
+        elif kind == "duplicate":
+            archive.writestr("medscale/duplicate.py", b"synthetic-1")
+            with pytest.warns(UserWarning, match="Duplicate name"):
+                archive.writestr("medscale/duplicate.py", b"synthetic-2")
+        else:
+            archive.writestr("medscale/Same.py", b"synthetic-1")
+            archive.writestr("medscale/same.py", b"synthetic-2")
+    with zipfile.ZipFile(wheel) as archive:
+        assert archive.read("medscale-0.3.0.dist-info/METADATA") == metadata()
+    result = checker.inspect(folder)
+    assert result["status"] == "BLOCKED"
+    assert expected in result["issues"]
+    assert result["publication_authorized"] is False
 
 
 def test_wheel_forged_inflated_size_fails_closed(checker: Any, tmp_path: Path) -> None:
