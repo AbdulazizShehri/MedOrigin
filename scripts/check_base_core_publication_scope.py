@@ -248,15 +248,53 @@ def _wheel(path: Path) -> EmailMessage:
         raise PublicationScopeError("wheel: invalid archive") from exc
 
 
+_WINDOWS_RESERVED_DEVICE = re.compile(
+    r"(?:CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9]|CONIN\\$|CONOUT\\$)", re.IGNORECASE
+)
+
+
+def _verify_sdist_member_inventory_entry(item: tarfile.TarInfo, seen: set[str]) -> None:
+    """Reject archive extraction aliases and special files before reading metadata.
+
+    TarFile can parse members whose names are unsafe to extract on either
+    POSIX or Windows. An intact PKG-INFO alone cannot qualify those payloads.
+    """
+    path = item.name
+    parts = path.removesuffix("/").split("/")
+    if (
+        not path
+        or path.startswith("/")
+        or "\\\\" in path
+        or any(ord(char) < 32 or ord(char) == 127 for char in path)
+        or any(
+            not part
+            or part in {".", ".."}
+            or ":" in part
+            or part.endswith((" ", "."))
+            or _WINDOWS_RESERVED_DEVICE.fullmatch(part.split(".", 1)[0]) is not None
+            for part in parts
+        )
+    ):
+        raise PublicationScopeError("sdist: unsafe member path")
+    normalized = path.removesuffix("/").casefold()
+    if normalized in seen:
+        raise PublicationScopeError("sdist: duplicate member path")
+    seen.add(normalized)
+    if not (item.isfile() or item.isdir()):
+        raise PublicationScopeError("sdist: unsupported member type")
+
+
 def _bounded_sdist_metadata(archive: tarfile.TarFile) -> tuple[EmailMessage, int]:
     total = 0
     matches = 0
     last_member_end = 0
     metadata_bytes: bytes | None = None
     metadata_path: str | None = None
+    seen: set[str] = set()
     for count, item in enumerate(archive, start=1):
         if count > _MAX_MEMBERS:
             raise PublicationScopeError("sdist: archive member limit exceeded")
+        _verify_sdist_member_inventory_entry(item, seen)
         if item.size < 0 or item.size > _MAX_SINGLE_MEMBER_BYTES:
             raise PublicationScopeError("sdist: inflated member exceeds budget")
         total += item.size
