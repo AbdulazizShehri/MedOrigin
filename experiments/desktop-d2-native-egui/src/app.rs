@@ -318,6 +318,127 @@ fn verified_fictional_preview_bytes(fixture: FixtureSpec, raw: &str) -> bool {
     actual == fixture.sha256
 }
 
+/// Exact relationship projection of an independently SHA-verified compiled
+/// fictional D0 JSON fixture. NOT a general FHIR graph or chronology.
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct FictionalRelationEdge {
+    source_pointer: &'static str,
+    target: &'static str,
+    relationship: &'static str,
+}
+
+#[derive(Clone, Debug)]
+struct FictionalRelationView {
+    source: FixtureSpec,
+    edges: Vec<FictionalRelationEdge>,
+}
+
+/// This helper receives only raw bytes returned by verified_json_for() in
+/// normal use. Unknown fixtures, unexpected fields, date invention and
+/// changed references are rejected, not repaired or clinically interpreted.
+fn project_pinned_fictional_relations(
+    fixture_id: &str,
+    raw: &str,
+) -> Result<Vec<FictionalRelationEdge>, &'static str> {
+    use serde_json::Value;
+    const PATIENT_REF: &str = "Patient/synthetic";
+    const PATIENT_URN: &str = "urn:uuid:00000000-0000-4000-8000-000000000001";
+    const OBS_URN: &str = "urn:uuid:00000000-0000-4000-8000-000000000002";
+    let source: Value = serde_json::from_str(raw).map_err(|_| "fictional_relation_invalid_json")?;
+    let value_at = |pointer: &str| {
+        source
+            .pointer(pointer)
+            .and_then(Value::as_str)
+            .ok_or("fictional_relation_pointer_missing")
+    };
+    let check = |pointer: &str, expected: &str| {
+        if value_at(pointer)? == expected {
+            Ok(())
+        } else {
+            Err("fictional_relation_changed")
+        }
+    };
+    // None of the current D0 fixtures contain date/time evidence. A revised
+    // corpus must be reviewed before attempting chronological ordering.
+    let no_dates = |resource: &Value| {
+        ![
+            "birthDate",
+            "effectiveDateTime",
+            "effectivePeriod",
+            "issued",
+            "recordedDate",
+        ]
+        .iter()
+        .any(|field| resource.get(*field).is_some())
+    };
+    if !no_dates(&source) {
+        return Err("fictional_relation_unreviewed_date");
+    }
+    match fixture_id {
+        "observation-minimal" => {
+            check("/resourceType", "Observation")?;
+            check("/id", "synthetic-observation")?;
+            check("/subject/reference", PATIENT_REF)?;
+            Ok(vec![FictionalRelationEdge {
+                source_pointer: "/subject/reference",
+                target: PATIENT_REF,
+                relationship: "fictional_subject_reference",
+            }])
+        }
+        "bundle-valid" | "bundle-linked" => {
+            check("/resourceType", "Bundle")?;
+            check("/id", "synthetic-bundle")?;
+            check("/type", "collection")?;
+            let entries = source
+                .get("entry")
+                .and_then(Value::as_array)
+                .ok_or("fictional_relation_bundle_missing")?;
+            if entries.len() != 2 {
+                return Err("fictional_relation_bundle_count_changed");
+            }
+            check("/entry/0/fullUrl", PATIENT_URN)?;
+            check("/entry/1/fullUrl", OBS_URN)?;
+            check("/entry/0/resource/resourceType", "Patient")?;
+            check("/entry/0/resource/id", "synthetic")?;
+            check("/entry/1/resource/resourceType", "Observation")?;
+            check("/entry/1/resource/id", "synthetic-observation")?;
+            for pointer in ["/entry/0/resource", "/entry/1/resource"] {
+                if !no_dates(
+                    source
+                        .pointer(pointer)
+                        .ok_or("fictional_relation_member_missing")?,
+                ) {
+                    return Err("fictional_relation_unreviewed_date");
+                }
+            }
+            let expected_ref = if fixture_id == "bundle-valid" {
+                PATIENT_REF
+            } else {
+                PATIENT_URN
+            };
+            check("/entry/1/resource/subject/reference", expected_ref)?;
+            Ok(vec![
+                FictionalRelationEdge {
+                    source_pointer: "/entry/0/resource",
+                    target: PATIENT_URN,
+                    relationship: "fictional_bundle_patient_member",
+                },
+                FictionalRelationEdge {
+                    source_pointer: "/entry/1/resource",
+                    target: OBS_URN,
+                    relationship: "fictional_bundle_observation_member",
+                },
+                FictionalRelationEdge {
+                    source_pointer: "/entry/1/resource/subject/reference",
+                    target: expected_ref,
+                    relationship: "fictional_subject_reference",
+                },
+            ])
+        }
+        _ => Err("fictional_relation_fixture_not_approved"),
+    }
+}
+
 #[derive(Default)]
 pub struct MedOriginNativePreview {
     selected: usize,
@@ -326,6 +447,8 @@ pub struct MedOriginNativePreview {
     preview: Option<String>,
     preview_notice: Option<&'static str>,
     comparison: Option<FictionalComparison>,
+    relationships: Option<FictionalRelationView>,
+    relationship_notice: Option<&'static str>,
 }
 
 impl MedOriginNativePreview {
@@ -336,6 +459,8 @@ impl MedOriginNativePreview {
         self.preview = None;
         self.preview_notice = None;
         self.comparison = None;
+        self.relationships = None;
+        self.relationship_notice = None;
     }
 
     /// Fail closed if either the trusted raw digest OR the independent
@@ -347,6 +472,8 @@ impl MedOriginNativePreview {
         self.preview = None;
         self.preview_notice = None;
         self.comparison = None;
+        self.relationships = None;
+        self.relationship_notice = None;
         let Some(fixture) = FIXTURES.get(self.selected) else {
             self.result = Some("FAIL CLOSED: invalid synthetic selection".to_owned());
             return Err("invalid_synthetic_selection");
@@ -464,6 +591,50 @@ impl MedOriginNativePreview {
         Ok(payload.raw_json)
     }
 
+    /// Inspect one of three approved source-compiled fictional relations,
+    /// using the existing independent raw SHA + D0 envelope verification.
+    /// A changed/invalid fixture clears previous evidence before refusal.
+    pub fn inspect_selected_relationships(&mut self) -> Result<(), &'static str> {
+        self.clear_fictional_output();
+        let fixture = match FIXTURES.get(self.selected) {
+            Some(fixture) => *fixture,
+            None => {
+                self.relationship_notice = Some("FAIL CLOSED: invalid fictional selection");
+                return Err("invalid_synthetic_selection");
+            }
+        };
+        if !matches!(
+            fixture.id,
+            "observation-minimal" | "bundle-valid" | "bundle-linked"
+        ) {
+            self.relationship_notice = Some(
+                "Relationship inspection unavailable: this fictional source is not in the reviewed three-source graph",
+            );
+            return Err("fictional_relation_fixture_not_approved");
+        }
+        let raw = match Self::verified_json_for(self.selected) {
+            Ok(raw) => raw,
+            Err(_) => {
+                self.relationship_notice =
+                    Some("FAIL CLOSED: fictional source digest or structure refused");
+                return Err("fictional_relation_verification_refused");
+            }
+        };
+        let edges = match project_pinned_fictional_relations(fixture.id, raw) {
+            Ok(edges) if !edges.is_empty() && edges.len() <= 3 => edges,
+            _ => {
+                self.relationship_notice =
+                    Some("FAIL CLOSED: fictional relation or source pointer changed");
+                return Err("fictional_relation_projection_refused");
+            }
+        };
+        self.relationships = Some(FictionalRelationView {
+            source: fixture,
+            edges,
+        });
+        Ok(())
+    }
+
     /// Compare two distinct, independently reverified source-fixed fictional
     /// JSON texts. Never reads files, copies to clipboard or normalizes bytes.
     pub fn compare_selected(&mut self) -> Result<(), &'static str> {
@@ -523,10 +694,7 @@ impl eframe::App for MedOriginNativePreview {
             for (index, fixture) in FIXTURES[..PRIMARY_FIXTURE_COUNT].iter().enumerate() {
                 if ui.selectable_label(self.selected == index, format!("{} ({} bytes)", fixture.id, fixture.bytes)).clicked() {
                     self.selected = index;
-                    self.result = None;
-                    self.preview = None;
-                    self.preview_notice = None;
-                    self.comparison = None;
+                    self.clear_fictional_output();
                 }
             }
             if ui.button("Verify synthetic SHA-256").clicked() {
@@ -546,10 +714,7 @@ impl eframe::App for MedOriginNativePreview {
                         let index = PRIMARY_FIXTURE_COUNT + offset;
                         if ui.selectable_label(self.selected == index, format!("{} ({} bytes)", fixture.id, fixture.bytes)).clicked() {
                             self.selected = index;
-                            self.result = None;
-                            self.preview = None;
-                            self.preview_notice = None;
-                            self.comparison = None;
+                            self.clear_fictional_output();
                         }
                     }
                 });
@@ -594,7 +759,7 @@ impl eframe::App for MedOriginNativePreview {
                                 .clicked()
                         {
                             self.compare_with = index;
-                            self.comparison = None;
+                            self.clear_fictional_output();
                         }
                     }
                 });
@@ -623,6 +788,32 @@ impl eframe::App for MedOriginNativePreview {
                     }
                 });
             }
+            ui.separator();
+            ui.label("Browserless provenance: exact pinned fictional references (no date fields)");
+            if ui
+                .button("Inspect verified fictional relationships (read-only)")
+                .clicked()
+            {
+                let _ = self.inspect_selected_relationships();
+            }
+            if let Some(notice) = self.relationship_notice {
+                ui.label(notice);
+            }
+            if let Some(view) = &self.relationships {
+                ui.strong("FICTIONAL RELATIONSHIPS VERIFIED - NOT FHIR OR CLINICAL VALIDATION");
+                ui.monospace(format!(
+                    "Source fixture: {} ({} bytes)",
+                    view.source.id, view.source.bytes
+                ));
+                ui.monospace(format!("Source SHA-256: {}", view.source.sha256));
+                ui.label("No recorded event dates in these source files; chronology unavailable.");
+                for edge in &view.edges {
+                    ui.monospace(format!(
+                        "JSON pointer {} -> {} ({})",
+                        edge.source_pointer, edge.target, edge.relationship
+                    ));
+                }
+            }
             if ui.button("Clear fictional output (Escape)").clicked() {
                 self.clear_fictional_output();
             }
@@ -636,6 +827,141 @@ impl eframe::App for MedOriginNativePreview {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn three_compiled_fictional_sources_yield_exact_reference_pointers_without_dates() {
+        let cases = [
+            (
+                "observation-minimal",
+                4usize,
+                1usize,
+                "/subject/reference",
+                "Patient/synthetic",
+            ),
+            (
+                "bundle-valid",
+                6usize,
+                3usize,
+                "/entry/1/resource/subject/reference",
+                "Patient/synthetic",
+            ),
+            (
+                "bundle-linked",
+                10usize,
+                3usize,
+                "/entry/1/resource/subject/reference",
+                "urn:uuid:00000000-0000-4000-8000-000000000001",
+            ),
+        ];
+        for (id, selected, expected_count, expected_pointer, expected_target) in cases {
+            let mut app = MedOriginNativePreview {
+                selected,
+                ..Default::default()
+            };
+            assert_eq!(FIXTURES[selected].id, id);
+            app.inspect_selected_relationships()
+                .expect("three reviewed fictional graph inputs");
+            let view = app
+                .relationships
+                .as_ref()
+                .expect("verified source-bound graph");
+            assert_eq!(view.source.id, id);
+            assert_eq!(view.source.sha256, FIXTURES[selected].sha256);
+            assert_eq!(view.edges.len(), expected_count);
+            assert!(
+                view.edges
+                    .iter()
+                    .any(|e| e.source_pointer == expected_pointer && e.target == expected_target)
+            );
+            assert!(app.relationship_notice.is_none());
+            assert!(app.preview.is_none());
+            assert!(app.comparison.is_none());
+        }
+    }
+
+    #[test]
+    fn malformed_fictional_edges_and_invented_dates_are_refused() {
+        let observation = MedOriginNativePreview::verified_json_for(4).unwrap();
+        let obs_changed = observation.replace("Patient/synthetic", "Patient/external");
+        assert_eq!(
+            project_pinned_fictional_relations("observation-minimal", &obs_changed),
+            Err("fictional_relation_changed"),
+        );
+        let obs_dated = observation.replace(
+            "\"status\":\"final\"",
+            "\"status\":\"final\",\"effectiveDateTime\":\"2026-01-01\"",
+        );
+        assert_eq!(
+            project_pinned_fictional_relations("observation-minimal", &obs_dated),
+            Err("fictional_relation_unreviewed_date"),
+        );
+        for (name, index) in [("bundle-valid", 6usize), ("bundle-linked", 10usize)] {
+            let source = MedOriginNativePreview::verified_json_for(index).unwrap();
+            assert_eq!(
+                project_pinned_fictional_relations(name, source)
+                    .unwrap()
+                    .len(),
+                3
+            );
+            let bad_urn = source.replace(
+                "00000000-0000-4000-8000-000000000002",
+                "00000000-0000-4000-8000-000000000003",
+            );
+            assert_eq!(
+                project_pinned_fictional_relations(name, &bad_urn),
+                Err("fictional_relation_changed"),
+            );
+            let bad_entries = source.replace("\"entry\":[", "\"entry\":[]");
+            assert!(project_pinned_fictional_relations(name, &bad_entries).is_err());
+            let noncanonical_date = source.replace(
+                "\"active\":true",
+                "\"active\":true,\"birthDate\":\"1970-01-01\"",
+            );
+            assert_eq!(
+                project_pinned_fictional_relations(name, &noncanonical_date),
+                Err("fictional_relation_unreviewed_date"),
+            );
+        }
+        assert_eq!(
+            project_pinned_fictional_relations("patient-minimal", observation),
+            Err("fictional_relation_fixture_not_approved"),
+        );
+        assert!(project_pinned_fictional_relations("bundle-valid", "not-json").is_err());
+    }
+
+    #[test]
+    fn relationship_ui_state_clears_on_explicit_verify_reset_and_invalid_fixture() {
+        let mut app = MedOriginNativePreview {
+            selected: 4,
+            ..Default::default()
+        };
+        app.inspect_selected_relationships().unwrap();
+        assert!(app.relationships.is_some());
+        app.hash_selected().unwrap();
+        assert!(
+            app.relationships.is_none(),
+            "verification must clear prior graph"
+        );
+        assert!(app.relationship_notice.is_none());
+        app.inspect_selected_relationships().unwrap();
+        app.clear_fictional_output();
+        assert!(app.relationships.is_none());
+        assert!(app.relationship_notice.is_none());
+        app.inspect_selected_relationships().unwrap();
+        app.selected = 1; // intentionally invalid UTF-8 boundary vector
+        assert_eq!(
+            app.inspect_selected_relationships(),
+            Err("fictional_relation_fixture_not_approved"),
+        );
+        assert!(app.relationships.is_none());
+        assert!(app.relationship_notice.is_some());
+        app.selected = usize::MAX;
+        assert_eq!(
+            app.inspect_selected_relationships(),
+            Err("invalid_synthetic_selection"),
+        );
+        assert!(app.relationships.is_none());
+    }
 
     #[test]
     fn clear_fictional_output_removes_all_rendered_state_without_mutating_choices() {
