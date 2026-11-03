@@ -206,7 +206,6 @@ fn direct_dependencies_remain_limited_to_native_ui_and_existing_d0() {
         own_package.contains("\"sha2\""),
         "D2 must pin its direct SHA-256 runtime dependency in Cargo.lock"
     );
-
 }
 
 #[test]
