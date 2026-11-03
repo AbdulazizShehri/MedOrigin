@@ -56,7 +56,7 @@ def synthesize(root: Path) -> tuple[Path, Path]:
                          for name, var in dispatch.items())
     d0_source += (
         '"patient-invalid-utf8" => vec![0xff],\n'
-        """patient-over-limit" => vec![b' '; required_bytes],\n"""
+        '''"patient-over-limit" => vec![b' '; required_bytes],\n'''
         '"patient-exact-limit" => {\n'
         '    let mut padded = PATIENT.to_vec();\n'
         """    padded.resize(required_bytes, b' ');\n"""
