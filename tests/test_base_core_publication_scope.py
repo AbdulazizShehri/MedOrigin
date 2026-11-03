@@ -427,6 +427,97 @@ def test_wheel_local_header_matches_central_directory_for_every_member(
     assert result["publication_authorized"] is False
 
 
+@pytest.mark.parametrize(
+    ("kind", "message"),
+    [
+        ("symlink", "sdist: unsupported member type"),
+        ("hardlink", "sdist: unsupported member type"),
+        ("device", "sdist: unsupported member type"),
+        ("fifo", "sdist: unsupported member type"),
+        ("traversal", "sdist: unsafe member path"),
+        ("absolute", "sdist: unsafe member path"),
+        ("backslash", "sdist: unsafe member path"),
+        ("double-slash", "sdist: unsafe member path"),
+        ("reserved-device-name", "sdist: unsafe member path"),
+        ("control-character", "sdist: unsafe member path"),
+        ("trailing-dot", "sdist: unsafe member path"),
+        ("duplicate", "sdist: duplicate member path"),
+        ("case-alias", "sdist: duplicate member path"),
+    ],
+)
+def test_sdist_rejects_unsafe_non_metadata_members(
+    checker: Any, tmp_path: Path, kind: str, message: str
+) -> None:
+    folder = make_dist(tmp_path / kind)
+    assert checker.inspect(folder)["status"] == "BASE_CORE_PUBLICATION_SCOPE_CLEAN"
+    archive_path = folder / "medscale-0.3.0.tar.gz"
+    names = {
+        "traversal": "medscale-0.3.0/../escape.py",
+        "absolute": "/medscale-0.3.0/escape.py",
+        "backslash": "medscale-0.3.0\\escape.py",
+        "double-slash": "medscale-0.3.0//escape.py",
+        "reserved-device-name": "medscale-0.3.0/CON.txt",
+        "control-character": "medscale-0.3.0/line\nbreak.py",
+        "trailing-dot": "medscale-0.3.0/file.",
+    }
+    with tarfile.open(archive_path, "w:gz") as archive:
+        info = tarfile.TarInfo("medscale-0.3.0/PKG-INFO")
+        doc = metadata()
+        info.size = len(doc)
+        archive.addfile(info, io.BytesIO(doc))
+        if kind in {"symlink", "hardlink", "device", "fifo"}:
+            special = tarfile.TarInfo("medscale-0.3.0/special")
+            special.type = {
+                "symlink": tarfile.SYMTYPE,
+                "hardlink": tarfile.LNKTYPE,
+                "device": tarfile.CHRTYPE,
+                "fifo": tarfile.FIFOTYPE,
+            }[kind]
+            if kind in {"symlink", "hardlink"}:
+                special.linkname = "../../unapproved"
+            archive.addfile(special)
+        elif kind in {"duplicate", "case-alias"}:
+            first = tarfile.TarInfo("medscale-0.3.0/Alpha.py")
+            first.size = 1
+            archive.addfile(first, io.BytesIO(b"a"))
+            second = tarfile.TarInfo(
+                "medscale-0.3.0/Alpha.py"
+                if kind == "duplicate"
+                else "medscale-0.3.0/alpha.py"
+            )
+            second.size = 1
+            archive.addfile(second, io.BytesIO(b"b"))
+        else:
+            file = tarfile.TarInfo(names[kind])
+            file.size = 1
+            archive.addfile(file, io.BytesIO(b"x"))
+    with tarfile.open(archive_path, "r:gz") as archive:
+        assert archive.extractfile("medscale-0.3.0/PKG-INFO").read() == metadata()
+    result = checker.inspect(folder)
+    assert result["status"] == "BLOCKED"
+    assert message in result["issues"]
+    assert result["publication_authorized"] is False
+
+
+def test_sdist_accepts_normal_directory_and_member(checker: Any, tmp_path: Path) -> None:
+    folder = make_dist(tmp_path / "normal-member")
+    archive_path = folder / "medscale-0.3.0.tar.gz"
+    with tarfile.open(archive_path, "w:gz") as archive:
+        doc = metadata()
+        info = tarfile.TarInfo("medscale-0.3.0/PKG-INFO")
+        info.size = len(doc)
+        archive.addfile(info, io.BytesIO(doc))
+        folder_info = tarfile.TarInfo("medscale-0.3.0/medscale/")
+        folder_info.type = tarfile.DIRTYPE
+        archive.addfile(folder_info)
+        file = tarfile.TarInfo("medscale-0.3.0/medscale/__init__.py")
+        file.size = 1
+        archive.addfile(file, io.BytesIO(b"x"))
+    receipt = checker.inspect(folder)
+    assert receipt["status"] == "BASE_CORE_PUBLICATION_SCOPE_CLEAN"
+    assert receipt["publication_authorized"] is False
+
+
 def test_sdist_forged_inflated_size_fails_before_extraction(checker: Any, tmp_path: Path) -> None:
     folder = make_dist(tmp_path / "bomb")
     oversized = tarfile.TarInfo("medscale-0.3.0/huge-data.bin")
