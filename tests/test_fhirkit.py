@@ -33,11 +33,30 @@ def _rule_input() -> dict[str, object]:
     }
 
 
-def test_validate_fhir_always_available() -> None:
+def test_local_fhir_boundary_is_available_but_never_claims_full_validation() -> None:
     report = validate_fhir(_rule_input())
-    assert report.status == "valid"
+    assert report.status == "not_validated"
+    assert report.errors == ()
+    assert report.warnings and "not performed" in report.warnings[0]
     assert report.validator_name == FHIR_VALIDATOR_NAME
     assert report.format_version == "fhirkit-validation-report/v1"
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {"resourceType": "UnknownFictionalResource", "id": "synthetic-bogus"},
+        {"resourceType": "Bundle", "type": "collection", "entry": []},
+    ],
+)
+def test_local_fhir_boundary_never_grants_schema_validity(
+    payload: dict[str, object],
+) -> None:
+    report = validate_fhir(payload)
+    assert report.status == "not_validated"
+    assert report.errors == ()
+    assert report.warnings and "FHIR R4 schema" in report.warnings[0]
+    assert report.input_hash == content_hash(payload)
 
 
 def test_report_hash_is_deterministic() -> None:
