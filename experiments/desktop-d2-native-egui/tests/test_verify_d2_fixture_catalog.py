@@ -48,7 +48,7 @@ class TestSourceCatalogFailClosed(unittest.TestCase):
     def _complete_synthetic_catalog():
         rows = "".join(
             'FixtureSpec { id: "' + name + '", bytes: 1, '
-            'sha256: "' + ("a" * 64) + '", status: "' + status + '" },\n'
+            'sha256: "' + ("a" * 64) + '", status: "' + status + '", },\n'
             for name, status in EXPECTED_STATUS.items()
         )
         return "pub const FIXTURES: [FixtureSpec; 12] = [\n" + rows + "];\n"
