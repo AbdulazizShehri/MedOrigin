@@ -81,12 +81,35 @@ def _input_hash(payload: dict[str, Any]) -> str:
 
 def call(cli: Path, args: list[str], cwd: Path) -> subprocess.CompletedProcess[str]:
     """Bound the fixed, local CLI invocation; never include its output on failure."""
+    # A source-matched installed Wheel is not sufficient if the CLI launcher
+    # inherits PYTHONPATH/PYTHONHOME/PYTHONUSERBASE/PYTHONWARNINGS, etc. These
+    # can execute attacker-controlled startup code outside the verified Wheel.
+    # Keep only non-Python parent settings and disable user-site startup.
     offline_env = {
-        **os.environ,
-        "HF_HUB_OFFLINE": "1",
-        "TRANSFORMERS_OFFLINE": "1",
-        "PIP_NO_INDEX": "1",
+        key: value
+        for key, value in os.environ.items()
+        if not key.upper().startswith("PYTHON")
+        and key.upper()
+        not in {
+            "LD_PRELOAD",
+            "LD_LIBRARY_PATH",
+            "DYLD_INSERT_LIBRARIES",
+            "DYLD_LIBRARY_PATH",
+            "DYLD_FRAMEWORK_PATH",
+            "DYLD_FALLBACK_LIBRARY_PATH",
+            "DYLD_FALLBACK_FRAMEWORK_PATH",
+        }
     }
+    offline_env.update(
+        {
+            "PYTHONNOUSERSITE": "1",
+            "PYTHONSAFEPATH": "1",
+            "PYTHONDONTWRITEBYTECODE": "1",
+            "HF_HUB_OFFLINE": "1",
+            "TRANSFORMERS_OFFLINE": "1",
+            "PIP_NO_INDEX": "1",
+        }
+    )
     try:
         result = subprocess.run(
             [str(cli), *args],
