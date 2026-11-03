@@ -96,6 +96,33 @@ def verify(experiments_root: Path) -> dict:
         "observation-minimal": fixed_literal(source, "OBSERVATION"),
         "observation-bad-subject": fixed_literal(source, "OBSERVATION_BAD_SUBJECT"),
     }
+    # Freeze the D0 provider dispatch, not only literal bytes and D2 SHA.
+    # A future refactor must not silently route a fixed id to another vector.
+    names_to_const = {
+        "patient-minimal": "PATIENT",
+        "observation-minimal": "OBSERVATION",
+        "observation-bad-subject": "OBSERVATION_BAD_SUBJECT",
+        **{name: name.upper().replace("-", "_") for name in BUNDLE_NAMES},
+    }
+    try:
+        hash_dispatch = source.split(
+            "let (identity, required_bytes) = match fixture_id {", 1
+        )[1].split("\n    };", 1)[0]
+        byte_dispatch = source.split("let bytes = match identity {", 1)[1].split(
+            "\n    };", 1
+        )[0]
+        preview_dispatch = source.split("pub fn fictional_json_preview_v1(", 1)[1].split(
+            "const MAX_VISIBLE_FICTIONAL_JSON_BYTES", 1
+        )[0]
+    except IndexError as exc:
+        raise ValueError("CHANGED_D0_DISPATCH_LAYOUT") from exc
+    for name, const in names_to_const.items():
+        require(hash_dispatch.count(f'"{name}" => ("{name}", {const}.len()),') == 1,
+                f"CHANGED_D0_HASH_DISPATCH_{name}")
+        require(byte_dispatch.count(f'"{name}" => {const}.to_vec(),') == 1,
+                f"CHANGED_D0_BYTE_DISPATCH_{name}")
+        require(preview_dispatch.count(f'"{name}" => ("{name}", {const}),') == 1,
+                f"CHANGED_D0_PREVIEW_DISPATCH_{name}")
     for name in BUNDLE_NAMES:
         const = name.upper().replace("-", "_")
         declaration = (f'const {const}: &[u8] = '
