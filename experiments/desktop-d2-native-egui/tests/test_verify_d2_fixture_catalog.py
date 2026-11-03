@@ -44,6 +44,35 @@ class TestSourceCatalogFailClosed(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "MISSING_OR_DUPLICATE_LITERAL"):
             fixed_literal(source + source, "PATIENT")
 
+    @staticmethod
+    def _complete_synthetic_catalog():
+        rows = "".join(
+            'FixtureSpec { id: "' + name + '", bytes: 1, '
+            'sha256: "' + ("a" * 64) + '", status: "' + status + '" },\n'
+            for name, status in EXPECTED_STATUS.items()
+        )
+        return "pub const FIXTURES: [FixtureSpec; 12] = [\n" + rows + "];\n"
+
+    def test_complete_synthetic_catalog_accepted(self):
+        records = catalog(self._complete_synthetic_catalog())
+        self.assertEqual(tuple(records), tuple(EXPECTED_STATUS))
+
+    def test_catalog_rejects_unparsed_trailing_fixture(self):
+        baseline = self._complete_synthetic_catalog()
+        malformed = baseline.replace(
+            "];\n", 'FixtureSpec { id: "not-reviewed" },\n];\n',
+        )
+        with self.assertRaisesRegex(ValueError, "UNPARSED_FIXTURE_CATALOG_CONTENT"):
+            catalog(malformed)
+
+    def test_catalog_rejects_injected_rust_tokens_between_entries(self):
+        baseline = self._complete_synthetic_catalog()
+        malformed = baseline.replace(
+            "},\nFixtureSpec", "},\nunsafe { do_unreviewed_work() };\nFixtureSpec", 1
+        )
+        with self.assertRaisesRegex(ValueError, "UNPARSED_FIXTURE_CATALOG_CONTENT"):
+            catalog(malformed)
+
     def test_catalog_rejects_unreviewed_entries(self):
         source = 'pub const FIXTURES: [FixtureSpec; 12] = [\n' + (
             'FixtureSpec { id: "patient-minimal", bytes: 57, '
