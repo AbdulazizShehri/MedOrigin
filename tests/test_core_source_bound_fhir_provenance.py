@@ -98,6 +98,9 @@ def _accept_fake_gates(
             "profile": "synthetic-pinned-launcher-template",
             "publication_authorized": False,
             "independent_security_review_complete": False,
+            "installer_pip_resource_record_matched": True,
+            "launcher_vendor_authenticity_verified": False,
+            "launcher_code_signature_verified": False,
         },
     )
     monkeypatch.setattr(
@@ -130,6 +133,7 @@ def test_exact_valid_receipts_are_still_explicitly_nonreleasing(
     assert result["entrypoint_execution_mode"] == "source_verified_python_module"
     assert result["installed_console_launcher_templates_checked"] == 2
     assert result["installed_console_launcher_profile"] == "synthetic-pinned-launcher-template"
+    assert result["installer_pip_resource_record_matched"] is True
     assert result["launcher_vendor_authenticity_verified"] is False
     assert result["launcher_code_signature_verified"] is False
     for field in (
@@ -339,7 +343,17 @@ def test_rejects_overstated_or_ambiguous_core_fhir_receipt(
         gate.qualify(*paths)
 
 
-@pytest.mark.parametrize("failure", ["blocked", "false_publication", "mixed_profiles"])
+@pytest.mark.parametrize(
+    "failure",
+    [
+        "blocked",
+        "false_publication",
+        "mixed_profiles",
+        "vendor_record_false",
+        "false_vendor_authenticity",
+        "false_signature",
+    ],
+)
 def test_unqualified_console_launcher_refuses_before_executing_fhir(
     gate: Any,
     paths: tuple[Path, Path, Path, Path, Path],
@@ -368,6 +382,9 @@ def test_unqualified_console_launcher_refuses_before_executing_fhir(
             else "fictional-one",
             "publication_authorized": failure == "false_publication",
             "independent_security_review_complete": False,
+            "installer_pip_resource_record_matched": failure != "vendor_record_false",
+            "launcher_vendor_authenticity_verified": failure == "false_vendor_authenticity",
+            "launcher_code_signature_verified": failure == "false_signature",
         }
 
     monkeypatch.setattr(gate.launcher_gate, "qualify", launcher)

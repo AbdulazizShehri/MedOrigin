@@ -9,20 +9,26 @@ before any installed launcher is approved for distribution.
 from __future__ import annotations
 
 import argparse
+import base64
+import csv
 import hashlib
 import io
 import json
 import platform
 import sys
 import zipfile
+from email.parser import BytesParser
 from pathlib import Path
 
 STATUS = "PINNED_CONSOLE_LAUNCHER_TEMPLATE_ONLY"
 WIN64_PE_PREFIX_LENGTH = 108_032
-# Observed for the isolated, offline Windows x64 system-pip installs of the
-# source-bound medscale 0.3.0 Wheel, CPython 3.11.15 and 3.12.13.
-# Its independent distribution/vendor origin has NOT been signed off.
-WIN64_PE_PREFIX_SHA256 = "acd47a82dc01132e3b8414f683c2e117c18aedbf650a370249fe9fdbc445cda1"
+# Pin only the Windows x64 pip 26.2.1 vendored t64.exe that both matches
+# its local pip RECORD and generates verified offline-installed Core shims.
+# Pip 26.1.2 on the tested host contained a different t64.exe whose local
+# RECORD did NOT match: it is intentionally no longer admitted. Vendor
+# authenticity and signature remain independently unverified.
+PINNED_INSTALLER_PIP_VERSION = "26.2.1"
+WIN64_PE_PREFIX_SHA256 = "81a618f21cb87db9076134e70388b6e9cb7c2106739011b6a51772d22cae06b7"
 WINDOWS_MAIN = (
     b"import sys\n"
     b"from medscale.cli import main\n"
@@ -93,6 +99,51 @@ def _check_windows_launcher(data: bytes, python: Path) -> None:
         raise QualificationError("installed Windows launcher ZIP not readable") from exc
 
 
+def _verify_pip_record_bound_stub(prefix: bytes, pip_root: Path) -> None:
+    """Require equality to the installed pip vendor resource AND its RECORD.
+
+    The local RECORD is an integrity manifest, not a cryptographically signed
+    vendor-origin statement. The hardcoded reviewed-template SHA remains a
+    separate requirement. Never import or execute the installer package.
+    """
+    if pip_root.is_symlink() or not pip_root.is_dir():
+        raise QualificationError("installed pip vendor source directory not qualified")
+    resource = pip_root / "_vendor" / "distlib" / "t64.exe"
+    dist_info = pip_root.parent / f"pip-{PINNED_INSTALLER_PIP_VERSION}.dist-info"
+    record = dist_info / "RECORD"
+    metadata = dist_info / "METADATA"
+    for path in (resource, record, metadata):
+        if path.is_symlink() or not path.is_file():
+            raise QualificationError("installed pip vendor resource or RECORD missing")
+    try:
+        if (
+            resource.stat().st_size != WIN64_PE_PREFIX_LENGTH
+            or record.stat().st_size > 15_000_000
+            or metadata.stat().st_size > 1_000_000
+        ):
+            raise QualificationError("installed pip vendor resource size unqualified")
+        vendor = resource.read_bytes()
+        if vendor != prefix or hashlib.sha256(vendor).hexdigest() != WIN64_PE_PREFIX_SHA256:
+            raise QualificationError("installed pip vendor stub differs from launcher")
+        meta = BytesParser().parsebytes(metadata.read_bytes(), headersonly=True)
+        if meta.get_all("Name") != ["pip"] or meta.get_all("Version") != [
+            PINNED_INSTALLER_PIP_VERSION
+        ]:
+            raise QualificationError("installed pip vendor distribution metadata mismatch")
+        with record.open("r", encoding="utf-8", newline="") as stream:
+            entries = [
+                row for row in csv.reader(stream) if row and row[0] == "pip/_vendor/distlib/t64.exe"
+            ]
+    except (OSError, UnicodeError, csv.Error, ValueError) as exc:
+        raise QualificationError("installed pip vendor RECORD unreadable") from exc
+    if len(entries) != 1 or len(entries[0]) != 3:
+        raise QualificationError("installed pip vendor RECORD entry ambiguous")
+    _, encoded, size = entries[0]
+    expected = base64.urlsafe_b64encode(hashlib.sha256(vendor).digest()).rstrip(b"=").decode()
+    if encoded != f"sha256={expected}" or size != str(WIN64_PE_PREFIX_LENGTH):
+        raise QualificationError("installed pip vendor file disagrees with its RECORD")
+
+
 def _check_unix_launcher(data: bytes, python: Path) -> None:
     """Accept the one offline uv/distlib POSIX shim inspected on Linux only."""
     expected = b"#!" + str(python).encode("utf-8") + b"\n" + UNIX_MAIN
@@ -100,7 +151,9 @@ def _check_unix_launcher(data: bytes, python: Path) -> None:
         raise QualificationError("installed Linux console launcher template mismatch")
 
 
-def qualify(cli: Path, python: Path) -> dict[str, object]:
+def qualify(
+    cli: Path, python: Path, *, installer_pip_root: Path | None = None
+) -> dict[str, object]:
     """Check installed launcher bytes without executing it or loading its modules."""
     if sys.platform == "win32":
         expected = python.parent / "medscale.exe"
@@ -126,15 +179,26 @@ def qualify(cli: Path, python: Path) -> dict[str, object]:
         raise QualificationError("installed console launcher unreadable") from exc
     if sys.platform == "win32":
         _check_windows_launcher(contents, python)
-        profile = "windows-x64-pinned-pip-distlib"
+        # The issuer of the launcher must be identified explicitly. Default
+        # to the source-verifier's own Python pip, not the target venv which
+        # intentionally lacks pip. An alternate source requires caller input.
+        source = installer_pip_root or Path(sys.prefix) / "Lib" / "site-packages" / "pip"
+        _verify_pip_record_bound_stub(contents[:WIN64_PE_PREFIX_LENGTH], source)
+        profile = "windows-x64-pip-26.2.1-record-bound"
+        record_bound = True
     else:
         _check_unix_launcher(contents, python)
         profile = "linux-pinned-uv-console-script"
+        record_bound = False
     return {
         "status": STATUS,
         "profile": profile,
         "launcher_sha256": hashlib.sha256(contents).hexdigest(),
         "launcher_file_bytes": len(contents),
+        "installer_pip_resource_record_matched": record_bound,
+        "installer_pip_version": (PINNED_INSTALLER_PIP_VERSION if record_bound else None),
+        "launcher_vendor_authenticity_verified": False,
+        "launcher_code_signature_verified": False,
         "publication_authorized": False,
         "independent_security_review_complete": False,
         "clinical_use_authorized": False,
@@ -145,9 +209,21 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--cli", type=Path, required=True)
     parser.add_argument("--python", type=Path, required=True)
+    parser.add_argument(
+        "--installer-pip-root",
+        type=Path,
+        default=None,
+        help="Explicit local pip source tree for independent RECORD comparison",
+    )
     args = parser.parse_args(argv)
     try:
-        result = qualify(args.cli.absolute(), args.python.absolute())
+        result = qualify(
+            args.cli.absolute(),
+            args.python.absolute(),
+            installer_pip_root=(
+                args.installer_pip_root.absolute() if args.installer_pip_root else None
+            ),
+        )
     except (QualificationError, OSError, ValueError):
         print("PINNED_INSTALLED_CONSOLE_LAUNCHER_BLOCKED", file=sys.stderr)
         return 2

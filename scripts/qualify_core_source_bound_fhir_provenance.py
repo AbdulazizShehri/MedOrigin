@@ -253,6 +253,12 @@ def qualify(
             inspected.get("status") != launcher_gate.STATUS
             or inspected.get("publication_authorized") is not False
             or inspected.get("independent_security_review_complete") is not False
+            or inspected.get("launcher_vendor_authenticity_verified") is not False
+            or inspected.get("launcher_code_signature_verified") is not False
+            or (
+                sys.platform == "win32"
+                and inspected.get("installer_pip_resource_record_matched") is not True
+            )
         ):
             raise QualificationError("installed launcher template receipt overstates authority")
     if launcher311.get("profile") != launcher312.get("profile"):
@@ -293,6 +299,10 @@ def qualify(
         "entrypoint_execution_mode": "source_verified_python_module",
         "installed_console_launcher_templates_checked": 2,
         "installed_console_launcher_profile": launcher311["profile"],
+        "installer_pip_resource_record_matched": (
+            launcher311["installer_pip_resource_record_matched"]
+            and launcher312["installer_pip_resource_record_matched"]
+        ),
         "launcher_vendor_authenticity_verified": False,
         "launcher_code_signature_verified": False,
         "known_report_sha256": receipt["known_report_sha256"],
