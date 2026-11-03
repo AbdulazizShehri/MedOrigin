@@ -23,7 +23,7 @@ cargo +1.97.1 fmt --all -- --check
 cargo +1.97.1 test --locked --all-targets
 cargo +1.97.1 clippy --locked --all-targets -- -D warnings
 cargo +1.97.1 build --locked
-python3 -m unittest discover -s scripts -p test_package_preview.py -v
+python3 -m unittest discover -s scripts -p 'test_*preview.py' -v
 python3 scripts/package_preview.py \
   --binary target/debug/medorigin-desktop-d2-native-egui \
   --output ./private-preview
@@ -39,6 +39,12 @@ On Linux, this is a **native glibc executable**, not a self-contained AppImage. 
 ## GitHub Actions
 
 `.github/workflows/medorigin-d2-crossplatform-portable.yml` compiles/tests the exact PR SHA on Windows 2025, Ubuntu 24.04 and macOS 15. Jobs upload archives as **short-lived private Actions artifacts** (retention 3 days) with `MedOrigin-D2-SYNTHETIC-ONLY-` names; there are no publishing, signing, app-store or release steps. A GitHub artifact is not a production installer, and private-repository runner minutes may count against account quotas.
+
+## Strict archive verification (synthetic-only)
+
+The verifier checks the exact source-commit-derived archive filename, the canonical set of five (Windows/Linux) or seven (macOS) regular files, byte-for-byte safety labels, source-tree LICENSE/UPSTREAM notice, macOS bundle metadata, permissions, binary header and SHA-256 recorded in the canonical manifest. It rejects duplicate member names, aliases, symlinks/special files, unsafe metadata, substituted contents, and bounded-size violations **before extracting anything to disk**. Run the packaging and adversarial verifier tests via `python3 -m unittest discover -s scripts -p 'test_*preview.py' -v`.
+
+**Critical limit:** this is a local self-consistency check, **not** a code-signing, independent provenance, or reproducible-build proof. An adversary able to replace both an executable and its self-attested manifest can still make the archive self-consistent; the verifier does not prove that binary was compiled from the reviewed source. Never trust an untrusted ZIP/TAR simply because this check passes, nor treat this as PHI/network isolation clearance.
 
 ## Mandatory release blockers
 

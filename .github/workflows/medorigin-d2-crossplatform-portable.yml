@@ -5,6 +5,7 @@ on:
   pull_request:
     branches:
       - feat/medorigin-d2-slice7-source-timeline-20261104
+      - feat/medorigin-d2-crossplatform-preview-20261104
     paths:
       - "experiments/desktop-d2-native-egui/**"
       - ".github/workflows/medorigin-d2-crossplatform-portable.yml"
@@ -52,12 +53,12 @@ jobs:
       - name: Test packaging and native-header contracts on Windows
         if: runner.os == 'Windows'
         shell: pwsh
-        run: python -m unittest discover -s scripts -p test_package_preview.py -v
+        run: python -m unittest discover -s scripts -p 'test_*preview.py' -v
 
       - name: Test packaging and native-header contracts on Unix
         if: runner.os != 'Windows'
         shell: bash
-        run: python3 -m unittest discover -s scripts -p test_package_preview.py -v
+        run: python3 -m unittest discover -s scripts -p 'test_*preview.py' -v
 
       - name: Check lockfile and formatting
         shell: bash
