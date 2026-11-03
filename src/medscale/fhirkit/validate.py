@@ -22,6 +22,10 @@ from medscale.fhirkit.report import (
 
 FHIR_VALIDATOR_NAME = "medscale-fhirkit-local"
 FHIR_VALIDATOR_VERSION = "0.1.0"
+LOCAL_UNVERIFIED_WARNING = (
+    "FHIR R4 schema, terminology, and profile validation were not performed; "
+    "this local report records deterministic provenance only."
+)
 
 
 def _search_path_command() -> list[str] | None:
@@ -38,23 +42,23 @@ def _command_hint(command: list[str]) -> str:
 
 
 def validate_fhir(input_payload: dict[str, Any], created_at: str | None = None) -> ValidationReport:
-    """Validate a local FHIR payload deterministically.
+    """Record local FHIR-shaped JSON provenance without asserting conformance.
 
-    This path is always available and never performs network calls.
+    No FHIR R4 schema/profile/terminology validator runs in this baseline.
+    Returning "valid" would falsely certify unvalidated data. This path
+    remains deterministic and never performs network calls.
     """
-    from medscale.reproducibility import canonical_json, content_hash
+    from medscale.reproducibility import content_hash
 
     input_hash = content_hash(input_payload)
-    if canonical_json(input_payload) != canonical_json(input_payload):
-        raise ValueError("unreachable canonical_json contract")
     return ValidationReport(
         report_id=None,
         input_hash=input_hash,
         validator_name=FHIR_VALIDATOR_NAME,
         validator_version=FHIR_VALIDATOR_VERSION,
-        status="valid",
+        status="not_validated",
         errors=(),
-        warnings=(),
+        warnings=(LOCAL_UNVERIFIED_WARNING,),
         created_at=created_at,
         format_version=FORMAT_VERSION,
     )
