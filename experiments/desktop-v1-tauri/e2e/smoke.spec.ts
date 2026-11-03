@@ -110,3 +110,28 @@ test('strict fictional subset check rejects semantically misleading labels and s
   await expect(result).toHaveCount(0);
   await expect(check).toHaveCount(0);
 });
+
+test('fixture lineage shows verified JSON-pointer provenance and re-verifies on linked navigation', async ({ page }) => {
+  await page.goto('/#/fhir-inspector');
+  await page.getByRole('button', { name: 'Fixture fixture-patient-alpha' }).click();
+  await page.getByRole('button', { name: 'Verify fixture with native Rust' }).click();
+  const inspect = page.getByRole('button', { name: 'Inspect pinned fictional provenance links' });
+  await expect(inspect).toBeVisible();
+  await inspect.click();
+  const provenance = page.getByRole('status', { name: 'Verified fictional fixture lineage' });
+  await expect(provenance).toContainText('FICTIONAL PROVENANCE LINKS VERIFIED');
+  await expect(provenance).toContainText('/patient/reference');
+  await expect(provenance).toContainText('/subject/reference');
+  await expect(provenance).toContainText('/entry/0/resource');
+  await expect(provenance).toContainText('FHIR semantics validated:');
+  await expect(provenance).toContainText('No');
+  await page.getByRole('button', { name: 'Select related fictional fixture fixture-observation-gamma' }).click();
+  await expect(provenance).toHaveCount(0);
+  await expect(inspect).toHaveCount(0);
+  await page.getByRole('button', { name: 'Verify fixture with native Rust' }).click();
+  await page.getByRole('button', { name: 'Inspect pinned fictional provenance links' }).click();
+  const next = page.getByRole('status', { name: 'Verified fictional fixture lineage' });
+  await expect(next).toContainText('/subject/reference');
+  await expect(next).toContainText('/entry/1/resource');
+  await expect(next).not.toContainText('/patient/reference');
+});

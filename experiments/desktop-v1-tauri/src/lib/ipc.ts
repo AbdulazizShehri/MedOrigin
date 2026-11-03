@@ -75,6 +75,31 @@ export interface FixtureStructuralEvidence {
   release_authorized: boolean;
 }
 
+export interface FictionalLineageNode {
+  fixture_id: string;
+  resource_type: string;
+  sha256_hex: string;
+  byte_len: number;
+}
+
+export interface FictionalLineageEdge {
+  source_id: string;
+  target_id: string;
+  relationship: string;
+  source_pointer: string;
+}
+
+export interface FictionalLineage {
+  contract: string;
+  focus_id: string;
+  nodes: FictionalLineageNode[];
+  edges: FictionalLineageEdge[];
+  scope: string;
+  synthetic_only: boolean;
+  fhir_semantics_validated: boolean;
+  release_authorized: boolean;
+}
+
 export interface CommandError {
   code: string;
 }
@@ -84,6 +109,8 @@ export const CONTRACT_LIST = 'medorigin-fixtures-list-v1';
 export const CONTRACT_VERIFY = 'medorigin-fixture-verify-v1';
 export const CONTRACT_SOURCE = 'medorigin-fixture-source-v1';
 export const CONTRACT_STRUCTURE = 'medorigin-fictional-structure-subset-v1';
+export const CONTRACT_LINEAGE = 'medorigin-four-fictional-fixtures-lineage-v1';
+export const LINEAGE_SCOPE = 'FOUR_PINNED_SYNTHETIC_FIXTURES';
 
 // Golden values mirror src-tauri fixtures and are cross-checked by
 // tests/verify_goldens.py. Browser mock only — the native Rust host is the
@@ -237,6 +264,56 @@ export async function inspectSyntheticFixtureStructure(
     };
   }
   return withStallGuard(invokeRaw<FixtureStructuralEvidence>('inspect_synthetic_fixture_structure', { req }));
+}
+
+// Static browser-preview values only. Rust validates these same pointer paths
+// against strictly parsed, hash-pinned fictional JSON, never user-supplied paths.
+export const PINNED_FICTIONAL_LINKS: FictionalLineageEdge[] = [
+  { source_id: 'fixture-allergy-beta', target_id: 'fixture-patient-alpha', relationship: 'fictional_reference', source_pointer: '/patient/reference' },
+  { source_id: 'fixture-observation-gamma', target_id: 'fixture-patient-alpha', relationship: 'fictional_reference', source_pointer: '/subject/reference' },
+  { source_id: 'fixture-bundle-delta', target_id: 'fixture-patient-alpha', relationship: 'fictional_bundle_member', source_pointer: '/entry/0/resource' },
+  { source_id: 'fixture-bundle-delta', target_id: 'fixture-observation-gamma', relationship: 'fictional_bundle_member', source_pointer: '/entry/1/resource' },
+];
+const PINNED_FICTIONAL_KINDS: Record<string, string> = {
+  'fixture-patient-alpha': 'Patient',
+  'fixture-allergy-beta': 'AllergyIntolerance',
+  'fixture-observation-gamma': 'Observation',
+  'fixture-bundle-delta': 'Bundle',
+};
+
+export async function inspectFictionalFixtureLineage(req: VerifyFixtureRequest): Promise<FictionalLineage> {
+  if (!isTauri()) {
+    const focus = MOCK_FIXTURES.find((item) => item.id === req.fixture_id);
+    if (!focus) {
+      const err: CommandError = { code: 'unknown_fixture' };
+      throw err;
+    }
+    const edges = PINNED_FICTIONAL_LINKS.filter((link) =>
+      link.source_id === focus.id || link.target_id === focus.id,
+    ).map((link) => ({ ...link }));
+    const involved = new Set<string>([focus.id]);
+    for (const link of edges) {
+      involved.add(link.source_id);
+      involved.add(link.target_id);
+    }
+    const nodes = MOCK_FIXTURES.filter((item) => involved.has(item.id)).map((item) => ({
+      fixture_id: item.id,
+      resource_type: PINNED_FICTIONAL_KINDS[item.id],
+      sha256_hex: item.sha256_hex,
+      byte_len: item.byte_len,
+    }));
+    return {
+      contract: CONTRACT_LINEAGE,
+      focus_id: focus.id,
+      nodes,
+      edges,
+      scope: LINEAGE_SCOPE,
+      synthetic_only: true,
+      fhir_semantics_validated: false,
+      release_authorized: false,
+    };
+  }
+  return withStallGuard(invokeRaw<FictionalLineage>('inspect_fictional_fixture_lineage', { req }));
 }
 
 export function isCommandError(err: unknown): err is CommandError {

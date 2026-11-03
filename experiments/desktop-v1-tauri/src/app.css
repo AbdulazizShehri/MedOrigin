@@ -297,3 +297,19 @@ h1.page-title { font-size: 22px; line-height: 1.2; font-weight: 600; letter-spac
 @media (max-width: 1024px) {
   .structure-facts { grid-template-columns: 1fr; }
 }
+
+/* Slice 4 - exact four-fixture synthetic provenance only. */
+.fixture-lineage-section { margin-top: 20px; }
+.fixture-lineage-section .sub { margin: 9px 0 15px; }
+.lineage-links { display: grid; gap: 10px; padding-bottom: 16px; }
+.lineage-link { display: flex; flex-wrap: wrap; align-items: center; column-gap: 8px; row-gap: 6px; border-bottom: 1px solid var(--mo-border); padding: 11px 0; font-size: 12px; }
+.lineage-link b { overflow-wrap: anywhere; }
+.lineage-link small { color: var(--mo-text-secondary); }
+.lineage-link code { display: block; color: var(--mo-text-secondary); width: 100%; overflow-wrap: anywhere; }
+.lineage-fixtures h3 { font-size: 13px; margin: 12px 0 8px; }
+.lineage-node { display: flex; justify-content: space-between; align-items: center; gap: 15px; padding: 12px 0; border-bottom: 1px solid var(--mo-border); }
+.lineage-node > div { min-width: 0; }
+.lineage-node strong, .lineage-node small { display: block; overflow-wrap: anywhere; }
+.lineage-node small { margin-top: 4px; color: var(--mo-text-muted); font-size: 11px; }
+.lineage-node button { flex-shrink: 0; }
+@media (max-width: 800px) { .lineage-node { align-items: flex-start; flex-direction: column; } }
