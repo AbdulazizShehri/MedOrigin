@@ -108,7 +108,20 @@ try {
   ExpectText $hexContext $false
   ExpectText $pointerDiff $false
   Write-Output 'D2_JSON_POINTER_STALE_CLEAR_PASS'
-  Write-Output 'D2_JSON_POINTER_WINDOWS_UIA_3_OF_3_PASS_NONPUBLISHING'
+
+  # Cross-feature regression: the explicit keyboard-reachable clear button
+  # from PR #859 must also clear all directional JSON/HEX hints from PR #864.
+  Press (One 'Compare verified fictional JSON (read-only)')
+  ExpectText $pointerDiff
+  ExpectText $byteDiff
+  ExpectText $hexContext
+  Press (One 'Clear fictional output (Escape)')
+  ExpectText $pointerDiff $false
+  ExpectText $byteDiff $false
+  ExpectText $hexContext $false
+  ExpectText $observation $false
+  Write-Output 'D2_JSON_POINTER_EXPLICIT_CLEAR_PASS'
+  Write-Output 'D2_JSON_POINTER_WINDOWS_UIA_4_OF_4_PASS_NONPUBLISHING'
 }catch{
   [Console]::Error.WriteLine('D2_COMPARE_WINDOWS_UIA_NO_GO: '+$_.Exception.Message)
   exit 1
