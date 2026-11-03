@@ -11,10 +11,11 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import re
 import sys
 import zipfile
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any
 
 import check_installed_core_fhir_provenance as fhir_gate
@@ -90,6 +91,88 @@ def _reject_venv_startup_hooks(python: Path, minor: int) -> None:
                 raise QualificationError("unreviewed installed Python startup hook")
 
 
+def _verify_installed_package_inventory(wheel: Path, python: Path, minor: int) -> int:
+    """Match EVERY installed medscale file, not only Wheel-owned .py sources.
+
+    Preexisting timestamp-compatible .pyc code can be executed in preference
+    to a source file whose exact bytes still match the Wheel. Enumerate files
+    and directories without launching the target interpreter or following
+    links, and refuse every missing, changed or unqualified package entry.
+    """
+    venv = python.parent.parent
+    site = (
+        venv / "Lib" / "site-packages"
+        if sys.platform == "win32"
+        else venv / "lib" / f"python3.{minor}" / "site-packages"
+    )
+    package = site / "medscale"
+    if not package.is_dir() or package.is_symlink():
+        raise QualificationError("installed Core package directory not qualified")
+
+    expected: dict[str, tuple[int, str]] = {}
+    expected_dirs: set[str] = set()
+    try:
+        with zipfile.ZipFile(wheel) as archive:
+            for member in archive.infolist():
+                name = member.filename
+                if not name.startswith("medscale/") or member.is_dir():
+                    continue
+                relative = name.removeprefix("medscale/")
+                parts = PurePosixPath(relative).parts
+                if (
+                    not parts
+                    or any(part in {"", ".", ".."} for part in relative.split("/"))
+                    or chr(92) in relative
+                    or relative in expected
+                ):
+                    raise QualificationError("unsafe installed Core Wheel inventory")
+                for depth in range(1, len(parts)):
+                    expected_dirs.add("/".join(parts[:depth]))
+                digest = hashlib.sha256()
+                with archive.open(member) as archive_file:
+                    while chunk := archive_file.read(65536):
+                        digest.update(chunk)
+                expected[relative] = member.file_size, digest.hexdigest()
+    except (OSError, ValueError, zipfile.BadZipFile) as exc:
+        raise QualificationError("installed Core Wheel inventory unreadable") from exc
+    if not expected:
+        raise QualificationError("installed Core Wheel has no package files")
+
+    observed: set[str] = set()
+
+    def refuse_walk_error(exc: OSError) -> None:
+        raise QualificationError("installed Core package directory unreadable") from exc
+
+    for parent, directories, files in os.walk(
+        package, topdown=True, followlinks=False, onerror=refuse_walk_error
+    ):
+        parent_path = Path(parent)
+        relative_root = parent_path.relative_to(package)
+        for directory in directories:
+            path = parent_path / directory
+            relative = (relative_root / directory).as_posix()
+            if path.is_symlink() or relative not in expected_dirs:
+                raise QualificationError("unqualified installed Core package directory")
+        for filename in files:
+            path = parent_path / filename
+            relative = (relative_root / filename).as_posix()
+            if path.is_symlink() or not path.is_file() or relative not in expected:
+                raise QualificationError("unqualified installed Core package file")
+            length, digest = expected[relative]
+            if path.stat().st_size != length:
+                raise QualificationError("installed Core package contents differ from Wheel")
+            actual = hashlib.sha256()
+            with path.open("rb") as installed_file:
+                while chunk := installed_file.read(65536):
+                    actual.update(chunk)
+            if actual.hexdigest() != digest:
+                raise QualificationError("installed Core package contents differ from Wheel")
+            observed.add(relative)
+    if observed != expected.keys():
+        raise QualificationError("installed Core package inventory incomplete")
+    return len(observed)
+
+
 def qualify(
     checkout: Path, wheel: Path, sdist: Path, python311: Path, python312: Path
 ) -> dict[str, Any]:
@@ -136,6 +219,13 @@ def qualify(
     # executable .pth file or sitecustomize module in site-packages.
     _reject_venv_startup_hooks(python311, 11)
     _reject_venv_startup_hooks(python312, 12)
+    # Do not execute either installed Python until the *complete* installed
+    # package file/directory inventory matches the approved Wheel. Source-
+    # only SHA checks miss forged __pycache__ bytecode and extra code modules.
+    inventory311 = _verify_installed_package_inventory(wheel, python311, 11)
+    inventory312 = _verify_installed_package_inventory(wheel, python312, 12)
+    if inventory311 != inventory312:
+        raise QualificationError("installed Core package inventories differ")
     try:
         count311 = artifact_gate.installed_wheel_matches(wheel, python311, 11)
         count312 = artifact_gate.installed_wheel_matches(wheel, python312, 12)

@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import importlib.util
 import sys
+import zipfile
 from pathlib import Path
 from typing import Any
 
@@ -87,6 +88,7 @@ def _accept_fake_gates(
 
     monkeypatch.setattr(gate.artifact_gate, "tool_receipt", fake_receipt)
     monkeypatch.setattr(gate.artifact_gate, "installed_wheel_matches", lambda *_a: 250)
+    monkeypatch.setattr(gate, "_verify_installed_package_inventory", lambda *_a: 250)
     monkeypatch.setattr(
         gate.fhir_gate,
         "qualify",
@@ -355,6 +357,105 @@ def test_main_does_not_echo_untrusted_paths_or_provide_positive_receipt(
     assert "SOURCE_BOUND_LOCAL_FHIR_PROVENANCE_BLOCKED" in captured.err
     assert "FICTIONAL-NEVER-ECHO" not in captured.err
     assert not captured.out
+
+
+def _make_tiny_installed_package(
+    gate: Any, paths: tuple[Path, Path, Path, Path, Path]
+) -> tuple[Path, Path]:
+    wheel = paths[1]
+    root = paths[3].parent.parent
+    package = (
+        root / "Lib" / "site-packages" / "medscale"
+        if sys.platform == "win32"
+        else root / "lib" / "python3.11" / "site-packages" / "medscale"
+    )
+    members = {
+        "medscale/__init__.py": b"__version__ = 'fictional'\n",
+        "medscale/cli/fhir.py": b"from __future__ import annotations\n",
+        "medscale/assets/metadata.json": b'{"fixture":true}\n',
+    }
+    with zipfile.ZipFile(wheel, "w", zipfile.ZIP_DEFLATED) as archive:
+        for relative, content in members.items():
+            archive.writestr(relative, content)
+            target = package.parent.joinpath(*relative.split("/"))
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(content)
+    return wheel, package
+
+
+def test_installed_package_full_inventory_accepts_only_exact_wheel_members(
+    gate: Any, paths: tuple[Path, Path, Path, Path, Path]
+) -> None:
+    wheel, _package = _make_tiny_installed_package(gate, paths)
+    assert gate._verify_installed_package_inventory(wheel, paths[3], 11) == 3
+
+
+@pytest.mark.parametrize(
+    "damage",
+    [
+        "forged_cache",
+        "legacy_pyc",
+        "extra_python",
+        "extra_native",
+        "extra_json",
+        "modified_source",
+        "modified_asset",
+        "missing_source",
+        "empty_extra_directory",
+        "missing_package",
+    ],
+)
+def test_installed_package_full_inventory_refuses_unqualified_or_changed_files(
+    gate: Any,
+    paths: tuple[Path, Path, Path, Path, Path],
+    damage: str,
+) -> None:
+    wheel, package = _make_tiny_installed_package(gate, paths)
+    if damage == "forged_cache":
+        cache = package / "cli" / "__pycache__"
+        cache.mkdir()
+        (cache / "fhir.cpython-311.pyc").write_bytes(b"FICTIONAL-FORGED-BYTECODE")
+    elif damage == "legacy_pyc":
+        (package / "cli" / "fhir.pyc").write_bytes(b"FICTIONAL-FORGED-BYTECODE")
+    elif damage == "extra_python":
+        (package / "extra.py").write_text("FICTIONAL EXTRA", encoding="utf-8")
+    elif damage == "extra_native":
+        (package / "extra.pyd").write_bytes(b"FICTIONAL-BINARY")
+    elif damage == "extra_json":
+        (package / "data.json").write_text('{"fictional":true}', encoding="utf-8")
+    elif damage == "modified_source":
+        (package / "cli" / "fhir.py").write_text("# wrong source", encoding="utf-8")
+    elif damage == "modified_asset":
+        (package / "assets" / "metadata.json").write_text("changed", encoding="utf-8")
+    elif damage == "missing_source":
+        (package / "cli" / "fhir.py").unlink()
+    elif damage == "empty_extra_directory":
+        (package / "unreviewed").mkdir()
+    else:
+        for member in sorted(package.rglob("*"), reverse=True):
+            if member.is_file():
+                member.unlink()
+            elif member.is_dir():
+                member.rmdir()
+        package.rmdir()
+    with pytest.raises(gate.QualificationError, match="installed Core"):
+        gate._verify_installed_package_inventory(wheel, paths[3], 11)
+
+
+def test_real_package_inventory_rejects_symlink_substitution_when_supported(
+    gate: Any, paths: tuple[Path, Path, Path, Path, Path], tmp_path: Path
+) -> None:
+    wheel, package = _make_tiny_installed_package(gate, paths)
+    target = package / "cli" / "fhir.py"
+    real = tmp_path / "fictional-source.py"
+    real.write_bytes(target.read_bytes())
+    target.unlink()
+    try:
+        target.symlink_to(real)
+    except (OSError, NotImplementedError):
+        pytest.skip("host cannot create symlinks")
+    with pytest.raises(gate.QualificationError, match="installed Core"):
+        gate._verify_installed_package_inventory(wheel, paths[3], 11)
 
 
 def test_source_never_certifies_fhir_or_release_approval() -> None:
