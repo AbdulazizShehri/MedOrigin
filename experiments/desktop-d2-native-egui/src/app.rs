@@ -919,6 +919,18 @@ mod tests {
     }
 
     #[test]
+    fn pinned_fictional_patient_observation_pointer_matches_windows_uia_contract() {
+        let left = MedOriginNativePreview::verified_json_for(0)
+            .expect("pinned fictional Patient bytes");
+        let right = MedOriginNativePreview::verified_json_for(4)
+            .expect("pinned fictional Observation bytes");
+        assert_eq!(
+            fictional_json_path_diff(left, right).expect("synthetic JSON Pointer"),
+            "Fictional JSON path difference: /id (value differs: left=\"synthetic\", right=\"synthetic-observation\"). Structural developer hint only; original source bytes unchanged."
+        );
+    }
+
+    #[test]
     fn fictional_json_path_comparison_is_verified_and_cleared_on_refusal() {
         let mut app = MedOriginNativePreview {
             selected: 0,
