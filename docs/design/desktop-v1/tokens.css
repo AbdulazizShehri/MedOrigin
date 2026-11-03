@@ -1,0 +1,76 @@
+/* MedOrigin Desktop v1 role tokens. Design reference, not shipped application. */
+:root,[data-theme="light"]{color-scheme:light;
+ --mo-canvas:#F6F7F4;
+ --mo-sidebar:#EEF1EE;
+ --mo-surface:#FFFFFF;
+ --mo-raised:#F9FAF8;
+ --mo-hover:#E9EEEA;
+ --mo-border:#D7DED8;
+ --mo-border-strong:#BAC5BD;
+ --mo-text:#19211C;
+ --mo-text-secondary:#41544A;
+ --mo-text-muted:#57675D;
+ --mo-accent:#C94A05;
+ --mo-accent-hover:#AD3E00;
+ --mo-accent-text:#FFFFFF;
+ --mo-brand-accent:#FE681B;
+ --mo-brand-on-accent:#19211C;
+ --mo-focus:#A13C04;
+ --mo-selection:#FFE5D6;
+ --mo-success:#176A50;
+ --mo-warning:#775200;
+ --mo-danger:#A52E30;
+ --mo-badge:#E9EFEA;
+ --mo-scrim:#19211C99;
+}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]):not([data-theme="dark"]){color-scheme:dark;
+ --mo-canvas:#0D0F10;
+ --mo-sidebar:#121516;
+ --mo-surface:#181C1D;
+ --mo-raised:#202526;
+ --mo-hover:#272D2E;
+ --mo-border:#31383A;
+ --mo-border-strong:#455052;
+ --mo-text:#F4F5F2;
+ --mo-text-secondary:#BEC7C2;
+ --mo-text-muted:#A6B0AA;
+ --mo-accent:#FF8A45;
+ --mo-accent-hover:#FFAB73;
+ --mo-accent-text:#171818;
+ --mo-brand-accent:#FE681B;
+ --mo-brand-on-accent:#171818;
+ --mo-focus:#FFB27E;
+ --mo-selection:#3D2C21;
+ --mo-success:#86DFC0;
+ --mo-warning:#F2D398;
+ --mo-danger:#FFA2A2;
+ --mo-badge:#262D2A;
+ --mo-scrim:#000000AA;
+}}
+[data-theme="dark"]{color-scheme:dark;
+ --mo-canvas:#0D0F10;
+ --mo-sidebar:#121516;
+ --mo-surface:#181C1D;
+ --mo-raised:#202526;
+ --mo-hover:#272D2E;
+ --mo-border:#31383A;
+ --mo-border-strong:#455052;
+ --mo-text:#F4F5F2;
+ --mo-text-secondary:#BEC7C2;
+ --mo-text-muted:#A6B0AA;
+ --mo-accent:#FF8A45;
+ --mo-accent-hover:#FFAB73;
+ --mo-accent-text:#171818;
+ --mo-brand-accent:#FE681B;
+ --mo-brand-on-accent:#171818;
+ --mo-focus:#FFB27E;
+ --mo-selection:#3D2C21;
+ --mo-success:#86DFC0;
+ --mo-warning:#F2D398;
+ --mo-danger:#FFA2A2;
+ --mo-badge:#262D2A;
+ --mo-scrim:#000000AA;
+}
+::selection{background:var(--mo-selection)}
+:focus-visible{outline:2px solid var(--mo-focus);outline-offset:2px}
+@media(prefers-reduced-motion:reduce){*,*:before,*:after{scroll-behavior:auto!important;animation-duration:.01ms!important;transition-duration:.01ms!important}}

@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MedOrigin — Desktop Theme Review (Not a Working App)</title>
+<link rel="stylesheet" href="./tokens.css">
+<style>
+*{box-sizing:border-box}[hidden]{display:none!important}html,body{margin:0;min-height:100%;font-family:Inter,"Segoe UI",system-ui,sans-serif;background:var(--mo-bg);color:var(--mo-text);font-size:13px;-webkit-font-smoothing:antialiased}
+button,input{font:inherit}button{cursor:pointer}button:disabled{cursor:not-allowed;opacity:.45}button:focus-visible,input:focus-visible{outline:2px solid var(--mo-focus);outline-offset:2px}button{min-height:38px}
+.shell{display:grid;grid-template-columns:244px minmax(0,1fr);min-height:100vh}.sidebar{background:var(--mo-sidebar);border-right:1px solid var(--mo-border);display:flex;flex-direction:column;padding:14px 11px}
+.brand{display:flex;align-items:center;gap:10px;padding:9px 10px 22px;font-size:17px;font-weight:730;letter-spacing:-.055em}.brand-dot{background:#FE681B;width:17px;height:17px;border-radius:50%;display:inline-block;flex:none}
+.preview-ribbon{border:1px solid var(--mo-border);padding:10px;margin:0 6px 17px;border-radius:7px;color:var(--mo-text-secondary);font-size:11px;line-height:1.5;background:var(--mo-raised)}.preview-ribbon b{color:var(--mo-text);display:block}
+.nav-label{font-size:10px;color:var(--mo-text-muted);font-weight:700;letter-spacing:.11em;text-transform:uppercase;margin:17px 10px 8px}
+.nav-link{display:flex;width:100%;gap:11px;align-items:center;border:1px solid transparent;border-radius:7px;background:transparent;color:var(--mo-text-secondary);text-align:left;padding:0 12px;font-size:13px;height:38px}.nav-link:hover{background:var(--mo-hover)}.nav-link[aria-current="page"]{background:var(--mo-raised);border-color:var(--mo-border);color:var(--mo-text);font-weight:650}.nav-link[aria-current="page"]:before{content:"";width:3px;height:17px;border-radius:2px;background:var(--mo-brand)}
+.glyph{width:16px;font-size:15px;display:inline-grid;place-items:center;color:var(--mo-text-muted)}
+.sidebar-bottom{margin-top:auto;padding:20px 8px 8px;color:var(--mo-text-muted);font-size:11px;line-height:1.6}
+.content{display:flex;flex-direction:column;min-width:0}.topbar{height:52px;min-height:52px;display:flex;align-items:center;gap:15px;padding:0 26px;border-bottom:1px solid var(--mo-border);background:var(--mo-surface)}
+.breadcrumb{color:var(--mo-text-secondary);flex:1;white-space:nowrap}.breadcrumbs-strong{color:var(--mo-text);font-weight:650}.key{border:1px solid var(--mo-border);border-radius:5px;padding:4px 7px;font:11px ui-monospace,Consolas,monospace;color:var(--mo-text-muted)}
+.theme-buttons{display:flex;border:1px solid var(--mo-border);border-radius:7px;overflow:hidden}.theme-buttons button{border:0;background:var(--mo-surface);color:var(--mo-text-secondary);padding:0 12px;min-height:32px}.theme-buttons button[aria-pressed="true"]{background:var(--mo-hover);color:var(--mo-text);font-weight:700}
+.main{display:grid;grid-template-columns:minmax(0,1fr) 306px;flex:1;min-height:0}
+.work{padding:32px clamp(22px,3vw,46px) 70px;max-width:1160px;width:100%;margin:auto}.eyebrow{color:var(--mo-text-muted);letter-spacing:.1em;text-transform:uppercase;font-weight:700;font-size:10px}
+.work h1{font-weight:690;font-size:26px;line-height:1.2;letter-spacing:-.045em;margin:11px 0}.sub{font-size:14px;color:var(--mo-text-secondary);line-height:1.65;max-width:710px;margin:0 0 27px}
+.toolbar{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:30px 0 17px}.toolbar h2{font-size:14px;margin:0;font-weight:700}
+.search{width:255px;max-width:100%;min-height:38px;border:1px solid var(--mo-border);border-radius:7px;background:var(--mo-surface);color:var(--mo-text);padding:8px 12px}
+.metrics{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:11px}.metric{border:1px solid var(--mo-border);border-radius:9px;background:var(--mo-surface);padding:18px;min-height:125px}
+.metric .counter{font-size:26px;letter-spacing:-.04em;font-weight:710;margin:10px 0 2px}.metric p{color:var(--mo-text-muted);font-size:11px;margin:0}.metric-title{font-size:12px;color:var(--mo-text-secondary)}
+.surface{border:1px solid var(--mo-border);border-radius:9px;background:var(--mo-surface);overflow:hidden}.table-header,.cap-row{display:grid;grid-template-columns:minmax(0,1fr) 145px 98px;align-items:center;gap:13px;padding:14px 17px}
+.table-header{color:var(--mo-text-muted);font-size:10px;text-transform:uppercase;letter-spacing:.06em;background:var(--mo-raised);font-weight:700}
+.cap-row{min-height:66px;border-top:1px solid var(--mo-border)}.cap-row:hover{background:var(--mo-hover)}.cap-row strong{display:block;font-size:13px;font-weight:650}.cap-row small{color:var(--mo-text-muted);display:block;margin-top:5px;line-height:1.35}
+.chip{font-size:10px;font-weight:660;padding:5px 8px;border-radius:5px;background:var(--mo-badge);border:1px solid var(--mo-border);width:max-content;max-width:100%;text-align:center}
+.chip.warn{color:var(--mo-warning)}.chip.ok{color:var(--mo-success)}.chip.off{color:var(--mo-text-muted)}
+.mini-link{color:var(--mo-accent);font-weight:700;font-size:11px;text-decoration:none}
+.inspector{border-left:1px solid var(--mo-border);background:var(--mo-surface);padding:24px 22px}.inspector h2{font-size:14px;letter-spacing:-.02em;margin:0 0 22px}.detail{padding:16px 0;border-top:1px solid var(--mo-border)}.detail strong{display:block;font-size:11px;color:var(--mo-text-muted);font-weight:650;margin-bottom:9px}.detail p{font-size:12px;line-height:1.65;margin:0;color:var(--mo-text-secondary)}.inspector-note{border:1px solid var(--mo-border);padding:14px;border-radius:8px;background:var(--mo-raised);font-size:12px;line-height:1.6;color:var(--mo-text-secondary);margin-top:20px}
+.inspector-note b{display:block;color:var(--mo-text);margin-bottom:5px}
+.bottom-note{margin-top:25px;font-size:11px;color:var(--mo-text-muted);line-height:1.6}
+@media(max-width:1150px){.main{grid-template-columns:1fr}.inspector{display:none}}
+@media(max-width:720px){.shell{grid-template-columns:65px 1fr}.sidebar{padding:12px 4px}.brand{justify-content:center;padding:10px 2px 22px;font-size:0}.brand-dot{width:23px;height:23px}.preview-ribbon,.nav-label,.nav-link span:last-child,.sidebar-bottom{display:none}.nav-link{justify-content:center;padding:0;min-height:45px}.topbar{padding:0 12px}.topbar .key{display:none}.work{padding:23px 16px 60px}.metrics{grid-template-columns:1fr}.metric{min-height:98px}.toolbar{align-items:start;flex-direction:column}.search{width:100%}.table-header,.cap-row{grid-template-columns:minmax(0,1fr) 92px;gap:8px;padding:13px}.table-header span:last-child,.cap-row>a{display:none}.cap-row strong{font-size:12px}.chip{font-size:9px}}
+</style>
+</head>
+<body>
+<div class="shell">
+<aside class="sidebar" aria-label="MedOrigin navigation">
+<div class="brand"><span class="brand-dot" aria-hidden="true"></span> MedOrigin</div>
+<div class="preview-ribbon"><b>Synthetic / Developer Preview</b>Design-only. No patient data, models or clinical access.</div>
+<div class="nav-label">Workspace</div>
+<button class="nav-link" aria-current="page" data-name="Overview" aria-label="Overview"><span class="glyph" aria-hidden="true">◫</span><span>Overview</span></button>
+<button class="nav-link" data-name="Encounters" aria-label="Encounters"><span class="glyph" aria-hidden="true">◷</span><span>Encounters</span></button>
+<button class="nav-link" data-name="Notes" aria-label="Notes"><span class="glyph" aria-hidden="true">▤</span><span>Notes & Drafts</span></button>
+<button class="nav-link" data-name="Evidence" aria-label="Evidence"><span class="glyph" aria-hidden="true">◇</span><span>Evidence</span></button>
+<button class="nav-link" data-name="Patient graph" aria-label="Patient graph"><span class="glyph" aria-hidden="true">⌁</span><span>Patient graph</span></button>
+<button class="nav-link" data-name="FHIR" aria-label="FHIR"><span class="glyph" aria-hidden="true">⟡</span><span>FHIR inspector</span></button>
+<div class="nav-label">Research</div>
+<button class="nav-link" data-name="Datasets" aria-label="Datasets"><span class="glyph" aria-hidden="true">▦</span><span>Datasets</span></button>
+<button class="nav-link" data-name="Research" aria-label="Research"><span class="glyph" aria-hidden="true">◉</span><span>Research explorer</span></button>
+<button class="nav-link" data-name="Analytics" aria-label="Analytics"><span class="glyph" aria-hidden="true">▥</span><span>Analytics</span></button>
+<div class="nav-label">Trust</div>
+<button class="nav-link" data-name="Audit" aria-label="Audit"><span class="glyph" aria-hidden="true">⌕</span><span>Audit & provenance</span></button>
+<button class="nav-link" data-name="Storage" aria-label="Storage"><span class="glyph" aria-hidden="true">▣</span><span>Storage & recovery</span></button>
+<button class="nav-link" data-name="Settings" aria-label="Settings"><span class="glyph" aria-hidden="true">⚙</span><span>Settings</span></button>
+<div class="sidebar-bottom">MedOrigin / Design laboratory<br>Local-first. Synthetic only.</div>
+</aside>
+<div class="content">
+<header class="topbar"><div class="breadcrumb">MedOrigin / <span class="breadcrumbs-strong" id="crumb">Overview</span></div><span class="key">⌘ K</span><div class="theme-buttons" aria-label="Appearance"><button type="button" data-theme-set="light" aria-pressed="false">Light</button><button type="button" data-theme-set="dark" aria-pressed="true">Dark</button><button type="button" data-theme-set="system" aria-pressed="false">System</button></div></header>
+<div class="main">
+<main class="work" id="content">
+<span class="eyebrow">MEDORIGIN / LOCAL WORKSPACE / DESIGN REVIEW</span>
+<h1 id="page-title">Overview</h1>
+<p class="sub" id="page-description">A calm, precise shell for evidence-native clinical research tools. This is a design preview only; no medical workflows are running.</p>
+<div class="metrics">
+<section class="metric"><span class="metric-title">Architecture</span><div class="counter">2</div><p>Research Core + separate Workspace foundation</p></section>
+<section class="metric"><span class="metric-title">Clinical authorization</span><div class="counter">0</div><p>Real-patient workflows currently authorized</p></section>
+<section class="metric"><span class="metric-title">Theme</span><div class="counter" id="mode-display">Dark</div><p>System / Light / Dark • original MedOrigin orange</p></section>
+</div>
+<div class="toolbar"><h2>Feature integration inventory</h2><input class="search" type="search" placeholder="Filter capabilities…" aria-label="Filter capabilities"></div>
+<div class="surface">
+<div class="table-header"><span>Capability</span><span>Backend status</span><span>Desktop</span></div>
+<div id="cap-list">
+<div class="cap-row" data-search="synthetic encounters records review"><div><strong>Synthetic encounters</strong><small>Local encounter and revision records</small></div><span class="chip ok">Foundation</span><a class="mini-link" href="#detail">Review</a></div>
+<div class="cap-row" data-search="notes drafts evidence source"><div><strong>Notes & provenance</strong><small>Source-linked draft and review contracts</small></div><span class="chip ok">Foundation</span><a class="mini-link" href="#detail">Review</a></div>
+<div class="cap-row" data-search="fhir validation synthetic"><div><strong>FHIR R4 inspection</strong><small>Deterministic validation and bounded fixtures</small></div><span class="chip ok">Foundation</span><a class="mini-link" href="#detail">Review</a></div>
+<div class="cap-row" data-search="evidence literature retrieval"><div><strong>Evidence retrieval</strong><small>Research evidence, snapshots and citations</small></div><span class="chip ok">Foundation</span><a class="mini-link" href="#detail">Review</a></div>
+<div class="cap-row" data-search="recording live microphone transcript"><div><strong>Live encounter recording</strong><small>Consent, hardware and model gates not qualified</small></div><span class="chip warn">Gated</span><a class="mini-link" href="#detail">Details</a></div>
+<div class="cap-row" data-search="ehr electronic health records writes"><div><strong>EHR writes & patient data</strong><small>Outside authorized developer-preview scope</small></div><span class="chip warn">Blocked</span><a class="mini-link" href="#detail">Details</a></div>
+</div></div>
+<div class="bottom-note" id="empty-state">UI preview only. Backend routes must not be represented as connected until runtime IPC validation and synthetic E2E tests pass.</div>
+</main>
+<aside class="inspector" id="detail">
+<h2>Inspector <span style="float:right;color:var(--mo-text-muted);font-weight:400;font-size:11px">⌘ ⇧ I</span></h2>
+<div class="detail"><strong>Environment</strong><p>Synthetic developer preview<br>Offline-first • Read-only research views</p></div>
+<div class="detail"><strong>Evidence boundary</strong><p>Every generated or inferred statement must disclose source, model/runtime identity, uncertainty, and review status.</p></div>
+<div class="detail"><strong>Security</strong><p>No automatic EHR writes, patient-data ingestion, remote AI fallback or Workspace-to-Research training backflow.</p></div>
+<div class="detail"><strong>About this screen</strong><p id="inspector-page">Navigation, filters and appearance work for design review. Actual MedOrigin backend is not attached to this HTML.</p></div>
+<div class="inspector-note"><b>Product rule</b>Keep the status of missing permissions and unavailable capabilities visible. A disabled action is safer than a simulated successful result.</div>
+</aside>
+</div></div></div>
+<script>
+const root=document.documentElement;
+const themeButtons=[...document.querySelectorAll('[data-theme-set]')];
+function setTheme(mode) {
+ if(mode==='system')root.removeAttribute('data-theme');
+ else root.dataset.theme=mode;
+ for(const btn of themeButtons)btn.setAttribute('aria-pressed', String(btn.dataset.themeSet===mode));
+ const actual=mode==='system' ? (matchMedia('(prefers-color-scheme:dark)').matches?'Dark':'Light') : mode.charAt(0).toUpperCase()+mode.slice(1);
+ document.getElementById('mode-display').textContent=actual;
+}
+themeButtons.forEach(b=>b.addEventListener('click',()=>setTheme(b.dataset.themeSet)));
+document.querySelectorAll('.nav-link').forEach(b=>b.addEventListener('click',()=>{
+ for(const sibling of document.querySelectorAll('.nav-link'))sibling.removeAttribute('aria-current');
+ b.setAttribute('aria-current','page');
+ document.getElementById('crumb').textContent=b.dataset.name;
+ document.getElementById('page-title').textContent=b.dataset.name;
+ document.getElementById('page-description').textContent='Design review only — '+b.dataset.name+' is a proposed route. The frontend must verify actual backend authorization before presenting a live workflow.';
+ document.getElementById('inspector-page').textContent=b.dataset.name+' remains a planned UI integration. No backend action was executed.';
+}));
+document.querySelector('.search').addEventListener('input',e=>{
+ const term=e.target.value.trim().toLowerCase();let n=0;
+ document.querySelectorAll('.cap-row').forEach(row=>{const visible=row.dataset.search.includes(term)||row.textContent.toLowerCase().includes(term);row.hidden=!visible;if(visible)n++;});
+ document.getElementById('empty-state').textContent=n ? 'UI preview only. Backend integrations must pass real qualification tests.' : 'No matching capabilities. Clear the search to see the inventory.';
+});
+document.addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='k'){e.preventDefault();document.querySelector('.search').focus();}});
+</script>
+</body></html>
