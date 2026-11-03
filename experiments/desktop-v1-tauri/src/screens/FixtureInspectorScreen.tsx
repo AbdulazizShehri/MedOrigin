@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { VerifiedFixtureSource } from '../components/VerifiedFixtureSource';
+import { FixtureStructuralSubset } from '../components/FixtureStructuralSubset';
 import { CircleCheck, CircleX, FileSearch, ShieldAlert } from 'lucide-react';
 import {
   CONTRACT_LIST,
@@ -100,7 +101,7 @@ export function FixtureInspectorScreen() {
 
   return (
     <>
-      <span className="eyebrow">MEDORIGIN / SYNTHETIC FHIR FIXTURE INSPECTOR / SLICES 1-2</span>
+      <span className="eyebrow">MEDORIGIN / SYNTHETIC FHIR FIXTURE INSPECTOR / SLICES 1-3</span>
       <h1 className="page-title">FHIR fixture inspector</h1>
       <p className="sub">
         FICTIONAL fixtures, hash-verified by the native Rust host over committed bytes. This is <b>not</b> FHIR validation,
@@ -202,7 +203,10 @@ export function FixtureInspectorScreen() {
               )}
             </div>
             {verify.kind === 'ready' && verify.result.fixture_id === selected.id && (
-              <VerifiedFixtureSource key={selected.id} fixture={selected} />
+              <>
+                <VerifiedFixtureSource key={selected.id} fixture={selected} />
+                <FixtureStructuralSubset key={`${selected.id}-structure`} fixture={selected} />
+              </>
             )}
           </>
         )}

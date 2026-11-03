@@ -1,0 +1,14 @@
+MedOrigin Desktop Slice 3 synthetic-only Windows QA receipt
+Date: 2026-11-03 Asia/Riyadh
+Tauri build: npx tauri build --debug --no-bundle PASS
+Actual native WebView2 UIA: PASS
+Real Rust golden SHA-256: PASS
+Real Rust fictional JSON source: PASS
+Real Rust recursive-duplicate/ref/Bundle structural subset: PASS
+UIA exposed FICTIONAL STRUCTURAL SUBSET CHECKED: PASS
+UIA exposed FHIR semantics validated = No: PASS
+Visuals: native light/dark 1280x800 and 1440x900 at 125% DPI, screenshot diversity >=563
+Rust unit 17/17, React 50/50, Playwright Edge 45/45 PASS
+WebView2 outbound egress still NO-GO from Slice 1; no PHI or clinical use
+macOS, Linux, 100/150/200% native DPI, 1920x1080 native NOT RUN
+Not signed, installed or published

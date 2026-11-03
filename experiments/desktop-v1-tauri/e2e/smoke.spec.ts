@@ -90,3 +90,23 @@ test('fictional JSON source is revealed only after verification and browser-side
   await expect(region).toHaveCount(0);
   await expect(inspect).toHaveCount(0);
 });
+
+test('strict fictional subset check rejects semantically misleading labels and shows only bounded evidence', async ({ page }) => {
+  await page.goto('/#/fhir-inspector');
+  await expect(page.getByRole('button', { name: 'Check fictional JSON structural subset' })).toHaveCount(0);
+  await page.getByRole('button', { name: 'Fixture fixture-observation-gamma' }).click();
+  await page.getByRole('button', { name: 'Verify fixture with native Rust' }).click();
+  const check = page.getByRole('button', { name: 'Check fictional JSON structural subset' });
+  await expect(check).toBeVisible();
+  await check.click();
+  const result = page.getByRole('status', { name: 'Fictional structural subset result' });
+  await expect(result).toContainText('FICTIONAL STRUCTURAL SUBSET CHECKED');
+  await expect(result).toContainText('Observation');
+  await expect(result).toContainText('References matched');
+  await expect(result).toContainText('Rejected at any depth');
+  await expect(result).toContainText('FHIR semantics validated');
+  await expect(result).toContainText('No');
+  await page.getByRole('button', { name: 'Fixture fixture-bundle-delta' }).click();
+  await expect(result).toHaveCount(0);
+  await expect(check).toHaveCount(0);
+});

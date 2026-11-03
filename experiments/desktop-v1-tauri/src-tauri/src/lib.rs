@@ -3,6 +3,8 @@
 //! files, Python subprocess, telemetry, updater or shell. Commands are
 //! allowlisted, typed and fail closed.
 
+mod structural;
+
 use serde::Serialize;
 use sha2::{Digest, Sha256};
 
@@ -224,6 +226,21 @@ fn read_synthetic_fixture_source(req: VerifyFixtureRequest) -> Result<FixtureSou
     })
 }
 
+/// Only the four compiled-in FICTIONAL IDs may reach the strict JSON subset
+/// inspector. No arbitrary bytes, paths or FHIR/clinical validation are accepted.
+#[tauri::command]
+fn inspect_synthetic_fixture_structure(
+    req: VerifyFixtureRequest,
+) -> Result<structural::FixtureStructuralEvidence, CommandError> {
+    let id = req.fixture_id;
+    if id.len() > MAX_FIXTURE_ID_BYTES {
+        return Err(CommandError::new("invalid_input"));
+    }
+    let (fixture_id, _, bytes) =
+        fixture_entry(&id).ok_or_else(|| CommandError::new("unknown_fixture"))?;
+    structural::analyze_fixture(fixture_id, bytes)
+}
+
 /// Deny-all navigation: the webview may only host the bundled app origin.
 /// This is webview-level defense in depth only, not OS egress proof.
 fn allow_desktop_navigation(url: &tauri::Url) -> bool {
@@ -258,7 +275,8 @@ pub fn run() {
             get_desktop_status,
             list_synthetic_fixtures,
             verify_synthetic_fixture,
-            read_synthetic_fixture_source
+            read_synthetic_fixture_source,
+            inspect_synthetic_fixture_structure
         ])
         .run(tauri::generate_context!())
         .expect("MedOrigin Desktop v1 bootstrap failed");
@@ -440,6 +458,39 @@ mod tests {
             r#"{"fixture_id":"fixture-patient-alpha","path":"C:/users/private"}"#,
         );
         assert!(forged.is_err());
+    }
+
+    #[test]
+    fn structure_command_denies_unknown_path_and_oversized_fixture_id() {
+        for id in ["unknown", "../private", "/etc/passwd", ""] {
+            let err = inspect_synthetic_fixture_structure(VerifyFixtureRequest {
+                fixture_id: id.to_owned(),
+            })
+            .unwrap_err();
+            assert_eq!(err.code, "unknown_fixture");
+        }
+        assert_eq!(
+            inspect_synthetic_fixture_structure(VerifyFixtureRequest {
+                fixture_id: "x".repeat(65),
+            })
+            .unwrap_err()
+            .code,
+            "invalid_input"
+        );
+    }
+
+    #[test]
+    fn structure_command_never_reports_fhir_semantics_validated() {
+        for (id, _, _) in FIXTURES {
+            let evidence = inspect_synthetic_fixture_structure(VerifyFixtureRequest {
+                fixture_id: (*id).to_owned(),
+            })
+            .unwrap();
+            assert_eq!(evidence.contract, structural::CONTRACT_STRUCTURE);
+            assert_eq!(evidence.resource_id, *id);
+            assert!(!evidence.fhir_semantics_validated);
+            assert!(!evidence.release_authorized);
+        }
     }
 
     #[test]

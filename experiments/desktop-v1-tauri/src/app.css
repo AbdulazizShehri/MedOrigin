@@ -285,3 +285,15 @@ h1.page-title { font-size: 22px; line-height: 1.2; font-weight: 600; letter-spac
   tab-size: 2;
 }
 .fixture-source-pre code { font: inherit; }
+
+/* Slice 3: bounded fictional JSON structure evidence, not clinical validation. */
+.fixture-structure-section { margin-top: 20px; }
+.fixture-structure-section .sub { margin: 9px 0 15px; }
+.structure-summary { display: flex; align-items: center; gap: 9px; margin-bottom: 14px; }
+.structure-facts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 20px; margin: 0; }
+.structure-facts > div { min-width: 0; border-top: 1px solid var(--mo-border); padding-top: 9px; }
+.structure-facts dt { color: var(--mo-text-secondary); font-size: 12px; }
+.structure-facts dd { margin: 4px 0 0; overflow-wrap: anywhere; font-weight: 600; }
+@media (max-width: 1024px) {
+  .structure-facts { grid-template-columns: 1fr; }
+}
