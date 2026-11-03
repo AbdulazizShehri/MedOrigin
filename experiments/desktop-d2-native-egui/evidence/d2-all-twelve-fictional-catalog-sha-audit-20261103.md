@@ -43,6 +43,12 @@ After independently verifying all twelve SHA-256 values, the Python audit was ex
 
 The check purposely extracts the three real D0 dispatch scopes rather than searching the entire file: those source strings legitimately also occur in other functions, making naive whole-file occurrence counts unreliable. A local Python syntax check and re-execution of the source-only adversarial suite after this hardening remained **8/8 PASS**. The **full-checkout source verifier has not been run against a materialized complete GitHub tree**; the independent full fixture audit above did run directly against actual GitHub file content.
 
+## Three additional end-to-end Python negative controls
+
+The full Python auditor was also tested against a temporary, deliberately **fictional** two-project source tree with all twelve entries and all nine preview/hash/raw-byte dispatches. The test verified the clean synthetic tree and then separately modified (1) a Bundle JSON byte while leaving the old SHA catalog intact and (2) the D0 byte dispatch of `observation-minimal` so it incorrectly returned the Patient bytes. The auditor refused both mutations with explicit mismatched-source reasons, and deleted the entire temporary tree.
+
+The three source-tree tests were added to `tests/test_verify_d2_fixture_catalog_tree.py` and the existing eight adversarial cases retained. The complete local Python unit suite ran **11/11 PASS**, using `python -m unittest discover -s . -p 'test_verify_d2_fixture_catalog*.py' -v`. The existing nonpublishing source-only GitHub workflow now runs these eleven tests and the independent full-checkout catalog command on **future eligible events**; no hosted run at this private branch HEAD has been asserted.
+
 ## Hard NO-GO and execution limits
 
 No actual `cargo test --offline --locked --all-targets`, `cargo fmt --all -- --check`, `cargo clippy -D warnings`, exact-HEAD Windows GUI UIA/keyboard, Linux real accessibility or macOS spoken VoiceOver test ran on the new integrated commit: the authorized PC remote execution connector remains blocked by a recorded monthly usage cap and the assistant's isolated environment has no Rust toolchain. The new Python repository-wide command is saved and can run in any full checkout, but its execution against an entire GitHub checkout was **not** claimed here.
