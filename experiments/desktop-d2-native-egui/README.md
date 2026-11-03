@@ -593,11 +593,11 @@ The separate Python 3 standard-library audit `tests/verify_d2_fixture_catalog.py
 From the `experiments/desktop-d2-native-egui/tests` directory, run:
 
 ```bash
-python3 -m unittest -v test_verify_d2_fixture_catalog.py
+python3 -m unittest discover -s . -p 'test_verify_d2_fixture_catalog*.py' -v
 python3 verify_d2_fixture_catalog.py
 ```
 
-The eight adversarial source-only unit tests passed in an isolated Python environment, and a separate independent SHA-256 implementation matched **12/12 actual GitHub D0 source bytes** against D2's catalog. The full-checkout Python command and the integrated native Rust tests have **not** been executed on the latest GitHub branch HEAD. The source-only workflow will request these commands for future eligible PR changes in D0 fixtures or D2 catalog, but there is **no exact-head hosted CI PASS** yet. This checks frozen synthetic source provenance only, not network confinement, actual OS accessibility, clinical FHIR or release authorization.
+The eleven source-only unit tests (eight negative helper cases and three temporary-tree integration cases) passed in an isolated Python environment, and a separate independent SHA-256 implementation matched **12/12 actual GitHub D0 source bytes** against D2's catalog. The full-checkout Python command and the integrated native Rust tests have **not** been executed on the latest GitHub branch HEAD. The source-only workflow will request these commands for future eligible PR changes in D0 fixtures or D2 catalog, but there is **no exact-head hosted CI PASS** yet. This checks frozen synthetic source provenance only, not network confinement, actual OS accessibility, clinical FHIR or release authorization.
 
 ## Independent fictional raw-byte SHA check (2026-11-03 integration)
 
