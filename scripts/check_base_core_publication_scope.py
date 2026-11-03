@@ -305,6 +305,14 @@ def inspect(dist: Path) -> dict[str, object]:
     for kind in ("wheel", "sdist"):
         if len(packages[kind]) != 1:
             issues.append(f"{kind}: exactly one MedOrigin artifact required")
+    # The publisher consumes dist/*, not only files matching medscale-*.
+    # Reject any other entry so an unreviewed artifact cannot be uploaded
+    # beside an otherwise-qualified Wheel/sdist pair.
+    expected_entries = set(packages["wheel"] + packages["sdist"])
+    if dist.is_symlink():
+        issues.append("dist: linked distribution directory forbidden")
+    elif dist.is_dir() and any(item not in expected_entries for item in dist.iterdir()):
+        issues.append("dist: unexpected artifact or sidecar")
     versions: dict[str, str] = {}
     if not issues:
         for kind, check in (("wheel", _wheel), ("sdist", _sdist)):

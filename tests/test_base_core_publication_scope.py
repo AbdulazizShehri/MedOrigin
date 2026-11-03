@@ -146,6 +146,31 @@ def test_malicious_archive_metadata_blocked(
     assert any(match in str(issue) for issue in result["issues"])
 
 
+@pytest.mark.parametrize(
+    "extra_name",
+    [
+        "unqualified-9.9.9-py3-none-any.whl",
+        "unqualified-9.9.9.tar.gz",
+        "SHA256SUMS",
+        "unreviewed-sidecar",
+    ],
+)
+def test_unqualified_dist_entries_are_not_silently_uploaded(
+    checker: Any, tmp_path: Path, extra_name: str
+) -> None:
+    folder = make_dist(tmp_path / "extra-dist-file")
+    assert checker.inspect(folder)["status"] == "BASE_CORE_PUBLICATION_SCOPE_CLEAN"
+    extra = folder / extra_name
+    if extra_name == "unreviewed-sidecar":
+        extra.mkdir()
+    else:
+        extra.write_bytes(b"unreviewed synthetic placeholder")
+    result = checker.inspect(folder)
+    assert result["status"] == "BLOCKED"
+    assert "dist: unexpected artifact or sidecar" in result["issues"]
+    assert result["publication_authorized"] is False
+
+
 def test_missing_archive_fails_closed(checker: Any, tmp_path: Path) -> None:
     result = checker.inspect(tmp_path)
     assert result["status"] == "BLOCKED"
