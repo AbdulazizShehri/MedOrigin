@@ -308,6 +308,40 @@ def test_wheel_rejects_unsafe_members_even_with_clean_metadata(
     assert result["publication_authorized"] is False
 
 
+@pytest.mark.parametrize(
+    "member_name",
+    [
+        "medscale/CON.txt",
+        "medscale/PRN",
+        "medscale/NUL.json",
+        "medscale/COM1.dll",
+        "medscale/LPT9.py",
+        "medscale/CONIN$.log",
+        "medscale/CONOUT$.log",
+        "medscale/AUX",
+        "medscale/control\tname.py",
+        "medscale/control\nname.py",
+        "medscale/control\x7fname.py",
+        "AUX.txt",
+    ],
+)
+def test_wheel_rejects_windows_reserved_names_and_controls(
+    checker: Any, tmp_path: Path, member_name: str
+) -> None:
+    folder = make_dist(tmp_path / "wheel-windows-unsafe")
+    assert checker.inspect(folder)["status"] == "BASE_CORE_PUBLICATION_SCOPE_CLEAN"
+    wheel = folder / "medscale-0.3.0-py3-none-any.whl"
+    with zipfile.ZipFile(wheel, "a") as archive:
+        archive.writestr(member_name, b"fictional data only")
+    with zipfile.ZipFile(wheel) as archive:
+        assert archive.read("medscale-0.3.0.dist-info/METADATA") == metadata()
+        assert member_name in archive.namelist()
+    result = checker.inspect(folder)
+    assert result["status"] == "BLOCKED"
+    assert "wheel: unsafe member path" in result["issues"]
+    assert result["publication_authorized"] is False
+
+
 def test_wheel_forged_inflated_size_fails_closed(checker: Any, tmp_path: Path) -> None:
     folder = make_dist(tmp_path / "bomb")
     wheel = folder / "medscale-0.3.0-py3-none-any.whl"
