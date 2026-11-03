@@ -4,6 +4,7 @@
 //! allowlisted, typed and fail closed.
 
 mod structural;
+mod timeline;
 
 use serde::Serialize;
 use sha2::{Digest, Sha256};
@@ -256,6 +257,20 @@ fn inspect_fictional_fixture_lineage(
     structural::inspect_lineage(fixture_id)
 }
 
+/// A genuinely connected, yet narrowly fictional, date-only timeline.
+#[tauri::command]
+fn inspect_fictional_patient_timeline(
+    req: VerifyFixtureRequest,
+) -> Result<timeline::FictionalPatientTimeline, CommandError> {
+    if req.fixture_id.len() > MAX_FIXTURE_ID_BYTES {
+        return Err(CommandError::new("invalid_input"));
+    }
+    if req.fixture_id != "fixture-patient-alpha" {
+        return Err(CommandError::new("unknown_patient_fixture"));
+    }
+    timeline::project_fictional_timeline("fixture-patient-alpha")
+}
+
 /// Deny-all navigation: the webview may only host the bundled app origin.
 /// This is webview-level defense in depth only, not OS egress proof.
 fn allow_desktop_navigation(url: &tauri::Url) -> bool {
@@ -292,7 +307,8 @@ pub fn run() {
             verify_synthetic_fixture,
             read_synthetic_fixture_source,
             inspect_synthetic_fixture_structure,
-            inspect_fictional_fixture_lineage
+            inspect_fictional_fixture_lineage,
+            inspect_fictional_patient_timeline
         ])
         .run(tauri::generate_context!())
         .expect("MedOrigin Desktop v1 bootstrap failed");
@@ -536,6 +552,34 @@ mod tests {
             assert!(!graph.release_authorized);
             assert!(graph.synthetic_only);
         }
+    }
+
+    #[test]
+    fn timeline_ipc_rejects_unknown_patient_ids_and_clinical_claims() {
+        for fixture_id in [
+            "../private",
+            "",
+            "fixture-observation-gamma",
+            "http://localhost/private",
+        ] {
+            let err = inspect_fictional_patient_timeline(VerifyFixtureRequest {
+                fixture_id: fixture_id.to_owned(),
+            })
+            .unwrap_err();
+            assert_eq!(err.code, "unknown_patient_fixture");
+        }
+        let err = inspect_fictional_patient_timeline(VerifyFixtureRequest {
+            fixture_id: "x".repeat(65),
+        })
+        .unwrap_err();
+        assert_eq!(err.code, "invalid_input");
+        let evidence = inspect_fictional_patient_timeline(VerifyFixtureRequest {
+            fixture_id: "fixture-patient-alpha".to_owned(),
+        })
+        .unwrap();
+        assert_eq!(evidence.contract, timeline::CONTRACT_TIMELINE);
+        assert!(!evidence.fhir_semantics_validated);
+        assert!(!evidence.release_authorized);
     }
 
     #[test]

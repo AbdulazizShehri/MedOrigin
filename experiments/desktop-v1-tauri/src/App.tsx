@@ -11,6 +11,7 @@ import { ErrorBoundary } from './components/ErrorBoundary';
 import { HonestState } from './components/HonestState';
 import { HomeScreen } from './screens/HomeScreen';
 import { FixtureInspectorScreen } from './screens/FixtureInspectorScreen';
+import { FictionalTimelineScreen } from './screens/FictionalTimelineScreen';
 import { SettingsScreen } from './screens/SettingsScreen';
 import { AboutScreen } from './screens/AboutScreen';
 import { HelpScreen } from './screens/HelpScreen';
@@ -22,6 +23,7 @@ function RoutedView() {
 
   if (location.pathname === '/' || location.pathname === '') return <HomeScreen />;
   if (location.pathname === '/fhir-inspector') return <FixtureInspectorScreen />;
+  if (location.pathname === '/timeline') return <FictionalTimelineScreen />;
   if (location.pathname === '/settings') return <SettingsScreen />;
   if (location.pathname === '/about') return <AboutScreen />;
   if (location.pathname === '/help') return <HelpScreen />;

@@ -29,7 +29,7 @@ export function Inspector({ route, onHide }: InspectorProps) {
       <div className="detail">
         <strong>State · status</strong>
         <p>
-          {route.status === 'fixture-only' && 'Connected Slices 1-4: native fictional fixture hash checks, source inspection, strict structural subset and four bounded provenance links. No general FHIR validation or Workspace integration.'}
+          {route.status === 'fixture-only' && (route.path === '/timeline' ? 'Connected Slice 5: two documented fictional dates and one explicitly undated observation, sourced from native Rust. No real patient timeline, full FHIR validation or Workspace integration.' : 'Connected Slices 1-4: native fictional fixture hash checks, source inspection, strict structural subset and four bounded provenance links. No general FHIR validation or Workspace integration.')}
           {route.status === 'foundation' && 'Python foundation exists and is contract-tested; the desktop route is intentionally not wired yet.'}
           {route.status === 'gated' && 'Blocked behind a separate authorization. The desktop must not fake an enabled control.'}
           {route.status === 'deferred' && 'Outside the currently authorized scope.'}

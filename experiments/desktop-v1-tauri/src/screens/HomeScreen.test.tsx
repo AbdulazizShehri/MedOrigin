@@ -56,11 +56,13 @@ describe('HomeScreen', () => {
     expect(container.querySelectorAll('.cap-row').length).toBeGreaterThan(0);
   });
 
-  it('shows fixture-only status only for the fixture inspector', async () => {
+  it('shows fixture-only status only for inspector and synthetic timeline', async () => {
     mockedGet.mockResolvedValue({ ...MOCK_STATUS });
     renderHome();
     await screen.findByText(/SYNTHETIC_DEVELOPER_PREVIEW/);
     const fixtureChips = screen.getAllByTestId('status-chip').filter((c) => c.textContent === 'Fixture-only');
-    expect(fixtureChips).toHaveLength(1);
+    expect(fixtureChips).toHaveLength(2);
+    expect(screen.getByText('FHIR fixture inspector')).toBeInTheDocument();
+    expect(screen.getByText('Synthetic timeline')).toBeInTheDocument();
   });
 });

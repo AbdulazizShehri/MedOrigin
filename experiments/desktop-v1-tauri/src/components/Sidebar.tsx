@@ -40,7 +40,7 @@ export function Sidebar() {
         </nav>
       ))}
       <div className="sidebar-bottom">
-        MedOrigin Desktop v1 · Slice 1
+        MedOrigin Desktop v1 · Synthetic Preview
         <br />
         Local-first · Synthetic only
         <br />

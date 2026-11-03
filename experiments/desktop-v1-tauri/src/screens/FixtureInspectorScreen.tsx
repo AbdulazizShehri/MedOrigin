@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { useLocation } from 'react-router-dom';
 import { VerifiedFixtureSource } from '../components/VerifiedFixtureSource';
 import { FixtureStructuralSubset } from '../components/FixtureStructuralSubset';
 import { FictionalFixtureLineage } from '../components/FictionalFixtureLineage';
@@ -25,6 +26,7 @@ type VerifyState =
   | { kind: 'error'; code: string };
 
 export function FixtureInspectorScreen() {
+  const location = useLocation();
   const [list, setList] = useState<ListState>({ kind: 'loading' });
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [verify, setVerify] = useState<VerifyState>({ kind: 'idle' });
@@ -50,6 +52,17 @@ export function FixtureInspectorScreen() {
       cancelled = true;
     };
   }, []);
+
+  // An explicitly requested source from the synthetic timeline may select
+  // an allowlisted fixture, but MUST NOT automatically verify or expose bytes.
+  useEffect(() => {
+    if (list.kind !== 'ready') return;
+    const requested = new URLSearchParams(location.search).get('fixture');
+    if (!requested || !list.fixtures.some((fixture) => fixture.id === requested)) return;
+    verificationGeneration.current += 1;
+    setSelectedId(requested);
+    setVerify({ kind: 'idle' });
+  }, [list, location.search]);
 
   const [probeState, setProbeState] = useState<VerifyState>({ kind: 'idle' });
 
