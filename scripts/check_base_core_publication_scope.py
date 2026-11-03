@@ -113,7 +113,7 @@ def _verify_wheel_member_inventory(members: list[zipfile.ZipInfo]) -> None:
         if (
             not path
             or path.startswith("/")
-        or "\\" in path
+            or "\\" in path
             or any(
                 not part or part in {".", ".."} or ":" in part or part.endswith((" ", "."))
                 for part in parts
@@ -264,7 +264,7 @@ def _verify_sdist_member_inventory_entry(item: tarfile.TarInfo, seen: set[str]) 
     if (
         not path
         or path.startswith("/")
-            or "\\" in path
+        or "\\" in path
         or any(ord(char) < 32 or ord(char) == 127 for char in path)
         or any(
             not part
@@ -294,6 +294,10 @@ def _bounded_sdist_metadata(archive: tarfile.TarFile) -> tuple[EmailMessage, int
     for count, item in enumerate(archive, start=1):
         if count > _MAX_MEMBERS:
             raise PublicationScopeError("sdist: archive member limit exceeded")
+        # Preserve the historic, specific PKG-INFO error for duplicate or
+        # non-file metadata before general TAR inventory validation.
+        if _SDIST_METADATA.fullmatch(item.name) and (matches or not item.isfile()):
+            raise PublicationScopeError("sdist: exactly one regular PKG-INFO required")
         _verify_sdist_member_inventory_entry(item, seen)
         if item.size < 0 or item.size > _MAX_SINGLE_MEMBER_BYTES:
             raise PublicationScopeError("sdist: inflated member exceeds budget")
