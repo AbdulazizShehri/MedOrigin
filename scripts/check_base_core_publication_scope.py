@@ -225,6 +225,32 @@ def _verify_wheel_physical_envelope(path: Path, members: list[zipfile.ZipInfo]) 
         raise PublicationScopeError("wheel: hidden ZIP member gap")
 
 
+def _verify_wheel_payload_integrity(
+    archive: zipfile.ZipFile, members: list[zipfile.ZipInfo]
+) -> None:
+    """Stream all members to verify actual decompression and CRC, not just headers.
+
+    Declared per-member and aggregate budgets are checked by the caller
+    before streaming; fixed-size reads avoid materializing the whole Wheel.
+    """
+    for member in members:
+        if member.is_dir():
+            if member.file_size or member.CRC:
+                raise PublicationScopeError("wheel: invalid directory payload")
+            continue
+        read_size = 0
+        try:
+            with archive.open(member) as reader:
+                while chunk := reader.read(65_536):
+                    read_size += len(chunk)
+                    if read_size > member.file_size:
+                        raise PublicationScopeError("wheel: inflated member size mismatch")
+        except (OSError, EOFError, RuntimeError, NotImplementedError, zipfile.BadZipFile, zlib.error) as exc:
+            raise PublicationScopeError("wheel: invalid member payload") from exc
+        if read_size != member.file_size:
+            raise PublicationScopeError("wheel: inflated member size mismatch")
+
+
 def _wheel(path: Path) -> EmailMessage:
     try:
         with zipfile.ZipFile(path) as archive:
@@ -240,6 +266,7 @@ def _wheel(path: Path) -> EmailMessage:
                     raise PublicationScopeError("wheel: inflated archive exceeds budget")
             _verify_wheel_member_inventory(members)
             _verify_wheel_physical_envelope(path, members)
+            _verify_wheel_payload_integrity(archive, members)
             matches = [m for m in members if _WHEEL_METADATA.fullmatch(m.filename)]
             if len(matches) != 1 or matches[0].is_dir():
                 raise PublicationScopeError("wheel: exactly one METADATA required")
@@ -252,7 +279,7 @@ def _wheel(path: Path) -> EmailMessage:
             if item.filename != expected:
                 raise PublicationScopeError("wheel: dist-info version disagrees with metadata")
             return parsed
-    except (OSError, RuntimeError, zipfile.BadZipFile, ValueError) as exc:
+    except (OSError, EOFError, RuntimeError, NotImplementedError, zipfile.BadZipFile, zlib.error, ValueError) as exc:
         if isinstance(exc, PublicationScopeError):
             raise
         raise PublicationScopeError("wheel: invalid archive") from exc
