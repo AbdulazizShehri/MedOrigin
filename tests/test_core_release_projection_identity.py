@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import importlib.util
 import json
 import subprocess
 import sys
@@ -24,6 +25,38 @@ def _run(dest: Path) -> subprocess.CompletedProcess[str]:
         capture_output=True,
         check=False,
     )
+
+
+def test_projection_stages_on_destination_volume_and_cleans_private_scratch(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    spec = importlib.util.spec_from_file_location("core_projection_staging_test", SCRIPT)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    original = module.tempfile.TemporaryDirectory
+    scratch_paths: list[Path] = []
+    dir_args: list[Path] = []
+
+    def captured_temporary_directory(*args: Any, **kwargs: Any) -> Any:
+        assert "dir" in kwargs, "cross-volume default TEMP staging is forbidden"
+        dir_args.append(Path(kwargs["dir"]).resolve())
+        stage = original(*args, **kwargs)
+        scratch_paths.append(Path(stage.name).resolve())
+        return stage
+
+    dest = tmp_path / "nested" / "isolated-core-stage"
+    assert not dest.parent.exists()
+    with monkeypatch.context() as patch:
+        patch.setattr(module.tempfile, "TemporaryDirectory", captured_temporary_directory)
+        result = module.stage(dest)
+    assert result["publication_authorized"] is False
+    assert dir_args == [dest.parent.resolve()]
+    assert len(scratch_paths) == 1
+    assert scratch_paths[0].parent == dest.parent.resolve()
+    assert not scratch_paths[0].exists()
+    assert (dest / "MEDORIGIN_SOURCE_PROVENANCE.json").is_file()
+    assert (dest / "pyproject.toml").is_file()
 
 
 def test_exact_committed_source_projection_is_read_only(tmp_path: Path) -> None:
