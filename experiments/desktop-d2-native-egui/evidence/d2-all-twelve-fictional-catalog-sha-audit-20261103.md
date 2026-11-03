@@ -37,6 +37,12 @@ The nine valid, bounded, text-preview sources are separate from the three intent
 
 This turns a one-off independent source audit into a reproducible dependency-bound regression gate; it does not replace the existing Rust view-model, UIA/AX/AT-SPI or OS packet confinement tests.
 
+## Additional frozen D0 provider routing gate
+
+After independently verifying all twelve SHA-256 values, the Python audit was extended to ensure the nine source-previewable fixture identities have their **exact intended D0 provider mappings**, not merely the correct D2 catalog digest. For each of nine permitted source fixture IDs it now validates three separately scoped D0 match expressions: `hash_fixture_raw_v1` identity-to-size dispatch, identity-to-raw-byte dispatch, and `fictional_json_preview_v1` identity-to-source dispatch. A GitHub-source inspection of the actual D0 code checked **27/27 mappings exactly once** in the correct function scopes. This closes a source-audit blind spot where catalog hashes could still be correct even though a future D0 refactor routed an ID to a different literal.
+
+The check purposely extracts the three real D0 dispatch scopes rather than searching the entire file: those source strings legitimately also occur in other functions, making naive whole-file occurrence counts unreliable. A local Python syntax check and re-execution of the source-only adversarial suite after this hardening remained **8/8 PASS**. The **full-checkout source verifier has not been run against a materialized complete GitHub tree**; the independent full fixture audit above did run directly against actual GitHub file content.
+
 ## Hard NO-GO and execution limits
 
 No actual `cargo test --offline --locked --all-targets`, `cargo fmt --all -- --check`, `cargo clippy -D warnings`, exact-HEAD Windows GUI UIA/keyboard, Linux real accessibility or macOS spoken VoiceOver test ran on the new integrated commit: the authorized PC remote execution connector remains blocked by a recorded monthly usage cap and the assistant's isolated environment has no Rust toolchain. The new Python repository-wide command is saved and can run in any full checkout, but its execution against an entire GitHub checkout was **not** claimed here.
