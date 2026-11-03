@@ -271,7 +271,11 @@ def test_wheel_rejects_unsafe_members_even_with_clean_metadata(
         elif kind == "traversal":
             archive.writestr("medscale/../outside.py", b"synthetic")
         elif kind == "backslash":
-            archive.writestr("medscale\\outside.py", b"synthetic")
+            # ZipInfo canonicalizes separators on Windows during construction.
+            # Force the *stored* ZIP filename bytes to contain a backslash.
+            member = zipfile.ZipInfo("medscale/outside.py")
+            member.filename = "medscale\\outside.py"
+            archive.writestr(member, b"synthetic")
         elif kind == "absolute":
             archive.writestr("/medscale/outside.py", b"synthetic")
         elif kind == "drive":
@@ -287,9 +291,20 @@ def test_wheel_rejects_unsafe_members_even_with_clean_metadata(
             archive.writestr("medscale/same.py", b"synthetic-2")
     with zipfile.ZipFile(wheel) as archive:
         assert archive.read("medscale-0.3.0.dist-info/METADATA") == metadata()
+    if kind == "backslash":
+        assert b"medscale\\outside.py" in wheel.read_bytes()
     result = checker.inspect(folder)
     assert result["status"] == "BLOCKED"
-    assert expected in result["issues"]
+    if kind == "backslash":
+        # Windows ZipInfo normalizes the central filename on read; its
+        # already-qualified local-name identity guard then catches the
+        # raw slash mismatch. POSIX can reject the unsafe name directly.
+        assert any(
+            message in result["issues"]
+            for message in ("wheel: unsafe member path", "wheel: local ZIP filename mismatch")
+        )
+    else:
+        assert expected in result["issues"]
     assert result["publication_authorized"] is False
 
 
