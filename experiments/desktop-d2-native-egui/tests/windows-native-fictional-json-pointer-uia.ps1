@@ -63,7 +63,15 @@ try {
   $hexA=($a[$start..($endA-1)] | ForEach-Object {$_.ToString('X2')}) -join ' '
   $hexB=($b[$start..($endB-1)] | ForEach-Object {$_.ToString('X2')}) -join ' '
   $hexContext='Fictional HEX context at zero-based byte {0}: left bytes {1}..{2} [HEX {3}]; right bytes {1}..{4} [HEX {5}]. Raw bytes only, not JSON semantics.' -f $offset,$start,$endA,$hexA,$endB,$hexB
-  $pointerDiff='Fictional JSON path difference: /id (value differs). Structural developer hint only; original source bytes unchanged.'
+  # Independently derive the exact source-compiled fictional scalar values.
+  # Rust's JSON Pointer summary prints both quoted string hints for /id,
+  # not the old abbreviated "(value differs)" placeholder.
+  $leftRecord=$patient | ConvertFrom-Json -ErrorAction Stop
+  $rightRecord=$observation | ConvertFrom-Json -ErrorAction Stop
+  if($leftRecord.id -cne 'synthetic' -or $rightRecord.id -cne 'synthetic-observation'){
+    throw 'pinned fictional D0 identifiers changed; independent pointer expectation invalid'
+  }
+  $pointerDiff='Fictional JSON path difference: /id (value differs: left="{0}", right="{1}"). Structural developer hint only; original source bytes unchanged.' -f $leftRecord.id,$rightRecord.id
   Press (One 'Choose second fictional fixture (9)')
   $option=$null
   for($i=0;$i -lt 35;$i++){
