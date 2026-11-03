@@ -131,6 +131,6 @@ describe('FixtureInspectorScreen — connected slice', () => {
     renderInspector();
     await user.click(await screen.findByRole('button', { name: `Fixture ${bundle.id}` }));
     await user.click(screen.getByRole('button', { name: /Verify fixture with native Rust/i }));
-    expect(await screen.findByText(/no FHIR structural validation in slice 1/i)).toBeInTheDocument();
+    expect(await screen.findByText(/no FHIR structural or clinical validation/i)).toBeInTheDocument();
   });
 });

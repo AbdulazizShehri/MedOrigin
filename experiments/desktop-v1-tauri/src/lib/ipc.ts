@@ -1,3 +1,8 @@
+import patientFixtureRaw from '../../src-tauri/fixtures/fixture-patient-alpha.json?raw';
+import allergyFixtureRaw from '../../src-tauri/fixtures/fixture-allergy-beta.json?raw';
+import observationFixtureRaw from '../../src-tauri/fixtures/fixture-observation-gamma.json?raw';
+import bundleFixtureRaw from '../../src-tauri/fixtures/fixture-bundle-delta.json?raw';
+
 // Typed wrappers over the Tauri 2 IPC bridge. Outside a Tauri webview
 // (browser dev, Playwright, jsdom) a deterministic synthetic mock is served
 // instead — never the real bridge, never the network. The mock mirrors the
@@ -43,6 +48,17 @@ export interface FixtureVerification {
   release_authorized: boolean;
 }
 
+export interface FixtureSource {
+  contract: string;
+  fixture_id: string;
+  media_type: string;
+  byte_len: number;
+  sha256_hex: string;
+  text: string;
+  synthetic_only: boolean;
+  release_authorized: boolean;
+}
+
 export interface CommandError {
   code: string;
 }
@@ -50,6 +66,7 @@ export interface CommandError {
 export const CONTRACT_STATUS = 'medorigin-desktop-status-v1';
 export const CONTRACT_LIST = 'medorigin-fixtures-list-v1';
 export const CONTRACT_VERIFY = 'medorigin-fixture-verify-v1';
+export const CONTRACT_SOURCE = 'medorigin-fixture-source-v1';
 
 // Golden values mirror src-tauri fixtures and are cross-checked by
 // tests/verify_goldens.py. Browser mock only — the native Rust host is the
@@ -60,6 +77,15 @@ export const MOCK_FIXTURES: FixtureMeta[] = [
   { id: 'fixture-observation-gamma', label: 'FICTIONAL observation (example finding)', media_type: 'application/fhir+json', byte_len: 474, sha256_hex: 'b086dee0c87c59ea853a927eba928f9c06703ca14b4dda75e75f46a91511cfb5' },
   { id: 'fixture-bundle-delta', label: 'FICTIONAL bundle, hash-verified only', media_type: 'application/fhir+json', byte_len: 533, sha256_hex: '7971da4c949507fcfb6d3679f7a63ad2840c93206ea4749545b274f6ee49f399' },
 ];
+
+// Browser preview source bytes are bundled only from the four committed,
+ // fictional, LF-pinned fixtures. Never fetch from a URL or user path.
+const MOCK_SOURCE_TEXTS: Record<string, string> = {
+  'fixture-patient-alpha': patientFixtureRaw,
+  'fixture-allergy-beta': allergyFixtureRaw,
+  'fixture-observation-gamma': observationFixtureRaw,
+  'fixture-bundle-delta': bundleFixtureRaw,
+};
 
 export const MOCK_STATUS: DesktopStatus = {
   contract: CONTRACT_STATUS,
@@ -129,6 +155,28 @@ export async function verifySyntheticFixture(req: VerifyFixtureRequest): Promise
     };
   }
   return withStallGuard(invokeRaw<FixtureVerification>('verify_synthetic_fixture', { req }));
+}
+
+export async function readSyntheticFixtureSource(req: VerifyFixtureRequest): Promise<FixtureSource> {
+  if (!isTauri()) {
+    const match = MOCK_FIXTURES.find((f) => f.id === req.fixture_id);
+    const text = MOCK_SOURCE_TEXTS[req.fixture_id];
+    if (!match || text === undefined) {
+      const err: CommandError = { code: 'unknown_fixture' };
+      throw err;
+    }
+    return {
+      contract: CONTRACT_SOURCE,
+      fixture_id: match.id,
+      media_type: match.media_type,
+      byte_len: match.byte_len,
+      sha256_hex: match.sha256_hex,
+      text,
+      synthetic_only: true,
+      release_authorized: false,
+    };
+  }
+  return withStallGuard(invokeRaw<FixtureSource>('read_synthetic_fixture_source', { req }));
 }
 
 export function isCommandError(err: unknown): err is CommandError {
