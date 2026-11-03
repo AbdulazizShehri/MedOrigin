@@ -110,7 +110,7 @@ jobs:
         run: |
           uv run --no-sync python scripts/stage_medorigin_core_projection.py --out "$RUNNER_TEMP/medorigin-core"
       - name: Build wheel + sdist
-        run: uv build "$RUNNER_TEMP/medorigin-core" --out-dir dist
+        run: uv build --no-create-gitignore "$RUNNER_TEMP/medorigin-core" --out-dir dist
       - name: Qualify exact Core distribution bytes before any downstream artifact use
         shell: bash
         run: |
@@ -277,7 +277,7 @@ jobs:
         run: |
           uv run --no-sync python scripts/stage_medorigin_core_projection.py --out "$RUNNER_TEMP/medorigin-core"
       - name: Build wheel + sdist
-        run: uv build "$RUNNER_TEMP/medorigin-core" --out-dir dist
+        run: uv build --no-create-gitignore "$RUNNER_TEMP/medorigin-core" --out-dir dist
       - name: Qualify exact Core distribution bytes before any downstream artifact use
         shell: bash
         run: |

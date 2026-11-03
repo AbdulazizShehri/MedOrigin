@@ -152,7 +152,12 @@ def stage(target: Path) -> dict[str, object]:
         "publication_authorized": False,
     }
     record = (json.dumps(manifest_doc, sort_keys=True, indent=2) + "\n").encode("utf-8")
-    with tempfile.TemporaryDirectory(prefix="medorigin-projection-") as scratch:
+    # The final rename must stay on one filesystem. On Windows, an arbitrary
+    # user TEMP on C: cannot be renamed atomically into an output on D:.
+    # Allocate the private scratch directory beside the requested target,
+    # keeping the pre-existing all-or-nothing destination admission checks.
+    target.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix="medorigin-projection-", dir=target.parent) as scratch:
         work = Path(scratch) / "package"
         work.mkdir()
         for p, value in files.items():
@@ -163,7 +168,6 @@ def stage(target: Path) -> dict[str, object]:
         (work / "MEDORIGIN_SOURCE_PROVENANCE.json").write_bytes(record)
         if target.exists():
             raise ProjectionError("destination created during staging")
-        target.parent.mkdir(parents=True, exist_ok=True)
         work.rename(target)
     return {
         "source_commit": commit,

@@ -152,6 +152,7 @@ def test_malicious_archive_metadata_blocked(
         "unqualified-9.9.9-py3-none-any.whl",
         "unqualified-9.9.9.tar.gz",
         "SHA256SUMS",
+        ".gitignore",
         "unreviewed-sidecar",
     ],
 )
@@ -220,6 +221,18 @@ def test_gate_wired_before_both_publishers() -> None:
     assert "actions/checkout@" not in pypi_job
     assert "permissions:\n      id-token: write" in pypi_job
     assert "contents: write" not in pypi_job
+
+
+def test_gated_uv_builds_disable_extra_gitignore_sidecar() -> None:
+    workflow_dir = SCRIPT.parents[1] / ".github/workflows"
+    for filename, expected_builds in (
+        ("release.yml", 2),
+        ("medorigin-free-linux-proposal-rehearsal.yml", 2),
+    ):
+        lines = (workflow_dir / filename).read_text(encoding="utf-8").splitlines()
+        commands = [line.strip() for line in lines if "uv build " in line]
+        assert len(commands) == expected_builds, filename
+        assert all("--no-create-gitignore" in line for line in commands), filename
 
 
 def test_no_independent_approval_or_publisher_code_in_gate() -> None:

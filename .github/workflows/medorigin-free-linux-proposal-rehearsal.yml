@@ -39,7 +39,7 @@ jobs:
         run: |
           set -euo pipefail
           python3 scripts/stage_medorigin_base_only_proposal.py --out "$RUNNER_TEMP/medorigin-linux-proposal-source"
-          uv build --wheel --sdist "$RUNNER_TEMP/medorigin-linux-proposal-source" --out-dir "$RUNNER_TEMP/medorigin-linux-proposal-dist"
+          uv build --no-create-gitignore --wheel --sdist "$RUNNER_TEMP/medorigin-linux-proposal-source" --out-dir "$RUNNER_TEMP/medorigin-linux-proposal-dist"
           python3 scripts/check_base_core_publication_scope.py --dist "$RUNNER_TEMP/medorigin-linux-proposal-dist"
 
       - name: Inspect archive contents, provenance and exact source
@@ -117,7 +117,7 @@ jobs:
         run: |
           set -euo pipefail
           python3 scripts/stage_medorigin_base_only_proposal.py --out "$RUNNER_TEMP/medorigin-linux-proposal-source-second"
-          uv build --offline --wheel --sdist "$RUNNER_TEMP/medorigin-linux-proposal-source-second" --out-dir "$RUNNER_TEMP/medorigin-linux-proposal-dist-second"
+          uv build --offline --no-create-gitignore --wheel --sdist "$RUNNER_TEMP/medorigin-linux-proposal-source-second" --out-dir "$RUNNER_TEMP/medorigin-linux-proposal-dist-second"
           python3 scripts/compare_medorigin_base_only_archives.py \
             --repo . \
             --left "$RUNNER_TEMP/medorigin-linux-proposal-dist" \
