@@ -586,6 +586,19 @@ Actual Windows native UIAutomation on one authorized device found the real previ
 This is fictional-only *developer inspection*, NOT full FHIR R4, a clinical validator or a production model platform. The existing #673 (unmaintained AccessKit/zbus5), #676 (spoken Mac VoiceOver/independent review), #662 (Windows WebView2 OS packet proof), #622/#603/#574 source/approval blockers remain NO-GO. No protected-main merge, installer, tag or release.
 
 
+## Source-only D0/D2 fictional fixture catalog gate (2026-11-03)
+
+The separate Python 3 standard-library audit `tests/verify_d2_fixture_catalog.py` checks **all 12 source-compiled fictional vector digests and byte lengths**, including six committed Bundle JSON files and the three intentionally invalid/boundary vectors. It also validates the nine permitted JSON previews, the exact synthetic envelope status labels and the D0 dispatch routes from each name to its original byte source (nine names, three paths each). Source file symlinks, changed D0 Rust declarations, new/missing catalog entries, mismatched length/SHA or unexpected statuses fail closed. This gate does not process user files.
+
+From the `experiments/desktop-d2-native-egui/tests` directory, run:
+
+```bash
+python3 -m unittest -v test_verify_d2_fixture_catalog.py
+python3 verify_d2_fixture_catalog.py
+```
+
+The eight adversarial source-only unit tests passed in an isolated Python environment, and a separate independent SHA-256 implementation matched **12/12 actual GitHub D0 source bytes** against D2's catalog. The full-checkout Python command and the integrated native Rust tests have **not** been executed on the latest GitHub branch HEAD. The source-only workflow will request these commands for future eligible PR changes in D0 fixtures or D2 catalog, but there is **no exact-head hosted CI PASS** yet. This checks frozen synthetic source provenance only, not network confinement, actual OS accessibility, clinical FHIR or release authorization.
+
 ## Independent fictional raw-byte SHA check (2026-11-03 integration)
 
 In Draft #865, the native Rust GUI now independently computes SHA-256 over the **actual `raw_json.as_bytes()` returned for display or side-by-side comparison**, in addition to checking the existing D0 provider contract, length, synthetic-only metadata, and fixed fixture catalog. Both `preview_selected` and `verified_json_for` refuse any byte content with a mismatched digest; their existing failure paths clear stale raw/comparison content. The new D2 implementation uses the **existing locked `sha2 0.11.1` crate** already required by D0; no separate version or network client was introduced. It refuses raw text exceeding 2,048 bytes even when a claimed fixture length matches.
