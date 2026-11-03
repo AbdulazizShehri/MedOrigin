@@ -586,6 +586,14 @@ Actual Windows native UIAutomation on one authorized device found the real previ
 This is fictional-only *developer inspection*, NOT full FHIR R4, a clinical validator or a production model platform. The existing #673 (unmaintained AccessKit/zbus5), #676 (spoken Mac VoiceOver/independent review), #662 (Windows WebView2 OS packet proof), #622/#603/#574 source/approval blockers remain NO-GO. No protected-main merge, installer, tag or release.
 
 
+## Independent fictional raw-byte SHA check (2026-11-03 integration)
+
+In Draft #865, the native Rust GUI now independently computes SHA-256 over the **actual `raw_json.as_bytes()` returned for display or side-by-side comparison**, in addition to checking the existing D0 provider contract, length, synthetic-only metadata, and fixed fixture catalog. Both `preview_selected` and `verified_json_for` refuse any byte content with a mismatched digest; their existing failure paths clear stale raw/comparison content. The new D2 implementation uses the **existing locked `sha2 0.11.1` crate** already required by D0; no separate version or network client was introduced. It refuses raw text exceeding 2,048 bytes even when a claimed fixture length matches.
+
+The Rust regression `fictional_preview_hash_checks_returned_bytes_not_only_provider_metadata` checks original fictional Patient source, same-length altered bytes, forged expected digest, oversized text, and all nine approved compiled fiction-only preview vectors. A separate local Python SHA-256 check confirmed that the fixed 57-byte Patient fixture hashes to `747e1e038d6cc9a39a9cee209f621841cf6a9748d82be42fa545f19cfd6877a0`, while the same-length `synthetix` mutation hashes differently. **These source/hash checks are not a compiled Rust test PASS or native GUI acceptance.** This change has not yet been executed on an exact-head native Windows/Linux/macOS build; no hosted CI outcome is claimed.
+
+This verifies integrity of **already built-in fictional raw preview bytes**, not PHI erasure, generic file-import safety, a trusted filesystem, operating-system egress confinement, full clinical FHIR R4, or release authorization. All preexisting NO-GO gates remain.
+
 ## Exact fictional JSON byte difference (2026-11-02)
 
 The native D2 side-by-side comparison additionally shows a **zero-based first differing byte offset**, the length of the unchanged common byte suffix, and both exact source byte lengths. This is calculated only from the two separately SHA-256/envelope-verified, compiled-in fictional JSON texts (at most 2,048 bytes each). It never normalizes, reformats, imports, saves, copies, or sends data, and it does not interpret a changed byte as a clinical or semantic FHIR difference. The byte index deliberately counts UTF-8 bytes, not Unicode characters. A fresh Verify, changed selection, invalid second selection, or refused comparison clears the old byte summary along with the source comparison.
