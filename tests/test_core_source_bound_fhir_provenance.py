@@ -92,9 +92,10 @@ def _accept_fake_gates(
     monkeypatch.setattr(
         gate.fhir_gate,
         "qualify",
-        lambda _clis: {
+        lambda _clis, **_kwargs: {
             "status": "LOCAL_FHIR_PROVENANCE_ONLY",
             "installed_cli_count": 2,
+            "execution_mode": "source_verified_python_module",
             "known_report_sha256": "a" * 64,
             "unknown_report_sha256": "b" * 64,
             "fhir_conformance_validated": False,
@@ -115,6 +116,7 @@ def test_exact_valid_receipts_are_still_explicitly_nonreleasing(
     assert result["status"] == "SOURCE_BOUND_INSTALLED_FHIR_PROVENANCE_ONLY"
     assert result["installed_python_source_files_verified_per_runtime"] == 250
     assert result["runtimes"] == ["3.11", "3.12"]
+    assert result["entrypoint_execution_mode"] == "source_verified_python_module"
     for field in (
         "fhir_conformance_validated",
         "publication_authorized",
@@ -293,6 +295,7 @@ def test_rejects_missing_or_divergent_installed_python_bytes(
     [
         ("status", "TECHNICAL_PREPUBLICATION_REHEARSAL_PASS"),
         ("installed_cli_count", 1),
+        ("execution_mode", "unattested_installed_console_shim"),
         ("fhir_conformance_validated", True),
         ("publication_authorized", 0),
         ("clinical_use_authorized", "false"),
@@ -311,8 +314,8 @@ def test_rejects_overstated_or_ambiguous_core_fhir_receipt(
     _accept_fake_gates(gate, monkeypatch, paths[1])
     original = gate.fhir_gate.qualify
 
-    def fake(clis: list[Path]) -> dict[str, Any]:
-        out = original(clis)
+    def fake(clis: list[Path], **kwargs: Any) -> dict[str, Any]:
+        out = original(clis, **kwargs)
         out[field] = value
         return out
 
@@ -456,6 +459,29 @@ def test_real_package_inventory_rejects_symlink_substitution_when_supported(
         pytest.skip("host cannot create symlinks")
     with pytest.raises(gate.QualificationError, match="installed Core"):
         gate._verify_installed_package_inventory(wheel, paths[3], 11)
+
+
+def test_source_bound_fhir_invokes_attested_python_not_console_shims(
+    gate: Any, paths: tuple[Path, Path, Path, Path, Path], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _accept_fake_gates(gate, monkeypatch, paths[1])
+    original = gate.fhir_gate.qualify
+    observed: list[tuple[list[Path], list[Path]]] = []
+
+    def spy(clis: list[Path], *, interpreters: list[Path]) -> dict[str, Any]:
+        observed.append((clis, interpreters))
+        return original(clis, interpreters=interpreters)
+
+    monkeypatch.setattr(gate.fhir_gate, "qualify", spy)
+    receipt = gate.qualify(*paths)
+    assert receipt["publication_authorized"] is False
+    assert len(observed) == 1
+    clis, interpreters = observed[0]
+    assert interpreters == [paths[3], paths[4]]
+    assert clis == [
+        paths[3].parent / ("medscale.exe" if sys.platform == "win32" else "medscale"),
+        paths[4].parent / ("medscale.exe" if sys.platform == "win32" else "medscale"),
+    ]
 
 
 def test_source_never_certifies_fhir_or_release_approval() -> None:
