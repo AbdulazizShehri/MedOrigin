@@ -110,6 +110,19 @@ class TestFullSourceTree(unittest.TestCase):
         self.assertIn(original, source)
         path.write_text(source.replace(original, updated, 1), encoding="utf-8")
 
+    def test_reordered_hash_correct_fixtures_refused(self):
+        path = self.d2 / "src" / "app.rs"
+        lines = path.read_text(encoding="utf-8").splitlines(keepends=True)
+        first = next(i for i, line in enumerate(lines)
+                     if 'id: "patient-minimal"' in line)
+        second = next(i for i, line in enumerate(lines)
+                      if 'id: "patient-invalid-utf8"' in line)
+        self.assertNotEqual(first, second)
+        lines[first], lines[second] = lines[second], lines[first]
+        path.write_text("".join(lines), encoding="utf-8")
+        with self.assertRaisesRegex(ValueError, "CHANGED_FICTIONAL_FIXTURE_ORDER"):
+            verify(self.root)
+
     def test_changed_resource_limit_refused(self):
         self._mutate_source("const FHIR_RESOURCE_LIMIT_BYTES: usize = 32_768;",
                             "const FHIR_RESOURCE_LIMIT_BYTES: usize = 31_000;")
