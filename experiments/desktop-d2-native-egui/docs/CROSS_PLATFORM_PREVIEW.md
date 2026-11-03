@@ -46,6 +46,10 @@ The verifier checks the exact source-commit-derived archive filename, the canoni
 
 **Critical limit:** this is a local self-consistency check, **not** a code-signing, independent provenance, or reproducible-build proof. An adversary able to replace both an executable and its self-attested manifest can still make the archive self-consistent; the verifier does not prove that binary was compiled from the reviewed source. Never trust an untrusted ZIP/TAR simply because this check passes, nor treat this as PHI/network isolation clearance.
 
+## Real macOS packaged-GUI qualification (interactive Mac only)
+
+After a source-bound macOS ZIP passes strict verification, run `python3 scripts/macos_archive_gui_preview.py --archive <the-exact-macos-arm64-zip>` on an authorized *interactive* Apple Silicon Mac with Accessibility permission. This fail-closed harness extracts the seven canonical bundle files into a private temporary directory, re-verifies all extracted bytes and permissions against the source contract, launches only the verified native executable, drives four primary and eight additional fictional cases through actual NSAccessibility interactions, re-checks the binary hash and cleans up only its own process and temporary bundle. Headless CI performs only the cross-platform Python contract tests, **not** these real GUI interactions. A real 12/12 AX pass was observed for the parent commit package on a Mac; see [`MACOS_PACKAGED_GUI_QUALIFICATION.md`](MACOS_PACKAGED_GUI_QUALIFICATION.md) for the immutable hashes and limits. A running native GUI is not independent binary attestation, VoiceOver spoken output, Gatekeeper/notarization approval or OS egress confinement.
+
 ## Mandatory release blockers
 
 A build or archive verification pass cannot grant these missing qualifications:
