@@ -245,7 +245,14 @@ def _verify_wheel_payload_integrity(
                     read_size += len(chunk)
                     if read_size > member.file_size:
                         raise PublicationScopeError("wheel: inflated member size mismatch")
-        except (OSError, EOFError, RuntimeError, NotImplementedError, zipfile.BadZipFile, zlib.error) as exc:
+        except (
+            OSError,
+            EOFError,
+            RuntimeError,
+            NotImplementedError,
+            zipfile.BadZipFile,
+            zlib.error,
+        ) as exc:
             raise PublicationScopeError("wheel: invalid member payload") from exc
         if read_size != member.file_size:
             raise PublicationScopeError("wheel: inflated member size mismatch")
@@ -279,7 +286,15 @@ def _wheel(path: Path) -> EmailMessage:
             if item.filename != expected:
                 raise PublicationScopeError("wheel: dist-info version disagrees with metadata")
             return parsed
-    except (OSError, EOFError, RuntimeError, NotImplementedError, zipfile.BadZipFile, zlib.error, ValueError) as exc:
+    except (
+        OSError,
+        EOFError,
+        RuntimeError,
+        NotImplementedError,
+        zipfile.BadZipFile,
+        zlib.error,
+        ValueError,
+    ) as exc:
         if isinstance(exc, PublicationScopeError):
             raise
         raise PublicationScopeError("wheel: invalid archive") from exc
