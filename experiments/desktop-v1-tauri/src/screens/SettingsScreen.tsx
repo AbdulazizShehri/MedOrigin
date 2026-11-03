@@ -32,7 +32,7 @@ export function SettingsScreen() {
       <p className="sub">Every control on this page works. Nothing else is pretending to.</p>
 
       <section className="panel" aria-label="Appearance">
-        <h3>Appearance</h3>
+        <h2>Appearance</h2>
         <fieldset className="option-group">
           <legend>Theme</legend>
           {THEME_OPTIONS.map((o) => (
@@ -60,7 +60,7 @@ export function SettingsScreen() {
       </section>
 
       <section className="panel" aria-label="Keyboard shortcuts">
-        <h3>Keyboard shortcuts</h3>
+        <h2>Keyboard shortcuts</h2>
         <ul className="inline-list">
           {SHORTCUTS.map((s) => (
             <li key={s.keys} className="status-line">
@@ -71,7 +71,7 @@ export function SettingsScreen() {
       </section>
 
       <section className="panel" aria-label="Local storage">
-        <h3>Local storage — complete inventory</h3>
+        <h2>Local storage — complete inventory</h2>
         <p>Exactly two keys are ever written, both non-sensitive UI preferences. No fixture content, no logs, no telemetry.</p>
         <ul className="inline-list">
           {STORAGE_KEYS.map((k) => (

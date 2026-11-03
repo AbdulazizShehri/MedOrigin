@@ -22,7 +22,7 @@ export function AboutScreen() {
       <p className="sub">Explicit build identity. No telemetry, no logs with content, no phone-home.</p>
 
       <section className="panel" aria-label="Build identity">
-        <h3>Build identity</h3>
+        <h2>Build identity</h2>
         {error && (
           <div className="error-box" role="alert">
             <strong>Native status unavailable</strong>

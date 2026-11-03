@@ -40,7 +40,7 @@ export function HomeScreen() {
       <p className="sub">A calm, precise shell for MedOrigin's authorized, synthetic-only capabilities. Nothing here is clinical, and nothing here claims to be.</p>
 
       <div className="honesty-banner" role="note" aria-label="Honesty notice">
-        <ShieldCheck size={18} aria-hidden="true" />
+        <ShieldCheck size={18} aria-hidden="true" className="brand-icon" />
         <span>
           <b>SYNTHETIC — NOT EGRESS-QUALIFIED</b>
           <br />
@@ -49,7 +49,7 @@ export function HomeScreen() {
       </div>
 
       <section className="panel" aria-label="Environment">
-        <h3>Environment</h3>
+        <h2>Environment</h2>
         {state.kind === 'loading' && <div className="loading-skeleton" aria-label="Loading native status" />}
         {state.kind === 'error' && (
           <div className="error-box" role="alert">
@@ -96,22 +96,26 @@ export function HomeScreen() {
       </div>
 
       <div className="surface" role="table" aria-label="Capability inventory" aria-rowcount={filtered.length + 1}>
-        <div className="cap-header" role="row">
-          <span role="columnheader">Capability</span>
-          <span role="columnheader">Status</span>
-          <span role="columnheader">Desktop</span>
-        </div>
-        {filtered.length === 0 && <div className="empty">No matching capabilities. Clear the filter to see the full inventory.</div>}
-        {filtered.map((r) => (
-          <div className="cap-row" role="row" key={r.path}>
-            <span role="cell">
-              <strong>{r.label}</strong>
-              <small>{r.reason}</small>
-            </span>
-            <span role="cell"><StatusChip status={r.status} /></span>
-            <span role="cell" className="mono">{r.path}</span>
+        <div role="rowgroup">
+          <div className="cap-header" role="row">
+            <span role="columnheader">Capability</span>
+            <span role="columnheader">Status</span>
+            <span role="columnheader">Desktop</span>
           </div>
-        ))}
+        </div>
+        <div role="rowgroup">
+          {filtered.length === 0 && <div className="empty">No matching capabilities. Clear the filter to see the full inventory.</div>}
+          {filtered.map((r) => (
+            <div className="cap-row" role="row" key={r.path}>
+              <span role="cell">
+                <strong>{r.label}</strong>
+                <small>{r.reason}</small>
+              </span>
+              <span role="cell"><StatusChip status={r.status} /></span>
+              <span role="cell" className="mono">{r.path}</span>
+            </div>
+          ))}
+        </div>
       </div>
 
       <p className="sub sub-spaced">
@@ -120,3 +124,4 @@ export function HomeScreen() {
     </>
   );
 }
+

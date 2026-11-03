@@ -3,6 +3,7 @@ name = "medorigin-desktop-v1"
 version = "0.0.0"
 description = "Unreleased synthetic-only MedOrigin Desktop v1 experiment (Slice 1)"
 edition = "2024"
+license = "Apache-2.0"
 publish = false
 
 [lib]

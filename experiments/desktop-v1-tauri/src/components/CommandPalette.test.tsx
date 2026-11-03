@@ -80,4 +80,13 @@ describe('CommandPalette', () => {
     await user.type(screen.getByRole('combobox'), 'zzzzqqqq-no-such-command');
     expect(screen.getByText(/No matching command or route/i)).toBeInTheDocument();
   });
+
+  it('traps Tab inside the combobox input', async () => {
+    const user = userEvent.setup();
+    renderPalette();
+    const input = screen.getByRole('combobox');
+    input.focus();
+    await user.tab();
+    expect(document.activeElement).toBe(input);
+  });
 });

@@ -108,6 +108,9 @@ export function CommandPalette({ open, onClose, onToggleInspector }: CommandPale
             } else if (e.key === 'Escape') {
               e.preventDefault();
               onClose();
+            } else if (e.key === 'Tab') {
+              // Combobox+aria-activedescendant keeps focus in the input by design.
+              e.preventDefault();
             }
           }}
         />

@@ -96,7 +96,7 @@ export function FixtureInspectorScreen() {
       </p>
 
       <div className="honesty-banner" role="note" aria-label="Fixture scope notice">
-        <ShieldAlert size={18} aria-hidden="true" />
+        <ShieldAlert size={18} aria-hidden="true" className="brand-icon" />
         <span>
           <b>FICTIONAL — NOT CLINICAL DATA</b>
           <br />
@@ -106,7 +106,7 @@ export function FixtureInspectorScreen() {
 
       <section aria-label="Synthetic fixtures">
         <div className="search-row">
-          <h2>Fixtures (4, allowlisted in the native host)</h2>
+          <h2>Fixtures ({list.kind === 'ready' ? list.fixtures.length : '—'}, allowlisted in the native host)</h2>
         </div>
 
         {list.kind === 'loading' && <div className="loading-skeleton" aria-label="Loading fixtures" />}

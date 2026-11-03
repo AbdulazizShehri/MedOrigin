@@ -81,6 +81,10 @@ Four qualification journeys remain for later slices; slice 1 implements none of 
 6. Goldfish review findings dispositioned; Alibaba OCR findings dispositioned; Impeccable/Emil pass recorded (or explicitly NOT RUN).
 7. No claim of clinical authorization, zero-egress, or release readiness anywhere in UI or docs.
 
-## 8. Known blockers carried forward
+## 8. Slice 1 outcome (2026-11-03, appended at close-out)
+
+Slice 1 is implemented and evidence-bound. Full gate results, threat model, residual risks, review dispositions and exact identities are in [`../../experiments/desktop-v1-tauri/QA_RECORD.md`](../../experiments/desktop-v1-tauri/QA_RECORD.md). Headline: cargo test 8/8, vitest 41/41, Playwright 43/43 (axe 0 violations), token sync + goldens green, native Windows UIA PASS on a real WebView2 binary with screenshots, **WebView2 egress snapshot: NO-GO** (external IPv6 TCP/443 observed; not offline-qualified; D1 NO-GO pattern reproduces), macOS/Linux NOT RUN, 1920×1080 native NOT RUN (display-bound). No 1920×1080, DPI-150/200 or macOS claims are made. No push, merge, release or installer was produced; PR #870 remains the owner's draft.
+
+## 9. Known blockers carried forward
 
 - D1/D2 remain Draft; brand PR #868 pending optical approval; WebView2 egress unqualified on Windows; Paper MCP unavailable this session; EGM plugin unavailable (fresh-subagent Goldfish used instead); macOS/Linux untested; real-patient authorization does not exist and cannot be granted by this work.

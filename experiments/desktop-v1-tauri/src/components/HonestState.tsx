@@ -24,7 +24,7 @@ export function HonestState({ route }: { route: RouteEntry }) {
   return (
     <div className="panel" data-testid="honest-state" role="region" aria-label={`${route.label} — ${route.status}`}>
       <div className="panel-head">
-        <h3>{route.label}</h3>
+        <h2>{route.label}</h2>
         <StatusChip status={route.status} />
       </div>
       <p>{route.reason}</p>

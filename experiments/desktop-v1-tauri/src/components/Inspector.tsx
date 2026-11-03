@@ -44,7 +44,7 @@ export function Inspector({ route, onHide }: InspectorProps) {
       </div>
 
       <div className="note">
-        <b>Product rule</b>
+        <b>Product rule</b>{' '}
         A disabled action with a visible reason is safer than a simulated success. Nothing on this page manufactures a result.
       </div>
     </aside>

@@ -6,7 +6,7 @@ export function HelpScreen() {
       <p className="sub">What this preview may and may never do, and how to report a problem.</p>
 
       <section className="panel" aria-label="Boundaries">
-        <h3>Boundaries that are always on</h3>
+        <h2>Boundaries that are always on</h2>
         <ul className="inline-list">
           <li><b>Synthetic only.</b> Fixtures are FICTIONAL and hash-pinned. No real patient information may be entered, loaded, or generated.</li>
           <li><b>No clinical use.</b> Nothing here diagnoses, prescribes, orders, bills, or writes to any health record.</li>
@@ -18,7 +18,7 @@ export function HelpScreen() {
       </section>
 
       <section className="panel" aria-label="Incident workflow">
-        <h3>If something looks wrong</h3>
+        <h2>If something looks wrong</h2>
         <ol>
           <li>Stop using the preview. Do not attempt to work around a broken control.</li>
           <li>Record what you did (route, control, exact text) and the build identity from the About screen.</li>
@@ -28,7 +28,7 @@ export function HelpScreen() {
       </section>
 
       <section className="panel" aria-label="References">
-        <h3>References</h3>
+        <h2>References</h2>
         <ul className="inline-list">
           <li className="status-line"><span className="mono">SECURITY.md</span></li>
           <li className="status-line"><span className="mono">GOVERNANCE.md</span></li>

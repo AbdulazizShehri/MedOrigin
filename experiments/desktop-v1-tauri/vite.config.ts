@@ -14,12 +14,12 @@ export default defineConfig({
   build: {
     target: 'es2022',
     sourcemap: false,
-    minify: 'esbuild',
   },
   test: {
     globals: true,
     environment: 'jsdom',
     setupFiles: ['./src/test/setup.ts'],
     css: false,
+    exclude: ['e2e/**', 'node_modules/**', 'dist/**'],
   },
 });
