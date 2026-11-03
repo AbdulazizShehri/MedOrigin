@@ -12,6 +12,7 @@ import subprocess
 import sys
 import tarfile
 import zipfile
+import zlib
 from email.message import EmailMessage
 from pathlib import Path
 from typing import Any
@@ -339,6 +340,50 @@ def test_wheel_rejects_windows_reserved_names_and_controls(
     result = checker.inspect(folder)
     assert result["status"] == "BLOCKED"
     assert "wheel: unsafe member path" in result["issues"]
+    assert result["publication_authorized"] is False
+
+
+@pytest.mark.parametrize("compression", [zipfile.ZIP_STORED, zipfile.ZIP_DEFLATED])
+def test_wheel_corrupt_nonmetadata_content_fails_closed(
+    checker: Any, tmp_path: Path, compression: int
+) -> None:
+    folder = make_dist(tmp_path / "corrupt-nonmetadata-wheel")
+    assert checker.inspect(folder)["status"] == "BASE_CORE_PUBLICATION_SCOPE_CLEAN"
+    wheel = folder / "medscale-0.3.0-py3-none-any.whl"
+    name = "medscale/fictional-not-executed.txt"
+    with zipfile.ZipFile(wheel, "a") as archive:
+        archive.writestr(name, b"fictional-only-" * 50, compress_type=compression)
+    with zipfile.ZipFile(wheel) as archive:
+        info = archive.getinfo(name)
+        start = (
+            info.header_offset
+            + checker._ZIP_LOCAL_HEADER.size
+            + len(name.encode("utf-8"))
+            + len(info.extra)
+        )
+        assert info.compress_size > 8
+    raw = bytearray(wheel.read_bytes())
+    raw[start + 8] ^= 0x01
+    wheel.write_bytes(raw)
+    with zipfile.ZipFile(wheel) as archive:
+        assert archive.read("medscale-0.3.0.dist-info/METADATA") == metadata()
+        with pytest.raises((zipfile.BadZipFile, zlib.error, EOFError, RuntimeError)):
+            archive.read(name)
+    result = checker.inspect(folder)
+    assert result["status"] == "BLOCKED"
+    assert "wheel: invalid member payload" in result["issues"]
+    assert result["publication_authorized"] is False
+
+
+def test_wheel_valid_nonmetadata_content_remains_clean(checker: Any, tmp_path: Path) -> None:
+    folder = make_dist(tmp_path / "valid-content-wheel")
+    wheel = folder / "medscale-0.3.0-py3-none-any.whl"
+    with zipfile.ZipFile(wheel, "a") as archive:
+        archive.writestr(
+            "medscale/fictional.txt", b"nonclinical", compress_type=zipfile.ZIP_DEFLATED
+        )
+    result = checker.inspect(folder)
+    assert result["status"] == "BASE_CORE_PUBLICATION_SCOPE_CLEAN"
     assert result["publication_authorized"] is False
 
 
