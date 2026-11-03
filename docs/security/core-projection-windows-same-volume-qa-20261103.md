@@ -36,7 +36,13 @@ Using an isolated task-owned D: sparse Git worktree `D:\MedOrigin-Core-HeaderQA-
    - Ruff **0.16.9**: `ruff check` PASS and `ruff format --check` PASS for both changed Python files.
 3. The original #869 Wheel local/central ZIP-header tests remain source-identical; they were independently qualified earlier on Windows at **42/42 on Python 3.11, 42/42 on Python 3.12, 42/42 on Python 3.14** (original production code HEAD `7f817a54`, unaffected by this branch).
 
-**Limit:** the full `test_sdist_publication_scope.py` suite was not rerun to completion at the new HEAD; its known blocking test was executed and passed on both target Python versions. No hosted CI run of this stacked PR yet.
+**Subsequent complete sdist integrity regression on the identical exact source HEAD `d278c66b0b69502972da39233d2a10c0ca582a7a`:**
+
+- Python **3.11.15**, full source-controlled `tests/test_sdist_publication_scope.py` on authorized Windows with dedicated D: `--basetemp`: **20 passed in 72.64s**, process exit **0**.
+- Python **3.12.13**, same full module and identical frozen Git source with an independent D: temporary directory: **20 passed in 52.08s**, process exit **0**.
+- Both complete suites include the previously failing cross-volume Core projection and the remaining sdist security/source-integrity cases, with no test failure on the corrected source. Like the module tests above, interpreter runs reused already-installed pytest8.4.2 pure-Python tooling through temporary process-local `PYTHONPATH` and disabled automatic plugins; this is genuine Python3.11/3.12 execution but not standalone venv installation.
+
+**Limit:** no fresh GitHub-hosted exact-HEAD CI, three-OS artifact build/install matrix or attributable independent #603 review has passed. These two **20/20 real Windows source tests** do not grant release authorization.
 
 ## Remaining risk, release blockers, and next acceptance
 
