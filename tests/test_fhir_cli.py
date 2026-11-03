@@ -94,9 +94,7 @@ def test_public_fhir_cli_rejects_unknown_resource_type_as_unverified(
         encoding="utf-8",
     )
     output_dir = tmp_path / "local-unverified"
-    exit_code = public_cli_main(
-        ["fhir", "validate", str(source), "--output-dir", str(output_dir)]
-    )
+    exit_code = public_cli_main(["fhir", "validate", str(source), "--output-dir", str(output_dir)])
     captured = capsys.readouterr()
     report = json.loads(captured.out)
     assert exit_code == 2
