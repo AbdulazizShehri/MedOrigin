@@ -15,6 +15,7 @@ import gzip
 import io
 import json
 import re
+import stat
 import struct
 import tarfile
 import zipfile
@@ -96,6 +97,40 @@ def _check_policy(message: EmailMessage, label: str) -> list[str]:
         if str(dynamic).casefold() in {"provides-extra", "requires-dist"}:
             issues.append(f"{label}: dynamic dependency/extra metadata forbidden")
     return issues
+
+
+def _verify_wheel_member_inventory(members: list[zipfile.ZipInfo]) -> None:
+    """Reject path aliases and special ZIP entries even when METADATA is clean.
+
+    ZIP readers may honor Unix symlink types, while Windows extraction may
+    collide with case-folded names or accept non-Posix path separators.
+    Verify *every* member, not just the dist-info/METADATA entry.
+    """
+    seen: set[str] = set()
+    for member in members:
+        path = member.filename
+        parts = path.removesuffix("/").split("/")
+        if (
+            not path
+            or path.startswith("/")
+            or "\\" in path
+            or any(
+                not part or part in {".", ".."} or ":" in part or part.endswith((" ", "."))
+                for part in parts
+            )
+        ):
+            raise PublicationScopeError("wheel: unsafe member path")
+        normalized = path.removesuffix("/").casefold()
+        if normalized in seen:
+            raise PublicationScopeError("wheel: duplicate member path")
+        seen.add(normalized)
+        mode_type = stat.S_IFMT(member.external_attr >> 16)
+        if (
+            mode_type not in (0, stat.S_IFREG, stat.S_IFDIR)
+            or (mode_type == stat.S_IFDIR and not member.is_dir())
+            or (mode_type == stat.S_IFREG and member.is_dir())
+        ):
+            raise PublicationScopeError("wheel: unsupported member type")
 
 
 def _verify_wheel_physical_envelope(path: Path, members: list[zipfile.ZipInfo]) -> None:
@@ -193,6 +228,7 @@ def _wheel(path: Path) -> EmailMessage:
                 total += item.file_size
                 if total > _MAX_TOTAL_DECLARED_BYTES:
                     raise PublicationScopeError("wheel: inflated archive exceeds budget")
+            _verify_wheel_member_inventory(members)
             _verify_wheel_physical_envelope(path, members)
             matches = [m for m in members if _WHEEL_METADATA.fullmatch(m.filename)]
             if len(matches) != 1 or matches[0].is_dir():
