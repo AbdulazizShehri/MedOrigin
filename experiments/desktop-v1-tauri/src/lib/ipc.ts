@@ -59,6 +59,22 @@ export interface FixtureSource {
   release_authorized: boolean;
 }
 
+export interface FixtureStructuralEvidence {
+  contract: string;
+  fixture_id: string;
+  resource_type: string;
+  resource_id: string;
+  byte_len: number;
+  sha256_hex: string;
+  reference_count: number;
+  bundle_entry_count: number;
+  duplicate_keys_rejected: boolean;
+  structural_subset_checked: boolean;
+  fhir_semantics_validated: boolean;
+  synthetic_only: boolean;
+  release_authorized: boolean;
+}
+
 export interface CommandError {
   code: string;
 }
@@ -67,6 +83,7 @@ export const CONTRACT_STATUS = 'medorigin-desktop-status-v1';
 export const CONTRACT_LIST = 'medorigin-fixtures-list-v1';
 export const CONTRACT_VERIFY = 'medorigin-fixture-verify-v1';
 export const CONTRACT_SOURCE = 'medorigin-fixture-source-v1';
+export const CONTRACT_STRUCTURE = 'medorigin-fictional-structure-subset-v1';
 
 // Golden values mirror src-tauri fixtures and are cross-checked by
 // tests/verify_goldens.py. Browser mock only — the native Rust host is the
@@ -177,6 +194,49 @@ export async function readSyntheticFixtureSource(req: VerifyFixtureRequest): Pro
     };
   }
   return withStallGuard(invokeRaw<FixtureSource>('read_synthetic_fixture_source', { req }));
+}
+
+// Browser-only mock: mirrors the exact fictional, pinned Rust fixture outcome.
+ // It is NOT evidence that structural parsing ran in the browser. Native Rust
+ // independently checks recursive duplicates, IDs, references and bundle URNs.
+const MOCK_STRUCTURE: Record<string, {
+  resource_type: string;
+  reference_count: number;
+  bundle_entry_count: number;
+}> = {
+  'fixture-patient-alpha': { resource_type: 'Patient', reference_count: 0, bundle_entry_count: 0 },
+  'fixture-allergy-beta': { resource_type: 'AllergyIntolerance', reference_count: 1, bundle_entry_count: 0 },
+  'fixture-observation-gamma': { resource_type: 'Observation', reference_count: 1, bundle_entry_count: 0 },
+  'fixture-bundle-delta': { resource_type: 'Bundle', reference_count: 0, bundle_entry_count: 2 },
+};
+
+export async function inspectSyntheticFixtureStructure(
+  req: VerifyFixtureRequest,
+): Promise<FixtureStructuralEvidence> {
+  if (!isTauri()) {
+    const match = MOCK_FIXTURES.find((item) => item.id === req.fixture_id);
+    const shape = MOCK_STRUCTURE[req.fixture_id];
+    if (!match || !shape) {
+      const err: CommandError = { code: 'unknown_fixture' };
+      throw err;
+    }
+    return {
+      contract: CONTRACT_STRUCTURE,
+      fixture_id: match.id,
+      resource_type: shape.resource_type,
+      resource_id: match.id,
+      byte_len: match.byte_len,
+      sha256_hex: match.sha256_hex,
+      reference_count: shape.reference_count,
+      bundle_entry_count: shape.bundle_entry_count,
+      duplicate_keys_rejected: true,
+      structural_subset_checked: true,
+      fhir_semantics_validated: false,
+      synthetic_only: true,
+      release_authorized: false,
+    };
+  }
+  return withStallGuard(invokeRaw<FixtureStructuralEvidence>('inspect_synthetic_fixture_structure', { req }));
 }
 
 export function isCommandError(err: unknown): err is CommandError {
