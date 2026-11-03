@@ -56,8 +56,8 @@ def _reject_venv_startup_hooks(python: Path, minor: int) -> None:
     inherited = [
         line.split("=", 1)[1].strip().casefold()
         for line in lines
-        if "=" in line and line.split("=", 1)[0].strip().casefold()
-        == "include-system-site-packages"
+        if "=" in line
+        and line.split("=", 1)[0].strip().casefold() == "include-system-site-packages"
     ]
     if inherited != ["false"]:
         raise QualificationError("installed Python must not inherit system site-packages")
@@ -66,8 +66,7 @@ def _reject_venv_startup_hooks(python: Path, minor: int) -> None:
         candidates = (venv / "Lib" / "site-packages",)
     else:
         candidates = tuple(
-            venv / lib / f"python3.{minor}" / "site-packages"
-            for lib in ("lib", "lib64")
+            venv / lib / f"python3.{minor}" / "site-packages" for lib in ("lib", "lib64")
         )
     if not candidates[0].is_dir() or candidates[0].is_symlink():
         raise QualificationError("installed Python site-packages not qualified")

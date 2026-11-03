@@ -215,8 +215,7 @@ def test_unreviewed_installed_startup_hook_refused_before_runtime_execution(
         config.unlink()
     elif kind == "duplicate_config":
         config.write_text(
-            "include-system-site-packages = false\n"
-            "include-system-site-packages = false\n",
+            "include-system-site-packages = false\ninclude-system-site-packages = false\n",
             encoding="utf-8",
         )
     else:
