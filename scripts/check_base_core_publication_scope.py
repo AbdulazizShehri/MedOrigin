@@ -249,7 +249,7 @@ def _wheel(path: Path) -> EmailMessage:
 
 
 _WINDOWS_RESERVED_DEVICE = re.compile(
-    r"(?:CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9]|CONIN\\$|CONOUT\\$)", re.IGNORECASE
+    r"(?:CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9]|CONIN\$|CONOUT\$)", re.IGNORECASE
 )
 
 
@@ -264,7 +264,7 @@ def _verify_sdist_member_inventory_entry(item: tarfile.TarInfo, seen: set[str]) 
     if (
         not path
         or path.startswith("/")
-        or "\\\\" in path
+            or "\\" in path
         or any(ord(char) < 32 or ord(char) == 127 for char in path)
         or any(
             not part
