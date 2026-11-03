@@ -32,6 +32,14 @@ def _synthetic_venv(
     original.parent.mkdir(parents=True)
     base_binary = base / "python.exe"
     base_binary.write_bytes(b"MZ" + b"A" * (91648 - 2))
+    loader_files = {
+        "python3.dll": b"FICTIONAL PYTHON3 ABI DLL",
+        "python311.dll": b"FICTIONAL PYTHON311 RUNTIME DLL",
+        "vcruntime140.dll": b"FICTIONAL VC RUNTIME DLL",
+        "vcruntime140_1.dll": b"FICTIONAL VC RUNTIME EXTENDED DLL",
+    }
+    for name, content in loader_files.items():
+        (base / name).write_bytes(content)
     original.write_bytes(b"MZ" + b"B" * (262144 - 2))
     venv = tmp_path / "env311"
     python = venv / "Scripts" / "python.exe"
@@ -53,6 +61,10 @@ def _synthetic_venv(
             "version": "3.11.15",
             "venv_sha256": hashlib.sha256(original.read_bytes()).hexdigest(),
             "base_sha256": hashlib.sha256(base_binary.read_bytes()).hexdigest(),
+            "runtime_dlls": {
+                name: (len(content), hashlib.sha256(content).hexdigest())
+                for name, content in loader_files.items()
+            },
         },
     )
     return python, cfg, base_binary, original, base
@@ -67,6 +79,8 @@ def test_exact_pinned_cpython_venv_source_checks_without_running_it(
     assert receipt["status"] == gate.STATUS
     assert receipt["installed_python_source_matches_base"] is True
     assert receipt["installed_base_executable_matches_local_pin"] is True
+    assert receipt["installed_base_runtime_dlls_verified"] == 4
+    assert receipt["unqualified_venv_loader_shadow_files_rejected"] is True
     assert receipt["publication_authorized"] is False
     assert receipt["clinical_use_authorized"] is False
     assert receipt["python_vendor_authenticity_verified"] is False
@@ -90,6 +104,13 @@ def test_exact_pinned_cpython_venv_source_checks_without_running_it(
         "duplicate_executable",
         "missing_executable_key",
         "not_python_file",
+        "base_python_dll_tamper",
+        "base_python3_dll_missing",
+        "base_vcruntime_dll_tamper",
+        "venv_scripts_shadow_dll",
+        "venv_root_shadow_dll",
+        "venv_scripts_extension_pyd",
+        "venv_scripts_python_pth",
     ],
 )
 def test_synthetic_replacement_or_configuration_ambiguity_refuses_before_use(
@@ -110,6 +131,20 @@ def test_synthetic_replacement_or_configuration_ambiguity_refuses_before_use(
         base_exe.write_bytes(data)
     elif tamper == "missing_source":
         source.unlink()
+    elif tamper == "base_python_dll_tamper":
+        (base / "python311.dll").write_bytes(b"FICTIONAL CHANGED PYTHON DLL")
+    elif tamper == "base_python3_dll_missing":
+        (base / "python3.dll").unlink()
+    elif tamper == "base_vcruntime_dll_tamper":
+        (base / "vcruntime140.dll").write_bytes(b"FICTIONAL CHANGED VC RUNTIME")
+    elif tamper == "venv_scripts_shadow_dll":
+        (python.parent / "python311.dll").write_bytes(b"FICTIONAL SHADOW DLL")
+    elif tamper == "venv_root_shadow_dll":
+        (python.parent.parent / "python3.dll").write_bytes(b"FICTIONAL SHADOW DLL")
+    elif tamper == "venv_scripts_extension_pyd":
+        (python.parent / "fictional_extension.pyd").write_bytes(b"FICTIONAL EXTENSION")
+    elif tamper == "venv_scripts_python_pth":
+        (python.parent / "python311._pth").write_text("FICTIONAL PTH\n")
     elif tamper == "short_venv":
         python.write_bytes(python.read_bytes()[:-1])
     elif tamper == "config_version":

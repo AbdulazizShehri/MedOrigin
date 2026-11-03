@@ -99,6 +99,8 @@ def _accept_fake_gates(
             "runtime_minor": minor,
             "installed_python_source_matches_base": True,
             "installed_base_executable_matches_local_pin": True,
+            "installed_base_runtime_dlls_verified": 4,
+            "unqualified_venv_loader_shadow_files_rejected": True,
             "publication_authorized": False,
             "clinical_use_authorized": False,
             "python_vendor_authenticity_verified": False,
@@ -148,6 +150,8 @@ def test_exact_valid_receipts_are_still_explicitly_nonreleasing(
     assert result["entrypoint_execution_mode"] == "source_verified_python_module"
     assert result["installed_python_executable_profiles_checked"] == 2
     assert result["installed_python_executable_profile"] == gate.python_gate.PROFILE
+    assert result["installed_base_runtime_dlls_verified_per_runtime"] == 4
+    assert result["installed_python_loader_shadow_directories_checked_per_runtime"] == 2
     assert result["python_vendor_authenticity_verified"] is False
     assert result["python_code_signature_verified"] is False
     assert result["installed_console_launcher_templates_checked"] == 2
@@ -414,7 +418,15 @@ def test_unqualified_console_launcher_refuses_before_executing_fhir(
 
 @pytest.mark.parametrize(
     "defect",
-    ["rejected", "bad_source", "bad_base", "bad_minor", "overclaimed_signature"],
+    [
+        "rejected",
+        "bad_source",
+        "bad_base",
+        "bad_minor",
+        "overclaimed_signature",
+        "dll_missing",
+        "shadow_unchecked",
+    ],
 )
 def test_unqualified_interpreter_refuses_before_any_installed_runtime(
     gate: Any,
@@ -440,6 +452,8 @@ def test_unqualified_interpreter_refuses_before_any_installed_runtime(
             "runtime_minor": minor + (1 if defect == "bad_minor" else 0),
             "installed_python_source_matches_base": defect != "bad_source",
             "installed_base_executable_matches_local_pin": defect != "bad_base",
+            "installed_base_runtime_dlls_verified": (3 if defect == "dll_missing" else 4),
+            "unqualified_venv_loader_shadow_files_rejected": defect != "shadow_unchecked",
             "publication_authorized": False,
             "clinical_use_authorized": False,
             "python_vendor_authenticity_verified": False,
