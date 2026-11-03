@@ -52,6 +52,17 @@ try {
   $patient=([regex]::Match($rust,'const PATIENT: &\[u8\] = br#"(.*?)"#;',[System.Text.RegularExpressions.RegexOptions]::Singleline)).Groups[1].Value
   $observation=([regex]::Match($rust,'const OBSERVATION: &\[u8\] = br#"(.*?)"#;',[System.Text.RegularExpressions.RegexOptions]::Singleline)).Groups[1].Value
   if($patient.Length -ne 57 -or $observation.Length -ne 251){throw 'D0 source fixture extraction mismatch'}
+  # Independently derive exact HEX context from the pinned fictional D0 bytes.
+  $a=[Text.Encoding]::UTF8.GetBytes($patient)
+  $b=[Text.Encoding]::UTF8.GetBytes($observation)
+  $offset=0
+  while($offset -lt [Math]::Min($a.Length,$b.Length) -and $a[$offset] -eq $b[$offset]){$offset++}
+  $start=[Math]::Max(0,$offset-8)
+  $endA=[Math]::Min($a.Length,$offset+8)
+  $endB=[Math]::Min($b.Length,$offset+8)
+  $hexA=($a[$start..($endA-1)] | ForEach-Object {$_.ToString('X2')}) -join ' '
+  $hexB=($b[$start..($endB-1)] | ForEach-Object {$_.ToString('X2')}) -join ' '
+  $hexContext='Fictional HEX context at zero-based byte {0}: left bytes {1}..{2} [HEX {3}]; right bytes {1}..{4} [HEX {5}]. Raw bytes only, not JSON semantics.' -f $offset,$start,$endA,$hexA,$endB,$hexB
   Press (One 'Choose second fictional fixture (9)')
   $option=$null
   for($i=0;$i -lt 35;$i++){
@@ -64,12 +75,17 @@ try {
   ExpectText $observation
   ExpectText 'SHA-256: 747e1e038d6cc9a39a9cee209f621841cf6a9748d82be42fa545f19cfd6877a0'
   ExpectText 'SHA-256: 527806e5427cc45e55424d1b8dc8ddcdc86a2b37df2ae116735e6832268b5e19'
+  $byteDiff='Fictional byte difference: first differing byte offset 17 (zero-based); common suffix 1 bytes; left 57 bytes, right 251 bytes. Original source bytes unchanged.'
+  ExpectText $byteDiff
+  ExpectText $hexContext
   Write-Output 'D2_COMPARE_TWO_REAL_UIA_PASS'
 
   Press (One 'Compare: patient-minimal')
   Press (One 'Compare verified fictional JSON (read-only)')
   ExpectText 'FAIL CLOSED: choose two distinct fictional fixtures'
   ExpectText $observation $false
+  ExpectText $byteDiff $false
+  ExpectText $hexContext $false
   Write-Output 'D2_COMPARE_SAME_FIXTURE_REFUSAL_PASS'
 
   Press (One 'Compare: observation-minimal')
@@ -77,6 +93,8 @@ try {
   ExpectText $observation
   Press (One 'Verify synthetic SHA-256')
   ExpectText $observation $false
+  ExpectText $byteDiff $false
+  ExpectText $hexContext $false
   Write-Output 'D2_COMPARE_STALE_CLEAR_PASS'
   Write-Output 'D2_COMPARE_WINDOWS_UIA_3_OF_3_PASS_NONPUBLISHING'
 }catch{
