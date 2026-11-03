@@ -59,7 +59,19 @@ def catalog(source: str) -> dict[str, tuple[int, str, str]]:
         r'bytes:\s*(\d+),\s*sha256:\s*"([0-9a-f]{64})",\s*'
         r'status:\s*"([^"]+)",\s*\}', re.DOTALL,
     )
-    entries = list(pattern.finditer(m.group(1)))
+    body = m.group(1)
+    entries = list(pattern.finditer(body))
+    # finditer() only recognizes good entries. Without inspecting the gaps,
+    # extra source tokens (e.g. an unrecognized FixtureSpec) could be
+    # silently ignored while the twelve recognized hashes still match.
+    # Every gap must be Rust's one optional comma plus whitespace only.
+    previous_end = 0
+    for entry in entries:
+        require(re.fullmatch(r"\s*,?\s*", body[previous_end:entry.start()]) is not None,
+                "UNPARSED_FIXTURE_CATALOG_CONTENT")
+        previous_end = entry.end()
+    require(re.fullmatch(r"\s*,?\s*", body[previous_end:]) is not None,
+            "UNPARSED_FIXTURE_CATALOG_CONTENT")
     result: dict[str, tuple[int, str, str]] = {}
     for entry in entries:
         name, length, digest, status = entry.groups()
