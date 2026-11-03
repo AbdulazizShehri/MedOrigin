@@ -8,6 +8,8 @@ This folder is a **design-system and architecture handoff**, not a finished appl
 - [Full feature-to-screen matrix](FEATURE_COVERAGE.md)
 - [Architecture decision / existing desktop experiments](ARCHITECTURE.md)
 - [Inkling implementation prompt and test gates](INKLING_HANDOFF.md)
+- [Verified toolkit / installation guidance / quality gates](TOOLCHAIN_AND_QUALITY_GATES.md)
+- [Copy-ready full Inkling master prompt](INKLING_MASTER_PROMPT.md)
 - [Theme verification](test_tokens.py)
 
 **Design logic:** preserve the orange Overlap Forward identity (currently a separately reviewed draft) and Minaret's shared precision; borrow Linear's usability principles, not a color-exact copy. Neutral canvas and precise visual hierarchy let medical evidence, warnings, citations and status take priority.

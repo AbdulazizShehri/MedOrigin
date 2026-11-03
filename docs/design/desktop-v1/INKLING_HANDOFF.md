@@ -59,3 +59,7 @@ Linear-class **information architecture and interaction discipline**, not copied
 - No release/publish/clinical claims until separately authorized.
 
 **Paper Desktop MCP:** optional for Inkling if it is installed in its environment. Import the token roles/screens and use Paper to refine frames, spacing, and component variants; keep the source implementation and security boundary in Git, and do not turn screenshots into uneditable implementation.
+
+## Mandatory independent-agent and QA tooling
+
+Use [toolchain and quality gates](TOOLCHAIN_AND_QUALITY_GATES.md) for source URLs, install decision gates, and explicit evidence requirements. Start Ink from the [complete master prompt](INKLING_MASTER_PROMPT.md). The plan includes Google EGM with fresh-context Goldfish subagents, PStack impact mapping, Playwright Test, TesterArmy E2E in no-model/telemetry-disabled mode, native Windows Tauri UI Automation, Impeccable audits, Emil Kowalski interaction QA, Alibaba Open Code Review, axe/manual accessibility, Rust supply-chain checks, and existing Python qualification. Tools are instructions, not claims of installed/connected services or passing tests. Do not replace D1/D2 native gates with browser-only tests or fabricate independent reviewer receipts.
