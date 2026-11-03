@@ -269,7 +269,9 @@ def test_tag_and_pr_paths_use_identical_audited_core_projection() -> None:
         "uv run --no-sync python scripts/stage_medorigin_core_projection.py "
         '--out "$RUNNER_TEMP/medorigin-core"'
     )
-    required_build = 'run: uv build "$RUNNER_TEMP/medorigin-core" --out-dir dist'
+    # The gate checks the exact dist/* upload inventory. uv must not create
+    # a hidden .gitignore alongside the qualified Wheel/sdist pair.
+    required_build = 'run: uv build --no-create-gitignore "$RUNNER_TEMP/medorigin-core" --out-dir dist'
     wheel_check = "scripts/inspect_release_wheel_metadata.py --wheel"
     archive_check = "scripts/check_sdist_publication_scope.py --sdist"
     for job_id in ("build", "pr-artifact-build"):
