@@ -65,7 +65,9 @@ def test_fhir_cli_summary_only_exits_zero(tmp_path: Path) -> None:
     assert exit_code == 0
 
 
-def test_fhir_cli_valid_json_stores_report(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_fhir_cli_local_json_stores_unverified_report(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     payload = {"resourceType": "StructureDefinition", "id": "test"}
     input_file = tmp_path / "payload.json"
     input_file.write_text(json.dumps(payload), encoding="utf-8")
@@ -74,9 +76,31 @@ def test_fhir_cli_valid_json_stores_report(tmp_path: Path, monkeypatch: pytest.M
 
     exit_code = fhir_cli.main([str(input_file), "--output-dir", str(output_dir)])
 
-    assert exit_code == 0
+    assert exit_code == 2
     reports = list(output_dir.rglob("report.json"))
-    assert reports, "expected a stored FHIR validation report"
+    assert len(reports) == 1, "expected exactly one stored, unverified local receipt"
+    receipt = json.loads(reports[0].read_text(encoding="utf-8"))
+    assert receipt["status"] == "not_validated"
+    assert receipt["errors"] == []
+    assert receipt["warnings"] and "FHIR R4 schema" in receipt["warnings"][0]
+
+
+def test_public_fhir_cli_rejects_unknown_resource_type_as_unverified(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    source = tmp_path / "fictional-unknown.json"
+    source.write_text(
+        json.dumps({"resourceType": "UnknownFictionalResource", "id": "fictional-1"}),
+        encoding="utf-8",
+    )
+    output_dir = tmp_path / "local-unverified"
+    exit_code = public_cli_main(["fhir", "validate", str(source), "--output-dir", str(output_dir)])
+    captured = capsys.readouterr()
+    report = json.loads(captured.out)
+    assert exit_code == 2
+    assert report["status"] == "not_validated"
+    assert report["warnings"] and "not performed" in report["warnings"][0]
+    assert list(output_dir.rglob("report.json"))
 
 
 def test_fhir_cli_invalid_json_returns_nonzero(tmp_path: Path) -> None:

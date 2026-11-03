@@ -20,12 +20,12 @@ from medscale.fhirkit.validate import validate_fhir
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="medscale fhir validate",
-        description="Validate a local FHIR JSON object and store the deterministic report.",
+        description="Record a deterministic local FHIR report without claiming schema conformance.",
     )
     parser.add_argument(
         "input_file",
         type=Path,
-        help="Path to a local FHIR JSON file.",
+        help="Path to a local FHIR-shaped JSON file (no schema validation by default).",
     )
     parser.add_argument(
         "--output-dir",
@@ -39,7 +39,7 @@ def main(argv: list[str] | None = None) -> int:
         default=None,
         help=(
             "Optional external validator command, split on whitespace. "
-            "When omitted, the deterministic local validator path is used."
+            "When omitted, local provenance is recorded with status not_validated."
         ),
     )
     parser.add_argument(
@@ -75,8 +75,8 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.validator_command:
         print(
-            "external validator command is not wired in this baseline; "
-            "use the local validator path instead.",
+            "external FHIR validator integration is not wired in this baseline; "
+            "the local path only records unverified provenance.",
             file=sys.stderr,
         )
         return 2
@@ -85,7 +85,9 @@ def main(argv: list[str] | None = None) -> int:
     path = store_report(report, root=args.output_dir)
     print(report_to_json(load_report_from_json(report_to_json(report))))
     print(f"report stored at: {path}", file=sys.stderr)
-    return 0
+    # Exit nonzero unless an actual validated status is available; an
+    # unverified provenance receipt must not masquerade as FHIR validation.
+    return 0 if report.status == "valid" else 2
 
 
 if __name__ == "__main__":
