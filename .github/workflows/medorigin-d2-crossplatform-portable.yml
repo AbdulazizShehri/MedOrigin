@@ -47,7 +47,7 @@ jobs:
         shell: bash
         run: |
           sudo apt-get update
-          sudo apt-get install -y libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev libxkbcommon-dev libwayland-dev libssl-dev
+          sudo apt-get install -y libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev libxkbcommon-dev libwayland-dev libssl-dev libxkbcommon-x11-0 xvfb xauth x11-utils libgl1-mesa-dri
 
       - name: Test packaging and native-header contracts on Windows
         if: runner.os == 'Windows'
@@ -81,6 +81,11 @@ jobs:
         if: runner.os == 'Linux'
         shell: bash
         run: strip --strip-debug target/debug/medorigin-desktop-d2-native-egui
+
+      - name: Verify real native Linux X11 window on virtual desktop
+        if: runner.os == 'Linux'
+        shell: bash
+        run: xvfb-run -a -s '-screen 0 1280x800x24' bash scripts/linux_x11_smoke.sh target/debug/medorigin-desktop-d2-native-egui
 
       - name: Windows private ZIP and integrity verification
         if: runner.os == 'Windows'

@@ -34,7 +34,7 @@ On Windows PowerShell use `python`, `target\debug\medorigin-desktop-d2-native-eg
 
 On macOS, a local archive holds `MedOrigin Synthetic Preview.app` with `Contents/Info.plist` and the host-native arm64 executable. A signed/notarized distributable is *separate future work*. Do not disable Gatekeeper or security controls to use this preview in a healthcare environment.
 
-On Linux, this is a **native glibc executable**, not a self-contained AppImage. GUI launch requires suitable desktop/compositor/OpenGL libraries. Headless WSL and CI `cargo build` or tests alone do not qualify GTK, Wayland, X11, rendering, UI keyboard/accessibility or networking.
+On Linux, this is a **native glibc executable**, not a self-contained AppImage. For Ubuntu/Debian X11 runtimes, a confirmed missing dependency was resolved with `sudo apt-get install libxkbcommon-x11-0` (and its `libxcb-xkb1` dependency). GL/X11/Wayland runtime libraries must also be available. The CI job uses Xvfb with software Mesa and asserts a real native window title, but that does **not** qualify every distro, Linux AT-SPI accessibility or OS network isolation.
 
 ## GitHub Actions
 
