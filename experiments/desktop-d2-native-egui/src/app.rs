@@ -652,6 +652,40 @@ mod tests {
     }
 
     #[test]
+    fn directional_semantic_and_hex_details_are_cleared_before_recomparing() {
+        let mut app = MedOriginNativePreview {
+            selected: 0,
+            compare_with: 4,
+            ..Default::default()
+        };
+        app.compare_selected().expect("first fictional comparison");
+        let first = app.comparison.as_ref().expect("first comparison state");
+        assert_eq!(first.left.id, "patient-minimal");
+        assert_eq!(first.right.id, "observation-minimal");
+        assert!(first.json_path_diff.contains("Fictional JSON path difference: /"));
+        assert!(first.byte_diff_summary.contains("Fictional byte difference:"));
+        assert!(first.byte_context.contains("Fictional HEX context at zero-based byte"));
+
+        app.clear_fictional_output();
+        assert_eq!((app.selected, app.compare_with), (0, 4));
+        assert!(app.result.is_none());
+        assert!(app.preview.is_none());
+        assert!(app.preview_notice.is_none());
+        assert!(app.comparison.is_none());
+
+        // A changed selection must compute *new* directional evidence rather
+        // than resurrecting the previous JSON Pointer or raw byte context.
+        app.compare_with = 6;
+        app.compare_selected().expect("second fictional comparison");
+        let second = app.comparison.as_ref().expect("second comparison state");
+        assert_eq!(second.left.id, "patient-minimal");
+        assert_eq!(second.right.id, "bundle-valid");
+        assert!(second.json_path_diff.contains("Fictional JSON path difference: /"));
+        assert!(second.byte_diff_summary.contains("Fictional byte difference:"));
+        assert!(second.byte_context.contains("Fictional HEX context at zero-based byte"));
+    }
+
+    #[test]
     fn all_twelve_fictional_vectors_match_compiled_sha_and_expected_envelope_status() {
         assert_eq!(FIXTURES.len(), 12);
         let mut seen = HashSet::new();
