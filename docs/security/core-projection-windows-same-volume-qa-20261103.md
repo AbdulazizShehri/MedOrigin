@@ -7,13 +7,13 @@
 - Stacked on Core package-security Draft PR #869, exact immutable parent `9069af014f627952639969a40e9299960463a758`.
 - The Core staging function `scripts/stage_medorigin_core_projection.py::stage` created its private work under the operating system's default `tempfile.TemporaryDirectory()` (C: on the authorized PC) but used `work.rename(target)` to install a package directory under the user-supplied output (D: in the isolated task).
 - In a real Windows Python 3.11 `pytest` execution against exact original source `7f817a5450d8cf6fe7cbdfde7be22323838f200f`, the independent source-distribution integrity test `test_rehashed_source_receipt_cannot_hide_missing_git_module` failed its **first normal staging prerequisite** before reaching its adversarial assertion. Actual error:
-  
+
   ```text
   PROJECTION_BLOCKED: [WinError 17] The system cannot move the file to a different disk drive:
   'C:\Users\Shehr\AppData\Local\Temp\medorigin-projection-...\package'
   -> 'D:\MedOrigin-Core-HeaderQA-PyMatrix-20261103\.pytest-adj-3-11\...\staged'
   ```
-  
+
   This is a concrete Windows cross-volume packaging bug, not a fake-metadata or Python-3.11 syntax problem. A source-bound sparse QA run before fixing it yielded 47 earlier tests passing, with this deterministic blocker at test 48. No host TEMP/folder permissions or global system settings were modified.
 
 ## Source fix (only two source paths)
