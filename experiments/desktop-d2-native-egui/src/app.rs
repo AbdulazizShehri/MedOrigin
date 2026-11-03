@@ -665,6 +665,9 @@ mod tests {
         assert!(first.json_path_diff.contains("Fictional JSON path difference: /"));
         assert!(first.byte_diff_summary.contains("Fictional byte difference:"));
         assert!(first.byte_context.contains("Fictional HEX context at zero-based byte"));
+        let previous_pointer = first.json_path_diff.clone();
+        let previous_bytes = first.byte_diff_summary.clone();
+        let previous_hex = first.byte_context.clone();
 
         app.clear_fictional_output();
         assert_eq!((app.selected, app.compare_with), (0, 4));
@@ -683,6 +686,9 @@ mod tests {
         assert!(second.json_path_diff.contains("Fictional JSON path difference: /"));
         assert!(second.byte_diff_summary.contains("Fictional byte difference:"));
         assert!(second.byte_context.contains("Fictional HEX context at zero-based byte"));
+        assert_ne!(second.json_path_diff, previous_pointer, "stale JSON Pointer");
+        assert_ne!(second.byte_diff_summary, previous_bytes, "stale byte comparison");
+        assert_ne!(second.byte_context, previous_hex, "stale HEX context");
     }
 
     #[test]
