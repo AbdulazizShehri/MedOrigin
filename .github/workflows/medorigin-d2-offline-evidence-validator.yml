@@ -13,6 +13,10 @@ on:
       - 'experiments/desktop-d2-native-egui/tests/test_linux_private_netns_host_interop.py'
       - 'experiments/desktop-d2-native-egui/tests/verify_linux_accesskit_maintenance.py'
       - 'experiments/desktop-d2-native-egui/tests/test_verify_linux_accesskit_maintenance.py'
+      - 'experiments/desktop-d2-native-egui/tests/verify_d2_fixture_catalog.py'
+      - 'experiments/desktop-d2-native-egui/tests/test_verify_d2_fixture_catalog.py'
+      - 'experiments/desktop-d0-rust/src/lib.rs'
+      - 'experiments/desktop-d0-rust/fixtures/**'
       - 'experiments/desktop-d2-native-egui/src/**'
       - 'experiments/desktop-d2-native-egui/Cargo.toml'
       - 'experiments/desktop-d2-native-egui/Cargo.lock'
@@ -47,6 +51,12 @@ jobs:
         run: |
           python3 -m unittest -v test_verify_linux_accesskit_maintenance.py
           # This source check does not run cargo or claim refreshed RustSec approval.
+      - name: Rehash all twelve source-compiled fictional D0 fixtures against D2 catalog
+        working-directory: experiments/desktop-d2-native-egui/tests
+        run: |
+          python3 -m unittest -v test_verify_d2_fixture_catalog.py
+          python3 verify_d2_fixture_catalog.py
+          # This checks fictional source integrity, never native runtime or release eligibility.
       - name: Compile script source
         run: python3 -m py_compile experiments/desktop-d2-native-egui/tests/verify_offline_evidence.py experiments/desktop-d2-native-egui/tests/test_verify_offline_evidence.py
       - name: Verify no tracked code changed
