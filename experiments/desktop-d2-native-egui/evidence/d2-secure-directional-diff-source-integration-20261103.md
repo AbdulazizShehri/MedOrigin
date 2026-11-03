@@ -20,6 +20,17 @@ Five independently checked 859 security and keyboard paths were also **blob-iden
 
 The integration diff against PR #859's exact HEAD shows only PR #864's 12 changed paths plus the explicitly integrated app additions; no protected source/security files were deleted. Comparison against #864 remains genealogically diverged because the integration commits are not a Git merge of #864's existing history.
 
+## Post-transplant corrections: source identities changed intentionally
+
+The 11/11 and 6/6 blob-identity counts above describe the **initial transplantation checkpoint** at `c9f55ac5`; they must **not** be interpreted as literal byte-for-byte identity for all files at the current PR #865 HEAD.
+
+- `src/app.rs`: strengthened the cross-feature regression to require **different** JSON Pointer, byte-summary and HEX-context results after clearing and recomparing a different fixed pair. Added an exact-text Rust unit test for the fictional D0 Patient versus Observation `/id` value hints.
+- `tests/windows-native-fictional-json-pointer-uia.ps1`: corrected the old test expectation `/id (value differs)` to the *new app formatter* `/id (value differs: left="synthetic", right="synthetic-observation")`, deriving both fictional IDs from D0 source; added a **fourth, not-yet-executed** accessible Clear-button case. The source is **no longer blob-identical to the original PR #864** by design.
+- `tests/windows-offline-powershell-ast-gate.ps1`: expanded prospective Windows source parser inputs to the three combined UIA/keyboard scripts (seven total). It is **not** a verified 7/7 Windows run.
+- `.github/workflows/medorigin-d2-offline-evidence-validator.yml`: the initial source-identical #859 copy was intentionally hardened to use a full-SHA-pinned checkout, `persist-credentials: false`, a source-head checkout ref, and extra path triggers for changes in D2 Rust sources, Cargo locks, or combined UIA scripts. No hosted head-CI success is claimed.
+
+The independent fixed source calculation yielded Patient 57 bytes, Observation 251 bytes, source-byte offset 17 for the first difference, one common trailing byte, and `id` as the first shared differing JSON key. D0 SHA-256 values match the compiled fictional fixture catalog. The earlier source-backed real Windows 3/3 UIA receipt in #864 identified a different exact tested parent source/EXE; it is **not transferable** to the updated formatter or this integration. Full analysis: `evidence/d2-pointer-drift-cross-feature-guard-20261103.md`.
+
 ## Acceptance and outstanding work
 
 **Verified now:** connector-backed source/sha identity, disjoint merged source lines, source-only presence of cross-feature regression. **Not verified now:** a native Rust compiler run, Cargo.lock real build/test, Clippy, Linux AT-SPI, Windows actual UIA key flow, the independent #864 semantic JSON pointer UIA path, macOS VoiceOver, or source-bound hosted CI on the integration head. Never describe pre-merge PR test reports as proof for this new combined head. Desktop Commander remains unavailable due to a documented monthly usage cap, even if paired/online.
