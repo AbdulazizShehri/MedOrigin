@@ -110,7 +110,7 @@ fn audited_native_source_files(root: &Path) -> Vec<PathBuf> {
     names.sort();
     assert_eq!(
         names,
-        ["app.rs", "lib.rs", "main.rs"],
+        ["app.rs", "core_provenance.rs", "lib.rs", "main.rs"],
         "new, missing or nested native D2 source requires explicit review"
     );
     names.into_iter().map(|name| root.join(name)).collect()
@@ -269,10 +269,10 @@ fn guard_refuses_unreviewed_nested_module_layout() {
         std::process::id()
     ));
     fs::create_dir(&root).expect("create owned test directory");
-    for name in ["app.rs", "lib.rs", "main.rs"] {
+    for name in ["app.rs", "core_provenance.rs", "lib.rs", "main.rs"] {
         fs::write(root.join(name), "// synthetic, no execution").expect("fixture");
     }
-    assert_eq!(audited_native_source_files(&root).len(), 3);
+    assert_eq!(audited_native_source_files(&root).len(), 4);
     let nested = root.join("hidden");
     fs::create_dir(&nested).expect("create nested fixture");
     fs::write(nested.join("socket.rs"), "// unreviewed nested source").expect("fixture");
