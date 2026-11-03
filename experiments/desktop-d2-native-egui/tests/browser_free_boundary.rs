@@ -185,10 +185,12 @@ fn direct_dependencies_remain_limited_to_native_ui_and_existing_d0() {
     // SHA-256 is an additional explicitly reviewed direct dependency for
     // the two in-memory fictional preview byte checks. Do not silently admit
     // another crate version, extra default features or a new network library.
+    const PINNED_SHA2_DEPENDENCY: &str =
+        "sha2 = { version = \"=0.11.1\", default-features = false }";
     assert!(
-        dependencies.lines().any(|line| {
-            line.trim() == "sha2 = { version = \"=0.11.1\", default-features = false }"
-        }),
+        dependencies
+            .lines()
+            .any(|line| line.trim() == PINNED_SHA2_DEPENDENCY),
         "D2 SHA-256 source integrity requires reviewed, exact locked sha2"
     );
     let lock = fs::read_to_string(Path::new(env!("CARGO_MANIFEST_DIR")).join("Cargo.lock"))
