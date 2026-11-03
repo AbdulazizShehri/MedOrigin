@@ -17,17 +17,17 @@ The goal is **full navigational coverage and honest capability integration**, no
 | **Home** | `apps/workspace/README.md`, README | Workspace health, local/offline state, pinned tasks, recent **synthetic** work | DESIGNED |
 | **Synthetic patients** | `identity.py`, `binding.py`, `patient_graph.py` | synthetic records list, search, provenance, contextual detail | FOUNDATION; UI adapter pending |
 | **Encounter detail** | `encounter.py`, `review.py` | encounter timeline, status, source drilldown, reviewed/edit history | FOUNDATION; fixtures only |
-| **Audio & transcript** | `asr.py`, CW plane 4.1 | transcript review and adapter status; **no live microphone unless separately qualified** | FOUNDATION contract; capture GATED |
+| **Audio & transcript** | `asr.py`, specs/medscale-clinical-workspace-v1/capability_map.md (4.1) | transcript review and adapter status; **no live microphone unless separately qualified** | FOUNDATION contract; capture GATED |
 | **Clinical note drafts** | `draft.py`, `review.py` | source-linked editable draft, missing-information indicators, review-only state | FOUNDATION; synthetic-only |
-| **Orders / tasks** | CW roadmap 4.2 | explicit suggestion list, NO auto-submit; manual review gate | DESIGNED; external write GATED |
-| **Coding suggestions** | CW capability map | source/rationale and human acknowledgement, no billing submission | DEFERRED/GATED |
+| **Orders / tasks** | specs/medscale-clinical-workspace-v1/capability_map.md (4.2) | explicit suggestion list, NO auto-submit; manual review gate | DESIGNED; external write GATED |
+| **Coding suggestions** | specs/medscale-clinical-workspace-v1/capability_map.md | source/rationale and human acknowledgement, no billing submission | DEFERRED/GATED |
 | **Clinical evidence** | `retrieval.py`, `corpus.py`, `evidence_strength.py` | query, sources, frozen snapshot, citations, contradictions, abstention | FOUNDATION; not a medical answer guarantee |
 | **Literature screening** | `src/medscale/litdb`, `screen.py` | results, screening criteria, provenance and reproducible export preview | FOUNDATION; read-only first |
 | **FHIR workspace** | `fhir_r4.py`, `src/medscale/fhirkit` | bounded FHIR R4 validation with errors & provenance, export preview | FOUNDATION; synthetic-only |
 | **FHIR fixture inspector** | D1 Tauri and D2 native Rust experiments | native synthetic FHIR examples with verified hashes | EXPERIMENT; do not conflate with full validator |
 | **Patient graph** | `patient_graph.py`, `linked_workspace.py` | timeline/graph, source labels, extracted vs inferred edges | FOUNDATION; synthetic only |
 | **Patient timeline** | `patient_graph.py`, `encounter.py` | chronological events, drilldown and visible uncertainty | FOUNDATION |
-| **Documents & canvas** | `draft.py`, `corpus.py`, CW capability map | structured notes, source links, local object blocks | PARTIAL FOUNDATION / DESIGNED |
+| **Documents & canvas** | `draft.py`, `corpus.py`, specs/medscale-clinical-workspace-v1/capability_map.md | structured notes, source links, local object blocks | PARTIAL FOUNDATION / DESIGNED |
 | **Tables & structured data** | `dataset.py`, `analytics.py` | queryable local tables, export preview, boundaries | FOUNDATION |
 | **Local search** | `retrieval.py`, `corpus.py` | exact scope, readable result provenance, offline errors | FOUNDATION |
 | **Analytics** | `analytics.py` | Workspace-only indicators, local calculations, provenance | FOUNDATION; no telemetry to Research |
