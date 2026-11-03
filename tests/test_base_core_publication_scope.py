@@ -481,9 +481,7 @@ def test_sdist_rejects_unsafe_non_metadata_members(
             first.size = 1
             archive.addfile(first, io.BytesIO(b"a"))
             second = tarfile.TarInfo(
-                "medscale-0.3.0/Alpha.py"
-                if kind == "duplicate"
-                else "medscale-0.3.0/alpha.py"
+                "medscale-0.3.0/Alpha.py" if kind == "duplicate" else "medscale-0.3.0/alpha.py"
             )
             second.size = 1
             archive.addfile(second, io.BytesIO(b"b"))
