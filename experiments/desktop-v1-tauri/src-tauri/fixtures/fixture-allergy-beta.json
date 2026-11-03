@@ -1,0 +1,18 @@
+{
+  "resourceType": "AllergyIntolerance",
+  "id": "fixture-allergy-beta",
+  "note": "FICTIONAL — not clinical data",
+  "patient": {
+    "reference": "Patient/fixture-patient-alpha"
+  },
+  "recordedDate": "2026-01-01",
+  "code": {
+    "coding": [
+      {
+        "system": "https://example.invalid/medorigin/fictcode",
+        "code": "FICT-ALLERGY-001",
+        "display": "FICTIONAL SUBSTANCE EXAMPLEPERSON"
+      }
+    ]
+  }
+}

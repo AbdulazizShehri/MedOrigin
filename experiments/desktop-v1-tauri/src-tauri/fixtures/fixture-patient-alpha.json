@@ -1,0 +1,22 @@
+{
+  "resourceType": "Patient",
+  "id": "fixture-patient-alpha",
+  "note": "FICTIONAL — not clinical data",
+  "identifier": [
+    {
+      "system": "https://example.invalid/medorigin/fixture",
+      "value": "FICTIONAL-PATI-ALPHA-001"
+    }
+  ],
+  "active": true,
+  "name": [
+    {
+      "family": "EXAMPLEPERSON",
+      "given": [
+        "FICTIONAL"
+      ]
+    }
+  ],
+  "gender": "unknown",
+  "birthDate": "1970-01-01"
+}

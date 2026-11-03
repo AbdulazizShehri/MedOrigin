@@ -1,0 +1,22 @@
+{
+  "resourceType": "Bundle",
+  "id": "fixture-bundle-delta",
+  "note": "FICTIONAL — not clinical data",
+  "type": "collection",
+  "entry": [
+    {
+      "fullUrl": "urn:example:invalid:medorigin:fixture-patient-alpha",
+      "resource": {
+        "resourceType": "Patient",
+        "id": "fixture-patient-alpha"
+      }
+    },
+    {
+      "fullUrl": "urn:example:invalid:medorigin:fixture-observation-gamma",
+      "resource": {
+        "resourceType": "Observation",
+        "id": "fixture-observation-gamma"
+      }
+    }
+  ]
+}

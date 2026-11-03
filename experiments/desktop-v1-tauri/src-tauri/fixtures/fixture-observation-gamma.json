@@ -1,0 +1,19 @@
+{
+  "resourceType": "Observation",
+  "id": "fixture-observation-gamma",
+  "note": "FICTIONAL — not clinical data",
+  "status": "final",
+  "code": {
+    "coding": [
+      {
+        "system": "https://example.invalid/medorigin/fictcode",
+        "code": "FICT-OBS-001",
+        "display": "FICTIONAL OBSERVATION EXAMPLEPERSON"
+      }
+    ]
+  },
+  "subject": {
+    "reference": "Patient/fixture-patient-alpha"
+  },
+  "valueString": "FICTIONAL VALUE — not a measurement"
+}
