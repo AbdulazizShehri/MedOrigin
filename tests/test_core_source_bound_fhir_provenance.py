@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import hashlib
 import importlib.util
-import json
 import sys
 from pathlib import Path
 from typing import Any
@@ -116,36 +115,44 @@ def test_exact_valid_receipts_are_still_explicitly_nonreleasing(
 
 @pytest.mark.parametrize("bad", ["dirty", "noncanonical_commit"])
 def test_source_checkout_must_match_clean_git_head(
-    gate: Any, paths: tuple[Path, Path, Path, Path, Path],
-    monkeypatch: pytest.MonkeyPatch, bad: str
+    gate: Any, paths: tuple[Path, Path, Path, Path, Path], monkeypatch: pytest.MonkeyPatch, bad: str
 ) -> None:
     _accept_fake_gates(gate, monkeypatch, paths[1])
     monkeypatch.setattr(
         gate.artifact_gate,
         "run",
         lambda args, **_kwargs: (
-            "b" * 39 if bad == "noncanonical_commit" else HEAD
-        ) if "rev-parse" in args else (" M src/medscale/__init__.py" if bad == "dirty" else ""),
+            ("b" * 39 if bad == "noncanonical_commit" else HEAD)
+            if "rev-parse" in args
+            else (" M src/medscale/__init__.py" if bad == "dirty" else "")
+        ),
     )
     with pytest.raises(gate.QualificationError, match="clean, canonical"):
         gate.qualify(*paths)
 
 
-@pytest.mark.parametrize("script", [
-    "check_core_wheel_source_identity.py",
-    "check_sdist_publication_scope.py",
-    "inspect_release_wheel_metadata.py",
-])
+@pytest.mark.parametrize(
+    "script",
+    [
+        "check_core_wheel_source_identity.py",
+        "check_sdist_publication_scope.py",
+        "inspect_release_wheel_metadata.py",
+    ],
+)
 def test_refuses_failed_source_artifact_verifier(
-    gate: Any, paths: tuple[Path, Path, Path, Path, Path],
-    monkeypatch: pytest.MonkeyPatch, script: str
+    gate: Any,
+    paths: tuple[Path, Path, Path, Path, Path],
+    monkeypatch: pytest.MonkeyPatch,
+    script: str,
 ) -> None:
     _accept_fake_gates(gate, monkeypatch, paths[1])
     original = gate.artifact_gate.tool_receipt
+
     def failing(name: str, *args: object) -> dict[str, Any]:
         if name == script:
             raise gate.artifact_gate.QualificationError("fictional private upstream payload")
         return original(name, *args)
+
     monkeypatch.setattr(gate.artifact_gate, "tool_receipt", failing)
     with pytest.raises(gate.QualificationError) as error:
         gate.qualify(*paths)
@@ -154,11 +161,11 @@ def test_refuses_failed_source_artifact_verifier(
 
 @pytest.mark.parametrize("bad", ["wheel_commit", "wheel_digest", "wheel_version"])
 def test_rejects_wrong_wheel_origin_or_metadata(
-    gate: Any, paths: tuple[Path, Path, Path, Path, Path],
-    monkeypatch: pytest.MonkeyPatch, bad: str
+    gate: Any, paths: tuple[Path, Path, Path, Path, Path], monkeypatch: pytest.MonkeyPatch, bad: str
 ) -> None:
     _accept_fake_gates(gate, monkeypatch, paths[1])
     original = gate.artifact_gate.tool_receipt
+
     def fake(script: str, *args: object) -> dict[str, Any]:
         out = original(script, *args)
         if bad == "wheel_commit" and script == "check_core_wheel_source_identity.py":
@@ -169,6 +176,7 @@ def test_rejects_wrong_wheel_origin_or_metadata(
             if bad == "wheel_version":
                 out["version"] = "9.9.9"
         return out
+
     monkeypatch.setattr(gate.artifact_gate, "tool_receipt", fake)
     with pytest.raises(gate.QualificationError):
         gate.qualify(*paths)
@@ -176,11 +184,11 @@ def test_rejects_wrong_wheel_origin_or_metadata(
 
 @pytest.mark.parametrize("bad", ["first_install", "second_install", "different_counts"])
 def test_rejects_missing_or_divergent_installed_python_bytes(
-    gate: Any, paths: tuple[Path, Path, Path, Path, Path],
-    monkeypatch: pytest.MonkeyPatch, bad: str
+    gate: Any, paths: tuple[Path, Path, Path, Path, Path], monkeypatch: pytest.MonkeyPatch, bad: str
 ) -> None:
     _accept_fake_gates(gate, monkeypatch, paths[1])
     calls = 0
+
     def fake(*_args: object) -> int:
         nonlocal calls
         calls += 1
@@ -191,6 +199,7 @@ def test_rejects_missing_or_divergent_installed_python_bytes(
         if bad == "different_counts" and calls == 2:
             return 249
         return 250
+
     monkeypatch.setattr(gate.artifact_gate, "installed_wheel_matches", fake)
     with pytest.raises(gate.QualificationError):
         gate.qualify(*paths)
@@ -210,15 +219,20 @@ def test_rejects_missing_or_divergent_installed_python_bytes(
     ],
 )
 def test_rejects_overstated_or_ambiguous_core_fhir_receipt(
-    gate: Any, paths: tuple[Path, Path, Path, Path, Path],
-    monkeypatch: pytest.MonkeyPatch, field: str, value: object
+    gate: Any,
+    paths: tuple[Path, Path, Path, Path, Path],
+    monkeypatch: pytest.MonkeyPatch,
+    field: str,
+    value: object,
 ) -> None:
     _accept_fake_gates(gate, monkeypatch, paths[1])
     original = gate.fhir_gate.qualify
+
     def fake(clis: list[Path]) -> dict[str, Any]:
         out = original(clis)
         out[field] = value
         return out
+
     monkeypatch.setattr(gate.fhir_gate, "qualify", fake)
     with pytest.raises(gate.QualificationError):
         gate.qualify(*paths)
@@ -229,6 +243,7 @@ def test_missing_source_or_runtime_blocks_without_running_any_verifier(
 ) -> None:
     def should_not_run(*_a: object, **_kw: object) -> None:
         raise AssertionError("must reject before spawning verifiers")
+
     monkeypatch.setattr(gate.artifact_gate, "run", should_not_run)
     with pytest.raises(gate.QualificationError):
         gate.qualify(paths[0], paths[1], paths[2], paths[3], paths[3])
@@ -241,8 +256,18 @@ def test_main_does_not_echo_untrusted_paths_or_provide_positive_receipt(
 ) -> None:
     secret = tmp_path / "FICTIONAL-NEVER-ECHO-PATH"
     result = gate.main(
-        ["--checkout", str(secret), "--wheel", str(secret), "--sdist", str(secret),
-         "--python311", str(secret), "--python312", str(secret)]
+        [
+            "--checkout",
+            str(secret),
+            "--wheel",
+            str(secret),
+            "--sdist",
+            str(secret),
+            "--python311",
+            str(secret),
+            "--python312",
+            str(secret),
+        ]
     )
     assert result == 2
     captured = capsys.readouterr()

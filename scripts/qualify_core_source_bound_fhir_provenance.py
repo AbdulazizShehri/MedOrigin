@@ -48,12 +48,8 @@ def qualify(
     if python311.absolute() == python312.absolute():
         raise QualificationError("two independent runtime interpreter paths are required")
     try:
-        commit = artifact_gate.run(
-            ["git", "-C", str(checkout), "rev-parse", "HEAD"]
-        ).strip()
-        dirty = artifact_gate.run(
-            ["git", "-C", str(checkout), "status", "--porcelain"]
-        ).strip()
+        commit = artifact_gate.run(["git", "-C", str(checkout), "rev-parse", "HEAD"]).strip()
+        dirty = artifact_gate.run(["git", "-C", str(checkout), "status", "--porcelain"]).strip()
     except artifact_gate.QualificationError as exc:
         raise QualificationError("trusted Git checkout could not be established") from exc
     if re.fullmatch(r"[0-9a-f]{40}", commit) is None or dirty:
