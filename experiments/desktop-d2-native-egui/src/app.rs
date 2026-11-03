@@ -1,6 +1,7 @@
 // Adapted from emilk/eframe_template under Apache-2.0, see UPSTREAM-NOTICE.md.
 // Synthetic-only, in-process native Rust eframe + D0; no browser, EHR, PHI or network.
 use eframe::egui;
+use sha2::{Digest, Sha256};
 use medorigin_desktop_d0_rust_prototype::{
     HashError, fictional_json_preview_v1, hash_fixture_raw_v1,
     inspect_named_synthetic_fhir_envelope_v1,
@@ -301,6 +302,22 @@ fn fictional_json_path_diff(left: &str, right: &str) -> Result<String, &'static 
     Ok(summary)
 }
 
+/// Independently hash the exact UTF-8 bytes displayed or compared by D2.
+/// A provider's SHA metadata matching the fixture table is not sufficient:
+/// its returned raw string must also match that digest. No normalization,
+/// arbitrary input or filesystem access is permitted here.
+fn verified_fictional_preview_bytes(fixture: FixtureSpec, raw: &str) -> bool {
+    if raw.len() != fixture.bytes || raw.len() > 2_048 {
+        return false;
+    }
+    use std::fmt::Write as _;
+    let mut actual = String::with_capacity(64);
+    for byte in Sha256::digest(raw.as_bytes()) {
+        write!(&mut actual, "{byte:02x}").expect("writing to String is infallible");
+    }
+    actual == fixture.sha256
+}
+
 #[derive(Default)]
 pub struct MedOriginNativePreview {
     selected: usize,
@@ -396,6 +413,7 @@ impl MedOriginNativePreview {
             || payload.bytes != fixture.bytes
             || payload.sha256_hex != fixture.sha256
             || payload.raw_json.len() != fixture.bytes
+            || !verified_fictional_preview_bytes(*fixture, payload.raw_json)
             || !payload.synthetic_only
             || payload.release_authorized
         {
@@ -437,6 +455,7 @@ impl MedOriginNativePreview {
             || payload.bytes != fixture.bytes
             || payload.sha256_hex != fixture.sha256
             || payload.raw_json.len() != fixture.bytes
+            || !verified_fictional_preview_bytes(*fixture, payload.raw_json)
             || !payload.synthetic_only
             || payload.release_authorized
         {
@@ -734,6 +753,44 @@ mod tests {
         ] {
             assert!(hash_fixture_raw_v1(id, 65_536).is_err());
             assert!(inspect_named_synthetic_fhir_envelope_v1(id, 65_536).is_err());
+        }
+    }
+
+    #[test]
+    fn fictional_preview_hash_checks_returned_bytes_not_only_provider_metadata() {
+        let original = fictional_json_preview_v1("patient-minimal")
+            .expect("compiled fictional Patient");
+        assert!(verified_fictional_preview_bytes(FIXTURES[0], original.raw_json));
+
+        // Same byte count and unchanged metadata, different actual source data.
+        let modified = original.raw_json.replacen("synthetic", "synthetix", 1);
+        assert_eq!(modified.len(), original.raw_json.len());
+        assert!(!verified_fictional_preview_bytes(FIXTURES[0], &modified));
+
+        // A forged metadata/catalog pairing cannot authorize a different hash.
+        let wrong_digest = FixtureSpec {
+            sha256: FIXTURES[4].sha256,
+            ..FIXTURES[0]
+        };
+        assert!(!verified_fictional_preview_bytes(wrong_digest, original.raw_json));
+
+        // Even if a catalog entry advertises 2,049 bytes, no oversized raw
+        // preview can pass the independent D2 display/compare boundary.
+        let oversized = "a".repeat(2_049);
+        let oversized_spec = FixtureSpec {
+            bytes: oversized.len(),
+            ..FIXTURES[0]
+        };
+        assert!(!verified_fictional_preview_bytes(oversized_spec, &oversized));
+
+        for fixture in FIXTURES {
+            if let Ok(payload) = fictional_json_preview_v1(fixture.id) {
+                assert!(
+                    verified_fictional_preview_bytes(fixture, payload.raw_json),
+                    "compiled fictional preview must match digest: {}",
+                    fixture.id
+                );
+            }
         }
     }
 
