@@ -12,7 +12,6 @@ import argparse
 import hashlib
 import io
 import json
-import os
 import platform
 import sys
 import zipfile
@@ -54,10 +53,8 @@ def _check_windows_launcher(data: bytes, python: Path) -> None:
     if (
         len(data) != WIN64_PE_PREFIX_LENGTH + len(shebang) + 260
         or data[:2] != b"MZ"
-        or hashlib.sha256(data[:WIN64_PE_PREFIX_LENGTH]).hexdigest()
-        != WIN64_PE_PREFIX_SHA256
-        or data[WIN64_PE_PREFIX_LENGTH : WIN64_PE_PREFIX_LENGTH + len(shebang)]
-        != shebang
+        or hashlib.sha256(data[:WIN64_PE_PREFIX_LENGTH]).hexdigest() != WIN64_PE_PREFIX_SHA256
+        or data[WIN64_PE_PREFIX_LENGTH : WIN64_PE_PREFIX_LENGTH + len(shebang)] != shebang
     ):
         raise QualificationError("installed Windows console launcher template mismatch")
     archive = data[WIN64_PE_PREFIX_LENGTH + len(shebang) :]
