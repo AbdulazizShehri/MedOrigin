@@ -1,0 +1,436 @@
+{
+    "schema":  "medorigin-windows-process-tree-egress-witness-v1",
+    "state":  "OBSERVED_EXTERNAL_TCP_NO_GO",
+    "executableSha256":  "BF09565876079937E35473AF5D74E9326D5A575C99B0CD00BEC42A6702A4B364",
+    "sampleCount":  20,
+    "samplingSecondsRequested":  45,
+    "sampleIntervalMillisecondsRequested":  1000,
+    "nonLoopbackTcpObservations":  36,
+    "localUdpEndpointObservations":  0,
+    "parentReuseSuspicions":  0,
+    "rootIdentityLost":  false,
+    "probeError":  null,
+    "warnings":  [
+                     "Read-only live snapshots are NOT network confinement or packet capture.",
+                     "Transient TCP, UDP destinations, DNS, QUIC, proxies, injected threads and inherited handles can be missed.",
+                     "Local UDP endpoint counts do not reveal outbound remote UDP traffic.",
+                     "No snapshot result grants PHI, clinical use, offline claims, or release authorization.",
+                     "WebView2 runtime external TCP from earlier tests is an unresolved independent NO-GO."
+                 ],
+    "tcpObservations":  [
+                            {
+                                "sample":  3,
+                                "processName":  "msedgewebview2.exe",
+                                "family":  "IPv6",
+                                "remotePort":  443,
+                                "state":  "Established"
+                            },
+                            {
+                                "sample":  3,
+                                "processName":  "msedgewebview2.exe",
+                                "family":  "IPv6",
+                                "remotePort":  443,
+                                "state":  "Established"
+                            },
+                            {
+                                "sample":  4,
+                                "processName":  "msedgewebview2.exe",
+                                "family":  "IPv6",
+                                "remotePort":  443,
+                                "state":  "Established"
+                            },
+                            {
+                                "sample":  4,
+                                "processName":  "msedgewebview2.exe",
+                                "family":  "IPv6",
+                                "remotePort":  443,
+                                "state":  "Established"
+                            },
+                            {
+                                "sample":  5,
+                                "processName":  "msedgewebview2.exe",
+                                "family":  "IPv6",
+                                "remotePort":  443,
+                                "state":  "Established"
+                            },
+                            {
+                                "sample":  5,
+                                "processName":  "msedgewebview2.exe",
+                                "family":  "IPv6",
+                                "remotePort":  443,
+                                "state":  "Established"
+                            },
+                            {
+                                "sample":  6,
+                                "processName":  "msedgewebview2.exe",
+                                "family":  "IPv6",
+                                "remotePort":  443,
+                                "state":  "Established"
+                            },
+                            {
+                                "sample":  6,
+                                "processName":  "msedgewebview2.exe",
+                                "family":  "IPv6",
+                                "remotePort":  443,
+                                "state":  "Established"
+                            },
+                            {
+                                "sample":  7,
+                                "processName":  "msedgewebview2.exe",
+                                "family":  "IPv6",
+                                "remotePort":  443,
+                                "state":  "Established"
+                            },
+                            {
+                                "sample":  7,
+                                "processName":  "msedgewebview2.exe",
+                                "family":  "IPv6",
+                                "remotePort":  443,
+                                "state":  "Established"
+                            },
+                            {
+                                "sample":  8,
+                                "processName":  "msedgewebview2.exe",
+                                "family":  "IPv6",
+                                "remotePort":  443,
+                                "state":  "Established"
+                            },
+                            {
+                                "sample":  8,
+                                "processName":  "msedgewebview2.exe",
+                                "family":  "IPv6",
+                                "remotePort":  443,
+                                "state":  "Established"
+                            },
+                            {
+                                "sample":  9,
+                                "processName":  "msedgewebview2.exe",
+                                "family":  "IPv6",
+                                "remotePort":  443,
+                                "state":  "Established"
+                            },
+                            {
+                                "sample":  9,
+                                "processName":  "msedgewebview2.exe",
+                                "family":  "IPv6",
+                                "remotePort":  443,
+                                "state":  "Established"
+                            },
+                            {
+                                "sample":  10,
+                                "processName":  "msedgewebview2.exe",
+                                "family":  "IPv6",
+                                "remotePort":  443,
+                                "state":  "Established"
+                            },
+                            {
+                                "sample":  10,
+                                "processName":  "msedgewebview2.exe",
+                                "family":  "IPv6",
+                                "remotePort":  443,
+                                "state":  "Established"
+                            },
+                            {
+                                "sample":  11,
+                                "processName":  "msedgewebview2.exe",
+                                "family":  "IPv6",
+                                "remotePort":  443,
+                                "state":  "Established"
+                            },
+                            {
+                                "sample":  11,
+                                "processName":  "msedgewebview2.exe",
+                                "family":  "IPv6",
+                                "remotePort":  443,
+                                "state":  "Established"
+                            },
+                            {
+                                "sample":  12,
+                                "processName":  "msedgewebview2.exe",
+                                "family":  "IPv6",
+                                "remotePort":  443,
+                                "state":  "Established"
+                            },
+                            {
+                                "sample":  12,
+                                "processName":  "msedgewebview2.exe",
+                                "family":  "IPv6",
+                                "remotePort":  443,
+                                "state":  "Established"
+                            },
+                            {
+                                "sample":  13,
+                                "processName":  "msedgewebview2.exe",
+                                "family":  "IPv6",
+                                "remotePort":  443,
+                                "state":  "Established"
+                            },
+                            {
+                                "sample":  13,
+                                "processName":  "msedgewebview2.exe",
+                                "family":  "IPv6",
+                                "remotePort":  443,
+                                "state":  "Established"
+                            },
+                            {
+                                "sample":  14,
+                                "processName":  "msedgewebview2.exe",
+                                "family":  "IPv6",
+                                "remotePort":  443,
+                                "state":  "Established"
+                            },
+                            {
+                                "sample":  14,
+                                "processName":  "msedgewebview2.exe",
+                                "family":  "IPv6",
+                                "remotePort":  443,
+                                "state":  "Established"
+                            },
+                            {
+                                "sample":  15,
+                                "processName":  "msedgewebview2.exe",
+                                "family":  "IPv6",
+                                "remotePort":  443,
+                                "state":  "Established"
+                            },
+                            {
+                                "sample":  15,
+                                "processName":  "msedgewebview2.exe",
+                                "family":  "IPv6",
+                                "remotePort":  443,
+                                "state":  "Established"
+                            },
+                            {
+                                "sample":  16,
+                                "processName":  "msedgewebview2.exe",
+                                "family":  "IPv6",
+                                "remotePort":  443,
+                                "state":  "Established"
+                            },
+                            {
+                                "sample":  16,
+                                "processName":  "msedgewebview2.exe",
+                                "family":  "IPv6",
+                                "remotePort":  443,
+                                "state":  "Established"
+                            },
+                            {
+                                "sample":  17,
+                                "processName":  "msedgewebview2.exe",
+                                "family":  "IPv6",
+                                "remotePort":  443,
+                                "state":  "Established"
+                            },
+                            {
+                                "sample":  17,
+                                "processName":  "msedgewebview2.exe",
+                                "family":  "IPv6",
+                                "remotePort":  443,
+                                "state":  "Established"
+                            },
+                            {
+                                "sample":  18,
+                                "processName":  "msedgewebview2.exe",
+                                "family":  "IPv6",
+                                "remotePort":  443,
+                                "state":  "Established"
+                            },
+                            {
+                                "sample":  18,
+                                "processName":  "msedgewebview2.exe",
+                                "family":  "IPv6",
+                                "remotePort":  443,
+                                "state":  "Established"
+                            },
+                            {
+                                "sample":  19,
+                                "processName":  "msedgewebview2.exe",
+                                "family":  "IPv6",
+                                "remotePort":  443,
+                                "state":  "Established"
+                            },
+                            {
+                                "sample":  19,
+                                "processName":  "msedgewebview2.exe",
+                                "family":  "IPv6",
+                                "remotePort":  443,
+                                "state":  "Established"
+                            },
+                            {
+                                "sample":  20,
+                                "processName":  "msedgewebview2.exe",
+                                "family":  "IPv6",
+                                "remotePort":  443,
+                                "state":  "Established"
+                            },
+                            {
+                                "sample":  20,
+                                "processName":  "msedgewebview2.exe",
+                                "family":  "IPv6",
+                                "remotePort":  443,
+                                "state":  "Established"
+                            }
+                        ],
+    "samples":  [
+                    {
+                        "sample":  1,
+                        "treeCount":  2,
+                        "webviewChildren":  0,
+                        "nonLoopbackTcpCount":  0,
+                        "localUdpEndpointCount":  0,
+                        "parentReuseSuspicions":  0
+                    },
+                    {
+                        "sample":  2,
+                        "treeCount":  8,
+                        "webviewChildren":  6,
+                        "nonLoopbackTcpCount":  0,
+                        "localUdpEndpointCount":  0,
+                        "parentReuseSuspicions":  0
+                    },
+                    {
+                        "sample":  3,
+                        "treeCount":  8,
+                        "webviewChildren":  6,
+                        "nonLoopbackTcpCount":  2,
+                        "localUdpEndpointCount":  0,
+                        "parentReuseSuspicions":  0
+                    },
+                    {
+                        "sample":  4,
+                        "treeCount":  8,
+                        "webviewChildren":  6,
+                        "nonLoopbackTcpCount":  2,
+                        "localUdpEndpointCount":  0,
+                        "parentReuseSuspicions":  0
+                    },
+                    {
+                        "sample":  5,
+                        "treeCount":  8,
+                        "webviewChildren":  6,
+                        "nonLoopbackTcpCount":  2,
+                        "localUdpEndpointCount":  0,
+                        "parentReuseSuspicions":  0
+                    },
+                    {
+                        "sample":  6,
+                        "treeCount":  8,
+                        "webviewChildren":  6,
+                        "nonLoopbackTcpCount":  2,
+                        "localUdpEndpointCount":  0,
+                        "parentReuseSuspicions":  0
+                    },
+                    {
+                        "sample":  7,
+                        "treeCount":  8,
+                        "webviewChildren":  6,
+                        "nonLoopbackTcpCount":  2,
+                        "localUdpEndpointCount":  0,
+                        "parentReuseSuspicions":  0
+                    },
+                    {
+                        "sample":  8,
+                        "treeCount":  8,
+                        "webviewChildren":  6,
+                        "nonLoopbackTcpCount":  2,
+                        "localUdpEndpointCount":  0,
+                        "parentReuseSuspicions":  0
+                    },
+                    {
+                        "sample":  9,
+                        "treeCount":  8,
+                        "webviewChildren":  6,
+                        "nonLoopbackTcpCount":  2,
+                        "localUdpEndpointCount":  0,
+                        "parentReuseSuspicions":  0
+                    },
+                    {
+                        "sample":  10,
+                        "treeCount":  8,
+                        "webviewChildren":  6,
+                        "nonLoopbackTcpCount":  2,
+                        "localUdpEndpointCount":  0,
+                        "parentReuseSuspicions":  0
+                    },
+                    {
+                        "sample":  11,
+                        "treeCount":  8,
+                        "webviewChildren":  6,
+                        "nonLoopbackTcpCount":  2,
+                        "localUdpEndpointCount":  0,
+                        "parentReuseSuspicions":  0
+                    },
+                    {
+                        "sample":  12,
+                        "treeCount":  8,
+                        "webviewChildren":  6,
+                        "nonLoopbackTcpCount":  2,
+                        "localUdpEndpointCount":  0,
+                        "parentReuseSuspicions":  0
+                    },
+                    {
+                        "sample":  13,
+                        "treeCount":  8,
+                        "webviewChildren":  6,
+                        "nonLoopbackTcpCount":  2,
+                        "localUdpEndpointCount":  0,
+                        "parentReuseSuspicions":  0
+                    },
+                    {
+                        "sample":  14,
+                        "treeCount":  8,
+                        "webviewChildren":  6,
+                        "nonLoopbackTcpCount":  2,
+                        "localUdpEndpointCount":  0,
+                        "parentReuseSuspicions":  0
+                    },
+                    {
+                        "sample":  15,
+                        "treeCount":  8,
+                        "webviewChildren":  6,
+                        "nonLoopbackTcpCount":  2,
+                        "localUdpEndpointCount":  0,
+                        "parentReuseSuspicions":  0
+                    },
+                    {
+                        "sample":  16,
+                        "treeCount":  8,
+                        "webviewChildren":  6,
+                        "nonLoopbackTcpCount":  2,
+                        "localUdpEndpointCount":  0,
+                        "parentReuseSuspicions":  0
+                    },
+                    {
+                        "sample":  17,
+                        "treeCount":  8,
+                        "webviewChildren":  6,
+                        "nonLoopbackTcpCount":  2,
+                        "localUdpEndpointCount":  0,
+                        "parentReuseSuspicions":  0
+                    },
+                    {
+                        "sample":  18,
+                        "treeCount":  8,
+                        "webviewChildren":  6,
+                        "nonLoopbackTcpCount":  2,
+                        "localUdpEndpointCount":  0,
+                        "parentReuseSuspicions":  0
+                    },
+                    {
+                        "sample":  19,
+                        "treeCount":  8,
+                        "webviewChildren":  6,
+                        "nonLoopbackTcpCount":  2,
+                        "localUdpEndpointCount":  0,
+                        "parentReuseSuspicions":  0
+                    },
+                    {
+                        "sample":  20,
+                        "treeCount":  8,
+                        "webviewChildren":  6,
+                        "nonLoopbackTcpCount":  2,
+                        "localUdpEndpointCount":  0,
+                        "parentReuseSuspicions":  0
+                    }
+                ]
+}

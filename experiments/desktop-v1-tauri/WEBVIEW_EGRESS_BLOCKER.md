@@ -27,3 +27,17 @@ The Slice 1 exact-tree Windows process-tree check saw `msedgewebview2.exe` desce
 4. No automatic downgrade to clinical, PHI, offline or release claims. Build/release governor remains **NO-GO** until all other clinical, security, license, signature and owner approval gates pass.
 
 **State:** Research decision only. No WFP rules or system policies modified. This branch remains a synthetic developer preview.
+
+## 2026-11-04 — exact executable evidence and build policy (Slice 6)
+
+New **read-only, SHA-256-bound** Windows process-tree witness:
+`tests/windows-egress-exact-binary-witness.ps1`. It uses process creation time plus parent PID rather than trusting PID alone, and observes live socket *snapshots* without changing OS policy.
+
+- Slice 5 executable `DA9F657E967BF880EA4F355801A9A1EE168C2089106B1E6FB68C65E665D9CE7D`: 21 samples, 38 observed nonloopback IPv6 TCP:443 connections belonging to WebView2 descendants; `OBSERVED_EXTERNAL_TCP_NO_GO`.
+- New exact Slice 6 debug executable `BF09565876079937E35473AF5D74E9326D5A575C99B0CD00BEC42A6702A4B364`: 20 samples, 36 observed nonloopback IPv6 TCP:443 connections belonging to WebView2 descendants; `OBSERVED_EXTERNAL_TCP_NO_GO`. Native Windows UIAutomation of that exact executable **PASS**.
+- Explicit Rust `build.rs` gate now refuses optimized Release or unknown/custom Cargo build profiles, allowing only debug/test; standalone policy tests **2/2 PASS**. This **does not eliminate network traffic or prove OS containment**.
+- No private IP addresses, usernames, command lines or raw endpoint data included in the checked-in evidence JSON. Reports record only destination port, family, owner name and TCP state. No PHI used.
+- Both observed results leave issue #662 and offline/PHI/release qualification **NO-GO**. Process snapshots miss short-lived events, DNS, UDP sends and QUIC; packet capture and enforceable OS network denial remain mandatory.
+- Alternative browserless D2 egui is an existing, independently tested track (recent #867 Windows/Linux native-offline checks passed), but it remains **Draft** and not a clinical-ready replacement with full feature parity. Keep Tauri/React synthetic-only while D2 is qualified separately.
+
+For reproducibility, limits, fail-closed wrong-hash tests and exact QA receipts see `SLICE6_SECURITY_QA.md`. No global firewall, antivirus, WFP or user preferences were modified.
