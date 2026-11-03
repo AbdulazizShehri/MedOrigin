@@ -113,7 +113,8 @@ Not clinical. Not regulatory-ready. Not HIPAA-anything. Not offline. Not zero-eg
 
 ## 10. Final verification identity
 
-Filled at close-out: the exact branch HEAD SHA after the verification commit, and confirmation that every screenshot/test cited above was produced from that tree. Navigation/verification/test outputs quoted in §1 were produced on this tree (Windows 11, 125% DPI).
-
-Known open items carried into the next slice: see §9. No claim in this record exceeds `INTEGRATED SYNTHETIC`.
+- **Code/evidence tree verified:** `e4f3f7bc` (implementation `9365fc55`; docs/evidence `dc3bd725` + `e4f3f7bc`) — every screenshot, gate output and UIA/egress result cited in §1 was produced from this tree or on its direct ancestors with no source edits afterwards (the subsequent commit only fills in this section).
+- Windows 11 Home build 26300 · 125% DPI · WebView2 156.0.4314.58.
+- Review identity for the whole slice: branch `feat/medorigin-desktop-v1-20261103` (worktree `C:\Users\Shehr\work\MedOrigin-desktop-v1`), based on PR #870 head `1bd0cb58`.
+- Known open items carried into the next slice: see §9. No claim in this record exceeds `INTEGRATED SYNTHETIC`.
 
