@@ -6,7 +6,8 @@ param(
   [Parameter(Mandatory=$true)][ValidatePattern('^[a-fA-F0-9]{64}$')][string]$ExpectedSha256,
   [string]$LiveReceiptPath = '',
   [string]$SessionFramePath = '',
-  [string]$PersistentQaReceiptPath = ''
+  [string]$PersistentQaReceiptPath = '',
+  [switch]$FocusedStartup
 )
 $ErrorActionPreference='Stop'
 function Refuse([string]$reason) {
@@ -63,7 +64,7 @@ $process=$null
 try {
   $info=New-Object System.Diagnostics.ProcessStartInfo
   $info.FileName=$exe
-  $info.Arguments='--synthetic-encrypted-readback-stdin'
+  $info.Arguments=if($FocusedStartup){'--synthetic-encrypted-readback-focused-stdin'}else{'--synthetic-encrypted-readback-stdin'}
   if($SessionFramePath) {
     if((-not $LiveReceiptPath -and -not $PersistentQaReceiptPath) -or
        $env:MEDORIGIN_D2_FICTIONAL_SESSION_NONCE -cnotmatch '^[0-9a-f]{32}$' -or
@@ -76,7 +77,7 @@ try {
        $entry.Length -le 1164 -or $entry.Length -gt 2048) {
       Refuse 'session_frame_file_bounds_refused'
     }
-    $info.Arguments='--synthetic-encrypted-readback-session-stdin'
+    $info.Arguments=if($FocusedStartup){'--synthetic-encrypted-readback-session-focused-stdin'}else{'--synthetic-encrypted-readback-session-stdin'}
   }
   $info.UseShellExecute=$false
   $info.RedirectStandardInput=$true
@@ -159,6 +160,15 @@ try {
       Start-Sleep -Milliseconds 130
     }
     throw ('native_UIA_button_missing: '+$wanted)
+  }
+  if($FocusedStartup) {
+    Expect 'MedOrigin focused Workspace'
+    Expect 'Source-verified resource browser'
+    Expect 'Focus: 3 of 3 source-verified fictional resources visible'
+    if(Has 'Workspace home: fictional Core source only') {
+      throw 'focused_startup_unexpectedly_started_developer_mode'
+    }
+    Press 'Focus: Return to developer evidence'
   }
   Expect 'Recovered fictional resource count: 3'
   Expect ('Encrypted readback SHA-256: '+$reportHash)

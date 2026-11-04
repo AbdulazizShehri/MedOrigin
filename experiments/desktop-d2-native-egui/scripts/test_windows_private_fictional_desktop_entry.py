@@ -66,6 +66,7 @@ class PrivateFictionalOneClickTests(unittest.TestCase):
                 cmd = created.read_text(encoding="ascii")
                 self.assertIn("setlocal DisableDelayedExpansion", cmd)
                 self.assertIn("--ensure-fictional-demo", cmd)
+                self.assertIn("--start-focused", cmd)
                 self.assertIn("--fictional-persistent-qa-root", cmd)
                 self.assertIn(
                     str(args.kit / "scripts/launch_windows_portable_fictional_core.py"), cmd
@@ -123,10 +124,12 @@ class PrivateFictionalOneClickTests(unittest.TestCase):
                 a = entry.make_entry(args)
                 self.assertEqual(a.name, entry.QA_ENTRY_NAME)
                 self.assertIn(" --qa-uia", a.read_text(encoding="ascii"))
+                self.assertNotIn("--start-focused", a.read_text(encoding="ascii"))
                 args.qa_mode = "auto-close"
                 b = entry.make_entry(args)
                 self.assertEqual(b.name, entry.CLOSE_ENTRY_NAME)
                 self.assertIn(" --qa-auto-close", b.read_text(encoding="ascii"))
+                self.assertNotIn("--start-focused", b.read_text(encoding="ascii"))
                 args.qa_mode = "unreviewed"
                 with self.assertRaisesRegex(ValueError, "unreviewed_mode"):
                     entry.make_entry(args)

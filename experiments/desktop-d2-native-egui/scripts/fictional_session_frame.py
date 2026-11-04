@@ -13,6 +13,7 @@ import secrets
 
 MAGIC = b"MedOrigin-D2-FICTIONAL-SESSION-V1\0"
 SESSION_FLAG = "--synthetic-encrypted-readback-session-stdin"
+SESSION_FOCUSED_FLAG = "--synthetic-encrypted-readback-session-focused-stdin"
 KEY_ENV = "MEDORIGIN_D2_FICTIONAL_SESSION_KEY"
 NONCE_ENV = "MEDORIGIN_D2_FICTIONAL_SESSION_NONCE"
 MAX_FRAME = 2048

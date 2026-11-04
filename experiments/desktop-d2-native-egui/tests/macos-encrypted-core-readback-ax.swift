@@ -7,10 +7,13 @@ func noGo(_ reason: String) -> Never {
   fputs("MACOS_FICTIONAL_WORKSPACE_AX_NO_GO: \(reason)\n", stderr)
   exit(1)
 }
-guard CommandLine.arguments.count == 2,
+guard (CommandLine.arguments.count == 2 ||
+       (CommandLine.arguments.count == 3 &&
+        CommandLine.arguments[2] == "--focused-startup")),
       let pid = Int32(CommandLine.arguments[1]), pid > 0 else {
-  noGo("exact signed native D2 PID required")
+  noGo("exact native D2 PID and optional reviewed focused startup mode required")
 }
+let focusedStartup = CommandLine.arguments.count == 3
 guard AXIsProcessTrusted() else { noGo("explicit accessibility permission absent") }
 let app = AXUIElementCreateApplication(pid)
 var nativeWindow: AXUIElement?
@@ -103,6 +106,19 @@ func detail(_ name: String, _ sha: String, _ status: String, _ relation: String?
   }
   noGo("actual native workspace detail missing/invalid for " + name)
 }
+if focusedStartup {
+  guard eventuallyText("MedOrigin focused Workspace"),
+        eventuallyText("Source-verified resource browser"),
+        eventuallyText("Focus: 3 of 3 source-verified fictional resources visible")
+  else { noGo("focused one-shot Core mode did not open Workspace FIRST") }
+  if textPresent("Workspace home: fictional Core source only") {
+    noGo("focused native start incorrectly exposed developer evidence first")
+  }
+  press("Focus: Return to developer evidence")
+  guard eventuallyText("Workspace home: fictional Core source only")
+  else { noGo("focused startup cannot return to original D2 developer evidence") }
+  print("MACOS_NATIVE_FOCUSED_SOURCE_STARTUP_FIRST_AX_PASS_NONCLINICAL")
+}
 let readbackSHA = "c99af04367aeaedeecb29b7fccc8a8fb58f2a85753eeae874eae5ad363307a49"
 for required in [
   "Recovered fictional resource count: 3",
@@ -169,7 +185,15 @@ else { noGo("focused keyword clearing did not restore source worklist") }
 print("MACOS_NATIVE_FOCUSED_SOURCE_BROWSER_FILTER_SEARCH_OPEN_AX_PASS_NONCLINICAL")
 press("Focus: Open Patient")
 guard eventuallyText("Focused fictional record: Patient/fictional-patient-001")
-else { noGo("focused patient not source-linked") }
+else {
+  let labels = visibleNodes().flatMap { $0.labels }.filter {
+    $0.contains("Focus:") || $0.contains("Focused fictional") ||
+    $0.contains("Workspace") || $0.contains("Patient") ||
+    $0.contains("Source-verified")
+  }.prefix(30)
+  noGo("focused patient not source-linked; actual AX labels: " +
+       String(describing: Array(labels)))
+}
 press("Focus: Open Encounter")
 guard eventuallyText("Focused fictional record: Encounter/fictional-encounter-001")
 else { noGo("focused Encounter not source-linked") }

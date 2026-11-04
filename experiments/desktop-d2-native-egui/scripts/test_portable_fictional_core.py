@@ -75,6 +75,39 @@ class PortableFictionalCoreContractTests(unittest.TestCase):
             encoding="utf-8",
         )
 
+    def test_focused_native_launcher_uses_only_reviewed_hmac_session_flag(self):
+        from unittest.mock import MagicMock
+
+        gui = self.root / "native/medorigin-desktop-d2-native-egui.exe"
+        framed = b"not-an-actual-signed-test-frame"
+        child = MagicMock()
+        child.returncode = 0
+        child.poll.return_value = 0
+        with patch.object(runtime.subprocess, "Popen", return_value=child) as factory:
+            runtime._launch_gui(
+                gui,
+                framed,
+                self.root,
+                qa_auto_close=False,
+                start_focused=True,
+                nonce=b"0" * 16,
+                key=b"1" * 32,
+            )
+            cmd = factory.call_args.args[0]
+            self.assertEqual(cmd, [str(gui), runtime.SESSION_FOCUSED_FLAG])
+            self.assertEqual(child.communicate.call_args.kwargs["input"], framed)
+        with patch.object(runtime.subprocess, "Popen", return_value=child) as factory:
+            runtime._launch_gui(
+                gui,
+                framed,
+                self.root,
+                qa_auto_close=False,
+                start_focused=False,
+                nonce=b"0" * 16,
+                key=b"1" * 32,
+            )
+            self.assertEqual(factory.call_args.args[0], [str(gui), runtime.SESSION_FLAG])
+
     def test_source_exact_portable_without_git_wheels_or_source_checkout(self):
         gui, exporter, fixture = runtime.attest_kit(self.root)
         self.assertEqual(gui, self.root / self.fake_files[3])

@@ -23,6 +23,7 @@ from fictional_session_frame import (
     KEY_ENV,
     NONCE_ENV,
     SESSION_FLAG,
+    SESSION_FOCUSED_FLAG,
     frame_one_time_fictional_core,
     fresh_ephemeral_session,
 )
@@ -144,6 +145,7 @@ def _launch_gui(
     work: Path,
     *,
     qa_auto_close: bool,
+    start_focused: bool,
     nonce: bytes,
     key: bytes,
 ) -> None:
@@ -161,7 +163,7 @@ def _launch_gui(
     process = None
     try:
         process = subprocess.Popen(
-            [str(gui), SESSION_FLAG],
+            [str(gui), SESSION_FOCUSED_FLAG if start_focused else SESSION_FLAG],
             cwd=work,
             env=env,
             stdin=subprocess.PIPE,
@@ -198,6 +200,7 @@ def _qa_native_clicks(
     key: bytes,
     *,
     persistent: bool = False,
+    focused: bool = False,
 ) -> None:
     receipt = work / "reviewed-portable-core-projection.json"
     if receipt.exists() or receipt.is_symlink():
@@ -226,6 +229,7 @@ def _qa_native_clicks(
             str(receipt),
             "-SessionFramePath",
             str(session_path),
+            *(["-FocusedStartup"] if focused else []),
         ],
         cwd=work,
         capture_output=True,
@@ -269,6 +273,9 @@ def launch(args: argparse.Namespace) -> None:
     gui, exporter, fixture = attest_kit(root)
     persistent_qa_root = getattr(args, "fictional_persistent_qa_root", None)
     ensure_demo = getattr(args, "ensure_fictional_demo", False)
+    start_focused = getattr(args, "start_focused", False)
+    if start_focused and (args.qa_uia or getattr(args, "qa_focused_uia", False)):
+        raise ValueError("focused_startup_qa_mode_conflict")
     if ensure_demo and persistent_qa_root is None:
         raise ValueError("fictional_demo_requires_explicit_fixed_vault_path")
     if persistent_qa_root is not None:
@@ -319,7 +326,7 @@ def launch(args: argparse.Namespace) -> None:
         # production sender authentication, key custody or OS secrecy.
         nonce, key = fresh_ephemeral_session()
         framed = frame_one_time_fictional_core(raw, nonce, key)
-        if args.qa_uia:
+        if args.qa_uia or getattr(args, "qa_focused_uia", False):
             _qa_native_clicks(
                 root,
                 gui,
@@ -329,6 +336,7 @@ def launch(args: argparse.Namespace) -> None:
                 nonce,
                 key,
                 persistent=persistent_qa_root is not None,
+                focused=getattr(args, "qa_focused_uia", False),
             )
         else:
             _launch_gui(
@@ -336,6 +344,7 @@ def launch(args: argparse.Namespace) -> None:
                 framed,
                 work,
                 qa_auto_close=args.qa_auto_close,
+                start_focused=start_focused,
                 nonce=nonce,
                 key=key,
             )
@@ -363,6 +372,14 @@ if __name__ == "__main__":
             "same fixed fictional test vault; never replace an existing vault"
         ),
     )
+    parser.add_argument(
+        "--start-focused",
+        action="store_true",
+        help=(
+            "Open the same strictly fictional SHA-verified Core source "
+            "in focused native Workspace first"
+        ),
+    )
     modes = parser.add_mutually_exclusive_group()
     modes.add_argument(
         "--qa-auto-close",
@@ -373,6 +390,14 @@ if __name__ == "__main__":
         "--qa-uia",
         action="store_true",
         help="Click exact recovered fictional Core using real Windows UIA",
+    )
+    modes.add_argument(
+        "--qa-focused-uia",
+        action="store_true",
+        help=(
+            "Verify the same HMAC-bound imaginary Core starts directly "
+            "in focused native Workspace UIA"
+        ),
     )
     try:
         launch(parser.parse_args())

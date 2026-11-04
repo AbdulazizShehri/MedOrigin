@@ -10,13 +10,15 @@ use std::time::Duration;
 
 use medorigin_desktop_d2_native_egui::MedOriginNativePreview;
 use medorigin_desktop_d2_native_egui::session::{
-    self, ENV_SESSION_KEY, ENV_SESSION_NONCE, SESSION_FLAG,
+    self, ENV_SESSION_KEY, ENV_SESSION_NONCE, SESSION_FLAG, SESSION_FOCUSED_FLAG,
 };
 
 const MAX_FICTIONAL_CORE_STDIN: usize = 2048;
 const EXPLICIT_SYNTHETIC_CORE_FLAG: &str = "--synthetic-core-stdin";
 const EXPLICIT_SYNTHETIC_WORKSPACE_FLAG: &str = "--synthetic-workspace-receipt-stdin";
 const EXPLICIT_SYNTHETIC_READBACK_FLAG: &str = "--synthetic-encrypted-readback-stdin";
+const EXPLICIT_SYNTHETIC_FOCUSED_READBACK_FLAG: &str =
+    "--synthetic-encrypted-readback-focused-stdin";
 const SYNTHETIC_CORE_STDIN_DEADLINE: Duration = Duration::from_secs(5);
 
 /// Only this opt-in command-line switch permits reading a finite stdin
@@ -46,7 +48,9 @@ fn make_app_with_deadline<R: Read + Send + 'static>(
         || (args[0] != EXPLICIT_SYNTHETIC_CORE_FLAG
             && args[0] != EXPLICIT_SYNTHETIC_WORKSPACE_FLAG
             && args[0] != EXPLICIT_SYNTHETIC_READBACK_FLAG
-            && args[0] != SESSION_FLAG)
+            && args[0] != EXPLICIT_SYNTHETIC_FOCUSED_READBACK_FLAG
+            && args[0] != SESSION_FLAG
+            && args[0] != SESSION_FOCUSED_FLAG)
     {
         return Err(io::Error::new(
             io::ErrorKind::InvalidInput,
@@ -87,7 +91,7 @@ fn make_app_with_deadline<R: Read + Send + 'static>(
             "unapproved_d2_synthetic_core_stdin_size",
         ));
     }
-    if args[0] == SESSION_FLAG {
+    if args[0] == SESSION_FLAG || args[0] == SESSION_FOCUSED_FLAG {
         // Session key/nonce are generated per GUI launch by the private owner.
         // Never fall back to the legacy unbound static readback when absent.
         // This is NOT an externally authenticated sender or OS secret store.
@@ -118,11 +122,23 @@ fn make_app_with_deadline<R: Read + Send + 'static>(
                 "fictional_session_mac_or_freshness_refused",
             )
         })?;
-        MedOriginNativePreview::from_one_time_synthetic_encrypted_readback_stdin(inner).map_err(
+        let app = if args[0] == SESSION_FOCUSED_FLAG {
+            MedOriginNativePreview::from_one_time_synthetic_focused_readback_stdin(inner)
+        } else {
+            MedOriginNativePreview::from_one_time_synthetic_encrypted_readback_stdin(inner)
+        };
+        app.map_err(|_| {
+            io::Error::new(
+                io::ErrorKind::InvalidData,
+                "fictional_session_unreviewed_inner_projection",
+            )
+        })
+    } else if args[0] == EXPLICIT_SYNTHETIC_FOCUSED_READBACK_FLAG {
+        MedOriginNativePreview::from_one_time_synthetic_focused_readback_stdin(&bytes).map_err(
             |_| {
                 io::Error::new(
                     io::ErrorKind::InvalidData,
-                    "fictional_session_unreviewed_inner_projection",
+                    "unapproved_synthetic_focused_readback_projection",
                 )
             },
         )
@@ -179,6 +195,65 @@ mod tests {
     const ENCRYPTED_READBACK: &[u8] =
         include_bytes!("../fixtures/core/encrypted-readback-projection.json");
     const CORE_NEGATIVE: &[u8] = include_bytes!("../fixtures/core/unknown-fictional-negative.json");
+
+    #[test]
+    fn source_verified_focused_startup_opens_product_view_only_for_exact_imaginary_readback() {
+        let app = make_app(
+            &[OsString::from(EXPLICIT_SYNTHETIC_FOCUSED_READBACK_FLAG)],
+            Cursor::new(ENCRYPTED_READBACK),
+        )
+        .expect("exact reviewed fictional source should open focused native Workspace");
+        assert!(app.has_external_synthetic_encrypted_readback());
+        assert!(app.focused_fictional_workspace_is_visible());
+
+        let legacy = make_app(
+            &[OsString::from(EXPLICIT_SYNTHETIC_READBACK_FLAG)],
+            Cursor::new(ENCRYPTED_READBACK),
+        )
+        .expect("existing source-only developer mode must be unchanged");
+        assert!(!legacy.focused_fictional_workspace_is_visible());
+        assert!(legacy.has_external_synthetic_encrypted_readback());
+
+        for data in [
+            b"{}".to_vec(),
+            [ENCRYPTED_READBACK, b" "].concat(),
+            [ENCRYPTED_READBACK, b"\n"].concat(),
+            vec![b'X'; MAX_FICTIONAL_CORE_STDIN + 1],
+        ] {
+            assert!(
+                make_app(
+                    &[OsString::from(EXPLICIT_SYNTHETIC_FOCUSED_READBACK_FLAG)],
+                    Cursor::new(data)
+                )
+                .is_err(),
+                "focused view must not bypass canonical source approval"
+            );
+        }
+    }
+
+    #[test]
+    fn focused_hmac_session_requires_independent_nonce_key_and_never_falls_back() {
+        // Supplying a raw fixture to a session HMAC flag must never allow GUI.
+        // The actual positive HMAC path is tested by the portable real Windows
+        // launcher using per-launch CSPRNG material and the real native GUI.
+        assert!(
+            make_app(
+                &[OsString::from(SESSION_FOCUSED_FLAG)],
+                Cursor::new(ENCRYPTED_READBACK)
+            )
+            .is_err()
+        );
+        assert!(
+            make_app(
+                &[
+                    OsString::from(SESSION_FOCUSED_FLAG),
+                    OsString::from("--file")
+                ],
+                Cursor::new(ENCRYPTED_READBACK)
+            )
+            .is_err()
+        );
+    }
 
     #[test]
     fn real_core_decrypted_three_record_projection_starts_only_explicit_native_mode() {

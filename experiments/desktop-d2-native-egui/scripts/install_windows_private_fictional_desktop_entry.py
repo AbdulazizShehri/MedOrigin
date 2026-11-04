@@ -118,7 +118,13 @@ def make_entry(args: argparse.Namespace) -> Path:
         f" --python-sha {args.python_sha.lower()}"
         f' --fictional-persistent-qa-root "{vault}"'
         " --ensure-fictional-demo"
-        + (" --qa-uia" if mode == "uia" else " --qa-auto-close" if mode == "auto-close" else "")
+        + (
+            " --qa-uia"
+            if mode == "uia"
+            else " --qa-auto-close"
+            if mode == "auto-close"
+            else " --start-focused"
+        )
     )
     script = (
         "@echo off\r\n"

@@ -6,6 +6,8 @@
 use sha2::{Digest, Sha256};
 
 pub const SESSION_FLAG: &str = "--synthetic-encrypted-readback-session-stdin";
+// Explicit fictional-only focused view: identical HMAC admission, different initial UI.
+pub const SESSION_FOCUSED_FLAG: &str = "--synthetic-encrypted-readback-session-focused-stdin";
 pub const ENV_SESSION_KEY: &str = "MEDORIGIN_D2_FICTIONAL_SESSION_KEY";
 pub const ENV_SESSION_NONCE: &str = "MEDORIGIN_D2_FICTIONAL_SESSION_NONCE";
 pub const SESSION_TAG: &[u8] = b"MedOrigin-D2-FICTIONAL-SESSION-V1\0";

@@ -4,14 +4,15 @@
 Source-pinned, no external records/paths/keys. Does NOT confine Core
 network access or attest third-party system crypto. Never clinical.
 """
+
 from __future__ import annotations
 
 import argparse
 import hashlib
 import os
-from pathlib import Path
 import subprocess
 import sys
+from pathlib import Path
 from tempfile import TemporaryDirectory
 
 from supervise_windows_encrypted_core_job import execute_encrypted_source_under_job
@@ -23,6 +24,8 @@ PACKAGES = (
     ("src/medscale", 120, 450),
     ("apps/workspace/src/medscale_workspace", 30, 120),
 )
+
+
 def sha(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
@@ -30,7 +33,9 @@ def sha(path: Path) -> str:
 def git(core: Path, *args: str) -> bytes:
     return subprocess.run(
         ["git", "-C", str(core), *args],
-        capture_output=True, check=True, timeout=12,
+        capture_output=True,
+        check=True,
+        timeout=12,
     ).stdout
 
 
@@ -43,10 +48,7 @@ def source_bound_core(core: Path) -> None:
         raise ValueError("reviewed_core_source_not_clean")
     for package, minimum, maximum in PACKAGES:
         inventory = git(core, "ls-files", "-z", "--", package)
-        approved = {
-            name.decode()
-            for name in inventory.split(b"\x00") if name
-        }
+        approved = {name.decode() for name in inventory.split(b"\x00") if name}
         if not minimum <= len(approved) <= maximum:
             raise ValueError("reviewed_core_source_inventory_changed")
         actual = set()
@@ -57,8 +59,7 @@ def source_bound_core(core: Path) -> None:
                 raise ValueError("ignored_python_bytecode_cache_refused")
             if path.is_file():
                 relative = path.relative_to(core).as_posix()
-                if path.suffix.lower() in (".pyc", ".pyo", ".pyd", ".dll", ".so",
-                                            ".pth", ".dylib"):
+                if path.suffix.lower() in (".pyc", ".pyo", ".pyd", ".dll", ".so", ".pth", ".dylib"):
                     raise ValueError("unreviewed_python_bytecode_native_loader_refused")
                 actual.add(relative)
         if actual != approved:
@@ -72,11 +73,14 @@ def qualify(args: argparse.Namespace) -> None:
     python = args.python.resolve(strict=True)
     gui = args.native_gui.resolve(strict=True)
     source_bound_core(core)
-    if (args.python.is_symlink() or args.native_gui.is_symlink()
+    if (
+        args.python.is_symlink()
+        or args.native_gui.is_symlink()
         or python.name.lower() != "python.exe"
         or gui.name != "medorigin-desktop-d2-native-egui.exe"
         or sha(python) != args.python_sha.lower()
-        or sha(gui) != args.native_sha.lower()):
+        or sha(gui) != args.native_sha.lower()
+    ):
         raise ValueError("reviewed_python_or_native_gui_executable_changed")
     site = args.site.resolve(strict=True)
     if args.site.is_symlink() or not site.is_dir():
@@ -85,8 +89,10 @@ def qualify(args: argparse.Namespace) -> None:
     fixture = root / "fixtures/core/encrypted-readback-projection.json"
     script = root / "scripts/synthetic_encrypted_readback_projection.py"
     observer = root / "tests/windows-encrypted-core-readback-uia.ps1"
-    if (any(p.is_symlink() or not p.is_file() for p in (fixture, script, observer))
-        or sha(fixture) != PROJECTION_SHA):
+    if (
+        any(p.is_symlink() or not p.is_file() for p in (fixture, script, observer))
+        or sha(fixture) != PROJECTION_SHA
+    ):
         raise ValueError("reviewed_synthetic_core_projection_fixture_changed")
     with TemporaryDirectory(prefix="medorigin-windows-source-core-readback-") as temp:
         work = Path(temp).resolve()
@@ -101,23 +107,48 @@ def qualify(args: argparse.Namespace) -> None:
         # assignment. Job handle close kills its entire descendant subtree;
         # it does NOT impose any network/DNS/TCP/UDP restriction.
         raw = execute_encrypted_source_under_job(
-            python=python, core=core, site=site, exporter=script, work=work,
+            python=python,
+            core=core,
+            site=site,
+            exporter=script,
+            work=work,
         )
-        if (len(raw) > 2048
+        if (
+            len(raw) > 2048
             or raw != fixture.read_bytes()
-            or hashlib.sha256(raw).hexdigest() != PROJECTION_SHA):
+            or hashlib.sha256(raw).hexdigest() != PROJECTION_SHA
+        ):
             raise ValueError("real_windows_core_encrypted_readback_source_mismatch")
         print("WINDOWS_REAL_ENCRYPTED_CORE_THREE_RESOURCE_READBACK_SOURCE_VERIFIED")
         receipt_path = work / "fixed-source-fantasy-only.json"
         receipt_path.write_bytes(raw)
         qualified_gui = subprocess.run(
-            ["powershell.exe", "-NoProfile", "-NonInteractive",
-             "-ExecutionPolicy", "Bypass", "-File", str(observer),
-             "-ExePath", str(gui), "-ExpectedSha256", args.native_sha,
-             "-LiveReceiptPath", str(receipt_path)],
-            cwd=work, env=env, capture_output=True, timeout=80, check=False,
+            [
+                "powershell.exe",
+                "-NoProfile",
+                "-NonInteractive",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-File",
+                str(observer),
+                "-ExePath",
+                str(gui),
+                "-ExpectedSha256",
+                args.native_sha,
+                "-LiveReceiptPath",
+                str(receipt_path),
+                *(["-FocusedStartup"] if getattr(args, "focused_startup", False) else []),
+            ],
+            cwd=work,
+            env=env,
+            capture_output=True,
+            timeout=80,
+            check=False,
         )
-        marker = b"WINDOWS_REAL_ENCRYPTED_CORE_READBACK_THREE_RESOURCES_LINK_AND_BACK_UIA_PASS_NOT_CLINICAL"
+        marker = (
+            b"WINDOWS_REAL_ENCRYPTED_CORE_READBACK_THREE_RESOURCES_"
+            b"LINK_AND_BACK_UIA_PASS_NOT_CLINICAL"
+        )
         if qualified_gui.returncode != 0 or marker not in qualified_gui.stdout:
             raise ValueError("real_windows_encrypted_Core_resource_UIA_refused")
         print(marker.decode())
@@ -130,10 +161,16 @@ def qualify(args: argparse.Namespace) -> None:
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     for key in ("core-source", "python", "site", "native-gui", "python-sha", "native-sha"):
-        parser.add_argument("--" + key, required=True,
-                            type=str if key.endswith("-sha") else Path)
+        parser.add_argument("--" + key, required=True, type=str if key.endswith("-sha") else Path)
+    parser.add_argument(
+        "--focused-startup",
+        action="store_true",
+        help="Validate the same imaginary Core readback opens directly in focused native Workspace",
+    )
     try:
         qualify(parser.parse_args())
     except (ValueError, OSError, subprocess.SubprocessError) as error:
-        print("WINDOWS_REAL_ENCRYPTED_CORE_READBACK_NATIVE_UIA_NO_GO:" + str(error), file=sys.stderr)
-        raise SystemExit(2)
+        print(
+            "WINDOWS_REAL_ENCRYPTED_CORE_READBACK_NATIVE_UIA_NO_GO:" + str(error), file=sys.stderr
+        )
+        raise SystemExit(2) from None
