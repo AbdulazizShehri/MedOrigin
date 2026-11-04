@@ -4,7 +4,8 @@
 param(
   [Parameter(Mandatory=$true)][string]$ExePath,
   [Parameter(Mandatory=$true)][ValidatePattern('^[a-fA-F0-9]{64}$')][string]$ExpectedSha256,
-  [string]$LiveReceiptPath = ''
+  [string]$LiveReceiptPath = '',
+  [string]$SessionFramePath = ''
 )
 $ErrorActionPreference='Stop'
 function Refuse([string]$reason) {
@@ -44,12 +45,35 @@ try {
   $info=New-Object System.Diagnostics.ProcessStartInfo
   $info.FileName=$exe
   $info.Arguments='--synthetic-encrypted-readback-stdin'
+  if($SessionFramePath) {
+    if(-not $LiveReceiptPath -or
+       $env:MEDORIGIN_D2_FICTIONAL_SESSION_NONCE -cnotmatch '^[0-9a-f]{32}$' -or
+       $env:MEDORIGIN_D2_FICTIONAL_SESSION_KEY -cnotmatch '^[0-9a-f]{64}$') {
+      Refuse 'session_environment_or_original_source_missing'
+    }
+    $frame=(Resolve-Path -LiteralPath $SessionFramePath -ErrorAction Stop).Path
+    $entry=Get-Item -LiteralPath $frame -ErrorAction Stop
+    if($entry.PSIsContainer -or ($entry.Attributes -band [IO.FileAttributes]::ReparsePoint) -or
+       $entry.Length -le 1164 -or $entry.Length -gt 2048) {
+      Refuse 'session_frame_file_bounds_refused'
+    }
+    $info.Arguments='--synthetic-encrypted-readback-session-stdin'
+  }
   $info.UseShellExecute=$false
   $info.RedirectStandardInput=$true
   $process=New-Object System.Diagnostics.Process
   $process.StartInfo=$info
   if(-not $process.Start()) {throw 'native_executable_start_refused'}
   $bytes=[IO.File]::ReadAllBytes($source)
+  if($SessionFramePath) {
+    $frameBytes=[IO.File]::ReadAllBytes($frame)
+    $tail=New-Object byte[] 1164
+    [Array]::Copy($frameBytes,$frameBytes.Length-1164,$tail,0,1164)
+    if([Convert]::ToBase64String($bytes) -cne [Convert]::ToBase64String($tail)) {
+      throw 'session_frame_core_projection_suffix_mismatch'
+    }
+    $bytes=$frameBytes
+  }
   $process.StandardInput.BaseStream.Write($bytes,0,$bytes.Length)
   $process.StandardInput.Close()
   $root=[System.Windows.Automation.AutomationElement]::RootElement

@@ -26,6 +26,7 @@ from qualify_windows_encrypted_readback_native_gui import PROJECTION_SHA, sha
 
 RUNTIME_SCRIPTS = (
     "launch_windows_portable_fictional_core.py",
+    "fictional_session_frame.py",
     "portable_core_tree.py",
     "supervise_windows_encrypted_core_job.py",
     "qualify_windows_job_subtree.py",
