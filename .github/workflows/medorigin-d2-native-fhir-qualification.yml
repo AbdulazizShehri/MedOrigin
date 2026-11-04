@@ -118,6 +118,13 @@ jobs:
           & $py -m unittest discover -s experiments/desktop-d2-native-egui/scripts -p test_private_release_gate.py -v
           if ($LASTEXITCODE -ne 0) { throw 'Private release NO-GO gate contract failed' }
           Write-Output 'PRIVATE_RELEASE_SOURCE_ONLY_NOT_LIVE_GITHUB_OR_CLINICAL_ATTESTATION'
+      - name: Source-only Mac AX and genuine keyboard harness regression controls
+        shell: pwsh
+        run: |
+          $py = if ($IsWindows) { 'python' } else { 'python3' }
+          & $py -m unittest discover -s experiments/desktop-d2-native-egui/tests -p test_macos_keyboard_ax_source_contract.py -v
+          if ($LASTEXITCODE -ne 0) { throw 'macOS native AX and keyboard source contract refused' }
+          Write-Output 'MACOS_AX_KEYBOARD_SOURCE_ONLY_NO_HOSTED_GUI_OR_VOICEOVER_APPROVAL'
       - name: Verify checks did not alter tracked code or lockfiles
         shell: pwsh
         run: |
