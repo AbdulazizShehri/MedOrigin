@@ -1,0 +1,22 @@
+# MedOrigin Desktop D2 — source-verified focused Core resource browser
+
+**November 5, 2026. Owner-private stacked Draft above PR #955. Strict fictional-only source.**
+
+## Actual user workflow
+
+The focused native Workspace view now has a **source-derived resource browser** alongside the patient-context buttons, with active type and identity keyword indicators, an exact visible-resource count, explicit empty-state when filters intersect to zero, and selectable source-derived identity rows opening the actual native detail view. Each resource row shows its type and original verified fictional resource identifier. This is a user-facing native Rust egui feature, not an embedded browser, QA screenshot, mock web page or network service.
+
+**Type filter buttons:** Focus: Type All / Patient / Encounter / Observation. **Preset identity query buttons:** Focus: Find All / Patient / Encounter / Observation. The type and keyword can be applied independently and compose by intersection; the visible count updates without inventing resources. Clicking a visible Focus: Inspect Type/id row opens that exact source-recovered identity, never an arbitrary index. Changing a filter clears stale selection and navigation history. The patient chart direct navigation and session walkthrough still work; verified graph navigation resets filters as needed to keep the destination visible. A zero-results state preserves the verified source and reports that no identities matched, without authorizing any new input.
+
+The browser **reuses existing Core-derived search, type facet, filtered-selection and graph checks**, including 64-byte ASCII-only conservative search validation. Users choose from exactly four preset query buttons: no free-text editing, no patient name, clinical observation value, arbitrary import, real FHIR or executable input is exposed. Actual admission remains limited to the two byte- and SHA-compiled Core readback projection fixtures (1164-byte ephemeral and 1215-byte Windows DPAPI-persistent test) with exact source and audited-reopen flags. The GUI itself never reads local files, launches processes, spawns a worker or connects to networks.
+
+## Qualification
+
+- Windows offline locked cargo: **64 Rust library + 11 main + 7 network/browser boundary = 82 PASS**, cargo fmt check and Clippy -D warnings PASS. New tests cover BOTH pinned source forms, type filter + identity keyword intersection, 3→1→0→1→3 worklist counts, selecting only currently visible source identities, preserving source across view switches, and fail-closed hidden selection or invalid unreviewed search.
+- Windows native binary SHA256 `93f856d59ab88cbe4d6f53d6ff5ed8cfcd4c6e68baa190f483f609f410e5d9c6`. Extended actual Windows UIAutomation script to click the type and preset keyword buttons, assert zero/one/three result count, refuse hidden Observation while Patient facet is active, open actual Encounter and Observation rows, clear the search and then execute all historical Patient/Encounter/Observation direct navigation, Back, walkthrough, developer return, source graph, facet, breadcrumb and Escape/clear checks. Mark real GUI outcome only after separately observing it.
+- Extended macOS Apple Accessibility script to execute the same focused source-browser actions against the genuine native compiled Mac app. Mac qualification separately observed on the exact PR source; do not claim success from the authored test script alone.
+- Hosted GitHub windows-2025 and ubuntu-24.04 PR-head tests and nonpublishing evidence must be checked on the exact final commit.
+
+## Explicit NO-GO
+
+The screen remains limited to **three imaginary source-pinned FHIR-shaped identifiers** and is not a clinical medical chart or an arbitrary FHIR R4 search implementation. Search checks only redacted type/id/URN, not diagnoses, dates, patient names or clinical payloads. No clinical privileges, real patient processing, production OS key custody, validated RBAC/consent, authenticated production IPC, signed/native installer, network egress confinement, clinical/security acceptance or release/production readiness is claimed. Do not merge protected main, publish, distribute, sign, allow PHI or call this ready for clinicians. Only reviewed code/tests/docs are permitted in this private Draft; no test database, DPAPI blobs, Wheels, unsigned GUI executable or private runtime kit.
