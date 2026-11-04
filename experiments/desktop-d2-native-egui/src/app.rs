@@ -571,6 +571,32 @@ struct FictionalWorkspaceDetail {
     relations: Vec<FictionalRelationEdge>,
 }
 
+/// Exact resource-type facets of the already verified fictional Core projection.
+/// No free-text entry, patient import or general-purpose query API.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+enum RecoveredResourceTypeFilter {
+    #[default]
+    All,
+    Observation,
+    Patient,
+    Encounter,
+}
+
+impl RecoveredResourceTypeFilter {
+    fn label(self) -> &'static str {
+        match self {
+            Self::All => "All",
+            Self::Observation => "Observation",
+            Self::Patient => "Patient",
+            Self::Encounter => "Encounter",
+        }
+    }
+
+    fn matches(self, resource: &crate::encrypted_readback::FictionalReadbackResource) -> bool {
+        self == Self::All || resource.resource_type == self.label()
+    }
+}
+
 #[derive(Default)]
 pub struct MedOriginNativePreview {
     selected: usize,
@@ -590,6 +616,7 @@ pub struct MedOriginNativePreview {
     encrypted_readback_source_external: bool,
     encrypted_readback_selected: Option<usize>,
     encrypted_readback_history: Vec<usize>,
+    encrypted_readback_filter: RecoveredResourceTypeFilter,
     encrypted_readback_notice: Option<&'static str>,
     workspace_report_external: bool,
     workspace_report_notice: Option<&'static str>,
@@ -666,6 +693,25 @@ impl MedOriginNativePreview {
 
     /// Native navigation through identities actually projected from
     /// encrypted Core memory readback. No arbitrary resource resolver.
+    fn set_recovered_type_filter(&mut self, filter: RecoveredResourceTypeFilter) {
+        self.encrypted_readback_filter = filter;
+        self.encrypted_readback_selected = None;
+        self.encrypted_readback_history.clear();
+        self.encrypted_readback_notice = None;
+    }
+
+    fn recovered_visible_count(&self) -> usize {
+        self.encrypted_readback
+            .as_ref()
+            .map(|r| {
+                r.resources
+                    .iter()
+                    .filter(|item| self.encrypted_readback_filter.matches(item))
+                    .count()
+            })
+            .unwrap_or(0)
+    }
+
     fn select_encrypted_readback_resource(&mut self, index: usize) -> Result<(), &'static str> {
         let count = self
             .encrypted_readback
@@ -675,6 +721,16 @@ impl MedOriginNativePreview {
         if index >= count {
             self.clear_fictional_output();
             return Err("encrypted_readback_unknown_resource");
+        }
+        if !self.encrypted_readback_filter.matches(
+            &self
+                .encrypted_readback
+                .as_ref()
+                .ok_or("encrypted_readback_not_loaded")?
+                .resources[index],
+        ) {
+            self.clear_fictional_output();
+            return Err("encrypted_readback_filtered_resource_refused");
         }
         self.encrypted_readback_selected = Some(index);
         self.encrypted_readback_history.clear();
@@ -775,6 +831,9 @@ impl MedOriginNativePreview {
             return Err("encrypted_readback_navigation_limit");
         }
         self.encrypted_readback_history.push(current);
+        // Relationship navigation can traverse types outside the chosen facet;
+        // reset to All so the active source-derived record remains visible.
+        self.encrypted_readback_filter = RecoveredResourceTypeFilter::All;
         self.encrypted_readback_selected = Some(position);
         self.encrypted_readback_notice = None;
         Ok(())
@@ -820,6 +879,7 @@ impl MedOriginNativePreview {
         self.encrypted_readback_source_external = false;
         self.encrypted_readback_selected = None;
         self.encrypted_readback_history.clear();
+        self.encrypted_readback_filter = RecoveredResourceTypeFilter::All;
         self.encrypted_readback_notice = None;
         self.workspace_report_external = false;
         self.workspace_report_notice = None;
@@ -848,6 +908,7 @@ impl MedOriginNativePreview {
         self.encrypted_readback_source_external = false;
         self.encrypted_readback_selected = None;
         self.encrypted_readback_history.clear();
+        self.encrypted_readback_filter = RecoveredResourceTypeFilter::All;
         self.encrypted_readback_notice = None;
         self.workspace_report_external = false;
         self.workspace_report_notice = None;
@@ -1374,6 +1435,7 @@ impl eframe::App for MedOriginNativePreview {
                     let mut select = None;
                     let mut follow = None;
                     let mut incoming = None;
+                    let mut filter_change = None;
                     if let Some(readback) = &self.encrypted_readback {
                         ui.label(format!("Recovered fictional resource count: {}", readback.resources.len()));
                         ui.monospace(format!("Encrypted readback SHA-256: {}", readback.report_sha256));
@@ -1382,11 +1444,30 @@ impl eframe::App for MedOriginNativePreview {
                         ui.label(format!("Audit chain verified: {}", readback.audit_chain_verified));
                         ui.label(format!("Ephemeral encrypted store removed: {}", readback.ephemeral_store_removed));
                         ui.strong(readback.disclosure);
+                        ui.horizontal_wrapped(|ui| {
+                            ui.label("Recovered resource type (fixed fictional only):");
+                            for facet in [
+                                RecoveredResourceTypeFilter::All,
+                                RecoveredResourceTypeFilter::Observation,
+                                RecoveredResourceTypeFilter::Patient,
+                                RecoveredResourceTypeFilter::Encounter,
+                            ] {
+                                if ui.button(format!("Filter recovered resource type: {}", facet.label())).clicked() {
+                                    filter_change = Some(facet);
+                                }
+                            }
+                        });
+                        ui.label(format!("Active recovered type: {}", self.encrypted_readback_filter.label()));
+                        ui.label(format!(
+                            "Recovered fictional worklist: {} of {} source-derived resources visible",
+                            self.recovered_visible_count(), readback.resources.len()
+                        ));
                         for (index, resource) in readback.resources.iter().enumerate() {
-                            if ui.button(format!(
-                                "Open recovered fictional resource: {}/{}",
-                                resource.resource_type, resource.resource_id
-                            )).clicked() {
+                            if self.encrypted_readback_filter.matches(resource)
+                                && ui.button(format!(
+                                    "Open recovered fictional resource: {}/{}",
+                                    resource.resource_type, resource.resource_id
+                                )).clicked() {
                                 select = Some(index);
                             }
                         }
@@ -1427,6 +1508,9 @@ impl eframe::App for MedOriginNativePreview {
                     }
                     if let Some(notice) = self.encrypted_readback_notice {
                         ui.label(notice);
+                    }
+                    if let Some(facet) = filter_change {
+                        self.set_recovered_type_filter(facet);
                     }
                     if let Some(index) = select {
                         let _ = self.select_encrypted_readback_resource(index);
@@ -1750,6 +1834,46 @@ mod tests {
         app.back_encrypted_readback_resource().unwrap();
         assert_eq!(app.encrypted_readback_selected, Some(1));
         assert!(app.encrypted_readback_history.is_empty());
+    }
+
+    #[test]
+    fn decrypted_core_facet_counts_and_hidden_selection_fail_closed() {
+        let raw = include_bytes!("../fixtures/core/encrypted-readback-projection.json");
+        let mut app =
+            MedOriginNativePreview::from_one_time_synthetic_encrypted_readback_stdin(raw).unwrap();
+        assert_eq!(app.recovered_visible_count(), 3);
+        for (facet, expected) in [
+            (RecoveredResourceTypeFilter::Patient, 1),
+            (RecoveredResourceTypeFilter::Encounter, 1),
+            (RecoveredResourceTypeFilter::Observation, 1),
+            (RecoveredResourceTypeFilter::All, 3),
+        ] {
+            app.set_recovered_type_filter(facet);
+            assert_eq!(app.recovered_visible_count(), expected);
+            assert!(app.encrypted_readback_selected.is_none());
+            assert!(app.encrypted_readback_history.is_empty());
+        }
+        app.set_recovered_type_filter(RecoveredResourceTypeFilter::Patient);
+        app.select_encrypted_readback_resource(1).unwrap();
+        assert_eq!(app.encrypted_readback_selected, Some(1));
+        app.follow_encrypted_readback_incoming(2, 0).unwrap();
+        assert_eq!(app.encrypted_readback_selected, Some(2));
+        assert_eq!(
+            app.encrypted_readback_filter,
+            RecoveredResourceTypeFilter::All
+        );
+
+        app.set_recovered_type_filter(RecoveredResourceTypeFilter::Patient);
+        assert_eq!(
+            app.select_encrypted_readback_resource(0),
+            Err("encrypted_readback_filtered_resource_refused")
+        );
+        assert!(app.encrypted_readback.is_none());
+        assert_eq!(app.recovered_visible_count(), 0);
+        assert_eq!(
+            app.encrypted_readback_filter,
+            RecoveredResourceTypeFilter::All
+        );
     }
 
     #[test]

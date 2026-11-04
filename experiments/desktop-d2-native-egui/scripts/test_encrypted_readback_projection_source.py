@@ -96,6 +96,69 @@ class SourcePinnedEncryptedReadbackTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "real_windows_native_ui_qa_required"):
                 windows_qa.qualify(None)
 
+    def test_interactive_windows_developer_launcher_has_only_fixed_core_source(self):
+        import launch_windows_encrypted_fictional_preview as launcher
+        from unittest.mock import patch
+        from argparse import Namespace
+
+        self.assertEqual(launcher.PROJECTION_SHA, DIGEST)
+        self.assertEqual(launcher.READBACK_SOURCE_MAX_BYTES, 2048)
+        self.assertEqual(launcher.GUI_FLAG, "--synthetic-encrypted-readback-stdin")
+        source = Path(launcher.__file__).read_text(encoding="utf-8")
+        for fixed_guard in (
+            "source_bound_core(core)",
+            "execute_encrypted_source_under_job(",
+            "raw != fixture.read_bytes()",
+            "hashlib.sha256(raw).hexdigest() != PROJECTION_SHA",
+            "sha(gui) != args.native_sha.lower()",
+            'stdin=subprocess.PIPE',
+            'input=raw',
+            'close_fds=True',
+            "source_bound_core(core)",
+            "process.kill()",
+            'TemporaryDirectory(prefix="medorigin-private-core-fictional-live-")',
+        ):
+            self.assertIn(fixed_guard, source)
+        self.assertNotIn("shell=True", source)
+        self.assertNotIn("requests.", source)
+        self.assertNotIn("urllib.", source)
+        self.assertNotIn("patient-file", source)
+        self.assertNotIn("patient_path", source)
+        with patch.object(launcher.sys, "platform", "darwin"):
+            with self.assertRaisesRegex(ValueError, "windows_only"):
+                launcher._attest_input_paths(Namespace())
+
+    def test_interactive_launcher_rejects_forged_binary_hash_before_core_work(self):
+        import launch_windows_encrypted_fictional_preview as launcher
+        from argparse import Namespace
+        from unittest.mock import patch
+        import tempfile
+
+        if sys.platform != "win32":
+            self.skipTest("actual Windows host required for input path identity")
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            native = root / "medorigin-desktop-d2-native-egui.exe"
+            native.write_bytes(b"unapproved-executable")
+            core = root / "core"
+            core.mkdir()
+            site = root / "site"
+            site.mkdir()
+            args = Namespace(
+                core_source=core,
+                python=Path(sys.executable),
+                site=site,
+                native_gui=native,
+                python_sha="0" * 64,
+                native_sha="0" * 64,
+            )
+            with patch.object(launcher, "source_bound_core",
+                              side_effect=AssertionError("must not invoke Core")):
+                with patch.object(launcher, "execute_encrypted_source_under_job",
+                                  side_effect=AssertionError("must not execute Core")):
+                    with self.assertRaisesRegex(ValueError, "unreviewed_python_site_or_gui"):
+                        launcher._attest_input_paths(args)
+
     def test_native_rust_stdin_only_and_forgery_refusals_remain(self):
         main = GUI.read_text(encoding="utf-8")
         admitted = ACCEPTOR.read_text(encoding="utf-8")
