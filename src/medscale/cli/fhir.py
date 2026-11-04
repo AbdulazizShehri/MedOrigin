@@ -53,6 +53,56 @@ def _bundle_preflight_main(argv: list[str]) -> int:
     return 0
 
 
+def _bundle_structural_assessment_main(argv: list[str]) -> int:
+    """Real relationship + official R4 structural-only check, source-redacted."""
+    if argv in (["-h"], ["--help"]):
+        print(
+            "usage: medscale fhir bundle-assess "
+            "--synthetic-only --offline-r4-schema OFFICIAL_R4_ZIP "
+            "FICTIONAL_LOCAL_BUNDLE_JSON\n"
+            "Offline narrow synthetic Bundle relationships and source-pinned "
+            "HL7 FHIR R4 v4.0.1 JSON Schema (jsonschema==4.25.1). "
+            "Both checks are PARTIAL and NOT full FHIR/clinical validation."
+        )
+        return 0
+    if (
+        len(argv) != 4
+        or argv[0] != "--synthetic-only"
+        or argv[1] != "--offline-r4-schema"
+        or not argv[2]
+        or not argv[3]
+        or argv[2].startswith("--")
+        or argv[3].startswith("--")
+    ):
+        print(
+            "bundle assessment refused: explicit_synthetic_offline_schema_flags_required",
+            file=sys.stderr,
+        )
+        return 2
+    try:
+        source = read_fhir_json_document(Path(argv[3]))
+    except FhirInputError:
+        print("bundle assessment refused: source_input_refused", file=sys.stderr)
+        return 1
+    try:
+        from medscale.fhirkit.bundle_assessment import synthetic_bundle_assessment_json
+
+        result = synthetic_bundle_assessment_json(source, Path(argv[2]), synthetic_only=True)
+    except BundlePreflightError:
+        print("bundle assessment refused: relationship_preflight_refused", file=sys.stderr)
+        return 2
+    except (UnavailableValidatorError, FhirMissingDependencyError):
+        print("bundle assessment unavailable: qualified_offline_schema_missing", file=sys.stderr)
+        return 2
+    except Exception:
+        print("bundle assessment refused: dual_assessment_contract_refused", file=sys.stderr)
+        return 2
+    print(result, end="")
+    # This exit is NEVER clinical or full FHIR R4 validation success:
+    # 'not_validated' means JSON Schema has no structural errors only.
+    return 2
+
+
 def _r4_structural_outcome_main(argv: list[str]) -> int:
     """Source-pinned optional local structural-only FHIR OperationOutcome.
 
@@ -221,6 +271,8 @@ def _workspace_catalog_demo_main(argv: list[str]) -> int:
 
 def main(argv: list[str] | None = None) -> int:
     tokens = list(sys.argv[1:] if argv is None else argv)
+    if tokens and tokens[0] == "bundle-assess":
+        return _bundle_structural_assessment_main(tokens[1:])
     if tokens and tokens[0] == "encrypted-structural-demo":
         return _encrypted_structural_demo_main(tokens[1:])
     if tokens and tokens[0] == "structural-outcome":
