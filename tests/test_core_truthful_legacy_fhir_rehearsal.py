@@ -184,3 +184,31 @@ def test_core_only_refuses_workspace_preview_combination(
     assert result == 2
     assert "MEDORIGIN_CORE_FHIR_PROVENANCE_ONLY_BLOCKED" in capsys.readouterr().err
     assert not (tmp_path / "not-created").exists()
+
+
+def test_legacy_full_beta_failure_redacts_installed_cli_stderr_and_fails_closed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    import subprocess
+
+    runner = _load("reproduce.py")
+    cli = tmp_path / "fictional-installed.exe"
+    cli.write_bytes(b"offline-fictional-stub")
+    out = tmp_path / "old-beta-evidence"
+
+    def fake_cli(_cli: Path, args: list[str], _cwd: Path) -> subprocess.CompletedProcess[str]:
+        if args == ["--version"]:
+            return subprocess.CompletedProcess(args, 0, stdout="medscale 0.3.0\\n", stderr="")
+        return subprocess.CompletedProcess(
+            args, 2, stdout="", stderr=f"unable to validate {HIDDEN} C:\\\\private\\\\record.json"
+        )
+
+    monkeypatch.setattr(runner, "call", fake_cli)
+    assert runner.main(["--cli", str(cli), "--out", str(out)]) == 1
+    captured = capsys.readouterr()
+    assert "MEDORIGIN_SYNTHETIC_FHIR_DEMO_FAIL" in captured.err
+    assert "legacy_preview_contract_unqualified" in captured.err
+    assert HIDDEN not in captured.err
+    assert "record.json" not in captured.err
+    assert not (out / "evidence.json").exists()
+    assert not (out / "preview.html").exists()

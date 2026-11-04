@@ -229,8 +229,14 @@ def main(argv: list[str] | None = None) -> int:
         ValueError,
         json.JSONDecodeError,
         subprocess.TimeoutExpired,
-    ) as exc:
-        print(f"MEDORIGIN_SYNTHETIC_FHIR_DEMO_FAIL: {exc}", file=sys.stderr)
+    ):
+        # An older installed Core CLI can include absolute source paths or
+        # patient-like strings in its diagnostic. This legacy full-preview
+        # route is NO-GO; do not reprint untrusted child exception text.
+        print(
+            "MEDORIGIN_SYNTHETIC_FHIR_DEMO_FAIL: legacy_preview_contract_unqualified",
+            file=sys.stderr,
+        )
         print("Any partial output is nonqualifying; use a new --out directory.", file=sys.stderr)
         return 1
 
