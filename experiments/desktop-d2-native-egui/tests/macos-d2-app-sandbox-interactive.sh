@@ -58,4 +58,6 @@ swift "$source_dir/macos-native-keyboard-qualification.swift" "$pid"
 # Two additional source-compiled Python Core provenance receipts are inspected
 # through the actual D2 native AX widgets; never a live Core or clinical bridge.
 swift "$source_dir/macos-core-provenance-ax-qualification.swift" "$pid"
+# Actual native, source-only fictional workspace navigation/filter/clear test.
+swift "$source_dir/macos-fictional-workspace-ax-qualification.swift" "$pid"
 echo "MACOS_D2_SIGNED_SANDBOX_AX_AND_KEYBOARD_4OF4_PASS_NOT_RELEASE_AUTHORITY"
