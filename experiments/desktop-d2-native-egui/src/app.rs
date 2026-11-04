@@ -752,6 +752,21 @@ impl MedOriginNativePreview {
         })
     }
 
+    /// Same strict verified fictional source as the developer readback mode,
+    /// but open the user-facing source browser FIRST. No alternative import,
+    /// elevated permission, clinical use or source authenticity claim.
+    pub fn from_one_time_synthetic_focused_readback_stdin(
+        raw: &[u8],
+    ) -> Result<Self, &'static str> {
+        let mut app = Self::from_one_time_synthetic_encrypted_readback_stdin(raw)?;
+        app.set_focused_fictional_workspace(true)?;
+        Ok(app)
+    }
+
+    pub fn focused_fictional_workspace_is_visible(&self) -> bool {
+        self.focused_workspace_visible
+    }
+
     pub fn has_external_synthetic_encrypted_readback(&self) -> bool {
         self.encrypted_readback_source_external && self.encrypted_readback.is_some()
     }
@@ -2528,6 +2543,40 @@ impl eframe::App for MedOriginNativePreview {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn direct_focused_startup_admits_only_two_independent_source_reviewed_fictional_projections() {
+        for raw in [
+            include_bytes!("../fixtures/core/encrypted-readback-projection.json").as_slice(),
+            include_bytes!("../fixtures/core/encrypted-persistent-readback-projection.json")
+                .as_slice(),
+        ] {
+            let mut app =
+                MedOriginNativePreview::from_one_time_synthetic_focused_readback_stdin(raw)
+                    .unwrap();
+            assert!(app.focused_fictional_workspace_is_visible());
+            assert!(app.has_external_synthetic_encrypted_readback());
+            assert_eq!(app.recovered_visible_count(), 3);
+            app.open_recovered_fictional_patient_chart().unwrap();
+            assert_eq!(app.encrypted_readback_selected, Some(1));
+            app.clear_fictional_output();
+            assert!(!app.focused_fictional_workspace_is_visible());
+            assert!(!app.has_external_synthetic_encrypted_readback());
+        }
+        for bad in [
+            b"{}".to_vec(),
+            [
+                include_bytes!("../fixtures/core/encrypted-readback-projection.json").as_slice(),
+                b" ",
+            ]
+            .concat(),
+        ] {
+            assert!(
+                MedOriginNativePreview::from_one_time_synthetic_focused_readback_stdin(&bad)
+                    .is_err()
+            );
+        }
+    }
 
     #[test]
     fn focused_browser_filters_source_verified_resources_and_refuses_hidden_selection() {
