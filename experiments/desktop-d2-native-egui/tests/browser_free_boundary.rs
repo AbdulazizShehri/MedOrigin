@@ -258,6 +258,19 @@ fn guard_rejects_aliased_socket_imports_and_external_rust_inclusion() {
 }
 
 #[test]
+fn synthetic_core_reader_example_is_explicitly_reviewed_for_network_and_process_imports() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let example = root.join("examples/core_provenance_stdin.rs");
+    let source = fs::read_to_string(example).expect("source controlled nonclinical QA reader");
+    assert!(
+        disallowed_source_api(&source).is_none(),
+        "synthetic Core reader must remain process-free and browser/network-free"
+    );
+    assert!(source.contains("admit_fixed_fictional_core_report"));
+    assert!(source.contains("FHIR_R4_NOT_VALIDATED"));
+}
+
+#[test]
 fn guard_refuses_unreviewed_nested_module_layout() {
     use std::time::{SystemTime, UNIX_EPOCH};
     let unique = SystemTime::now()
