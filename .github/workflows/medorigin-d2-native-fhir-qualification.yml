@@ -148,6 +148,22 @@ jobs:
             throw 'Missing real native Core provenance two-case test marker'
           }
           Write-Output 'WINDOWS_NATIVE_CORE_PROVENANCE_UIA_SOURCE_ONLY_NOT_GUI_EXECUTION'
+      - name: Parse Windows native fictional Workspace UIA acceptance script
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $path = 'experiments/desktop-d2-native-egui/tests/windows-native-fictional-workspace-uia.ps1'
+          $tokens = $null
+          $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile(
+            (Resolve-Path $path).Path, [ref]$tokens, [ref]$errors
+          ) | Out-Null
+          if (@($errors).Count -ne 0) { throw 'Native fictional workspace Windows UIA script syntax failed' }
+          $source = Get-Content -LiteralPath $path -Raw
+          if (-not $source.Contains('D2_WINDOWS_FICTIONAL_WORKSPACE_4_CASES_FILTER_AND_CLEAR_PASS_NOT_CLINICAL')) {
+            throw 'Native fictional Workspace real GUI test marker is missing'
+          }
+          Write-Output 'WINDOWS_FICTIONAL_WORKSPACE_UIA_SOURCE_ONLY_NOT_HOSTED_GUI_APPROVAL'
       - name: Verify checks did not alter tracked code or lockfiles
         shell: pwsh
         run: |

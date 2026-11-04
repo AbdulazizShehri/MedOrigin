@@ -442,6 +442,96 @@ fn project_pinned_fictional_relations(
     }
 }
 
+/// In-memory-only, source-pinned fictional case explorer. This is NOT a
+/// clinical workspace, authentication layer, clinical audit log or PHI store.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+enum FictionalWorkspaceFilter {
+    #[default]
+    All,
+    ExpectedEnvelopeOk,
+    ExpectedNegative,
+}
+
+impl FictionalWorkspaceFilter {
+    fn label(self) -> &'static str {
+        match self {
+            Self::All => "All fictional cases",
+            Self::ExpectedEnvelopeOk => "Expected-positive developer controls",
+            Self::ExpectedNegative => "Expected-negative developer controls",
+        }
+    }
+    fn admits(self, negative: bool) -> bool {
+        match self {
+            Self::All => true,
+            Self::ExpectedEnvelopeOk => !negative,
+            Self::ExpectedNegative => negative,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
+struct FictionalWorkspaceSpec {
+    fixture_index: usize,
+    resource_type: &'static str,
+    resource_id: &'static str,
+    negative: bool,
+    expected_edges: usize,
+}
+
+const FICTIONAL_WORKSPACE_CASES: [FictionalWorkspaceSpec; 6] = [
+    FictionalWorkspaceSpec {
+        fixture_index: 0,
+        resource_type: "Patient",
+        resource_id: "synthetic",
+        negative: false,
+        expected_edges: 0,
+    },
+    FictionalWorkspaceSpec {
+        fixture_index: 4,
+        resource_type: "Observation",
+        resource_id: "synthetic-observation",
+        negative: false,
+        expected_edges: 1,
+    },
+    FictionalWorkspaceSpec {
+        fixture_index: 5,
+        resource_type: "Observation",
+        resource_id: "synthetic-observation",
+        negative: true,
+        expected_edges: 0,
+    },
+    FictionalWorkspaceSpec {
+        fixture_index: 6,
+        resource_type: "Bundle",
+        resource_id: "synthetic-bundle",
+        negative: false,
+        expected_edges: 3,
+    },
+    FictionalWorkspaceSpec {
+        fixture_index: 10,
+        resource_type: "Bundle",
+        resource_id: "synthetic-bundle",
+        negative: false,
+        expected_edges: 3,
+    },
+    FictionalWorkspaceSpec {
+        fixture_index: 11,
+        resource_type: "Bundle",
+        resource_id: "synthetic-bundle",
+        negative: true,
+        expected_edges: 0,
+    },
+];
+
+#[derive(Clone, Debug)]
+struct FictionalWorkspaceDetail {
+    fixture: FixtureSpec,
+    resource_type: &'static str,
+    resource_id: &'static str,
+    negative: bool,
+    relations: Vec<FictionalRelationEdge>,
+}
+
 #[derive(Default)]
 pub struct MedOriginNativePreview {
     selected: usize,
@@ -455,6 +545,11 @@ pub struct MedOriginNativePreview {
     core_report_selection: usize,
     core_report: Option<CoreProvenanceReceipt>,
     core_report_notice: Option<&'static str>,
+    fictional_workspace_unlocked: bool,
+    fictional_workspace_filter: FictionalWorkspaceFilter,
+    fictional_workspace_selected: Option<usize>,
+    fictional_workspace_detail: Option<FictionalWorkspaceDetail>,
+    fictional_workspace_notice: Option<&'static str>,
 }
 
 impl MedOriginNativePreview {
@@ -469,6 +564,9 @@ impl MedOriginNativePreview {
         self.relationship_notice = None;
         self.core_report = None;
         self.core_report_notice = None;
+        self.fictional_workspace_selected = None;
+        self.fictional_workspace_detail = None;
+        self.fictional_workspace_notice = None;
     }
 
     /// Fail closed if either the trusted raw digest OR the independent
@@ -484,6 +582,9 @@ impl MedOriginNativePreview {
         self.relationship_notice = None;
         self.core_report = None;
         self.core_report_notice = None;
+        self.fictional_workspace_selected = None;
+        self.fictional_workspace_detail = None;
+        self.fictional_workspace_notice = None;
         let Some(fixture) = FIXTURES.get(self.selected) else {
             self.result = Some("FAIL CLOSED: invalid synthetic selection".to_owned());
             return Err("invalid_synthetic_selection");
@@ -707,6 +808,97 @@ impl MedOriginNativePreview {
     }
 }
 
+impl MedOriginNativePreview {
+    /// An explicit, local, fictional test intent toggle. This is NOT user
+    /// authentication or patient consent. Never persists across restarts.
+    fn enter_fictional_workspace(&mut self) {
+        self.clear_fictional_output();
+        self.fictional_workspace_unlocked = true;
+        self.fictional_workspace_filter = FictionalWorkspaceFilter::All;
+    }
+
+    fn close_fictional_workspace(&mut self) {
+        self.clear_fictional_output();
+        self.fictional_workspace_unlocked = false;
+        self.fictional_workspace_filter = FictionalWorkspaceFilter::All;
+    }
+
+    fn filter_fictional_workspace(&mut self, filter: FictionalWorkspaceFilter) {
+        self.clear_fictional_output();
+        self.fictional_workspace_filter = filter;
+    }
+
+    /// A bounded native developer workflow. A case is never a path, record
+    /// entered by a user, EHR document, or the result of medical validation.
+    fn open_fictional_workspace_case(&mut self, case_index: usize) -> Result<(), &'static str> {
+        self.clear_fictional_output();
+        if !self.fictional_workspace_unlocked {
+            self.fictional_workspace_notice = Some("FAIL CLOSED: fictional workspace is closed");
+            return Err("fictional_workspace_closed");
+        }
+        let Some(spec) = FICTIONAL_WORKSPACE_CASES.get(case_index).copied() else {
+            self.fictional_workspace_notice = Some("FAIL CLOSED: unapproved fictional case");
+            return Err("fictional_workspace_case_not_allowed");
+        };
+        if !self.fictional_workspace_filter.admits(spec.negative) {
+            self.fictional_workspace_notice =
+                Some("FAIL CLOSED: fictional case not in selected filter");
+            return Err("fictional_workspace_case_filtered_out");
+        }
+        let fixture = FIXTURES
+            .get(spec.fixture_index)
+            .copied()
+            .ok_or("fictional_workspace_index_not_allowed")?;
+        let raw = match Self::verified_json_for(spec.fixture_index) {
+            Ok(raw) => raw,
+            Err(_) => {
+                self.fictional_workspace_notice =
+                    Some("FAIL CLOSED: fictional source integrity refused");
+                return Err("fictional_workspace_source_unverified");
+            }
+        };
+        let parsed: serde_json::Value =
+            serde_json::from_str(raw).map_err(|_| "fictional_workspace_invalid_json")?;
+        let expected_status = match (spec.negative, spec.resource_type) {
+            (true, _) => "INVALID_REFERENCE",
+            (false, "Bundle") => "BUNDLE_GRAPH_OK",
+            (false, _) => "FHIR_ENVELOPE_OK",
+        };
+        if parsed
+            .get("resourceType")
+            .and_then(serde_json::Value::as_str)
+            != Some(spec.resource_type)
+            || parsed.get("id").and_then(serde_json::Value::as_str) != Some(spec.resource_id)
+            || fixture.status != expected_status
+        {
+            self.fictional_workspace_notice =
+                Some("FAIL CLOSED: fictional resource identity or status changed");
+            return Err("fictional_workspace_resource_mismatch");
+        }
+        let relations = if spec.expected_edges == 0 {
+            Vec::new()
+        } else {
+            match project_pinned_fictional_relations(fixture.id, raw) {
+                Ok(edges) if edges.len() == spec.expected_edges => edges,
+                _ => {
+                    self.fictional_workspace_notice =
+                        Some("FAIL CLOSED: fictional source relationships changed");
+                    return Err("fictional_workspace_relationship_refused");
+                }
+            }
+        };
+        self.fictional_workspace_selected = Some(case_index);
+        self.fictional_workspace_detail = Some(FictionalWorkspaceDetail {
+            fixture,
+            resource_type: spec.resource_type,
+            resource_id: spec.resource_id,
+            negative: spec.negative,
+            relations,
+        });
+        Ok(())
+    }
+}
+
 impl eframe::App for MedOriginNativePreview {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         if ui.input(|input| input.key_pressed(egui::Key::Escape)) {
@@ -767,6 +959,99 @@ impl eframe::App for MedOriginNativePreview {
                         ui.strong(format!("Core status: {}", receipt.status));
                         ui.strong(receipt.disclosure);
                         ui.label("Not a live Python Core connection, full R4 validator, EHR import or patient workspace.");
+                    }
+                });
+            // Actual native workspace navigation, but restricted to six
+            // source-compiled fictional controls. No clinical records, search
+            // text box, imports, writes, sessions, inference or network.
+            egui::CollapsingHeader::new("Fictional Workspace — six source-verified cases (NO PHI)")
+                .default_open(false)
+                .show(ui, |ui| {
+                    ui.strong("In-memory developer case explorer · not a clinical workspace");
+                    ui.label("No patient import, login, EHR, persistence, clinical validation or real consent.");
+                    if !self.fictional_workspace_unlocked {
+                        if ui.button("Enter fictional workspace (synthetic only)").clicked() {
+                            self.enter_fictional_workspace();
+                        }
+                    } else {
+                        if ui.button("Close fictional workspace and clear details").clicked() {
+                            self.close_fictional_workspace();
+                        } else {
+                            ui.label("Choose a fixed developer status filter:");
+                            ui.horizontal_wrapped(|ui| {
+                                for filter in [
+                                    FictionalWorkspaceFilter::All,
+                                    FictionalWorkspaceFilter::ExpectedEnvelopeOk,
+                                    FictionalWorkspaceFilter::ExpectedNegative,
+                                ] {
+                                    if ui
+                                        .selectable_label(
+                                            self.fictional_workspace_filter == filter,
+                                            filter.label(),
+                                        )
+                                        .clicked()
+                                    {
+                                        self.filter_fictional_workspace(filter);
+                                    }
+                                }
+                            });
+                            ui.label("Select an in-memory source-approved case:");
+                            for (index, spec) in FICTIONAL_WORKSPACE_CASES.iter().enumerate() {
+                                if !self.fictional_workspace_filter.admits(spec.negative) {
+                                    continue;
+                                }
+                                let fixture = FIXTURES[spec.fixture_index];
+                                if ui
+                                    .selectable_label(
+                                        self.fictional_workspace_selected == Some(index),
+                                        format!(
+                                            "Open fictional case: {} [{}]",
+                                            fixture.id,
+                                            if spec.negative { "expected-negative" } else { "expected-positive" }
+                                        ),
+                                    )
+                                    .clicked()
+                                {
+                                    let _ = self.open_fictional_workspace_case(index);
+                                }
+                            }
+                            if let Some(notice) = self.fictional_workspace_notice {
+                                ui.label(notice);
+                            }
+                            if let Some(detail) = &self.fictional_workspace_detail {
+                                ui.separator();
+                                ui.strong(format!("Fictional case: {}", detail.fixture.id));
+                                ui.label(format!(
+                                    "Source resource: {}/{}",
+                                    detail.resource_type,
+                                    detail.resource_id
+                                ));
+                                ui.monospace(format!("Source SHA-256: {}", detail.fixture.sha256));
+                                ui.strong(format!(
+                                    "Expected developer envelope status: {}",
+                                    detail.fixture.status
+                                ));
+                                if detail.negative {
+                                    ui.label("Expected-negative developer control: deliberately malformed reference.");
+                                } else {
+                                    ui.label("Expected-positive envelope test only: NOT FHIR R4 validation.");
+                                }
+                                ui.label("Source-bound fictional relationship pointers (no event dates):");
+                                if detail.relations.is_empty() {
+                                    ui.label("No approved relationship projection for this case.");
+                                } else {
+                                    for relation in &detail.relations {
+                                        ui.monospace(format!(
+                                            "{} -> {} ({})",
+                                            relation.source_pointer,
+                                            relation.target,
+                                            relation.relationship
+                                        ));
+                                    }
+                                }
+                                ui.strong("Clinical data: PROHIBITED · FHIR R4: NOT VALIDATED");
+                            }
+                        }
                     }
                 });
             egui::CollapsingHeader::new("Additional fictional FHIR/Bundle cases (8)")
@@ -890,6 +1175,133 @@ impl eframe::App for MedOriginNativePreview {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn fictional_workspace_is_closed_by_default_and_denies_case_opening() {
+        let mut app = MedOriginNativePreview::default();
+        assert!(!app.fictional_workspace_unlocked);
+        assert_eq!(
+            app.open_fictional_workspace_case(0),
+            Err("fictional_workspace_closed")
+        );
+        assert!(app.fictional_workspace_detail.is_none());
+        assert!(app.fictional_workspace_notice.is_some());
+    }
+
+    #[test]
+    fn fictional_workspace_all_six_source_pinned_cases_have_exact_identity_and_graph() {
+        let mut app = MedOriginNativePreview::default();
+        app.enter_fictional_workspace();
+        let mut cases = HashSet::new();
+        for (case_index, spec) in FICTIONAL_WORKSPACE_CASES.iter().enumerate() {
+            assert!(
+                cases.insert(spec.fixture_index),
+                "duplicate fictional source"
+            );
+            app.open_fictional_workspace_case(case_index)
+                .expect("only fixed source-compiled fictional inputs allowed");
+            let detail = app
+                .fictional_workspace_detail
+                .as_ref()
+                .expect("verified fictional detail");
+            assert_eq!(detail.fixture.id, FIXTURES[spec.fixture_index].id);
+            assert_eq!(detail.fixture.sha256, FIXTURES[spec.fixture_index].sha256);
+            assert_eq!(detail.resource_type, spec.resource_type);
+            assert_eq!(detail.resource_id, spec.resource_id);
+            assert_eq!(detail.negative, spec.negative);
+            assert_eq!(detail.relations.len(), spec.expected_edges);
+            assert_eq!(app.fictional_workspace_selected, Some(case_index));
+            assert!(app.fictional_workspace_notice.is_none());
+            assert!(app.preview.is_none());
+            assert!(app.core_report.is_none());
+            assert!(app.result.is_none());
+        }
+        assert_eq!(cases.len(), 6);
+    }
+
+    #[test]
+    fn fictional_workspace_filter_refuses_hidden_cases_and_clears_stale_evidence() {
+        let mut app = MedOriginNativePreview::default();
+        app.enter_fictional_workspace();
+        app.open_fictional_workspace_case(1).unwrap();
+        assert!(app.fictional_workspace_detail.is_some());
+        app.filter_fictional_workspace(FictionalWorkspaceFilter::ExpectedNegative);
+        assert!(app.fictional_workspace_detail.is_none());
+        assert!(app.fictional_workspace_selected.is_none());
+        assert_eq!(
+            app.open_fictional_workspace_case(1),
+            Err("fictional_workspace_case_filtered_out")
+        );
+        assert!(app.fictional_workspace_detail.is_none());
+        assert!(app.fictional_workspace_notice.is_some());
+        for index in [2usize, 5] {
+            app.open_fictional_workspace_case(index)
+                .expect("two source-reviewed negative controls");
+            assert!(app.fictional_workspace_detail.as_ref().unwrap().negative);
+        }
+        app.filter_fictional_workspace(FictionalWorkspaceFilter::ExpectedEnvelopeOk);
+        assert!(app.fictional_workspace_detail.is_none());
+        for index in [0usize, 1, 3, 4] {
+            app.open_fictional_workspace_case(index).unwrap();
+            assert!(!app.fictional_workspace_detail.as_ref().unwrap().negative);
+        }
+        assert_eq!(
+            app.open_fictional_workspace_case(5),
+            Err("fictional_workspace_case_filtered_out")
+        );
+    }
+
+    #[test]
+    fn fictional_workspace_close_escape_and_other_source_actions_clear_details() {
+        let mut app = MedOriginNativePreview::default();
+        app.enter_fictional_workspace();
+        app.open_fictional_workspace_case(3).unwrap();
+        assert_eq!(
+            app.fictional_workspace_detail
+                .as_ref()
+                .unwrap()
+                .relations
+                .len(),
+            3
+        );
+        app.clear_fictional_output(); // Escape path used by native eframe.
+        assert!(app.fictional_workspace_detail.is_none());
+        assert!(app.fictional_workspace_unlocked); // UI still requires explicit Close.
+        app.open_fictional_workspace_case(4).unwrap();
+        app.inspect_selected_core_receipt().unwrap();
+        assert!(app.fictional_workspace_detail.is_none());
+        assert!(app.core_report.is_some());
+        app.open_fictional_workspace_case(2).unwrap();
+        assert!(app.core_report.is_none());
+        app.close_fictional_workspace();
+        assert!(!app.fictional_workspace_unlocked);
+        assert!(app.fictional_workspace_detail.is_none());
+        assert!(app.fictional_workspace_selected.is_none());
+        assert_eq!(
+            app.fictional_workspace_filter,
+            FictionalWorkspaceFilter::All
+        );
+        assert_eq!(
+            app.open_fictional_workspace_case(0),
+            Err("fictional_workspace_closed")
+        );
+    }
+
+    #[test]
+    fn fictional_workspace_unknown_case_indexes_never_reuse_previous_success() {
+        let mut app = MedOriginNativePreview::default();
+        app.enter_fictional_workspace();
+        app.open_fictional_workspace_case(0).unwrap();
+        for index in [6, 7, usize::MAX] {
+            assert_eq!(
+                app.open_fictional_workspace_case(index),
+                Err("fictional_workspace_case_not_allowed")
+            );
+            assert!(app.fictional_workspace_detail.is_none());
+            assert!(app.fictional_workspace_selected.is_none());
+            assert!(app.fictional_workspace_notice.is_some());
+        }
+    }
 
     #[test]
     fn actual_native_core_provenance_view_model_inspects_two_source_pinned_receipts() {
