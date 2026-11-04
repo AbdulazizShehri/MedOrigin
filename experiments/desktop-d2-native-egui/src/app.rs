@@ -597,6 +597,68 @@ impl RecoveredResourceTypeFilter {
     }
 }
 
+/// A source-validated *fictional* patient-linked view of exactly three
+/// de-identified recovered test identities. No actual clinical chart or time.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct FictionalPatientChart {
+    patient: usize,
+    observation: usize,
+    encounter: usize,
+}
+
+fn verified_fictional_patient_chart(
+    readback: &FictionalEncryptedReadback,
+) -> Result<FictionalPatientChart, &'static str> {
+    if readback.resources.len() != 3
+        || !readback.audit_chain_verified
+        || !readback.encrypted_reopen_verified
+    {
+        return Err("fictional_patient_chart_source_or_audit_refused");
+    }
+    let only_type = |kind: &str| -> Result<usize, &'static str> {
+        let matching: Vec<_> = readback
+            .resources
+            .iter()
+            .enumerate()
+            .filter(|(_, item)| item.resource_type == kind)
+            .map(|(index, _)| index)
+            .collect();
+        if matching.len() != 1 {
+            return Err("fictional_patient_chart_type_ambiguous");
+        }
+        Ok(matching[0])
+    };
+    let chart = FictionalPatientChart {
+        patient: only_type("Patient")?,
+        observation: only_type("Observation")?,
+        encounter: only_type("Encounter")?,
+    };
+    let patient = &readback.resources[chart.patient];
+    let encounter = &readback.resources[chart.encounter];
+    let observation = &readback.resources[chart.observation];
+
+    let exactly_one = |record: &crate::encrypted_readback::FictionalReadbackResource,
+                       field: &str,
+                       target: &str| {
+        record
+            .links
+            .iter()
+            .filter(|edge| edge.field == field && edge.target == target)
+            .count()
+            == 1
+    };
+    if !patient.links.is_empty()
+        || encounter.links.len() != 1
+        || observation.links.len() != 2
+        || !exactly_one(encounter, "subject", &patient.full_url)
+        || !exactly_one(observation, "subject", &patient.full_url)
+        || !exactly_one(observation, "encounter", &encounter.full_url)
+    {
+        return Err("fictional_patient_chart_unverified_relationship_refused");
+    }
+    Ok(chart)
+}
+
 #[derive(Default)]
 pub struct MedOriginNativePreview {
     selected: usize,
@@ -694,6 +756,65 @@ impl MedOriginNativePreview {
 
     /// Native navigation through identities actually projected from
     /// encrypted Core memory readback. No arbitrary resource resolver.
+    /// Select only the one source-projected, graph-verified fictional Patient
+    /// and reset stale filters/selection. This is not a clinical patient chart.
+    fn open_recovered_fictional_patient_chart(&mut self) -> Result<(), &'static str> {
+        let chart = self
+            .encrypted_readback
+            .as_ref()
+            .ok_or("fictional_patient_chart_no_source")
+            .and_then(verified_fictional_patient_chart);
+        match chart {
+            Ok(chart) => {
+                self.encrypted_readback_filter = RecoveredResourceTypeFilter::All;
+                self.encrypted_readback_query.clear();
+                self.encrypted_readback_selected = Some(chart.patient);
+                self.encrypted_readback_history.clear();
+                self.encrypted_readback_notice = None;
+                Ok(())
+            }
+            Err(reason) => {
+                self.clear_fictional_output();
+                self.encrypted_readback_notice =
+                    Some("FAIL CLOSED: fictional patient chart graph not verified");
+                Err(reason)
+            }
+        }
+    }
+
+    /// Navigate only to one of the two exact, source-verified Patient-related
+    /// fictional resources. Never infer medical chronology from graph edges.
+    fn open_recovered_fictional_patient_chart_member(
+        &mut self,
+        target_index: usize,
+    ) -> Result<(), &'static str> {
+        let verified = (|| {
+            let source = self
+                .encrypted_readback
+                .as_ref()
+                .ok_or("fictional_patient_chart_no_source")?;
+            let chart = verified_fictional_patient_chart(source)?;
+            let current = self
+                .encrypted_readback_selected
+                .ok_or("fictional_patient_chart_no_selection")?;
+            if current != chart.patient
+                || (target_index != chart.encounter && target_index != chart.observation)
+            {
+                return Err("fictional_patient_chart_unapproved_member");
+            }
+            Ok((current, target_index))
+        })();
+        match verified {
+            Ok((current, target)) => self.navigate_encrypted_readback_resource(current, target),
+            Err(reason) => {
+                self.clear_fictional_output();
+                self.encrypted_readback_notice =
+                    Some("FAIL CLOSED: fictional patient chart member not verified");
+                Err(reason)
+            }
+        }
+    }
+
     fn set_recovered_type_filter(&mut self, filter: RecoveredResourceTypeFilter) {
         self.encrypted_readback_filter = filter;
         self.encrypted_readback_selected = None;
@@ -1406,6 +1527,41 @@ impl eframe::App for MedOriginNativePreview {
             ui.heading("MedOrigin — Native Rust Experiment");
             ui.strong("Synthetic developer preview only · No EHR · No clinical use");
             ui.label("No browser engine, IPC server, Python worker, filesystem input or model is used in this proof of concept.");
+            // This top-level native home is directly usable without scrolling
+            // through historical developer fixtures. It exposes no PHI and
+            // cannot create a patient, write to SQLite, or launch Core.
+            let mut open_home_chart = false;
+            ui.group(|ui| {
+                ui.heading("Workspace home: fictional Core source only");
+                if let Some(readback) = &self.encrypted_readback {
+                    ui.strong(format!(
+                        "Verified fictional resources: {} (read-only)",
+                        readback.resources.len()
+                    ));
+                    ui.label(format!(
+                        "Workspace source: {}",
+                        if readback.persistent_test_vault_reopened {
+                            "Cold-reopened persistent QA encrypted test vault"
+                        } else {
+                            "Reopened ephemeral encrypted test vault (removed after QA)"
+                        }
+                    ));
+                    ui.label(format!(
+                        "Encrypted reopen: {} | Audit: {}",
+                        readback.encrypted_reopen_verified, readback.audit_chain_verified
+                    ));
+                    ui.label("Only source-approved imaginary FHIR-shaped identities; no real patient data.");
+                    if ui.button("Open workspace home: fictional patient chart").clicked() {
+                        open_home_chart = true;
+                    }
+                } else {
+                    ui.label("No verified encrypted Core Workspace is attached to this GUI session.");
+                    ui.label("Launch the separate fictional-only portable Core demo to display verified identities.");
+                }
+            });
+            if open_home_chart {
+                let _ = self.open_recovered_fictional_patient_chart();
+            }
             ui.separator();
             // Keep all four original controls visible in the same order.
             // This retains the testable AX/UIA keyboard contract from D2.
@@ -1504,6 +1660,8 @@ impl eframe::App for MedOriginNativePreview {
                     let mut follow = None;
                     let mut incoming = None;
                     let mut breadcrumb_jump = None;
+                    let mut chart_open = false;
+                    let mut chart_member = None;
                     let mut filter_change = None;
                     let mut search_change: Option<String> = None;
                     if let Some(readback) = &self.encrypted_readback {
@@ -1528,6 +1686,10 @@ impl eframe::App for MedOriginNativePreview {
                                 }
                             }
                         });
+                        if ui.button("Open recovered fictional patient chart").clicked() {
+                            chart_open = true;
+                        }
+                        ui.label("Patient-linked fictional chart: reviewed graph only, no dates, diagnosis or clinical timeline.");
                         ui.label(format!("Active recovered type: {}", self.encrypted_readback_filter.label()));
                         ui.horizontal_wrapped(|ui| {
                             ui.label("Search recovered fictional type/ID (ASCII only):");
@@ -1608,6 +1770,27 @@ impl eframe::App for MedOriginNativePreview {
                                         }
                                     }
                                 }
+                                if resource.resource_type == "Patient" {
+                                    match verified_fictional_patient_chart(readback) {
+                                        Ok(chart) if chart.patient == index => {
+                                            ui.strong("Fictional patient chart: source-verified relationships");
+                                            ui.label("Associated fictional resources: 1 Encounter, 1 Observation");
+                                            ui.label("No clinical chronology, medications, diagnoses or outcomes are available.");
+                                            for member in [chart.encounter, chart.observation] {
+                                                let related = &readback.resources[member];
+                                                if ui.button(format!(
+                                                    "Open patient chart member: {}/{}",
+                                                    related.resource_type, related.resource_id
+                                                )).clicked() {
+                                                    chart_member = Some(member);
+                                                }
+                                            }
+                                        }
+                                        _ => {
+                                            ui.label("Fictional patient chart not available: source graph verification failed");
+                                        }
+                                    }
+                                }
                                 for (link_index, link) in resource.links.iter().enumerate() {
                                     if ui.button(format!(
                                         "Follow recovered fictional {} -> {}",
@@ -1646,6 +1829,12 @@ impl eframe::App for MedOriginNativePreview {
                     }
                     if let Some(index) = select {
                         let _ = self.select_encrypted_readback_resource(index);
+                    }
+                    if chart_open {
+                        let _ = self.open_recovered_fictional_patient_chart();
+                    }
+                    if let Some(index) = chart_member {
+                        let _ = self.open_recovered_fictional_patient_chart_member(index);
                     }
                     if let Some(index) = follow {
                         let _ = self.follow_encrypted_readback_link(index);
@@ -1924,6 +2113,91 @@ impl eframe::App for MedOriginNativePreview {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn fictional_patient_chart_reconciles_source_verified_encounter_observation_and_back() {
+        for raw in [
+            include_bytes!("../fixtures/core/encrypted-readback-projection.json").as_slice(),
+            include_bytes!("../fixtures/core/encrypted-persistent-readback-projection.json")
+                .as_slice(),
+        ] {
+            let mut app =
+                MedOriginNativePreview::from_one_time_synthetic_encrypted_readback_stdin(raw)
+                    .unwrap();
+            let chart = verified_fictional_patient_chart(app.encrypted_readback.as_ref().unwrap())
+                .expect("actual decrypted fictional Core graph");
+            assert_eq!(
+                chart,
+                FictionalPatientChart {
+                    observation: 0,
+                    patient: 1,
+                    encounter: 2,
+                }
+            );
+            app.set_recovered_type_filter(RecoveredResourceTypeFilter::Observation);
+            app.set_recovered_search_query("observation").unwrap();
+            assert_eq!(app.recovered_visible_count(), 1);
+            app.open_recovered_fictional_patient_chart().unwrap();
+            assert_eq!(app.encrypted_readback_selected, Some(chart.patient));
+            assert_eq!(
+                app.encrypted_readback_filter,
+                RecoveredResourceTypeFilter::All
+            );
+            assert!(app.encrypted_readback_query.is_empty());
+            assert!(app.encrypted_readback_history.is_empty());
+            app.open_recovered_fictional_patient_chart_member(chart.encounter)
+                .unwrap();
+            assert_eq!(app.encrypted_readback_selected, Some(chart.encounter));
+            assert_eq!(app.encrypted_readback_history, vec![chart.patient]);
+            app.back_encrypted_readback_resource().unwrap();
+            assert_eq!(app.encrypted_readback_selected, Some(chart.patient));
+            app.open_recovered_fictional_patient_chart_member(chart.observation)
+                .unwrap();
+            assert_eq!(app.encrypted_readback_selected, Some(chart.observation));
+            assert_eq!(app.encrypted_readback_history, vec![chart.patient]);
+            app.back_encrypted_readback_resource().unwrap();
+            assert_eq!(app.encrypted_readback_selected, Some(chart.patient));
+            assert_eq!(
+                app.open_recovered_fictional_patient_chart_member(chart.patient),
+                Err("fictional_patient_chart_unapproved_member")
+            );
+            assert!(app.encrypted_readback.is_none());
+            assert!(app.encrypted_readback_selected.is_none());
+            assert!(app.encrypted_readback_history.is_empty());
+        }
+    }
+
+    #[test]
+    fn fictional_patient_chart_refuses_forged_relationships_and_missing_members() {
+        let raw = include_bytes!("../fixtures/core/encrypted-readback-projection.json");
+        let mut app =
+            MedOriginNativePreview::from_one_time_synthetic_encrypted_readback_stdin(raw).unwrap();
+        app.encrypted_readback.as_mut().unwrap().resources[0].links[1].target =
+            "urn:uuid:00000000-0000-4000-8000-000000000002".to_owned();
+        assert_eq!(
+            app.open_recovered_fictional_patient_chart(),
+            Err("fictional_patient_chart_unverified_relationship_refused")
+        );
+        assert!(app.encrypted_readback.is_none());
+
+        let mut app =
+            MedOriginNativePreview::from_one_time_synthetic_encrypted_readback_stdin(raw).unwrap();
+        app.encrypted_readback.as_mut().unwrap().resources[2].resource_type =
+            "Observation".to_owned();
+        assert_eq!(
+            app.open_recovered_fictional_patient_chart(),
+            Err("fictional_patient_chart_type_ambiguous")
+        );
+        assert!(app.encrypted_readback.is_none());
+
+        let mut app =
+            MedOriginNativePreview::from_one_time_synthetic_encrypted_readback_stdin(raw).unwrap();
+        assert_eq!(
+            app.open_recovered_fictional_patient_chart_member(0),
+            Err("fictional_patient_chart_no_selection")
+        );
+        assert!(app.encrypted_readback.is_none());
+    }
 
     #[test]
     fn recovered_encrypted_core_resources_have_live_source_projected_navigation() {
