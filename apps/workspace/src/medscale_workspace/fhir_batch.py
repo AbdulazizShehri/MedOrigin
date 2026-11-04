@@ -7,6 +7,7 @@ private fhir_r4 functions, audit constructors, or store provider attributes.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 
@@ -17,6 +18,8 @@ from medscale_workspace.audit import (
     AuditTrail,
     prepare_next_event,
 )
+from medscale_workspace.binding import ObjectBinding
+from medscale_workspace.identity import WorkspaceObjectType, synthetic_identity
 from medscale_workspace.keyprovider import InMemoryTestKeyProvider
 from medscale_workspace.provenance import (
     ProducerIdentity,
@@ -47,6 +50,7 @@ def commit_synthetic_fhir_batch_atomic(
     actor_id: str,
     occurred_at: str,
     synthetic_only: bool = False,
+    source_bundle: dict[str, object] | None = None,
 ) -> dict[str, object]:
     """Commit the complete synthetic test batch with provenance and audit.
 
@@ -79,6 +83,63 @@ def commit_synthetic_fhir_batch_atomic(
         moment = fhir_mod._admit_occurred_at(occurred_at)
     except (ValueError, TypeError) as exc:
         raise SyntheticFhirBatchError("import_audit_identity_refused") from exc
+
+    manifest_write: ObjectWrite | None = None
+    if source_bundle is not None:
+        try:
+            if not isinstance(source_bundle, dict):
+                raise ValueError("not a bundle")
+            if (
+                source_bundle.get("resourceType") != "Bundle"
+                or source_bundle.get("type") != "collection"
+            ):
+                raise ValueError("not a collection")
+            entries = source_bundle.get("entry")
+            if not isinstance(entries, list) or len(entries) != len(resources):
+                raise ValueError("manifest membership mismatch")
+            original_ids = [
+                (entry["resource"]["resourceType"], entry["resource"]["id"]) for entry in entries
+            ]
+            imported_ids = [(resource["resourceType"], resource["id"]) for resource in resources]
+            if len(set(original_ids)) != len(original_ids) or set(original_ids) != set(
+                imported_ids
+            ):
+                raise ValueError("manifest resource identity mismatch")
+            original = json.dumps(
+                source_bundle,
+                sort_keys=True,
+                separators=(",", ":"),
+                ensure_ascii=False,
+                allow_nan=False,
+            ).encode("utf-8")
+            if len(original) > 2 * 1024 * 1024:
+                raise ValueError("oversized bundle")
+            if hashlib.sha256(original).hexdigest() != source_content_sha256:
+                raise ValueError("digest mismatch")
+            identity = synthetic_identity(
+                store.workspace_id,
+                WorkspaceObjectType.FHIR_IMPORT_MANIFEST,
+                source_content_sha256,
+            )
+            manifest_write = ObjectWrite(
+                binding=ObjectBinding(
+                    workspace_id=store.workspace_id,
+                    object_id=identity.object_id,
+                    object_type=WorkspaceObjectType.FHIR_IMPORT_MANIFEST,
+                    object_revision="1",
+                ),
+                payload=original,
+            )
+        except (
+            ValueError,
+            TypeError,
+            KeyError,
+            IndexError,
+            UnicodeError,
+            RecursionError,
+            OverflowError,
+        ) as exc:
+            raise SyntheticFhirBatchError("synthetic_source_manifest_refused") from exc
 
     writes: list[ObjectWrite] = []
     audit_refs: list[AuditObjectRef] = []
@@ -199,6 +260,8 @@ def commit_synthetic_fhir_batch_atomic(
             ),
         )
         writes.append(ObjectWrite(binding=event.binding(), payload=event.canonical_bytes()))
+        if manifest_write is not None:
+            writes.append(manifest_write)
     except SyntheticFhirBatchError:
         raise
     except (ValueError, TypeError, KeyError, AttributeError, OverflowError, RecursionError) as exc:
@@ -214,5 +277,6 @@ def commit_synthetic_fhir_batch_atomic(
         "resource_count": len(parsed_resources),
         "provenance_records_written": len(parsed_resources),
         "audit_events_written": 1,
+        "encrypted_import_manifests_written": int(manifest_write is not None),
         "audit_head_digest": event.event_digest,
     }

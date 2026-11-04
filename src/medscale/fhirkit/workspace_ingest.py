@@ -113,6 +113,7 @@ def ingest_synthetic_bundle_atomic(
             actor_id=actor_id,
             occurred_at=occurred_at,
             synthetic_only=True,
+            source_bundle=admitted_bundle,
         )
     except SyntheticFhirBatchError as exc:
         # Workspace errors only expose fixed reviewed tokens, not input.
@@ -125,6 +126,7 @@ def ingest_synthetic_bundle_atomic(
         "resource_count": outcome["resource_count"],
         "provenance_records_written": outcome["provenance_records_written"],
         "audit_events_written": outcome["audit_events_written"],
+        "encrypted_import_manifests_written": outcome["encrypted_import_manifests_written"],
         "audit_head_digest": outcome["audit_head_digest"],
         "payload_included": False,
         "production_key_provider_used": False,

@@ -83,7 +83,7 @@ def test_true_atomic_encrypted_bundle_ingest_reopen_and_audit(tmp_path: Path) ->
         assert PATIENT_ID not in json.dumps(receipt)
         # Three encrypted resource records, three encrypted provenance
         # records, one encrypted audit event, all in one transaction.
-        assert store.object_count() == 7
+        assert store.object_count() == 8
         trail = AuditTrail(store)
         verified = trail.verify()
         assert verified.events_verified == 1
@@ -106,7 +106,7 @@ def test_true_atomic_encrypted_bundle_ingest_reopen_and_audit(tmp_path: Path) ->
         assert b"Synthetic Example Only" not in binary
         assert PATIENT_ID.encode("ascii") not in binary
     with _store(tmp_path, provider) as reopened:
-        assert reopened.object_count() == 7
+        assert reopened.object_count() == 8
         assert (
             AuditTrail(reopened)
             .verify(expected_head_event_digest=receipt["audit_head_digest"])
@@ -154,7 +154,7 @@ def test_replaying_batch_atomic_conflict_leaves_snapshot_unchanged(tmp_path: Pat
         initial = _ingest(_bundle(), store, provider)
         with pytest.raises(SyntheticWorkspaceImportError, match="workspace_atomic_commit_refused"):
             _ingest(_bundle(), store, provider)
-        assert store.object_count() == 7
+        assert store.object_count() == 8
         assert AuditTrail(store).verify().head_event_digest == initial["audit_head_digest"]
 
 
@@ -266,7 +266,7 @@ def test_existing_audit_chain_remains_contiguous_after_atomic_import(tmp_path: P
             occurred_at=OCCURRED,
         )
         receipt = _ingest(_bundle(), store, provider)
-        assert store.object_count() == 8
+        assert store.object_count() == 9
         events = trail.events()
         assert len(events) == 2
         assert events[0] == first
@@ -284,7 +284,7 @@ def test_wrong_test_secret_cannot_reopen_encrypted_store(tmp_path: Path) -> None
     with pytest.raises(WorkspaceStoreError):
         _store(tmp_path, InMemoryTestKeyProvider(new_root_secret()))
     with _store(tmp_path, provider) as reopened:
-        assert reopened.object_count() == 7
+        assert reopened.object_count() == 8
 
 
 def test_policy_failures_do_not_even_read_unsupported_store(tmp_path: Path) -> None:
@@ -346,5 +346,5 @@ def test_source_dict_mutation_after_preflight_does_not_change_committed_content(
             WORKSPACE_ID, fhir_mod.FhirResourceType.PATIENT, PATIENT_ID, "1"
         )
         assert fhir_mod.read_resource(store, identity).fhir_id == PATIENT_ID
-        assert store.object_count() == 7
+        assert store.object_count() == 8
         assert "poisoned" not in json.dumps(receipt)
