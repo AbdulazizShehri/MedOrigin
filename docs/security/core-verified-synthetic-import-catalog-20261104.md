@@ -125,3 +125,78 @@ terminology/invariant validation, independently reviewed security and
 clinical acceptance, dependency vulnerabilities, source-qualified
 native Windows console launcher, hosted exact-head CI, signing,
 main merge or release/publication.
+
+
+## Exact-source offline package and installed-runtime evidence
+
+**Functional Git commit:** `a3eb7b4b29ee031df4a891a1bc091614ebb7d1f8`.
+
+A task-only Ubuntu WSL2 ext4 Git checkout pinned to that exact SHA
+was projected with the existing repository Core staging script.
+Both Core and Workspace were built **offline** using
+`uv build --offline --no-create-gitignore`; the protected source tree's
+root `pyproject.toml` and `uv.lock` were unchanged.
+
+Pre-existing Core artifact identity gates for both Wheel and sdist
+completed with **zero issues**:
+`SOURCE_BOUND_WHEEL_QUALIFIED_ONLY` and
+`SDIST_SCOPE_QUALIFIED_ONLY`. Six Core source modules including
+the new public CLI and catalog APIs, and **all 35 Workspace Python
+modules**, were byte-identical inside the exact built Wheels.
+
+Unpublished local artifact SHA-256 digests:
+
+- Core Wheel `medscale-0.3.0-py3-none-any.whl`:
+  `b23dd717189218f40c8154ea2905c5e20901f1a7a94d4cee584ef83e6b87f7a8`.
+- Core sdist `medscale-0.3.0.tar.gz`:
+  `0614936321d71181be48442cd8261114385bc1db362f8cc67a3e6fe86639d6f1`.
+- Workspace Wheel `medscale_workspace-0.1.0.dev1-py3-none-any.whl`:
+  `9a957dceaeac0ea8678999a87c472ae73d64cb8454235038aa007d1c5078a8fd`.
+- Workspace sdist `medscale_workspace-0.1.0.dev1.tar.gz`:
+  `ca83d5321d11b48575ebde48dc6fa9a777eb4b20cca993364e066ffa239e08b3`.
+
+**Both exact SHA-checked Wheels** were installed side by side via
+`pip --no-index --no-deps --target` into a disposable Windows
+directory (no global package mutation). The isolated test script
+asserted **eight imported Core/Workspace modules** including the
+new catalog and CLI entry-point resolve from the Wheel install
+destination, not the repository sources.
+
+The same real installed-Wheel verification completed **exit0 on all
+three native Windows versions Python 3.14, 3.11.15 and 3.12.13**:
+
+- Two independent fictional encrypted FHIR Bundle imports with
+  a benign intervening audit event, **13 encrypted objects**;
+  close/reopen and verify source/canonical FHIR resource digests,
+  immutable provenance and original/current audit anchors for both
+  old and recent Bundle entries.
+- Return **only** two source/audit digests and resource/sequence
+  counts, no original payload fields. Using each safe selector,
+  independently read back and match the original fictional
+  FHIR Bundle in memory. Bytes of the encrypted SQLite file
+  contain no invented name or `urn:uuid:` strings.
+- Temporary encrypted workspace deleted; proof
+  `EXACT_TWO_INSTALLED_WHEELS_VERIFIED_CATALOG_PASS`, clinical/full-R4
+  flags **false**.
+- Installed public Core **Python CLI dispatcher**
+  `fhir workspace-catalog-demo --synthetic-only --ephemeral-demo`
+  returned exit0, `SYNTHETIC_ENCRYPTED_CATALOG_DEMO_PASS`,
+  `import_count=2`, `resource_count=4`, and cleaned the
+  temporary store on all three runtimes.
+- Python 3.11/3.12 used separate task-only pinned binary
+  `cryptography==50.0.1` and `cffi==2.1.1` local dependencies.
+  These are NOT independently production-approved supply-chain
+  attestations.
+
+The wider native Windows Python3.14 source/Core/Workspace/FHIR
+adversarial regression completed **157 PASS, 2 DESELECTED**.
+The two excluded historical raw-Wheel fixture tests need an unavailable
+external build executable and are not represented as passes.
+Ruff checks/format and Git whitespace checks PASSED.
+
+**No hosted exact-HEAD CI, independent security or medical review
+or native installed `medscale.exe` console launcher provenance
+is implied by this evidence.** The packaged CLI validation was through
+the installed Python dispatcher, not the OS console shim. PR remains
+private DRAFT and full release/clinical status **NO-GO**. No
+artifact was signed, merged to protected main, uploaded or published.
