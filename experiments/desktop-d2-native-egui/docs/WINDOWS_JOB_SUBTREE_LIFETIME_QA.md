@@ -27,7 +27,7 @@ WINDOWS_D2_JOB_HANDLE_CLOSE_TERMINATED_PARENT_AND_CHILD
 WINDOWS_D2_SOURCE_ONLY_JOB_OBJECT_PARENT_AND_CHILD_KILLED_ON_CLOSE_PASS
 ```
 
-Source-controlled negative/source tests `scripts/test_windows_job_subtree.py`: **4/4 PASS** independently on the authorized Windows PC (and 4/4 on Mac for source-only checks). Hosted Windows and Ubuntu D2 CI also run *source-only* test collection, not actual Job Object child execution.
+Source-controlled negative/source tests `scripts/test_windows_job_subtree.py`: **4/4 PASS** independently on the authorized Windows PC (and 4/4 on Mac for source-only checks). Hosted Windows and Ubuntu D2 CI run the **source-only** regression collection. The Windows runner **additionally executes this exact synthetic Job Object kernel proof** in a dedicated nonpublishing step; Ubuntu does not claim to exercise Windows Job Objects. A hosted failure is a real unresolved Windows compatibility gate, not an authorized waiver.
 
 ## Strictly unresolved
 
