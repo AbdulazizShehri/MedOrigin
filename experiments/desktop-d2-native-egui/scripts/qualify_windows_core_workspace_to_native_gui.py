@@ -68,10 +68,15 @@ def verify_pinned_core(core: Path) -> None:
         for item in package_dir.rglob("*"):
             if item.is_symlink():
                 raise ValueError("core_workspace_source_symlink_refused")
+            # Git ignores __pycache__ by default. Python -B suppresses writes
+            # but DOES NOT refuse existing compiled bytecode at import time.
+            if item.is_dir() and item.name.lower() == "__pycache__":
+                raise ValueError("unreviewed_ignored_python_bytecode_refused")
             if item.is_file():
                 path = item.relative_to(core).as_posix()
-                if path.endswith((".py", ".pyd", ".pth", ".dll", ".so")):
-                    if path not in tracked or not path.endswith(".py"):
+                if item.suffix.lower() in (".py", ".pyc", ".pyo", ".pyd", ".pth",
+                                           ".dll", ".so", ".dylib"):
+                    if path not in tracked or item.suffix.lower() != ".py":
                         raise ValueError("unreviewed_python_startup_or_native_source")
                     seen.add(path)
         expected_python = {p for p in tracked if p.endswith(".py")}

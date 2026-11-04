@@ -67,6 +67,46 @@ class WindowsRealCoreWorkspaceSourceTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "single_terminal_newline_missing"):
             qa.strip_platform_one_newline(b"")
 
+    def test_ignored_bytecode_cache_and_native_loader_shadow_refused(self):
+        with TemporaryDirectory() as tmp:
+            core = Path(tmp)
+            inventories = {}
+            for section, count in (
+                ("src/medscale", 120),
+                ("apps/workspace/src/medscale_workspace", 25),
+            ):
+                folder = core / section
+                folder.mkdir(parents=True)
+                files = []
+                for index in range(count):
+                    rel = f"{section}/fictional_{index:03d}.py"
+                    (core / rel).write_text("# fictional QA only\n", encoding="utf-8")
+                    files.append(rel)
+                inventories[section] = files
+
+            def fixed_git(_core, *args):
+                if args == ("rev-parse", "HEAD"):
+                    return (qa.CORE_SHA + "\n").encode()
+                if args[0] == "status":
+                    return b""
+                if args[0] == "ls-files":
+                    return ("\x00".join(inventories[args[-1]]) + "\x00").encode()
+                raise AssertionError("unexpected source inventory operation")
+
+            with patch.object(qa, "git", side_effect=fixed_git):
+                qa.verify_pinned_core(core)
+                cached = core / "src/medscale/__pycache__"
+                cached.mkdir()
+                (cached / "fictional_000.cpython-314.pyc").write_bytes(b"bad bytecode")
+                with self.assertRaisesRegex(ValueError, "ignored_python_bytecode_refused"):
+                    qa.verify_pinned_core(core)
+                (cached / "fictional_000.cpython-314.pyc").unlink()
+                cached.rmdir()
+                rogue = core / "src/medscale/hidden_native_loader.pyd"
+                rogue.write_bytes(b"bad native loader")
+                with self.assertRaisesRegex(ValueError, "unreviewed_python_startup"):
+                    qa.verify_pinned_core(core)
+
     def test_native_windows_uia_live_file_is_exact_hash_and_size_bounded(self):
         observer = Path(__file__).resolve().parent.parent / "tests/windows-encrypted-workspace-native-uia.ps1"
         text = observer.read_text()
