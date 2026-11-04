@@ -1,5 +1,8 @@
 // Adapted from emilk/eframe_template under Apache-2.0, see UPSTREAM-NOTICE.md.
 // Synthetic-only, in-process native Rust eframe + D0; no browser, EHR, PHI or network.
+use crate::core_provenance::{
+    CoreProvenanceReceipt, PINNED_CORE_CASE_LABELS, inspect_pinned_core_report,
+};
 use eframe::egui;
 use medorigin_desktop_d0_rust_prototype::{
     HashError, fictional_json_preview_v1, hash_fixture_raw_v1,
@@ -449,6 +452,9 @@ pub struct MedOriginNativePreview {
     comparison: Option<FictionalComparison>,
     relationships: Option<FictionalRelationView>,
     relationship_notice: Option<&'static str>,
+    core_report_selection: usize,
+    core_report: Option<CoreProvenanceReceipt>,
+    core_report_notice: Option<&'static str>,
 }
 
 impl MedOriginNativePreview {
@@ -461,6 +467,8 @@ impl MedOriginNativePreview {
         self.comparison = None;
         self.relationships = None;
         self.relationship_notice = None;
+        self.core_report = None;
+        self.core_report_notice = None;
     }
 
     /// Fail closed if either the trusted raw digest OR the independent
@@ -474,6 +482,8 @@ impl MedOriginNativePreview {
         self.comparison = None;
         self.relationships = None;
         self.relationship_notice = None;
+        self.core_report = None;
+        self.core_report_notice = None;
         let Some(fixture) = FIXTURES.get(self.selected) else {
             self.result = Some("FAIL CLOSED: invalid synthetic selection".to_owned());
             return Err("invalid_synthetic_selection");
@@ -678,6 +688,25 @@ impl MedOriginNativePreview {
     }
 }
 
+impl MedOriginNativePreview {
+    /// Show source-pinned Python Core provenance from the two fixed fictional
+    /// QA reports; this deliberately does not launch Python or load a file.
+    pub fn inspect_selected_core_receipt(&mut self) -> Result<(), &'static str> {
+        self.clear_fictional_output();
+        match inspect_pinned_core_report(self.core_report_selection) {
+            Ok(receipt) => {
+                self.core_report = Some(receipt);
+                Ok(())
+            }
+            Err(_) => {
+                self.core_report_notice =
+                    Some("FAIL CLOSED: unapproved or changed synthetic Core report");
+                Err("core_report_inspection_refused")
+            }
+        }
+    }
+}
+
 impl eframe::App for MedOriginNativePreview {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         if ui.input(|input| input.key_pressed(egui::Key::Escape)) {
@@ -707,6 +736,39 @@ impl eframe::App for MedOriginNativePreview {
                     ui.monospace(line);
                 }
             }
+            // Real, canonical reports emitted by pinned Python Core for TWO
+            // fictional QA cases, embedded as build-time bytes. All admission
+            // is reverified locally on click; NO live Core worker or file IO.
+            egui::CollapsingHeader::new("Core provenance: two fictional reports (NOT validated)")
+                .default_open(false)
+                .show(ui, |ui| {
+                    ui.strong("Source-compiled Python Core QA receipts. NOT live or clinical.");
+                    for (index, label) in PINNED_CORE_CASE_LABELS.iter().enumerate() {
+                        if ui
+                            .selectable_label(self.core_report_selection == index, *label)
+                            .clicked()
+                        {
+                            self.core_report_selection = index;
+                            self.clear_fictional_output();
+                        }
+                    }
+                    if ui
+                        .button("Inspect Core synthetic provenance (read-only)")
+                        .clicked()
+                    {
+                        let _ = self.inspect_selected_core_receipt();
+                    }
+                    if let Some(notice) = self.core_report_notice {
+                        ui.label(notice);
+                    }
+                    if let Some(receipt) = &self.core_report {
+                        ui.monospace(format!("Core case: {:?}", receipt.case));
+                        ui.monospace(format!("Source report SHA-256: {}", receipt.report_sha256));
+                        ui.strong(format!("Core status: {}", receipt.status));
+                        ui.strong(receipt.disclosure);
+                        ui.label("Not a live Python Core connection, full R4 validator, EHR import or patient workspace.");
+                    }
+                });
             egui::CollapsingHeader::new("Additional fictional FHIR/Bundle cases (8)")
                 .default_open(false)
                 .show(ui, |ui| {
@@ -819,6 +881,7 @@ impl eframe::App for MedOriginNativePreview {
             }
             ui.label("Keyboard: Tab/Shift+Tab to navigate, Space to activate, Escape to clear synthetic output.");
             ui.separator();
+            ui.separator();
             ui.label("FHIR structural checks only · Release: NO-GO · Network isolation: UNQUALIFIED · PHI: PROHIBITED");
         });
     }
@@ -827,6 +890,57 @@ impl eframe::App for MedOriginNativePreview {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn actual_native_core_provenance_view_model_inspects_two_source_pinned_receipts() {
+        let mut app = MedOriginNativePreview::default();
+        for index in 0..PINNED_CORE_CASE_LABELS.len() {
+            app.core_report_selection = index;
+            app.inspect_selected_core_receipt()
+                .expect("real pinned synthetic Core data");
+            let receipt = app
+                .core_report
+                .as_ref()
+                .expect("Core report visible after admission");
+            assert_eq!(receipt.status, "not_validated");
+            assert!(receipt.disclosure.contains("Not for patient data"));
+            assert_eq!(receipt.report_sha256.len(), 64);
+            assert!(app.core_report_notice.is_none());
+            assert!(app.preview.is_none());
+            assert!(app.comparison.is_none());
+            assert!(app.result.is_none());
+        }
+        // A new native fixture selection/hash action must not preserve
+        // a previously rendered source-bound Core report.
+        app.hash_selected().expect("fictional D0 fixture");
+        assert!(app.core_report.is_none());
+        assert!(app.core_report_notice.is_none());
+        assert!(app.result.is_some());
+    }
+
+    #[test]
+    fn invalid_core_selection_and_explicit_clear_fail_closed_without_stale_display() {
+        let mut app = MedOriginNativePreview::default();
+        app.inspect_selected_core_receipt()
+            .expect("source-backed first QA receipt");
+        assert!(app.core_report.is_some());
+        app.core_report_selection = usize::MAX;
+        assert_eq!(
+            app.inspect_selected_core_receipt(),
+            Err("core_report_inspection_refused")
+        );
+        assert!(app.core_report.is_none());
+        assert!(app.core_report_notice.is_some());
+        app.core_report_selection = 1;
+        app.inspect_selected_core_receipt()
+            .expect("source-backed negative QA receipt");
+        assert!(app.core_report.is_some());
+        assert!(app.core_report_notice.is_none());
+        app.clear_fictional_output();
+        assert!(app.core_report.is_none());
+        assert!(app.core_report_notice.is_none());
+        assert_eq!(app.core_report_selection, 1);
+    }
 
     #[test]
     fn three_compiled_fictional_sources_yield_exact_reference_pointers_without_dates() {

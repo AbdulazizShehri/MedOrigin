@@ -125,6 +125,29 @@ jobs:
           & $py -m unittest discover -s experiments/desktop-d2-native-egui/tests -p test_macos_keyboard_ax_source_contract.py -v
           if ($LASTEXITCODE -ne 0) { throw 'macOS native AX and keyboard source contract refused' }
           Write-Output 'MACOS_AX_KEYBOARD_SOURCE_ONLY_NO_HOSTED_GUI_OR_VOICEOVER_APPROVAL'
+      - name: Qualify two exact Python Core provenance reports embedded in native D2 UI
+        shell: pwsh
+        run: |
+          $py = if ($IsWindows) { 'python' } else { 'python3' }
+          & $py -m unittest discover -s experiments/desktop-d2-native-egui/scripts -p test_core_source_embedded_ui.py -v
+          if ($LASTEXITCODE -ne 0) { throw 'Native D2 embedded Core fixture/provenance contract refused' }
+          Write-Output 'D2_CORE_EMBEDDED_2_SOURCE_REPORTS_NOT_VALIDATED_NOT_LIVE_WORKER'
+      - name: Windows source-parse real native Core provenance UIA 2-case acceptance
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $path = 'experiments/desktop-d2-native-egui/tests/windows-native-core-provenance-uia.ps1'
+          $tokens = $null
+          $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile(
+            (Resolve-Path $path).Path, [ref]$tokens, [ref]$errors
+          ) | Out-Null
+          if (@($errors).Count -ne 0) { throw 'Core provenance native UIA script syntax failed' }
+          $text = Get-Content -LiteralPath $path -Raw
+          if (-not $text.Contains('D2_WINDOWS_CORE_PROVENANCE_UIA_2_OF_2_PASS_NONPUBLISHING')) {
+            throw 'Missing real native Core provenance two-case test marker'
+          }
+          Write-Output 'WINDOWS_NATIVE_CORE_PROVENANCE_UIA_SOURCE_ONLY_NOT_GUI_EXECUTION'
       - name: Verify checks did not alter tracked code or lockfiles
         shell: pwsh
         run: |
