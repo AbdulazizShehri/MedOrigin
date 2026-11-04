@@ -95,6 +95,18 @@ jobs:
           uv pip install --python $python312 --no-index --no-deps $wheel
           if ($LASTEXITCODE -ne 0) { throw 'Python 3.12 offline wheel install failed' }
 
+          # Independently verify the truthful Core-only contract on BOTH
+          # source-matched installed interpreters. This does NOT waive the
+          # historical full Beta/desktop release gate below.
+          & $pythonBuild scripts/qualify_medorigin_developer_beta.py `
+            --checkout . --wheel $wheel --sdist $sdist `
+            --python311 $python311 --python312 $python312 `
+            --core-negative-truth-preview
+          if ($LASTEXITCODE -ne 0) {
+            throw 'Source-qualified Core negative-truth preview refused'
+          }
+          Write-Output 'CORE_NEGATIVE_TRUTH_PREVIEW_ONLY_NOT_RELEASE'
+
           & $pythonBuild scripts/qualify_medorigin_developer_beta.py `
             --checkout . --wheel $wheel --sdist $sdist `
             --python311 $python311 --python312 $python312

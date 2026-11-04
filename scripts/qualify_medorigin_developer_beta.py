@@ -147,8 +147,112 @@ def installed_wheel_matches(wheel: Path, python: Path, expected_minor: int) -> i
     return len(expected)
 
 
+def source_qualified_core_negative_truth_preview(
+    checkout: Path,
+    cli311: Path,
+    cli312: Path,
+    python311: Path,
+    python312: Path,
+) -> dict[str, Any]:
+    """Explicit nonrelease Core lane: actual installed modules, inert truthful UI.
+
+    Only call this AFTER the existing Core Wheel+sdist source identity
+    and native installed Python byte inventories pass.
+    """
+    import importlib.util
+
+    def _module(file: Path, label: str) -> Any:
+        spec = importlib.util.spec_from_file_location(label, file)
+        if spec is None or spec.loader is None:
+            raise QualificationError("source-qualified core preview module unavailable")
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return module
+
+    try:
+        gate = _module(
+            checkout / "scripts" / "check_installed_core_fhir_provenance.py",
+            "medorigin_qualified_core_provenance",
+        )
+        renderer = _module(
+            checkout / "examples" / "synthetic_fhir_developer_beta" / "core_truth_preview.py",
+            "medorigin_core_truthful_preview",
+        )
+        # Verified Python module entry points, NOT source-unattested .exe shims.
+        proof = gate.qualify(
+            [cli311, cli312],
+            interpreters=[python311, python312],
+        )
+        with tempfile.TemporaryDirectory(prefix="medorigin-core-negative-preview-") as temp:
+            root = Path(temp)
+            created = renderer.write_negative_truth_preview(root / "evidence", proof)
+            evidence = root / "evidence"
+            if {p.name for p in evidence.iterdir()} != {
+                "core-negative-truth.json",
+                "core-negative-truth.html",
+            }:
+                raise QualificationError("core preview contained extra files")
+            recorded = json.loads((evidence / "core-negative-truth.json").read_text())
+            if renderer.admit_installed_core_proof(proof) != recorded:
+                raise QualificationError("core preview source evidence mismatch")
+            html = (evidence / "core-negative-truth.html").read_text(encoding="utf-8")
+            if (
+                renderer.render_negative_truth_preview(recorded) != html
+                or "Not validated." not in html
+                or "NOT AUTHORIZED" not in html
+                or "script-src 'none'" not in html
+                or "connect-src 'none'" not in html
+                or "full FHIR" in html
+                or any(
+                    created.get(key) is not False
+                    for key in (
+                        "fhir_conformance_validated",
+                        "prepublication_rehearsal_qualified",
+                        "clinical_use_authorized",
+                        "publication_authorized",
+                        "native_launcher_identity_attested",
+                        "full_beta_preview_qualified",
+                    )
+                )
+            ):
+                raise QualificationError("unsafe Core negative-truth preview")
+    except QualificationError:
+        raise
+    except Exception as exc:
+        # Third-party stdout, CLI errors, host file paths and arbitrary
+        # patient-like strings must never be reflected in the CI log.
+        raise QualificationError("source-qualified_core_negative_preview_refused") from exc
+
+    return {
+        "status": "TECHNICAL_CORE_NEGATIVE_TRUTH_PREVIEW_ONLY",
+        "distribution": "medscale",
+        "installed_python_source_files_verified_per_runtime": None,
+        "native_python_module_execution": True,
+        "source_qualified_negative_truth_preview": True,
+        "known_report_sha256": proof["known_report_sha256"],
+        "unknown_report_sha256": proof["unknown_report_sha256"],
+        "record_sha256": created["record_sha256"],
+        "preview_sha256": created["preview_sha256"],
+        "installed_cli_count": 2,
+        "fhir_conformance_validated": False,
+        "prepublication_rehearsal_qualified": False,
+        "clinical_use_authorized": False,
+        "publication_authorized": False,
+        "independent_security_review_completed": False,
+        "native_launcher_identity_attested": False,
+        "full_beta_preview_qualified": False,
+        "merge_or_tag_authorized": False,
+    }
+
+
 def qualify(
-    checkout: Path, wheel: Path, sdist: Path, python311: Path, python312: Path
+    checkout: Path,
+    wheel: Path,
+    sdist: Path,
+    python311: Path,
+    python312: Path,
+    *,
+    core_negative_truth_preview: bool = False,
 ) -> dict[str, Any]:
     """Verify exact source, package, two installs and real synthetic FHIR E2E."""
     for path in (checkout, wheel, sdist):
@@ -193,6 +297,14 @@ def qualify(
     cli312 = python312.parent / ("medscale" + suffix)
     if not cli311.is_file() or not cli312.is_file():
         raise QualificationError("installed Core CLI absent")
+    if core_negative_truth_preview is True:
+        core_result = source_qualified_core_negative_truth_preview(
+            checkout, cli311, cli312, python311, python312
+        )
+        core_result["source_git_commit"] = source_sha
+        core_result["wheel_sha256"] = sha
+        core_result["installed_python_source_files_verified_per_runtime"] = count311
+        return core_result
     demo = SCRIPT_ROOT / "examples" / "synthetic_fhir_developer_beta" / "reproduce.py"
     with tempfile.TemporaryDirectory(prefix="medorigin-readiness-") as temp:
         output = Path(temp) / "synthetic-evidence"
@@ -247,18 +359,32 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--sdist", required=True, type=Path)
     parser.add_argument("--python311", required=True, type=Path)
     parser.add_argument("--python312", required=True, type=Path)
+    parser.add_argument(
+        "--core-negative-truth-preview",
+        action="store_true",
+        help="Explicit separate Core-only proof+static HTML path. "
+        "NEVER qualifies old full Beta, release or FHIR conformance.",
+    )
     args = parser.parse_args(argv)
     try:
-        result = qualify(
-            args.checkout.resolve(),
-            args.wheel.resolve(),
-            args.sdist.resolve(),
-            # On Linux, venv/bin/python is typically a symlink to the base
-            # interpreter; resolve() would discard the virtualenv identity.
-            # absolute() preserves the venv launcher path and its bin/medscale.
-            args.python311.absolute(),
-            args.python312.absolute(),
-        )
+        if args.core_negative_truth_preview:
+            result = qualify(
+                args.checkout.resolve(),
+                args.wheel.resolve(),
+                args.sdist.resolve(),
+                args.python311.absolute(),
+                args.python312.absolute(),
+                core_negative_truth_preview=True,
+            )
+        else:
+            result = qualify(
+                args.checkout.resolve(),
+                args.wheel.resolve(),
+                args.sdist.resolve(),
+                # Preserve the installed venv interpreter and CLI shim path.
+                args.python311.absolute(),
+                args.python312.absolute(),
+            )
     except QualificationError as exc:
         # Only fixed, author-controlled failure descriptions; never child output.
         print(f"MEDORIGIN_PREPUBLICATION_REHEARSAL_BLOCKED: {exc}", file=sys.stderr)
