@@ -617,6 +617,7 @@ pub struct MedOriginNativePreview {
     encrypted_readback_selected: Option<usize>,
     encrypted_readback_history: Vec<usize>,
     encrypted_readback_filter: RecoveredResourceTypeFilter,
+    encrypted_readback_query: String,
     encrypted_readback_notice: Option<&'static str>,
     workspace_report_external: bool,
     workspace_report_notice: Option<&'static str>,
@@ -700,13 +701,49 @@ impl MedOriginNativePreview {
         self.encrypted_readback_notice = None;
     }
 
+    // Ephemeral search over ONLY redacted source-derived identities, never
+    // patient values, clinical observations, raw FHIR, or other file content.
+    // Reject non-ASCII/control input and bound memory to one short token.
+    fn set_recovered_search_query(&mut self, input: &str) -> Result<(), &'static str> {
+        let normalized = input.trim().to_ascii_lowercase();
+        if normalized.len() > 64
+            || !normalized
+                .bytes()
+                .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-' || b == b':')
+        {
+            self.clear_fictional_output();
+            self.encrypted_readback_notice =
+                Some("FAIL CLOSED: unreviewed fictional search input refused");
+            return Err("fictional_search_unreviewed_characters_or_length");
+        }
+        self.encrypted_readback_query = normalized;
+        self.encrypted_readback_selected = None;
+        self.encrypted_readback_history.clear();
+        self.encrypted_readback_notice = None;
+        Ok(())
+    }
+
+    fn recovered_search_matches(
+        &self,
+        resource: &crate::encrypted_readback::FictionalReadbackResource,
+    ) -> bool {
+        if !self.encrypted_readback_filter.matches(resource) {
+            return false;
+        }
+        let query = self.encrypted_readback_query.as_str();
+        query.is_empty()
+            || resource.resource_type.to_ascii_lowercase().contains(query)
+            || resource.resource_id.to_ascii_lowercase().contains(query)
+            || resource.full_url.to_ascii_lowercase().contains(query)
+    }
+
     fn recovered_visible_count(&self) -> usize {
         self.encrypted_readback
             .as_ref()
             .map(|r| {
                 r.resources
                     .iter()
-                    .filter(|item| self.encrypted_readback_filter.matches(item))
+                    .filter(|item| self.recovered_search_matches(item))
                     .count()
             })
             .unwrap_or(0)
@@ -722,7 +759,7 @@ impl MedOriginNativePreview {
             self.clear_fictional_output();
             return Err("encrypted_readback_unknown_resource");
         }
-        if !self.encrypted_readback_filter.matches(
+        if !self.recovered_search_matches(
             &self
                 .encrypted_readback
                 .as_ref()
@@ -834,6 +871,7 @@ impl MedOriginNativePreview {
         // Relationship navigation can traverse types outside the chosen facet;
         // reset to All so the active source-derived record remains visible.
         self.encrypted_readback_filter = RecoveredResourceTypeFilter::All;
+        self.encrypted_readback_query.clear();
         self.encrypted_readback_selected = Some(position);
         self.encrypted_readback_notice = None;
         Ok(())
@@ -880,6 +918,7 @@ impl MedOriginNativePreview {
         self.encrypted_readback_selected = None;
         self.encrypted_readback_history.clear();
         self.encrypted_readback_filter = RecoveredResourceTypeFilter::All;
+        self.encrypted_readback_query.clear();
         self.encrypted_readback_notice = None;
         self.workspace_report_external = false;
         self.workspace_report_notice = None;
@@ -909,6 +948,7 @@ impl MedOriginNativePreview {
         self.encrypted_readback_selected = None;
         self.encrypted_readback_history.clear();
         self.encrypted_readback_filter = RecoveredResourceTypeFilter::All;
+        self.encrypted_readback_query.clear();
         self.encrypted_readback_notice = None;
         self.workspace_report_external = false;
         self.workspace_report_notice = None;
@@ -1436,6 +1476,7 @@ impl eframe::App for MedOriginNativePreview {
                     let mut follow = None;
                     let mut incoming = None;
                     let mut filter_change = None;
+                    let mut search_change: Option<String> = None;
                     if let Some(readback) = &self.encrypted_readback {
                         ui.label(format!("Recovered fictional resource count: {}", readback.resources.len()));
                         ui.monospace(format!("Encrypted readback SHA-256: {}", readback.report_sha256));
@@ -1458,12 +1499,41 @@ impl eframe::App for MedOriginNativePreview {
                             }
                         });
                         ui.label(format!("Active recovered type: {}", self.encrypted_readback_filter.label()));
+                        ui.horizontal_wrapped(|ui| {
+                            ui.label("Search recovered fictional type/ID (ASCII only):");
+                            let mut input = self.encrypted_readback_query.clone();
+                            if ui.add(
+                                egui::TextEdit::singleline(&mut input)
+                                    .hint_text("fictional-patient-001")
+                                    .desired_width(220.0),
+                            ).changed() {
+                                search_change = Some(input);
+                            }
+                            if ui.button("Search recovered source: Patient").clicked() {
+                                search_change = Some("patient".to_owned());
+                            }
+                            if ui.button("Search recovered source: Encounter").clicked() {
+                                search_change = Some("encounter".to_owned());
+                            }
+                            if ui.button("Clear recovered search").clicked() {
+                                search_change = Some(String::new());
+                            }
+                        });
+                        ui.label("In-memory search of three fictional source identities only. Never enter real patient information.");
+                        ui.label(format!(
+                            "Active recovered search: {}",
+                            if self.encrypted_readback_query.is_empty() {
+                                "All fictional IDs"
+                            } else {
+                                self.encrypted_readback_query.as_str()
+                            }
+                        ));
                         ui.label(format!(
                             "Recovered fictional worklist: {} of {} source-derived resources visible",
                             self.recovered_visible_count(), readback.resources.len()
                         ));
                         for (index, resource) in readback.resources.iter().enumerate() {
-                            if self.encrypted_readback_filter.matches(resource)
+                            if self.recovered_search_matches(resource)
                                 && ui.button(format!(
                                     "Open recovered fictional resource: {}/{}",
                                     resource.resource_type, resource.resource_id
@@ -1511,6 +1581,9 @@ impl eframe::App for MedOriginNativePreview {
                     }
                     if let Some(facet) = filter_change {
                         self.set_recovered_type_filter(facet);
+                    }
+                    if let Some(query) = search_change {
+                        let _ = self.set_recovered_search_query(&query);
                     }
                     if let Some(index) = select {
                         let _ = self.select_encrypted_readback_resource(index);
@@ -1874,6 +1947,66 @@ mod tests {
             app.encrypted_readback_filter,
             RecoveredResourceTypeFilter::All
         );
+    }
+
+    #[test]
+    fn recovered_core_search_composes_with_type_facets_and_clears_stale_selection() {
+        let raw = include_bytes!("../fixtures/core/encrypted-readback-projection.json");
+        let mut app =
+            MedOriginNativePreview::from_one_time_synthetic_encrypted_readback_stdin(raw).unwrap();
+        app.select_encrypted_readback_resource(0).unwrap();
+        app.set_recovered_search_query("  PATIENT  ").unwrap();
+        assert_eq!(app.encrypted_readback_query, "patient");
+        assert_eq!(app.recovered_visible_count(), 1);
+        assert!(app.encrypted_readback_selected.is_none());
+        assert!(app.encrypted_readback_history.is_empty());
+        assert_eq!(
+            app.select_encrypted_readback_resource(0),
+            Err("encrypted_readback_filtered_resource_refused")
+        );
+        assert!(app.encrypted_readback.is_none());
+        assert!(app.encrypted_readback_query.is_empty());
+
+        let mut app =
+            MedOriginNativePreview::from_one_time_synthetic_encrypted_readback_stdin(raw).unwrap();
+        app.set_recovered_search_query("fictional-observation-001")
+            .unwrap();
+        assert_eq!(app.recovered_visible_count(), 1);
+        app.select_encrypted_readback_resource(0).unwrap();
+        app.follow_encrypted_readback_link(0).unwrap();
+        assert_eq!(app.encrypted_readback_selected, Some(1));
+        assert!(app.encrypted_readback_query.is_empty());
+        assert_eq!(app.recovered_visible_count(), 3);
+        assert_eq!(app.encrypted_readback_history, vec![0]);
+
+        app.set_recovered_type_filter(RecoveredResourceTypeFilter::Encounter);
+        assert!(app.encrypted_readback_history.is_empty());
+        assert!(app.encrypted_readback_selected.is_none());
+        assert_eq!(app.recovered_visible_count(), 1);
+        app.set_recovered_search_query("patient").unwrap();
+        assert_eq!(app.recovered_visible_count(), 0);
+        assert!(app.encrypted_readback.is_some());
+        app.set_recovered_search_query("FICTIONAL-ENCOUNTER")
+            .unwrap();
+        assert_eq!(app.recovered_visible_count(), 1);
+        app.set_recovered_search_query("").unwrap();
+        assert_eq!(app.recovered_visible_count(), 1);
+        assert!(app.encrypted_readback_query.is_empty());
+
+        assert_eq!(
+            app.set_recovered_search_query("unreviewed:patient-data/real-name"),
+            Err("fictional_search_unreviewed_characters_or_length")
+        );
+        assert!(app.encrypted_readback.is_none());
+        assert!(app.encrypted_readback_query.is_empty());
+        let mut app =
+            MedOriginNativePreview::from_one_time_synthetic_encrypted_readback_stdin(raw).unwrap();
+        assert!(app.set_recovered_search_query(&"x".repeat(65)).is_err());
+        assert!(app.encrypted_readback.is_none());
+        let mut app =
+            MedOriginNativePreview::from_one_time_synthetic_encrypted_readback_stdin(raw).unwrap();
+        assert!(app.set_recovered_search_query("مريض").is_err());
+        assert!(app.encrypted_readback.is_none());
     }
 
     #[test]

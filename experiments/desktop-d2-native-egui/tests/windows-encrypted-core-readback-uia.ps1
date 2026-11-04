@@ -147,6 +147,15 @@ try {
   Expect 'Ephemeral encrypted store removed: true'
   Expect 'Sender/freshness NOT authenticated'
   Expect 'Recovered fictional worklist: 3 of 3 source-derived resources visible'
+  Press 'Search recovered source: Patient'
+  Expect 'Active recovered search: patient'
+  Expect 'Recovered fictional worklist: 1 of 3 source-derived resources visible'
+  if(Has 'Open recovered fictional resource: Observation/fictional-observation-001') {
+    throw 'search_filtered_core_observation_still_visible'
+  }
+  Press 'Clear recovered search'
+  Expect 'Active recovered search: All fictional IDs'
+  Expect 'Recovered fictional worklist: 3 of 3 source-derived resources visible'
   Press 'Filter recovered resource type: Patient'
   Expect 'Active recovered type: Patient'
   Expect 'Recovered fictional worklist: 1 of 3 source-derived resources visible'
