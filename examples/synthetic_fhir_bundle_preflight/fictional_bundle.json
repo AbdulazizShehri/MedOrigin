@@ -1,0 +1,42 @@
+{
+  "resourceType": "Bundle",
+  "type": "collection",
+  "meta": {
+    "tag": [
+      {"system": "urn:medorigin:fixture-classification", "code": "synthetic"}
+    ]
+  },
+  "entry": [
+    {
+      "fullUrl": "urn:uuid:00000000-0000-4000-8000-000000000001",
+      "resource": {
+        "resourceType": "Observation",
+        "id": "synthetic-observation-001",
+        "status": "final",
+        "code": {"text": "synthetic exercise measure"},
+        "subject": {"reference": "urn:uuid:00000000-0000-4000-8000-000000000002"},
+        "encounter": {"reference": "urn:uuid:00000000-0000-4000-8000-000000000003"},
+        "valueString": "fictional result"
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:00000000-0000-4000-8000-000000000002",
+      "resource": {
+        "resourceType": "Patient",
+        "id": "synthetic-patient-001",
+        "active": true,
+        "name": [{"text": "Synthetic Example Only"}]
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:00000000-0000-4000-8000-000000000003",
+      "resource": {
+        "resourceType": "Encounter",
+        "id": "synthetic-encounter-001",
+        "status": "finished",
+        "class": {"code": "AMB"},
+        "subject": {"reference": "urn:uuid:00000000-0000-4000-8000-000000000002"}
+      }
+    }
+  ]
+}

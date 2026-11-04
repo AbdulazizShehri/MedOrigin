@@ -12,6 +12,7 @@ import json
 import sys
 from pathlib import Path
 
+from medscale.fhirkit.bundle import BundlePreflightError, inspect_synthetic_bundle
 from medscale.fhirkit.errors import FhirMissingDependencyError, UnavailableValidatorError
 from medscale.fhirkit.input import FhirInputError, read_fhir_json_document
 from medscale.fhirkit.r4_schema import validate_offline_r4_json_structure
@@ -20,7 +21,42 @@ from medscale.fhirkit.storage import store_report
 from medscale.fhirkit.validate import validate_fhir
 
 
+def _bundle_preflight_main(argv: list[str]) -> int:
+    parser = argparse.ArgumentParser(
+        prog="medscale fhir bundle-preflight",
+        description=(
+            "Read-only, synthetic-only local FHIR Bundle relationship check; "
+            "NOT full FHIR R4 validation or permission to process patient data."
+        ),
+    )
+    parser.add_argument("input_file", type=Path)
+    parser.add_argument(
+        "--synthetic-only",
+        action="store_true",
+        help="Explicitly attest the input contains only invented synthetic fixtures.",
+    )
+    args = parser.parse_args(argv)
+    if not args.synthetic_only:
+        print("bundle preflight refused: synthetic_only_attestation_required", file=sys.stderr)
+        return 2
+    try:
+        payload = read_fhir_json_document(args.input_file)
+    except FhirInputError as exc:
+        print(f"bundle input refused: {exc}", file=sys.stderr)
+        return 1
+    try:
+        receipt = inspect_synthetic_bundle(payload)
+    except BundlePreflightError as exc:
+        print(f"bundle preflight refused: {exc}", file=sys.stderr)
+        return 2
+    print(json.dumps(receipt, sort_keys=True, separators=(",", ":")))
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
+    tokens = list(sys.argv[1:] if argv is None else argv)
+    if tokens and tokens[0] == "bundle-preflight":
+        return _bundle_preflight_main(tokens[1:])
     parser = argparse.ArgumentParser(
         prog="medscale fhir validate",
         description="Record a deterministic local FHIR report without claiming schema conformance.",
@@ -69,7 +105,6 @@ def main(argv: list[str] | None = None) -> int:
     )
     # Public command is 'medscale fhir validate <file>'. Historically this
     # module also accepted the bare 'medscale fhir <file>' spelling; keep both.
-    tokens = list(sys.argv[1:] if argv is None else argv)
     if tokens and tokens[0] == "validate":
         tokens.pop(0)
     args = parser.parse_args(tokens)
