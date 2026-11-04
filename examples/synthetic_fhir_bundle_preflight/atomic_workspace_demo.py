@@ -26,6 +26,7 @@ def run_demo() -> dict[str, object]:
 
     from medscale.fhirkit.input import read_fhir_json_document
     from medscale.fhirkit.workspace_ingest import ingest_synthetic_bundle_atomic
+    from medscale.fhirkit.workspace_readback import read_synthetic_bundle_in_memory
 
     fixture = Path(__file__).with_name("fictional_bundle.json")
     payload = read_fhir_json_document(fixture)
@@ -45,7 +46,7 @@ def run_demo() -> dict[str, object]:
                 occurred_at=OCCURRED_AT,
                 synthetic_only=True,
             )
-            if store.object_count() != 7 or AuditTrail(store).verify().events_verified != 1:
+            if store.object_count() != 8 or AuditTrail(store).verify().events_verified != 1:
                 raise ValueError("synthetic demo integrity check refused")
         with WorkspaceStore.open(
             store_root=root,
@@ -56,8 +57,19 @@ def run_demo() -> dict[str, object]:
             chain = AuditTrail(reopened).verify(
                 expected_head_event_digest=str(receipt["audit_head_digest"])
             )
-            if reopened.object_count() != 7 or chain.events_verified != 1:
+            if reopened.object_count() != 8 or chain.events_verified != 1:
                 raise ValueError("synthetic demo reopen refused")
+            readback = read_synthetic_bundle_in_memory(
+                reopened,
+                test_key_provider=provider,
+                source_content_sha256=str(receipt["source_content_sha256"]),
+                expected_audit_head_digest=str(receipt["audit_head_digest"]),
+                actor_id=ACTOR,
+                synthetic_only=True,
+                allow_in_memory_readback=True,
+            )
+            if readback["bundle"] != payload or readback["resource_count"] != 3:
+                raise ValueError("synthetic demo in-memory readback refused")
     if Path(root).exists():
         raise ValueError("ephemeral synthetic store was not cleaned")
     return {
