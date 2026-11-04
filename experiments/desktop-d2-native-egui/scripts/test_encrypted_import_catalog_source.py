@@ -76,6 +76,29 @@ class SyntheticCatalogSourceQualification(unittest.TestCase):
         self.assertNotIn("shell=True", src)
         self.assertNotIn("requests.", src)
 
+    def test_windows_real_core_catalog_job_lifetime_and_source_gate(self):
+        runner = (ROOT / "scripts/qualify_windows_encrypted_import_catalog_native_gui.py").read_text()
+        job = (ROOT / "scripts/supervise_windows_encrypted_catalog_job.py").read_text()
+        self.assertIn("PINNED_CORE_SHA = \"35290b7c0f6f47995b52a10bb0ade9f7b27a67a8\"", runner)
+        self.assertIn("approved_core_source(core)", runner)
+        self.assertIn("real_catalog_under_windows_job(", runner)
+        self.assertIn("raw != fixture.read_bytes()", runner)
+        self.assertIn("genuine_windows_historical_import_GUI_UIA_refused", runner)
+        self.assertIn("CREATE_SUSPENDED | CREATE_NO_WINDOW | CREATE_UNICODE_ENVIRONMENT", job)
+        self.assertIn("api.AssignProcessToJobObject(job, proc.hProcess)", job)
+        self.assertIn("api.IsProcessInJob(proc.hProcess, job", job)
+        self.assertIn("api.ResumeThread(proc.hThread)", job)
+        self.assertLess(
+            job.index("api.AssignProcessToJobObject(job, proc.hProcess)"),
+            job.index("api.ResumeThread(proc.hThread)"),
+        )
+        self.assertIn("JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE", job)
+        self.assertIn("api.TerminateJobObject(job, 1)", job)
+        self.assertIn("WaitForSingleObject(proc.hProcess, 45000)", job)
+        self.assertIn("m.version('cryptography')", job)
+        self.assertNotIn("shell=True", runner + job)
+        self.assertNotIn("requests.", runner + job)
+
     def test_windows_real_uia_contract_is_exact_nonclinical_projection(self):
         source = (ROOT / "tests/windows-encrypted-import-catalog-uia.ps1").read_text()
         self.assertIn("WINDOWS_REAL_ENCRYPTED_CORE_TWO_HISTORICAL_IMPORTS_NATIVE_UIA_PASS_NOT_CLINICAL", source)
