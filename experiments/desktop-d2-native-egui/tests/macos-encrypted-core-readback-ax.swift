@@ -291,21 +291,27 @@ guard textPresent("Recovered fictional record: Patient/fictional-patient-001")
 else { noGo("Back from fictional Observation chart to Patient failed") }
 print("MACOS_NATIVE_WORKSPACE_HOME_PATIENT_CHART_AX_PASS_NONCLINICAL")
 press("Open recovered fictional resource: Observation/fictional-observation-001")
-guard textPresent("Recovered fictional record: Observation/fictional-observation-001")
+guard eventuallyText("Recovered fictional record: Observation/fictional-observation-001")
   else { noGo("recovered encrypted Observation detail not visible") }
 press("Follow recovered fictional subject -> urn:uuid:00000000-0000-4000-8000-000000000002")
-guard textPresent("Recovered fictional record: Patient/fictional-patient-001")
+guard eventuallyText("Recovered fictional record: Patient/fictional-patient-001")
   else { noGo("encrypted source recovered Patient relationship not navigated") }
 press("Back to previous recovered fictional record")
-guard textPresent("Recovered fictional record: Observation/fictional-observation-001")
+guard eventuallyText("Recovered fictional record: Observation/fictional-observation-001")
   else { noGo("Back from decrypted Patient failed") }
 press("Follow recovered fictional encounter -> urn:uuid:00000000-0000-4000-8000-000000000003")
-guard textPresent("Recovered fictional record: Encounter/fictional-encounter-001")
+guard eventuallyText("Recovered fictional record: Encounter/fictional-encounter-001")
   else { noGo("decrypted Encounter reference not navigated") }
 press("Back to previous recovered fictional record")
-guard textPresent("Recovered fictional record: Observation/fictional-observation-001")
+guard eventuallyText("Recovered fictional record: Observation/fictional-observation-001")
   else { noGo("back from decrypted Encounter failed") }
 press("Clear encrypted Core readback display")
+for _ in 0..<30 {
+  if !textPresent("Recovered fictional record: Observation/fictional-observation-001") {
+    break
+  }
+  Thread.sleep(forTimeInterval: 0.12)
+}
 if textPresent("Recovered fictional record: Observation/fictional-observation-001") {
   noGo("encrypted Core readback record leaked after clear")
 }
