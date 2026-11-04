@@ -109,6 +109,51 @@ def _r4_structural_outcome_main(argv: list[str]) -> int:
     return 2
 
 
+def _encrypted_structural_demo_main(argv: list[str]) -> int:
+    """Only a hardcoded fictional Bundle; caller supplies a qualified schema ZIP."""
+    if argv in (["-h"], ["--help"]):
+        print(
+            "usage: medscale fhir encrypted-structural-demo "
+            "--synthetic-only --ephemeral-demo --offline-r4-schema OFFICIAL_R4_ZIP\n"
+            "Offline, source-pinned official R4 JSON Schema and pinned jsonschema; "
+            "structural check only, NOT full FHIR/clinical conformance."
+        )
+        return 0
+    if (
+        len(argv) != 4
+        or argv[0] != "--synthetic-only"
+        or argv[1] != "--ephemeral-demo"
+        or argv[2] != "--offline-r4-schema"
+        or not argv[3]
+        or argv[3].startswith("--")
+    ):
+        print(
+            "encrypted structural demo refused: exact_synthetic_demo_schema_flags_required",
+            file=sys.stderr,
+        )
+        return 2
+    try:
+        from medscale.fhirkit.workspace_structural_demo import receipt_json
+
+        result = receipt_json(Path(argv[3]))
+    except ImportError:
+        print(
+            "encrypted structural demo unavailable: optional_workspace_runtime_missing",
+            file=sys.stderr,
+        )
+        return 2
+    except Exception:
+        print(
+            "encrypted structural demo refused: synthetic_structural_receipt_blocked",
+            file=sys.stderr,
+        )
+        return 2
+    print(result)
+    # Demo process integrity success is NOT a FHIR structural/conformance
+    # validation success; the report contains the negative-truth status.
+    return 0
+
+
 def _workspace_demo_main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(
         prog="medscale fhir workspace-demo",
@@ -176,6 +221,8 @@ def _workspace_catalog_demo_main(argv: list[str]) -> int:
 
 def main(argv: list[str] | None = None) -> int:
     tokens = list(sys.argv[1:] if argv is None else argv)
+    if tokens and tokens[0] == "encrypted-structural-demo":
+        return _encrypted_structural_demo_main(tokens[1:])
     if tokens and tokens[0] == "structural-outcome":
         return _r4_structural_outcome_main(tokens[1:])
     if tokens and tokens[0] == "workspace-catalog-demo":
