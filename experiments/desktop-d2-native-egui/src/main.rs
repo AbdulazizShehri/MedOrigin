@@ -14,6 +14,7 @@ const MAX_FICTIONAL_CORE_STDIN: usize = 2048;
 const EXPLICIT_SYNTHETIC_CORE_FLAG: &str = "--synthetic-core-stdin";
 const EXPLICIT_SYNTHETIC_WORKSPACE_FLAG: &str = "--synthetic-workspace-receipt-stdin";
 const EXPLICIT_SYNTHETIC_READBACK_FLAG: &str = "--synthetic-encrypted-readback-stdin";
+const EXPLICIT_SYNTHETIC_IMPORT_HISTORY_FLAG: &str = "--synthetic-encrypted-import-history-stdin";
 const SYNTHETIC_CORE_STDIN_DEADLINE: Duration = Duration::from_secs(5);
 
 /// Only this opt-in command-line switch permits reading a finite stdin
@@ -42,7 +43,8 @@ fn make_app_with_deadline<R: Read + Send + 'static>(
     if args.len() != 1
         || (args[0] != EXPLICIT_SYNTHETIC_CORE_FLAG
             && args[0] != EXPLICIT_SYNTHETIC_WORKSPACE_FLAG
-            && args[0] != EXPLICIT_SYNTHETIC_READBACK_FLAG)
+            && args[0] != EXPLICIT_SYNTHETIC_READBACK_FLAG
+            && args[0] != EXPLICIT_SYNTHETIC_IMPORT_HISTORY_FLAG)
     {
         return Err(io::Error::new(
             io::ErrorKind::InvalidInput,
@@ -83,7 +85,14 @@ fn make_app_with_deadline<R: Read + Send + 'static>(
             "unapproved_d2_synthetic_core_stdin_size",
         ));
     }
-    if args[0] == EXPLICIT_SYNTHETIC_READBACK_FLAG {
+    if args[0] == EXPLICIT_SYNTHETIC_IMPORT_HISTORY_FLAG {
+        MedOriginNativePreview::from_one_time_synthetic_import_history_stdin(&bytes).map_err(|_| {
+            io::Error::new(
+                io::ErrorKind::InvalidData,
+                "unapproved_synthetic_encrypted_import_history",
+            )
+        })
+    } else if args[0] == EXPLICIT_SYNTHETIC_READBACK_FLAG {
         MedOriginNativePreview::from_one_time_synthetic_encrypted_readback_stdin(&bytes).map_err(
             |_| {
                 io::Error::new(
@@ -135,7 +144,47 @@ mod tests {
     const WORKSPACE_DEMO: &[u8] = include_bytes!("../fixtures/core/workspace-ephemeral-demo.json");
     const ENCRYPTED_READBACK: &[u8] =
         include_bytes!("../fixtures/core/encrypted-readback-projection.json");
+    const ENCRYPTED_IMPORT_HISTORY: &[u8] =
+        include_bytes!("../fixtures/core/encrypted-import-catalog-demo.json");
     const CORE_NEGATIVE: &[u8] = include_bytes!("../fixtures/core/unknown-fictional-negative.json");
+
+    #[test]
+    fn actual_core_encrypted_historical_import_catalog_only_explicit_mode() {
+        let app = make_app(
+            &[OsString::from(EXPLICIT_SYNTHETIC_IMPORT_HISTORY_FLAG)],
+            Cursor::new(ENCRYPTED_IMPORT_HISTORY),
+        )
+        .expect("source-pinned real Core encrypted history");
+        assert!(app.has_external_synthetic_import_history());
+        assert!(!app.has_external_synthetic_encrypted_readback());
+        for wrong_flag in [
+            EXPLICIT_SYNTHETIC_READBACK_FLAG,
+            EXPLICIT_SYNTHETIC_CORE_FLAG,
+            EXPLICIT_SYNTHETIC_WORKSPACE_FLAG,
+        ] {
+            assert!(
+                make_app(
+                    &[OsString::from(wrong_flag)],
+                    Cursor::new(ENCRYPTED_IMPORT_HISTORY),
+                )
+                .is_err()
+            );
+        }
+        for modified in [
+            b"{}".to_vec(),
+            [ENCRYPTED_IMPORT_HISTORY, b"\n"].concat(),
+            [ENCRYPTED_IMPORT_HISTORY, b" "].concat(),
+            vec![b'X'; MAX_FICTIONAL_CORE_STDIN + 1],
+        ] {
+            assert!(
+                make_app(
+                    &[OsString::from(EXPLICIT_SYNTHETIC_IMPORT_HISTORY_FLAG)],
+                    Cursor::new(modified),
+                )
+                .is_err()
+            );
+        }
+    }
 
     #[test]
     fn real_core_decrypted_three_record_projection_starts_only_explicit_native_mode() {
