@@ -237,6 +237,13 @@ jobs:
             throw 'Windows encrypted Workspace GUI QA marker missing'
           }
           Write-Output 'WINDOWS_ENCRYPTED_WORKSPACE_UIA_SYNTAX_ONLY_NOT_ACTUAL_INTERACTION'
+      - name: Verify Windows source-pinned live Core Workspace-to-GUI limits
+        shell: pwsh
+        run: |
+          $py = if ($IsWindows) { 'python' } else { 'python3' }
+          & $py -m unittest discover -s experiments/desktop-d2-native-egui/scripts -p test_windows_live_core_workspace_gui.py -v
+          if ($LASTEXITCODE -ne 0) { throw 'Windows live Core Workspace-to-D2 synthetic safety source checks failed' }
+          Write-Output 'WINDOWS_LIVE_CORE_WORKSPACE_GUI_SOURCE_ONLY_NOT_HOSTED_FUNCTIONAL_PROOF'
       - name: Verify checks did not alter tracked code or lockfiles
         shell: pwsh
         run: |

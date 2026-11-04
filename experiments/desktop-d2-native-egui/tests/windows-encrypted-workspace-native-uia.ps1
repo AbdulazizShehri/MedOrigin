@@ -3,7 +3,8 @@
 [CmdletBinding()]
 param(
   [Parameter(Mandatory=$true)][string]$ExePath,
-  [Parameter(Mandatory=$true)][ValidatePattern('^[0-9A-Fa-f]{64}$')][string]$ExpectedSha256
+  [Parameter(Mandatory=$true)][ValidatePattern('^[0-9A-Fa-f]{64}$')][string]$ExpectedSha256,
+  [string]$LiveReceiptPath = ''
 )
 $ErrorActionPreference='Stop'
 $fixtureSha='25acdb57db8ca3f11d353cf311167973760caaa95bb64de7339fe21e3b05cc2e'
@@ -22,6 +23,19 @@ try {
   $fixture=(Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..\fixtures\core\workspace-ephemeral-demo.json')).Path
   if((Get-FileHash -LiteralPath $fixture -Algorithm SHA256).Hash -ine $fixtureSha) {
     Refuse 'fictional encrypted summary source changed'
+  }
+  $live=$fixture
+  if($LiveReceiptPath) {
+    $resolved=(Resolve-Path -LiteralPath $LiveReceiptPath -ErrorAction Stop).Path
+    $entry=Get-Item -LiteralPath $resolved -ErrorAction Stop
+    if($entry.PSIsContainer -or ($entry.Attributes -band [IO.FileAttributes]::ReparsePoint) -or
+       $entry.Length -ne 391 -or
+       (Get-FileHash -LiteralPath $resolved -Algorithm SHA256).Hash -ine $fixtureSha) {
+      Refuse 'live ephemeral source summary changed or nonregular'
+    }
+    # QA-only: never accept a clinical resource, arbitrary FHIR/URL, or
+    # report text which differs by even one byte from the reviewed fixture.
+    $live=$resolved
   }
   Add-Type -AssemblyName UIAutomationClient
   Add-Type -AssemblyName UIAutomationTypes
@@ -44,7 +58,7 @@ function SpawnFixed([byte[]]$bytes) {
 }
 $process=$null
 try {
-  $bytes=[System.IO.File]::ReadAllBytes($fixture)
+  $bytes=[System.IO.File]::ReadAllBytes($live)
   $process=SpawnFixed $bytes
   $desktop=[System.Windows.Automation.AutomationElement]::RootElement
   $window=$null
