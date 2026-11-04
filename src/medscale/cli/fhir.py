@@ -12,6 +12,7 @@ import json
 import sys
 from pathlib import Path
 
+from medscale.fhirkit.errors import FhirStorageError
 from medscale.fhirkit.report import load_report_from_json, report_to_json
 from medscale.fhirkit.storage import store_report
 from medscale.fhirkit.validate import validate_fhir
@@ -82,7 +83,13 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     report = validate_fhir(payload, created_at=args.created_at)
-    path = store_report(report, root=args.output_dir)
+    try:
+        path = store_report(report, root=args.output_dir)
+    except FhirStorageError:
+        # Filesystem exceptions may contain absolute patient-workspace paths.
+        # Do not print a positive FHIR report or disclose those paths.
+        print("FHIR_REPORT_STORAGE_BLOCKED", file=sys.stderr)
+        return 2
     print(report_to_json(load_report_from_json(report_to_json(report))))
     print(f"report stored at: {path}", file=sys.stderr)
     # Exit nonzero unless an actual validated status is available; an
