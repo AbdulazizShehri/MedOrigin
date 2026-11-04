@@ -99,3 +99,69 @@ aggregate output remain unchanged. All testing is synthetic-only.
 Source-owned package and runtime verification evidence is recorded
 separately below after exact-source artifact qualification. The host
 demonstration is **not** a release/certification gate.
+
+
+## Exact-source local qualification receipt — 2026-11-04
+
+**Functional Git source:** `4c45893f1344f198b57674318de71dc4ab175dbf`.
+A task-only Git checkout on native WSL Linux ext4 at **this exact SHA**
+was independently projected using the repository's existing
+`scripts/stage_medorigin_core_projection.py` and both Core and
+Workspace were built via
+`uv build --offline --no-create-gitignore`.
+No root `pyproject.toml` / `uv.lock` edits or publication occurred.
+
+- Core Wheel `medscale-0.3.0-py3-none-any.whl` SHA256:
+  `4eab78aff92d3b56b3f4e17fb9515390842f7e7ceccccccd2c558bd96f02b34a`.
+- Core sdist `medscale-0.3.0.tar.gz` SHA256:
+  `89226ea81d769a442e7fbbb0901358b7af03c5eed84b11ede3f507d3297c0744`.
+- Workspace Wheel `medscale_workspace-0.1.0.dev1-py3-none-any.whl`
+  SHA256: `6c97f61686fe4ee6f7051e53233e89c7bf224e3a97e5057c70cc4d48aae175fe`.
+- Workspace sdist `medscale_workspace-0.1.0.dev1.tar.gz`
+  SHA256: `319da5988ecdb8be3fb140fa16ea3acd68c135fdb4c58723b868262e1f67bd96`.
+
+Existing independent Core source Wheel/sdist identity gates exited 0
+with **zero issues**, status `SOURCE_BOUND_WHEEL_QUALIFIED_ONLY`
+and `SDIST_SCOPE_QUALIFIED_ONLY`. The new and changed Core in-memory
+readback, importer and portable-demo modules all matched byte-for-byte
+against the built Core Wheel. **All 34 Workspace Python module bytes**
+matched the built Workspace Wheel, including the new FHIR readback
+facade.
+
+The SHA-checked two Wheels were installed into the **same task-owned
+Windows `pip --no-index --no-deps --target` directory**, with no
+system-wide package installation. A separate task-local script ran
+on actual native Windows Python **3.14, 3.11.15 and 3.12.13** with
+`-P -B -s`, controlled `PYTHONPATH` and required both Core and
+Workspace imported module paths to lie **under that exact installed
+target**, not the source tree. Python 3.11 and 3.12 used separate
+task-local pinned `cryptography==50.0.1` and `cffi==2.1.1`
+binary dependencies; no production supply-chain approval is implied.
+
+**Actual runtime evidence, each of Python 3.14 / 3.11 / 3.12:**
+- `TWO_INSTALLED_WHEELS_FHIR_ENCRYPTED_READBACK_PASS`, exit0.
+  Three invented FHIR resources, three provenance revisions, one audit
+  event and one encrypted source manifest, **8 total objects**.
+- Verified reopened encrypted store, exact in-memory original fictional
+  Bundle with original `urn:uuid` `fullUrl` relationships, canonical
+  source SHA256 matches, ciphertext excludes the invented patient name
+  and URN strings, temporary store deleted.
+- Executed the **real installed Core public Python dispatcher**
+  `fhir workspace-demo --synthetic-only --ephemeral-demo`, exit0,
+  `SYNTHETIC_ENCRYPTED_ATOMIC_DEMO_PASS`, same existing redacted
+  receipt shape, 3 resources, reopen and cleanup successful, clinical
+  use false. This **does not** independently attest the generated
+  native `medscale.exe` console shim (#893).
+- Full native Windows Python3.14 selected Core FHIR/Workspace
+  functional and adversarial regression: **118 PASS, 2 DESELECTED**.
+  Those two historical raw-Wheel fixture tests require an unavailable
+  external build executable in this environment and are not marked
+  passed. Ruff lint/format and `git diff --check` passed.
+
+**Outstanding:** hosted exact-head CI and independent review are not
+asserted. Full FHIR R4 profile/terminology/invariant validation,
+source-approved clinical workflows, protected OS key provider,
+RBAC/authenticated export, independent security/clinical review,
+license/dependency audit, signed native launcher, no-PHI guarantee,
+and publication/release authorization remain NO-GO. Production and
+plaintext-disk export are **not implemented** by this slice.
