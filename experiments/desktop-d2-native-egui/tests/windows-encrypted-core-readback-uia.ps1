@@ -5,7 +5,8 @@ param(
   [Parameter(Mandatory=$true)][string]$ExePath,
   [Parameter(Mandatory=$true)][ValidatePattern('^[a-fA-F0-9]{64}$')][string]$ExpectedSha256,
   [string]$LiveReceiptPath = '',
-  [string]$SessionFramePath = ''
+  [string]$SessionFramePath = '',
+  [string]$PersistentQaReceiptPath = ''
 )
 $ErrorActionPreference='Stop'
 function Refuse([string]$reason) {
@@ -13,6 +14,10 @@ function Refuse([string]$reason) {
   exit 1
 }
 $reportHash='c99af04367aeaedeecb29b7fccc8a8fb58f2a85753eeae874eae5ad363307a49'
+$persistentHash='3673eb77b2dbef25fd6cb33d9c345d2f37d38a86bcf1652ed9defae4da139243'
+if($PersistentQaReceiptPath -and $LiveReceiptPath) {
+  Refuse 'two_different_fictional_receipts_refused'
+}
 try {
   if((Split-Path -Leaf $ExePath) -cne 'medorigin-desktop-d2-native-egui.exe') {
     Refuse 'unapproved_native_executable_name'
@@ -26,6 +31,20 @@ try {
     Refuse 'compiled_encrypted_readback_fixture_changed'
   }
   $source=$fixture
+  if($PersistentQaReceiptPath) {
+    $persistentFixture=(Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..\fixtures\core\encrypted-persistent-readback-projection.json')).Path
+    if((Get-FileHash -LiteralPath $persistentFixture -Algorithm SHA256).Hash -ine $persistentHash) {
+      Refuse 'compiled_persistent_fictional_readback_modified'
+    }
+    $source=(Resolve-Path -LiteralPath $PersistentQaReceiptPath -ErrorAction Stop).Path
+    $entry=Get-Item -LiteralPath $source -ErrorAction Stop
+    if($entry.PSIsContainer -or ($entry.Attributes -band [IO.FileAttributes]::ReparsePoint) -or
+       $entry.Length -ne 1215 -or
+       (Get-FileHash -LiteralPath $source -Algorithm SHA256).Hash -ine $persistentHash) {
+      Refuse 'real_persistent_fictional_core_receipt_not_canonical'
+    }
+    $reportHash=$persistentHash
+  }
   if($LiveReceiptPath) {
     $source=(Resolve-Path -LiteralPath $LiveReceiptPath -ErrorAction Stop).Path
     $entry=Get-Item -LiteralPath $source -ErrorAction Stop
@@ -46,7 +65,7 @@ try {
   $info.FileName=$exe
   $info.Arguments='--synthetic-encrypted-readback-stdin'
   if($SessionFramePath) {
-    if(-not $LiveReceiptPath -or
+    if((-not $LiveReceiptPath -and -not $PersistentQaReceiptPath) -or
        $env:MEDORIGIN_D2_FICTIONAL_SESSION_NONCE -cnotmatch '^[0-9a-f]{32}$' -or
        $env:MEDORIGIN_D2_FICTIONAL_SESSION_KEY -cnotmatch '^[0-9a-f]{64}$') {
       Refuse 'session_environment_or_original_source_missing'
@@ -67,8 +86,9 @@ try {
   $bytes=[IO.File]::ReadAllBytes($source)
   if($SessionFramePath) {
     $frameBytes=[IO.File]::ReadAllBytes($frame)
-    $tail=New-Object byte[] 1164
-    [Array]::Copy($frameBytes,$frameBytes.Length-1164,$tail,0,1164)
+    $size=if($PersistentQaReceiptPath){1215}else{1164}
+    $tail=New-Object byte[] $size
+    [Array]::Copy($frameBytes,$frameBytes.Length-$size,$tail,0,$size)
     if([Convert]::ToBase64String($bytes) -cne [Convert]::ToBase64String($tail)) {
       throw 'session_frame_core_projection_suffix_mismatch'
     }
@@ -144,7 +164,13 @@ try {
   Expect ('Encrypted readback SHA-256: '+$reportHash)
   Expect 'Audit chain verified: true'
   Expect 'Encrypted store reopened: true'
-  Expect 'Ephemeral encrypted store removed: true'
+  if($PersistentQaReceiptPath) {
+    Expect 'Ephemeral encrypted store removed: false'
+    Expect 'Persistent fictional QA vault reopened: true'
+  } else {
+    Expect 'Ephemeral encrypted store removed: true'
+    Expect 'Persistent fictional QA vault reopened: false'
+  }
   Expect 'Sender/freshness NOT authenticated'
   Expect 'Recovered fictional worklist: 3 of 3 source-derived resources visible'
   Press 'Search recovered source: Patient'

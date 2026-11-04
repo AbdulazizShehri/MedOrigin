@@ -32,6 +32,7 @@ class PortableFictionalCoreContractTests(unittest.TestCase):
         self.fake_files = (
             "scripts/synthetic_encrypted_readback_projection.py",
             "fixtures/core/encrypted-readback-projection.json",
+            "fixtures/core/encrypted-persistent-readback-projection.json",
             "native/medorigin-desktop-d2-native-egui.exe",
         )
         for name in self.fake_files:
@@ -46,6 +47,11 @@ class PortableFictionalCoreContractTests(unittest.TestCase):
             (runtime, "RUNTIME_FILES", self.fake_files),
             (runtime, "EXPORTER_SHA256", runtime.sha(self.root / self.fake_files[0])),
             (runtime, "PROJECTION_SHA", runtime.sha(self.root / self.fake_files[1])),
+            (
+                runtime,
+                "PERSISTENT_PROJECTION_SHA256",
+                runtime.sha(self.root / self.fake_files[2]),
+            ),
         ):
             action = patch.object(module, attr, value)
             action.start()
@@ -71,7 +77,7 @@ class PortableFictionalCoreContractTests(unittest.TestCase):
 
     def test_source_exact_portable_without_git_wheels_or_source_checkout(self):
         gui, exporter, fixture = runtime.attest_kit(self.root)
-        self.assertEqual(gui, self.root / self.fake_files[2])
+        self.assertEqual(gui, self.root / self.fake_files[3])
         self.assertEqual(exporter, self.root / self.fake_files[0])
         self.assertEqual(fixture, self.root / self.fake_files[1])
         self.assertEqual(tree.digest_installed_packages(self.root / "core"), self.digest)

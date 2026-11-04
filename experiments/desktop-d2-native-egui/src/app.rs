@@ -1513,6 +1513,7 @@ impl eframe::App for MedOriginNativePreview {
                         ui.label(format!("Encrypted store reopened: {}", readback.encrypted_reopen_verified));
                         ui.label(format!("Audit chain verified: {}", readback.audit_chain_verified));
                         ui.label(format!("Ephemeral encrypted store removed: {}", readback.ephemeral_store_removed));
+                        ui.label(format!("Persistent fictional QA vault reopened: {}", readback.persistent_test_vault_reopened));
                         ui.strong(readback.disclosure);
                         ui.horizontal_wrapped(|ui| {
                             ui.label("Recovered resource type (fixed fictional only):");

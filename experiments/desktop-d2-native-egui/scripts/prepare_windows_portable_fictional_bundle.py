@@ -27,6 +27,7 @@ from qualify_windows_encrypted_readback_native_gui import PROJECTION_SHA, sha
 RUNTIME_SCRIPTS = (
     "launch_windows_portable_fictional_core.py",
     "fictional_session_frame.py",
+    "windows_fictional_persistent_vault.py",
     "portable_core_tree.py",
     "supervise_windows_encrypted_core_job.py",
     "qualify_windows_job_subtree.py",
@@ -36,6 +37,7 @@ RUNTIME_SCRIPTS = (
 )
 SOURCE_EXTRAS = (
     "fixtures/core/encrypted-readback-projection.json",
+    "fixtures/core/encrypted-persistent-readback-projection.json",
     "tests/windows-encrypted-core-readback-uia.ps1",
 )
 LAUNCHER_NAME = "medorigin-desktop-d2-native-egui.exe"
@@ -75,6 +77,10 @@ def prepare(args: argparse.Namespace) -> Path:
             raise ValueError(f"reviewed_runtime_bundle_source_missing:{name}")
     if sha(srcs["fixtures/core/encrypted-readback-projection.json"]) != PROJECTION_SHA:
         raise ValueError("reviewed_fictional_bundle_projection_changed")
+    if sha(srcs["fixtures/core/encrypted-persistent-readback-projection.json"]) != (
+        "3673eb77b2dbef25fd6cb33d9c345d2f37d38a86bcf1652ed9defae4da139243"
+    ):
+        raise ValueError("reviewed_persistent_fictional_source_projection_changed")
     with TemporaryDirectory(
         prefix="medorigin-private-portable-staging-", dir=destination.parent
     ) as temp:
