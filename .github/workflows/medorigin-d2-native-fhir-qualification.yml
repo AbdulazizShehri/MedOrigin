@@ -104,6 +104,13 @@ jobs:
           & $py -m unittest discover -s experiments/desktop-d2-native-egui/scripts -p test_age_synthetic_workspace.py -v
           if ($LASTEXITCODE -ne 0) { throw 'Synthetic workspace consent/permissions/overwrite contract failed' }
           Write-Output 'SYNTHETIC_AGE_WORKSPACE_SOURCE_ONLY_NO_CI_CRYPTO_OR_CLINICAL_APPROVAL'
+      - name: Source-only official FHIR R4 JSON schema provenance and negative gate tests
+        shell: pwsh
+        run: |
+          $py = if ($IsWindows) { 'python' } else { 'python3' }
+          & $py -m unittest discover -s experiments/desktop-d2-native-egui/scripts -p test_offline_fhir_r4_schema.py -v
+          if ($LASTEXITCODE -ne 0) { throw 'Pinned HL7 R4 schema admission/fail-close tests failed' }
+          Write-Output 'FHIR_R4_SCHEMA_SOURCE_ONLY_NOT_ACTUAL_FHIR_VALIDATOR_OR_CLINICAL_RELEASE'
       - name: Verify checks did not alter tracked code or lockfiles
         shell: pwsh
         run: |
