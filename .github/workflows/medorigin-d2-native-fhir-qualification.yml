@@ -111,6 +111,13 @@ jobs:
           & $py -m unittest discover -s experiments/desktop-d2-native-egui/scripts -p test_offline_fhir_r4_schema.py -v
           if ($LASTEXITCODE -ne 0) { throw 'Pinned HL7 R4 schema admission/fail-close tests failed' }
           Write-Output 'FHIR_R4_SCHEMA_SOURCE_ONLY_NOT_ACTUAL_FHIR_VALIDATOR_OR_CLINICAL_RELEASE'
+      - name: Assert private release gate always refuses without independent approval
+        shell: pwsh
+        run: |
+          $py = if ($IsWindows) { 'python' } else { 'python3' }
+          & $py -m unittest discover -s experiments/desktop-d2-native-egui/scripts -p test_private_release_gate.py -v
+          if ($LASTEXITCODE -ne 0) { throw 'Private release NO-GO gate contract failed' }
+          Write-Output 'PRIVATE_RELEASE_SOURCE_ONLY_NOT_LIVE_GITHUB_OR_CLINICAL_ATTESTATION'
       - name: Verify checks did not alter tracked code or lockfiles
         shell: pwsh
         run: |
