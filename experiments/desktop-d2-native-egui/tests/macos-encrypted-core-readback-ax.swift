@@ -60,6 +60,13 @@ func visibleNodes() -> [Node] {
 func textPresent(_ text: String) -> Bool {
   visibleNodes().contains { $0.labels.contains(where: { $0.contains(text) }) }
 }
+func eventuallyText(_ target: String) -> Bool {
+  for _ in 0..<32 {
+    if textPresent(target) { return true }
+    Thread.sleep(forTimeInterval: 0.12)
+  }
+  return false
+}
 func press(_ title: String) {
   for _ in 0..<35 {
     let found = visibleNodes().filter {
@@ -122,6 +129,40 @@ for label in [
 ] {
   guard textPresent(label) else { noGo("native Workspace home absent: " + label) }
 }
+press("Open focused fictional Workspace")
+guard eventuallyText("MedOrigin focused Workspace"),
+      textPresent("3 fictional identities | encrypted reopen: true | audit: true"),
+      textPresent("Source: Ephemeral encrypted QA test vault, removed after readback")
+else { noGo("focused native fictional Workspace home missing") }
+press("Focus: Open Patient")
+guard eventuallyText("Focused fictional record: Patient/fictional-patient-001")
+else { noGo("focused patient not source-linked") }
+press("Focus: Open Encounter")
+guard eventuallyText("Focused fictional record: Encounter/fictional-encounter-001")
+else { noGo("focused Encounter not source-linked") }
+press("Focus: Back to patient")
+guard eventuallyText("Focused fictional record: Patient/fictional-patient-001")
+else { noGo("focused Back did not return to patient") }
+press("Focus: Open Observation")
+guard eventuallyText("Focused fictional record: Observation/fictional-observation-001")
+else {
+  let labels = visibleNodes().flatMap { $0.labels }.filter {
+    $0.contains("Focus:") || $0.contains("Focused fictional") ||
+    $0.contains("Workspace") || $0.contains("Observation") || $0.contains("Patient")
+  }.prefix(24)
+  noGo("focused Observation not source-linked; actual visible AX labels: " +
+       String(describing: Array(labels)))
+}
+press("Focus: Mark visited (demo only)")
+guard eventuallyText("Fictional walkthrough: 1 of 3 visited this session")
+else { noGo("focused visit state did not update") }
+press("Focus: Reset visits")
+guard eventuallyText("Fictional walkthrough: 0 of 3 visited this session")
+else { noGo("focused visit state did not reset") }
+press("Focus: Return to developer evidence")
+guard eventuallyText("Workspace home: fictional Core source only")
+else { noGo("focused view did not return to prior developer UI") }
+print("MACOS_NATIVE_FOCUSED_FICTIONAL_WORKSPACE_PATIENT_CONTEXT_AX_PASS_NONCLINICAL")
 guard textPresent("Fictional session walkthrough: 0 of 3 identities visited")
 else { noGo("fictional session walkthrough did not start empty") }
 press("Open next unvisited fictional identity")
