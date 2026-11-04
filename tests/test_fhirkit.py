@@ -184,13 +184,25 @@ def test_external_validator_never_clobbers_cwd_file(
 def test_external_validator_scratch_file_is_isolated_and_cleaned(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from medscale.fhirkit import validate_fhir_with_validator
+    from medscale.fhirkit import report_to_json, validate_fhir_with_validator
+    from medscale.fhirkit import validate as validation_module
 
     monkeypatch.chdir(tmp_path)
+    roots: list[Path] = []
+    original_mkdtemp = validation_module.tempfile.mkdtemp
+
+    def captured_mkdtemp(*args: object, **kwargs: object) -> str:
+        root = Path(original_mkdtemp(*args, **kwargs))
+        roots.append(root)
+        return str(root)
+
+    monkeypatch.setattr(validation_module.tempfile, "mkdtemp", captured_mkdtemp)
     report = validate_fhir_with_validator(_rule_input(), command=_echo_input_path_command())
 
-    scratch = Path(report.warnings[0])
-    assert scratch.name == "medscale-fhirkit-input.json"
-    assert scratch.parent.resolve() != tmp_path.resolve(), "scratch file must not live in CWD"
-    assert not scratch.exists(), "scratch file must be removed after validation"
-    assert not scratch.parent.exists(), "scratch directory must be removed after validation"
+    assert report.status == "not_validated"
+    assert report.errors == ()
+    assert report.warnings and "not source-qualified" in report.warnings[0]
+    assert len(roots) == 1
+    assert roots[0].resolve() != tmp_path.resolve(), "scratch directory cannot be CWD"
+    assert not roots[0].exists(), "the disposable source file and directory were removed"
+    assert str(roots[0]) not in report_to_json(report), "validator paths are never mirrored"
