@@ -50,3 +50,19 @@ No protected main merge, public installer, signing, publication, clinical claims
 ## Regression and instability disclosure
 
 The previous normal-launch, disposable **ad-hoc signed App Sandbox** D2 GUI tests were re-executed on the new source binary without passing the stdin switch: first cold start failed **only at the fourth primary AX fixture** (`patient-exact-limit` hash AX node not read); the other first three primary controls passed. A second independent native cold start passed **4/4 original AX, 4/4 real keyboard Tab/Shift+Tab/Space, 2/2 embedded Core AX, 4/4 fictional Workspace AX**, exit 0. This is an observed **intermittent accessibility test instability**, not a justified permanent waiver or independent spoken VoiceOver certification; #676 stays unresolved. The **new one-shot Core→GUI** test separately passed both actual installed Core cases using AX twice (including final exact binary SHA shown above).
+
+## Real Windows 11 native GUI one-shot stdin acceptance (separate from installed Mac Core)
+
+On the authorized Windows 11 desktop, an isolated private sparse checkout of the **same D2 functional Rust sources** at `56931026e7a59e3732985b3174cfe93f6d391d2c` (parent version of this PR, subsequent change is only Windows QA script/source tests/docs) built from pinned offline Rust 1.97.1 with actual native unit/source tests PASS. Windows native executable SHA-256: `e6c101f4f95c0ce682d695b8d9ab314f1ba2ffdbd722191d81878b0a78de1c49`.
+
+The reviewed `tests/windows-native-core-stdin-uia.ps1` was retrieved from this private branch and checked against exact Git blob before running. It validates native EXE SHA before/after, two source-controlled report JSON file SHAs, then launches each Windows GUI with `--synthetic-core-stdin`, pipes finite exact synthetic Core bytes, and checks **real PID-specific native Windows UIAutomation** for both exact source report SHA-256 labels, `Core status: not_validated`, `FHIR R4 NOT validated` and the external-origin-not-authenticated disclosure. It independently sends forged clinical-valid-looking data and requires process exit **nonzero** before GUI acceptance. Observed after fixing an initial **test-harness-only** PowerShell reserved-variable `$PID` collision:
+
+```
+D2_WINDOWS_ONE_SHOT_CORE_STDIN_GUI_SOURCE_REPORT_PASS known
+D2_WINDOWS_ONE_SHOT_CORE_STDIN_GUI_SOURCE_REPORT_PASS negative
+D2_WINDOWS_ONE_SHOT_CORE_STDIN_FORGED_VALID_REFUSED
+D2_WINDOWS_ONE_SHOT_CORE_STDIN_NATIVE_UIA_2_OF_2_PASS_NOT_CLINICAL
+WINDOWS_STDIN_UIA_EXIT:0
+```
+
+Existing Windows primary native UIA controls **4/4 PASS**, exit 0 at the same actual executable SHA. This verifies the **Windows stdin-to-native-GUI acceptance**, NOT installation or sandbox confinement of Python Core on Windows. Windows report bytes are previously source-pinned synthetic fixtures in this test; the actual **fresh installed Python Core invocation** was performed separately on the authorized Mac and in the Mac end-to-end AX GUI qualification above. Do not combine the two into a claim that the Windows GUI launched an installed Python Core or that Windows outbound network, DLL loader or subprocess containment are solved.

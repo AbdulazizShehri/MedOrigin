@@ -48,6 +48,8 @@ class NativeOneShotCoreSourceTests(unittest.TestCase):
     def test_windows_actual_uia_source_checks_two_canonical_reports_and_forgery(self):
         script = (ROOT / "tests/windows-native-core-stdin-uia.ps1").read_text()
         self.assertIn("RedirectStandardInput=$true", script)
+        self.assertIn("function FindWindow([int]$nativeProcessId)", script)
+        self.assertNotIn("function FindWindow([int]$pid)", script)
         self.assertIn("medorigin-desktop-d2-native-egui.exe", script)
         self.assertIn("Get-FileHash -LiteralPath $exe -Algorithm SHA256", script)
         self.assertIn("Core status: not_validated", script)

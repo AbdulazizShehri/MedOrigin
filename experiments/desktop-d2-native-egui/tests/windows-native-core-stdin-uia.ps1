@@ -50,14 +50,14 @@ function SpawnFixedInput([byte[]]$data) {
   }
   return $proc
 }
-function FindWindow([int]$pid) {
+function FindWindow([int]$nativeProcessId) {
   for($i=0;$i -lt 65;$i++){
     $windows=@($root.FindAll(
       [System.Windows.Automation.TreeScope]::Children,
       [System.Windows.Automation.Condition]::TrueCondition
     )|Where-Object {
       try {
-        $_.Current.ProcessId -eq $pid -and
+        $_.Current.ProcessId -eq $nativeProcessId -and
         $_.Current.Name -like 'MedOrigin Native Rust*' -and
         -not $_.Current.IsOffscreen
       } catch {$false}
