@@ -14,6 +14,8 @@ import subprocess
 import sys
 from tempfile import TemporaryDirectory
 
+from supervise_windows_encrypted_core_job import execute_encrypted_source_under_job
+
 CORE_SHA = "8e5ed5430f4ab2ebc8981c52c67234023382954b"
 PROJECTION_SHA = "c99af04367aeaedeecb29b7fccc8a8fb58f2a85753eeae874eae5ad363307a49"
 SUCCESS = "WINDOWS_LIVE_ENCRYPTED_CORE_READBACK_TO_NATIVE_D2_GUI_PASS_NOT_CLINICAL"
@@ -21,16 +23,6 @@ PACKAGES = (
     ("src/medscale", 120, 450),
     ("apps/workspace/src/medscale_workspace", 30, 120),
 )
-FIXED_CODE = (
-    "import sys,runpy,importlib.metadata as m;"
-    "sys.path[:0]=[sys.argv[1],sys.argv[2],sys.argv[3]];"
-    "assert m.version('cryptography')=='50.0.1';"
-    "assert m.version('cffi')=='2.1.1';"
-    "script=sys.argv[4];sys.argv=[script];"
-    "runpy.run_path(script,run_name='__main__')"
-)
-
-
 def sha(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
@@ -105,20 +97,19 @@ def qualify(args: argparse.Namespace) -> None:
             "TMP": str(work),
             "PYTHONDONTWRITEBYTECODE": "1",
         }
-        executed = subprocess.run(
-            [str(python), "-I", "-S", "-B", "-c", FIXED_CODE,
-             str(core / "src"), str(core / "apps/workspace/src"),
-             str(site), str(script)],
-            cwd=work, env=env, capture_output=True, timeout=45, check=False,
+        # The real Core worker executes ZERO instructions before Job Object
+        # assignment. Job handle close kills its entire descendant subtree;
+        # it does NOT impose any network/DNS/TCP/UDP restriction.
+        raw = execute_encrypted_source_under_job(
+            python=python, core=core, site=site, exporter=script, work=work,
         )
-        if (executed.returncode != 0 or executed.stderr
-            or len(executed.stdout) > 2048
-            or executed.stdout != fixture.read_bytes()
-            or hashlib.sha256(executed.stdout).hexdigest() != PROJECTION_SHA):
+        if (len(raw) > 2048
+            or raw != fixture.read_bytes()
+            or hashlib.sha256(raw).hexdigest() != PROJECTION_SHA):
             raise ValueError("real_windows_core_encrypted_readback_source_mismatch")
         print("WINDOWS_REAL_ENCRYPTED_CORE_THREE_RESOURCE_READBACK_SOURCE_VERIFIED")
         receipt_path = work / "fixed-source-fantasy-only.json"
-        receipt_path.write_bytes(executed.stdout)
+        receipt_path.write_bytes(raw)
         qualified_gui = subprocess.run(
             ["powershell.exe", "-NoProfile", "-NonInteractive",
              "-ExecutionPolicy", "Bypass", "-File", str(observer),
