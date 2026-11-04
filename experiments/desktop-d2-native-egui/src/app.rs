@@ -4,6 +4,10 @@ use crate::core_provenance::{
     CoreProvenanceReceipt, FictionalCoreInput, PINNED_CORE_CASE_LABELS,
     admit_exact_source_reviewed_external_core_report, inspect_pinned_core_report,
 };
+use crate::workspace_receipt::{
+    FictionalEncryptedWorkspaceReceipt, admit_source_pinned_encrypted_workspace_receipt,
+    inspect_compiled_encrypted_workspace_receipt,
+};
 use eframe::egui;
 use medorigin_desktop_d0_rust_prototype::{
     HashError, fictional_json_preview_v1, hash_fixture_raw_v1,
@@ -547,6 +551,9 @@ pub struct MedOriginNativePreview {
     core_report: Option<CoreProvenanceReceipt>,
     core_report_notice: Option<&'static str>,
     external_core_source_visible: bool,
+    encrypted_workspace_receipt: Option<FictionalEncryptedWorkspaceReceipt>,
+    workspace_report_external: bool,
+    workspace_report_notice: Option<&'static str>,
     fictional_workspace_unlocked: bool,
     fictional_workspace_filter: FictionalWorkspaceFilter,
     fictional_workspace_selected: Option<usize>,
@@ -571,6 +578,36 @@ impl MedOriginNativePreview {
         })
     }
 
+    /// Admit an exact nonclinical Core+Workspace encrypted demo summary.
+    /// Input is UNTRUSTED and never proves its own producer or freshness.
+    pub fn from_one_time_synthetic_workspace_stdin(raw: &[u8]) -> Result<Self, &'static str> {
+        let receipt = admit_source_pinned_encrypted_workspace_receipt(raw)?;
+        Ok(Self {
+            encrypted_workspace_receipt: Some(receipt),
+            workspace_report_external: true,
+            ..Default::default()
+        })
+    }
+
+    pub fn inspect_compiled_encrypted_demo(&mut self) -> Result<(), &'static str> {
+        self.clear_fictional_output();
+        match inspect_compiled_encrypted_workspace_receipt() {
+            Ok(receipt) => {
+                self.encrypted_workspace_receipt = Some(receipt);
+                Ok(())
+            }
+            Err(_) => {
+                self.workspace_report_notice =
+                    Some("FAIL CLOSED: encrypted demo evidence modified");
+                Err("fictional_encrypted_workspace_evidence_refused")
+            }
+        }
+    }
+
+    pub fn has_external_fictional_workspace_stdin(&self) -> bool {
+        self.workspace_report_external && self.encrypted_workspace_receipt.is_some()
+    }
+
     /// Read-only source marker for the strict one-shot synthetic stdin path.
     pub fn has_external_fictional_core_stdin(&self) -> bool {
         self.external_core_source_visible && self.core_report.is_some()
@@ -588,6 +625,9 @@ impl MedOriginNativePreview {
         self.core_report = None;
         self.core_report_notice = None;
         self.external_core_source_visible = false;
+        self.encrypted_workspace_receipt = None;
+        self.workspace_report_external = false;
+        self.workspace_report_notice = None;
         self.fictional_workspace_selected = None;
         self.fictional_workspace_detail = None;
         self.fictional_workspace_notice = None;
@@ -607,6 +647,9 @@ impl MedOriginNativePreview {
         self.core_report = None;
         self.core_report_notice = None;
         self.external_core_source_visible = false;
+        self.encrypted_workspace_receipt = None;
+        self.workspace_report_external = false;
+        self.workspace_report_notice = None;
         self.fictional_workspace_selected = None;
         self.fictional_workspace_detail = None;
         self.fictional_workspace_notice = None;
@@ -989,6 +1032,37 @@ impl eframe::App for MedOriginNativePreview {
                         ui.label("Not a live Python Core connection, full R4 validator, EHR import or patient workspace.");
                     }
                 });
+            // Only aggregate counts from a bounded, source-compiled, nonclinical
+            // encrypted Workspace demo. Never any FHIR resource or secret.
+            egui::CollapsingHeader::new("Encrypted Workspace proof — synthetic only (NO PHI)")
+                .default_open(self.workspace_report_external)
+                .show(ui, |ui| {
+                    ui.strong("Ephemeral AES-GCM synthetic import and audit QA, NOT clinical storage");
+                    if ui.button("Inspect compiled encrypted Workspace demo receipt").clicked() {
+                        let _ = self.inspect_compiled_encrypted_demo();
+                    }
+                    if let Some(notice) = self.workspace_report_notice {
+                        ui.label(notice);
+                    }
+                    if let Some(receipt) = &self.encrypted_workspace_receipt {
+                        ui.monospace(format!("Workspace demo SHA-256: {}", receipt.report_sha256));
+                        ui.strong("Encrypted synthetic import result: PASS (source-pinned QA)");
+                        ui.label(format!("Fictional resources: {}", receipt.resource_count));
+                        ui.label(format!("Fictional provenance records: {}", receipt.provenance_records));
+                        ui.label(format!("Audit events: {}", receipt.audit_events));
+                        ui.label(format!("Verified encrypted reopen: {}", receipt.verified_reopen));
+                        ui.label(format!("Temporary encrypted store removed: {}", receipt.ephemeral_store_removed));
+                        ui.strong(receipt.disclosure);
+                        if self.workspace_report_external {
+                            ui.label("One-shot external synthetic Workspace summary. Exact bytes only; source and freshness NOT authenticated by GUI.");
+                        } else {
+                            ui.label("Embedded source fixture: the GUI has NOT run an encrypted Workspace itself.");
+                        }
+                        if ui.button("Clear encrypted Workspace receipt").clicked() {
+                            self.clear_fictional_output();
+                        }
+                    }
+                });
             // Actual native workspace navigation, but restricted to six
             // source-compiled fictional controls. No clinical records, search
             // text box, imports, writes, sessions, inference or network.
@@ -1203,6 +1277,40 @@ impl eframe::App for MedOriginNativePreview {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn encrypted_workspace_receipt_clear_switch_and_embedded_mode_never_retain_external_claim() {
+        let source = include_bytes!("../fixtures/core/workspace-ephemeral-demo.json");
+        let mut app = MedOriginNativePreview::from_one_time_synthetic_workspace_stdin(source)
+            .expect("only fixed fictional source metadata is admitted");
+        assert!(app.has_external_fictional_workspace_stdin());
+        assert_eq!(
+            app.encrypted_workspace_receipt
+                .as_ref()
+                .unwrap()
+                .resource_count,
+            3
+        );
+        assert!(app.core_report.is_none());
+        app.clear_fictional_output();
+        assert!(!app.has_external_fictional_workspace_stdin());
+        assert!(app.encrypted_workspace_receipt.is_none());
+        app.inspect_compiled_encrypted_demo().unwrap();
+        assert!(!app.has_external_fictional_workspace_stdin());
+        assert_eq!(
+            app.encrypted_workspace_receipt
+                .as_ref()
+                .unwrap()
+                .audit_events,
+            1
+        );
+        app.inspect_selected_core_receipt().unwrap();
+        assert!(app.encrypted_workspace_receipt.is_none());
+        assert!(!app.has_external_fictional_workspace_stdin());
+        app.inspect_compiled_encrypted_demo().unwrap();
+        app.hash_selected().unwrap();
+        assert!(app.encrypted_workspace_receipt.is_none());
+    }
 
     #[test]
     fn external_one_shot_core_report_clears_on_other_native_actions() {

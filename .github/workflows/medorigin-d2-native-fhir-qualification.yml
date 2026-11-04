@@ -215,6 +215,28 @@ jobs:
           & python experiments/desktop-d2-native-egui/scripts/qualify_windows_job_subtree.py
           if ($LASTEXITCODE -ne 0) { throw 'Windows Job Object OS descendant lifecycle proof NO-GO' }
           Write-Output 'WINDOWS_JOB_OBJECT_REAL_OS_SYNTHETIC_CHILD_SUBTREE_KILLED_NO_PATIENT_DATA'
+      - name: Verify source-bound encrypted Core Workspace native preview limits
+        shell: pwsh
+        run: |
+          $py = if ($IsWindows) { 'python' } else { 'python3' }
+          & $py -m unittest discover -s experiments/desktop-d2-native-egui/scripts -p test_installed_workspace_to_native_gui.py -v
+          if ($LASTEXITCODE -ne 0) { throw 'Encrypted Workspace synthetic Core-to-native GUI source limits FAILED' }
+          Write-Output 'D2_ENCRYPTED_WORKSPACE_SOURCE_ONLY_NO_REAL_CI_GUI_OR_INSTALLED_CORE_CLAIM'
+      - name: Parse real Windows encrypted Workspace native UIA source
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $path = 'experiments/desktop-d2-native-egui/tests/windows-encrypted-workspace-native-uia.ps1'
+          $tokens = $null
+          $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile(
+            (Resolve-Path $path).Path, [ref]$tokens, [ref]$errors
+          ) | Out-Null
+          if (@($errors).Count -ne 0) { throw 'Windows synthetic encrypted Workspace UIA syntax FAILED' }
+          if (-not (Get-Content -Raw $path).Contains('D2_WINDOWS_ENCRYPTED_WORKSPACE_NATIVE_UIA_PASS_NONCLINICAL')) {
+            throw 'Windows encrypted Workspace GUI QA marker missing'
+          }
+          Write-Output 'WINDOWS_ENCRYPTED_WORKSPACE_UIA_SYNTAX_ONLY_NOT_ACTUAL_INTERACTION'
       - name: Verify checks did not alter tracked code or lockfiles
         shell: pwsh
         run: |

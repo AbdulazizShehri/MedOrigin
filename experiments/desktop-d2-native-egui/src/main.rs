@@ -12,6 +12,7 @@ use medorigin_desktop_d2_native_egui::MedOriginNativePreview;
 
 const MAX_FICTIONAL_CORE_STDIN: usize = 2048;
 const EXPLICIT_SYNTHETIC_CORE_FLAG: &str = "--synthetic-core-stdin";
+const EXPLICIT_SYNTHETIC_WORKSPACE_FLAG: &str = "--synthetic-workspace-receipt-stdin";
 const SYNTHETIC_CORE_STDIN_DEADLINE: Duration = Duration::from_secs(5);
 
 /// Only this opt-in command-line switch permits reading a finite stdin
@@ -37,7 +38,9 @@ fn make_app_with_deadline<R: Read + Send + 'static>(
     if args.is_empty() {
         return Ok(MedOriginNativePreview::default());
     }
-    if args.len() != 1 || args[0] != EXPLICIT_SYNTHETIC_CORE_FLAG {
+    if args.len() != 1
+        || (args[0] != EXPLICIT_SYNTHETIC_CORE_FLAG && args[0] != EXPLICIT_SYNTHETIC_WORKSPACE_FLAG)
+    {
         return Err(io::Error::new(
             io::ErrorKind::InvalidInput,
             "unapproved_d2_native_startup_argument",
@@ -77,12 +80,21 @@ fn make_app_with_deadline<R: Read + Send + 'static>(
             "unapproved_d2_synthetic_core_stdin_size",
         ));
     }
-    MedOriginNativePreview::from_one_time_fictional_core_stdin(&bytes).map_err(|_| {
-        io::Error::new(
-            io::ErrorKind::InvalidData,
-            "unapproved_d2_synthetic_core_stdin_report",
-        )
-    })
+    if args[0] == EXPLICIT_SYNTHETIC_WORKSPACE_FLAG {
+        MedOriginNativePreview::from_one_time_synthetic_workspace_stdin(&bytes).map_err(|_| {
+            io::Error::new(
+                io::ErrorKind::InvalidData,
+                "unapproved_d2_synthetic_workspace_stdin_receipt",
+            )
+        })
+    } else {
+        MedOriginNativePreview::from_one_time_fictional_core_stdin(&bytes).map_err(|_| {
+            io::Error::new(
+                io::ErrorKind::InvalidData,
+                "unapproved_d2_synthetic_core_stdin_report",
+            )
+        })
+    }
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -108,6 +120,7 @@ mod tests {
     use std::io::Cursor;
 
     const CORE_KNOWN: &[u8] = include_bytes!("../fixtures/core/known-structure-definition.json");
+    const WORKSPACE_DEMO: &[u8] = include_bytes!("../fixtures/core/workspace-ephemeral-demo.json");
     const CORE_NEGATIVE: &[u8] = include_bytes!("../fixtures/core/unknown-fictional-negative.json");
 
     #[test]
@@ -238,6 +251,61 @@ mod tests {
         .err()
         .expect("read error must not launch GUI");
         assert_eq!(error.kind(), io::ErrorKind::PermissionDenied);
+    }
+
+    #[test]
+    fn exact_source_synthetic_encrypted_workspace_summary_opens_read_only_gui() {
+        let app = make_app(
+            &[OsString::from(EXPLICIT_SYNTHETIC_WORKSPACE_FLAG)],
+            Cursor::new(WORKSPACE_DEMO),
+        )
+        .expect("one exact ephemeral synthetic-only workspace receipt");
+        assert!(app.has_external_fictional_workspace_stdin());
+        assert!(!app.has_external_fictional_core_stdin());
+    }
+
+    #[test]
+    fn forged_workspace_production_flags_or_extra_records_refused_before_gui() {
+        for data in [
+            b"{}".to_vec(),
+            [WORKSPACE_DEMO, b" "].concat(),
+            [WORKSPACE_DEMO, b"\n"].concat(),
+            vec![b'X'; MAX_FICTIONAL_CORE_STDIN + 1],
+            WORKSPACE_DEMO
+                .windows(5)
+                .position(|w| w == b"false")
+                .map(|idx| {
+                    let mut bytes = WORKSPACE_DEMO.to_vec();
+                    bytes[idx] = b't';
+                    bytes
+                })
+                .expect("canonical fictional false safety marker"),
+        ] {
+            assert!(
+                make_app(
+                    &[OsString::from(EXPLICIT_SYNTHETIC_WORKSPACE_FLAG)],
+                    Cursor::new(data)
+                )
+                .is_err(),
+                "unapproved workspace receipt must fail before GUI"
+            );
+        }
+        assert!(
+            make_app(
+                &[OsString::from(EXPLICIT_SYNTHETIC_CORE_FLAG)],
+                Cursor::new(WORKSPACE_DEMO)
+            )
+            .is_err(),
+            "workspace report cannot masquerade as Core validation"
+        );
+        assert!(
+            make_app(
+                &[OsString::from(EXPLICIT_SYNTHETIC_WORKSPACE_FLAG)],
+                Cursor::new(CORE_KNOWN)
+            )
+            .is_err(),
+            "Core validation receipt cannot masquerade as encrypted workspace"
+        );
     }
 
     #[test]
