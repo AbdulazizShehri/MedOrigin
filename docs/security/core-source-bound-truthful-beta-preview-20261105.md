@@ -121,3 +121,106 @@ its accurate acceptance contract is redesigned and tested);
 #603 independent security/clinical review; #622 dependency
 advisories; production OS-managed keys, clinician RBAC/PHI;
 #574 founder release authorization. **Release NO-GO.**
+
+
+## Actual exact-source artifact + installed-Windows and hosted GitHub evidence
+
+**Functional source Git commit:** `42a0c18f4a9c73bd90c6189e20bc96263c47480e`,
+stacked privately above Core PR #951. On task-only WSL2 Ubuntu
+ext4 an **exact clean Git checkout** and existing authorized Core
+projection built offline using
+`uv build --offline --no-create-gitignore`; only the disposable
+projection had POSIX permissions normalized for source identity
+gates, not the checkout, original Windows repo or protected main.
+Independent existing checks:
+`SOURCE_BOUND_WHEEL_QUALIFIED_ONLY`,
+`SDIST_SCOPE_QUALIFIED_ONLY`, and
+`METADATA_QUALIFIED_ONLY`, **all zero issues**.
+Four relevant unchanged Core FHIR/timeline/CLI module bytes matched
+the exact Wheel.
+
+**Local, unpublished SHA256 artifacts:**
+
+- Core Wheel `medscale-0.3.0-py3-none-any.whl`:
+  `ec79654b61942f496f4b64b9c582e272266bd0eaa09da849f9116394ade7f6b3`.
+- Core sdist `medscale-0.3.0.tar.gz`:
+  `b190e9d413b6c33f87ad0c56193c6fdff32987d6a3c42cef0787a953b5e62fa8`.
+
+The exact SHA-checked Core Wheel was installed **offline**
+(`pip --python ... --no-index --no-deps`) into two separately
+created, task-only **native Windows** Python3.11.15 and
+Python3.12.13 virtualenvs. Both generated real installed
+`Scripts/medscale.exe` shims and returned
+`medscale 0.3.0`. The new Core-only qualifier executed from
+a separate **clean exact-head Windows Git worktree**, with
+strict independent source-Wheel, sdist and metadata gates, then
+matched **all 266 installed Core Python files per environment**
+byte-for-byte to the source-bound Wheel. It executed the
+verified installed **Python MODULE entrypoint**, rather than
+trusting a generated native launcher, for two separate
+fictional known and unknown FHIR sources on each installed
+interpreter. Both produced deterministic `not_validated`/exit2,
+never fake `valid`. Exact SHA256 report digests matched
+across both interpreters:
+
+- Known fictional FHIR report:
+  `165b41acdc416617e8f207366d454ac6a713ecf4c9a5efd740d14a0af882bd08`
+- Unknown fictional resource report:
+  `7962d747049185ce33f252d8760e1197942e6f945d22e9f640df27eaeff1129c`
+
+The strictly qualified new Core-only JSON receipt SHA256 was
+`05400c5d1f056fec23f5d0bd65f253ca93041e940c7532cce3e3893931dcab82`;
+static negative-truth HTML SHA256
+`3189ab70e0fa6b29fa0a10372683bec476a92d50d605e1e20bc652a3235f4d0f`.
+This separate **technical nonpublishing PASS** was
+`TECHNICAL_CORE_NEGATIVE_TRUTH_PREVIEW_ONLY`,
+with both
+`source_qualified_negative_truth_preview=true` and
+`prepublication_rehearsal_qualified=false`,
+`fhir_conformance_validated=false`,
+`native_launcher_identity_attested=false`,
+`full_beta_preview_qualified=false`,
+`clinical_use_authorized=false`,
+`publication_authorized=false`,
+`merge_or_tag_authorized=false`.
+Windows UTF-8 roundtrip of the HTML and JSON was explicitly
+tested (never use locale default decoding for a UTF-8 file).
+The clean source checkout remained clean after the qualifier.
+No package installation affected global Windows Python.
+
+**Native Windows Python3.14 author-side source tests:**
+focused Beta/new preview regressions **51 PASS, 1 SKIP**
+(host forbids symlink creation); broader Core/FHIR/Beta/timeline
+**236 PASS, 2 SKIP** (symlink and optional official HL7 ZIP
+not configured), **5 DESELECTED** historical raw-Wheel fixture
+cases. Ruff check/format and Git whitespace passed.
+
+**Hosted exact functional-head CI evidence (not green):**
+GitHub Actions run
+`41919858871`, *MedOrigin Developer Beta offline rehearsal*,
+on source SHA `42a0c18f...`:
+- **Ubuntu job `126889180387`** built and installed exact source
+  Wheel into Python3.11 and 3.12; new Core-negative-truth
+  qualification emitted
+  `TECHNICAL_CORE_NEGATIVE_TRUTH_PREVIEW_ONLY`, followed by
+  `CORE_NEGATIVE_TRUTH_PREVIEW_ONLY_NOT_RELEASE` (**PASS**).
+  The unchanged historic full Beta prepublication step then
+  **FAILED** with
+  `MEDORIGIN_PREPUBLICATION_REHEARSAL_BLOCKED:
+  synthetic installed-CLI demonstration failed`.
+- **Windows job `126889180876`** did the same: **new truthful
+  Core-only step PASS**, **old full Beta step FAIL**.
+- Separate Browser/Sentry run `41919858844`, Windows job
+  `126889180709`, still **FAILED** at old
+  `scripts/qa_medorigin_free_browser_sentry.py`
+  local synthetic QA command. No new source assertion
+  bypasses this failure, which requires its own truthful
+  UX acceptance work.
+
+Thus the **full hosted workflows remain RED** on this
+functional SHA. This PR neither sets `continue-on-error` nor
+removes an old gate; it supplies a real, source-qualified
+Core technical demonstration and static preview whose
+meaning is precisely *not validated*. The previous legacy
+Beta browser/native UI contract and independent clinical
+approval are still **NO-GO**, regardless of this PASS.
