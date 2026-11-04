@@ -60,4 +60,7 @@ swift "$source_dir/macos-native-keyboard-qualification.swift" "$pid"
 swift "$source_dir/macos-core-provenance-ax-qualification.swift" "$pid"
 # Actual native, source-only fictional workspace navigation/filter/clear test.
 swift "$source_dir/macos-fictional-workspace-ax-qualification.swift" "$pid"
+# Interact with real native resource facets, SHA-verified fictional relationship
+# links and one-step Back, including hidden-target fail-closed behavior.
+swift "$source_dir/macos-fictional-resource-navigation-ax-qualification.swift" "$pid"
 echo "MACOS_D2_SIGNED_SANDBOX_AX_AND_KEYBOARD_4OF4_PASS_NOT_RELEASE_AUTHORITY"

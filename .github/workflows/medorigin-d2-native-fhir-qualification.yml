@@ -160,8 +160,9 @@ jobs:
           ) | Out-Null
           if (@($errors).Count -ne 0) { throw 'Native fictional workspace Windows UIA script syntax failed' }
           $source = Get-Content -LiteralPath $path -Raw
-          if (-not $source.Contains('D2_WINDOWS_FICTIONAL_WORKSPACE_4_CASES_FILTER_AND_CLEAR_PASS_NOT_CLINICAL')) {
-            throw 'Native fictional Workspace real GUI test marker is missing'
+          if (-not $source.Contains('D2_WINDOWS_FICTIONAL_WORKSPACE_4_CASES_FILTER_AND_CLEAR_PASS_NOT_CLINICAL') -or
+              -not $source.Contains('D2_WINDOWS_FICTIONAL_WORKSPACE_RESOURCE_FACET_LINK_AND_BACK_PASS_NOT_CLINICAL')) {
+            throw 'Native fictional Workspace filter and verified-reference navigation test markers missing'
           }
           Write-Output 'WINDOWS_FICTIONAL_WORKSPACE_UIA_SOURCE_ONLY_NOT_HOSTED_GUI_APPROVAL'
       - name: Verify installed-Wheel Core to Rust synthetic provenance source guards
