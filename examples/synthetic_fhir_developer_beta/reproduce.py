@@ -69,7 +69,7 @@ def run_one(cli: Path, directory: Path, label: str) -> dict[str, Any]:
         directory,
     )
     if validated.returncode:
-        raise ValueError(f"{label}: FHIR command failed: {validated.stderr[:250]}")
+        raise ValueError(f"{label}: FHIR command refused or was not validated")
     reports = list(output.rglob("report.json"))
     if len(reports) != 1:
         raise ValueError(f"{label}: expected one report, got {len(reports)}")
@@ -218,7 +218,7 @@ def main(argv: list[str] | None = None) -> int:
             check=False,
         )
         if preview.returncode != 0:
-            raise ValueError(f"local static preview failed: {preview.stderr[:250]}")
+            raise ValueError("legacy static preview did not qualify")
         print("MEDORIGIN_SYNTHETIC_FHIR_DEMO_PASS")
         print(f"report_sha256={runs[0]['report_sha256']}")
         print(f"receipt_sha256={digest(record)}")
@@ -229,8 +229,8 @@ def main(argv: list[str] | None = None) -> int:
         ValueError,
         json.JSONDecodeError,
         subprocess.TimeoutExpired,
-    ) as exc:
-        print(f"MEDORIGIN_SYNTHETIC_FHIR_DEMO_FAIL: {exc}", file=sys.stderr)
+    ):
+        print("MEDORIGIN_SYNTHETIC_FHIR_DEMO_FAIL: legacy_rehearsal_not_qualified", file=sys.stderr)
         print("Any partial output is nonqualifying; use a new --out directory.", file=sys.stderr)
         return 1
 

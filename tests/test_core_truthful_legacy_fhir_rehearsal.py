@@ -184,3 +184,22 @@ def test_core_only_refuses_workspace_preview_combination(
     assert result == 2
     assert "MEDORIGIN_CORE_FHIR_PROVENANCE_ONLY_BLOCKED" in capsys.readouterr().err
     assert not (tmp_path / "not-created").exists()
+
+
+def test_legacy_default_rejects_correct_not_validated_exit_without_stderr_leak(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import subprocess
+
+    runner = _load("reproduce.py")
+
+    def fake_call(_cli: Path, args: list[str], _cwd: Path) -> subprocess.CompletedProcess[str]:
+        if args == ["--version"]:
+            return subprocess.CompletedProcess(args, 0, "medscale 0.3.0\n", "")
+        return subprocess.CompletedProcess(args, 2, '{"status":"not_validated"}\n', HIDDEN)
+
+    monkeypatch.setattr(runner, "call", fake_call)
+    with pytest.raises(ValueError, match="not validated") as error:
+        runner.run_one(Path("synthetic-fake"), tmp_path, "run_1")
+    assert HIDDEN not in str(error.value)
+    assert not list(tmp_path.rglob("report.json"))
