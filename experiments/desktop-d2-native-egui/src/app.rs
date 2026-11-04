@@ -1739,6 +1739,9 @@ impl MedOriginNativePreview {
             SetType(RecoveredResourceTypeFilter),
             Search(&'static str),
             Select(usize),
+            FollowOutgoing(usize),
+            FollowIncoming(usize, usize),
+            JumpHistory(usize),
         }
         let mut action: Option<FocusAction> = None;
         ui.heading("Fictional patient context");
@@ -1849,11 +1852,72 @@ impl MedOriginNativePreview {
                 if !visited[index] && ui.button("Focus: Mark visited (demo only)").clicked() {
                     action = Some(FocusAction::Mark);
                 }
-                for link in &resource.links {
-                    ui.monospace(format!("Verified {0} -> {1}", link.field, link.target));
+                let incoming_count = resources
+                    .iter()
+                    .flat_map(|source| source.links.iter())
+                    .filter(|link| link.target == resource.full_url)
+                    .count();
+                ui.strong(format!(
+                    "Focus: {} outgoing and {} incoming source links",
+                    resource.links.len(),
+                    incoming_count
+                ));
+                for (link_index, link) in resource.links.iter().enumerate() {
+                    if let Some(destination) = resources
+                        .iter()
+                        .find(|candidate| candidate.full_url == link.target)
+                    {
+                        if ui
+                            .button(format!(
+                                "Focus: Follow outgoing {} to {}/{}",
+                                link.field, destination.resource_type, destination.resource_id
+                            ))
+                            .clicked()
+                        {
+                            action = Some(FocusAction::FollowOutgoing(link_index));
+                        }
+                    } else {
+                        // Never invent a destination when a source edge is missing.
+                        ui.label("FAIL CLOSED: source-projected outgoing link unresolved");
+                    }
                 }
-                if history_len > 0 && ui.button("Focus: Back to patient").clicked() {
-                    action = Some(FocusAction::Back);
+                for (source_index, source) in resources.iter().enumerate() {
+                    for (link_index, link) in source.links.iter().enumerate() {
+                        if link.target == resource.full_url
+                            && ui
+                                .button(format!(
+                                    "Focus: Open incoming {}/{} via {}",
+                                    source.resource_type, source.resource_id, link.field
+                                ))
+                                .clicked()
+                        {
+                            action = Some(FocusAction::FollowIncoming(source_index, link_index));
+                        }
+                    }
+                }
+                if history_len > 0 {
+                    ui.strong(format!(
+                        "Focus: Verified navigation trail {} of 16 steps",
+                        history_len
+                    ));
+                    for (step, previous_index) in self.encrypted_readback_history.iter().enumerate()
+                    {
+                        if let Some(previous) = resources.get(*previous_index)
+                            && ui
+                                .button(format!(
+                                    "Focus: Jump history {}: {}/{}",
+                                    step + 1,
+                                    previous.resource_type,
+                                    previous.resource_id
+                                ))
+                                .clicked()
+                        {
+                            action = Some(FocusAction::JumpHistory(step));
+                        }
+                    }
+                    if ui.button("Focus: Back along verified path").clicked() {
+                        action = Some(FocusAction::Back);
+                    }
                 }
                 ui.label("No clinical note, event date, order, diagnosis or status was inferred.");
             });
@@ -1898,6 +1962,15 @@ impl MedOriginNativePreview {
             }
             Some(FocusAction::Select(index)) => {
                 let _ = self.select_encrypted_readback_resource(index);
+            }
+            Some(FocusAction::FollowOutgoing(link_index)) => {
+                let _ = self.follow_encrypted_readback_link(link_index);
+            }
+            Some(FocusAction::FollowIncoming(source_index, link_index)) => {
+                let _ = self.follow_encrypted_readback_incoming(source_index, link_index);
+            }
+            Some(FocusAction::JumpHistory(step)) => {
+                let _ = self.jump_encrypted_readback_history(step);
             }
             None => {}
         }
@@ -2543,6 +2616,73 @@ impl eframe::App for MedOriginNativePreview {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn focused_relationship_navigation_reuses_source_links_and_bounded_breadcrumbs() {
+        for raw in [
+            include_bytes!("../fixtures/core/encrypted-readback-projection.json").as_slice(),
+            include_bytes!("../fixtures/core/encrypted-persistent-readback-projection.json")
+                .as_slice(),
+        ] {
+            let mut app =
+                MedOriginNativePreview::from_one_time_synthetic_focused_readback_stdin(raw)
+                    .unwrap();
+            app.open_recovered_fictional_patient_chart().unwrap();
+            assert_eq!(app.encrypted_readback_selected, Some(1));
+            app.follow_encrypted_readback_incoming(2, 0).unwrap();
+            assert_eq!(app.encrypted_readback_selected, Some(2)); // Encounter.subject
+            assert_eq!(app.encrypted_readback_history, vec![1]);
+            app.follow_encrypted_readback_link(0).unwrap();
+            assert_eq!(app.encrypted_readback_selected, Some(1)); // Patient
+            assert_eq!(app.encrypted_readback_history, vec![1, 2]);
+            app.jump_encrypted_readback_history(1).unwrap();
+            assert_eq!(app.encrypted_readback_selected, Some(2));
+            assert_eq!(app.encrypted_readback_history, vec![1]);
+            app.back_encrypted_readback_resource().unwrap();
+            assert_eq!(app.encrypted_readback_selected, Some(1));
+            assert!(app.encrypted_readback_history.is_empty());
+            app.follow_encrypted_readback_incoming(0, 0).unwrap();
+            assert_eq!(app.encrypted_readback_selected, Some(0)); // Observation.subject
+            app.follow_encrypted_readback_link(1).unwrap();
+            assert_eq!(app.encrypted_readback_selected, Some(2)); // Observation.encounter
+            assert_eq!(app.encrypted_readback_history, vec![1, 0]);
+            app.jump_encrypted_readback_history(0).unwrap();
+            assert_eq!(app.encrypted_readback_selected, Some(1));
+            assert!(app.encrypted_readback_history.is_empty());
+            assert_eq!(app.recovered_visible_count(), 3);
+            assert!(app.focused_workspace_visible);
+            assert!(app.has_external_synthetic_encrypted_readback());
+        }
+    }
+
+    #[test]
+    fn focused_relationship_rejects_mutated_source_and_breadcrumb_reuse_after_filter() {
+        let raw = include_bytes!("../fixtures/core/encrypted-readback-projection.json");
+        let mut app =
+            MedOriginNativePreview::from_one_time_synthetic_focused_readback_stdin(raw).unwrap();
+        app.open_recovered_fictional_patient_chart().unwrap();
+        app.follow_encrypted_readback_incoming(2, 0).unwrap();
+        app.set_recovered_type_filter(RecoveredResourceTypeFilter::Patient);
+        assert!(app.encrypted_readback_history.is_empty());
+        assert!(app.encrypted_readback_selected.is_none());
+        assert_eq!(
+            app.jump_encrypted_readback_history(0),
+            Err("encrypted_readback_breadcrumb_refused")
+        );
+        assert!(app.encrypted_readback.is_none());
+        assert!(!app.focused_workspace_visible);
+
+        let mut forged =
+            MedOriginNativePreview::from_one_time_synthetic_focused_readback_stdin(raw).unwrap();
+        forged.open_recovered_fictional_patient_chart().unwrap();
+        // Reverse-edge mismatch cannot navigate to an unrelated source identity.
+        assert_eq!(
+            forged.follow_encrypted_readback_incoming(0, 1),
+            Err("encrypted_readback_incoming_edge_mismatch")
+        );
+        assert!(!forged.focused_workspace_visible);
+        assert!(forged.encrypted_readback.is_none());
+    }
 
     #[test]
     fn direct_focused_startup_admits_only_two_independent_source_reviewed_fictional_projections() {
