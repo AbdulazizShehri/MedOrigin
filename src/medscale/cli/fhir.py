@@ -342,8 +342,62 @@ def _workspace_catalog_demo_main(argv: list[str]) -> int:
     return 0
 
 
+def _filtered_multi_timeline_demo_main(argv: list[str]) -> int:
+    """Real encrypted fictional filtered chronology, source verified before view."""
+    if argv in (["--help"], ["-h"]):
+        print(
+            "usage: medscale fhir filtered-multi-timeline-demo "
+            "--synthetic-only --ephemeral-demo "
+            "[--from-day YYYY-MM-DD] [--through-day YYYY-MM-DD] "
+            "[--event-type Encounter|Observation]\n"
+            "Source-verified per-import fictional event search only; never "
+            "patient identity joining, FHIR R4 validation or clinical authorization."
+        )
+        return 0
+    if (
+        len(argv) not in (4, 6, 8)
+        or argv[:2] != ["--synthetic-only", "--ephemeral-demo"]
+        or (len(argv) - 2) % 2 != 0
+    ):
+        print("filtered timeline refused: explicit_fictional_flags_required", file=sys.stderr)
+        return 2
+    accepted = {"--from-day", "--through-day", "--event-type"}
+    opts: dict[str, str] = {}
+    for i in range(2, len(argv), 2):
+        flag, value = argv[i : i + 2]
+        if flag not in accepted or flag in opts:
+            print("filtered timeline refused: unsupported_filter", file=sys.stderr)
+            return 2
+        opts[flag] = value
+    try:
+        from medscale.fhirkit.workspace_multi_timeline import _checked_day
+
+        start = _checked_day(opts.get("--from-day"))
+        end = _checked_day(opts.get("--through-day"))
+        if start is not None and end is not None and start > end:
+            raise ValueError("invalid_day_range")
+        kind = opts.get("--event-type")
+        if kind is not None and kind not in ("Encounter", "Observation"):
+            raise ValueError("unknown_event_type")
+        from medscale.fhirkit.workspace_multi_timeline_demo import receipt_json
+
+        result = receipt_json(
+            from_day_utc=start,
+            through_day_utc=end,
+            resource_type=kind,
+        )
+    except Exception:
+        # Do not forward caller text, raw bundled data or any absolute paths.
+        print("filtered timeline refused: source_verified_view_unavailable", file=sys.stderr)
+        return 2
+    print(result)
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     tokens = list(sys.argv[1:] if argv is None else argv)
+    if tokens and tokens[0] == "filtered-multi-timeline-demo":
+        return _filtered_multi_timeline_demo_main(tokens[1:])
     if tokens and tokens[0] == "multi-timeline-demo":
         return _multi_timeline_demo_main(tokens[1:])
     if tokens and tokens[0] == "timeline-demo":
