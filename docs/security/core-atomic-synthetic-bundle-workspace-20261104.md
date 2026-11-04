@@ -108,3 +108,47 @@ independent security/medical review, security advisories (#622), full
 FHIR R4 qualification (#877), legacy demo false-valid (#882), external
 launcher attestation (#893) and release governance (#574/#603) remain
 **NO-GO**. Never infer release readiness from author-side synthetic QA.
+
+
+## Exact-source projected package and real installed Core smoke
+
+**Functional source SHA**: `9ee7493a06a9999ebff48da89cc08b61cab87251`
+(stack base Draft #914 SHA `138907ca1de67dfbf0d50ec3ce6d881e145700cd`).
+
+- A **task-only WSL Linux ext4** checkout of that exact source commit
+  was independently staged through the repository's existing
+  `stage_medorigin_core_projection.py` without modifying frozen
+  `pyproject.toml`, `uv.lock`, archived research or tracked source bytes.
+- `uv build --offline --no-create-gitignore` produced **LOCAL UNPUBLISHED**
+  `medscale-0.3.0-py3-none-any.whl`, SHA-256:
+  `ab7cdf6ea76be6606654c53497488a2ff3f8fe7da02e9860b05e427e0c92419e`.
+- The sdist `medscale-0.3.0.tar.gz` SHA-256:
+  `9937165bb42c854c3e9a0cababc3397c845504ad38a57d960ccc34e0598d6427`.
+- Independent existing verification gates returned
+  `SOURCE_BOUND_WHEEL_QUALIFIED_ONLY` and
+  `SDIST_SCOPE_QUALIFIED_ONLY`, **zero issues**, exit0. These are
+  source identity/scope verifiers, not release authorization.
+- Copied the qualifying Wheel into a task-owned Windows QA folder,
+  checked its exact SHA, and installed to a **local isolated --target**
+  from local file using `pip --no-index --no-deps` (no package upload).
+  Verified that the actually imported Core module was located inside
+  the installed Wheel tree, not source checkout.
+- With `PYTHONPATH` pointing at that installed Core + existing local
+  Workspace source, native Windows Python3.14 with `-P -B -s` executed
+  `atomic_workspace_demo.py --synthetic-only --ephemeral-demo`.
+  Result: `SYNTHETIC_ENCRYPTED_ATOMIC_DEMO_PASS` / exit0,
+  **3 encrypted FHIR resources, 3 encrypted provenance records,
+  1 chained audit event, correct reopen, ephemeral DB removed**.
+  `full_fhir_r4_conformance_established`, `clinical_use_authorized`
+  and `publication_authorized` were all `false`.
+- This test **does not** independently attest an installed generated
+  Windows `medscale.exe` launcher (#893); the installed Python source
+  module was invoked intentionally. The separate Workspace distribution
+  was loaded from a local source path, **not** independently packaged and
+  attest-tested in this run.
+
+All source/digest evidence is author-side, nonpublishing and
+synthetic-only. Nothing here resolves independent review, full FHIR
+conformance, OS-protected production key management or hosted exact-head
+CI. The disposable test artifacts should not be treated as signed
+release files.
