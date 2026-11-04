@@ -111,6 +111,17 @@ class EmbeddedCoreProvenanceSourceTests(unittest.TestCase):
         self.assertIn("windows.count == 1", script)
         for _, digest, _ in CASES:
             self.assertIn(digest, script)
+    def test_real_windows_uia_has_exact_two_case_reproduction_and_hash_gate(self):
+        script = (ROOT / "tests/windows-native-core-provenance-uia.ps1").read_text()
+        self.assertIn("Get-FileHash -LiteralPath $ExePath -Algorithm SHA256", script)
+        self.assertIn("UIAutomationClient", script)
+        self.assertIn("InvokePattern", script)
+        self.assertIn("TogglePattern", script)
+        self.assertIn("Core status: not_validated", script)
+        self.assertIn("D2_WINDOWS_CORE_PROVENANCE_UIA_2_OF_2_PASS_NONPUBLISHING", script)
+        self.assertIn("stale positive receipt survived selection change", script)
+        for _, digest, _ in CASES:
+            self.assertIn(digest, script)
 
 
 if __name__ == "__main__":
