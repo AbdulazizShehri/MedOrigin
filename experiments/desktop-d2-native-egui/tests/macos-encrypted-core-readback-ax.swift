@@ -185,7 +185,15 @@ else { noGo("focused keyword clearing did not restore source worklist") }
 print("MACOS_NATIVE_FOCUSED_SOURCE_BROWSER_FILTER_SEARCH_OPEN_AX_PASS_NONCLINICAL")
 press("Focus: Open Patient")
 guard eventuallyText("Focused fictional record: Patient/fictional-patient-001")
-else { noGo("focused patient not source-linked") }
+else {
+  let labels = visibleNodes().flatMap { $0.labels }.filter {
+    $0.contains("Focus:") || $0.contains("Focused fictional") ||
+    $0.contains("Workspace") || $0.contains("Patient") ||
+    $0.contains("Source-verified")
+  }.prefix(30)
+  noGo("focused patient not source-linked; actual AX labels: " +
+       String(describing: Array(labels)))
+}
 press("Focus: Open Encounter")
 guard eventuallyText("Focused fictional record: Encounter/fictional-encounter-001")
 else { noGo("focused Encounter not source-linked") }
