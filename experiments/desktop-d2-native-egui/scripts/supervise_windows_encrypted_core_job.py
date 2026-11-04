@@ -64,7 +64,7 @@ INSTALLED_RUNNER = (
 
 def execute_encrypted_source_under_job(
     python: Path,
-    core: Path,
+    core: Path | None,
     site: Path,
     exporter: Path,
     work: Path,
@@ -76,17 +76,21 @@ def execute_encrypted_source_under_job(
         or not work.is_dir()
         or not python.is_file()
         or python.name.lower() != "python.exe"
-        or not (core / "src").is_dir()
-        or not (core / "apps/workspace/src").is_dir()
+        or (core is None and installed_site is None)
+        or (
+            core is not None
+            and (not (core / "src").is_dir() or not (core / "apps/workspace/src").is_dir())
+        )
         or not site.is_dir()
         or not exporter.is_file()
-        or any(path.is_symlink() for path in (python, core, site, exporter, work))
+        or any(path.is_symlink() for path in (python, site, exporter, work))
+        or (core is not None and core.is_symlink())
     ):
         raise ValueError("reviewed_windows_job_core_prerequisites_refused")
     if installed_site is not None and (
         installed_site.is_symlink()
         or not installed_site.is_dir()
-        or installed_site.resolve() == core.resolve()
+        or (core is not None and installed_site.resolve() == core.resolve())
         or any((installed_site / p).is_symlink() for p in ("medscale", "medscale_workspace"))
     ):
         raise ValueError("installed_core_target_not_attested_or_unavailable")
@@ -132,6 +136,8 @@ def execute_encrypted_source_under_job(
             runner = INSTALLED_RUNNER
             worker_args = [str(installed_site), str(site), str(exporter), str(output)]
         else:
+            if core is None:
+                raise ValueError("source_checkpoint_required_for_noninstalled_worker")
             runner = SOURCE_RUNNER
             worker_args = [
                 str(core / "src"),
