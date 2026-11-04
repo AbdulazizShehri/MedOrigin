@@ -132,3 +132,63 @@ Windows test environment, **not because their assertions passed**;
 they were explicitly excluded in this test selection. Exact-source
 Wheel build, source identity and installed-binary smoke are separate
 gates, not inferred from the functional test selection.
+
+
+## Latest independently source-checked installed Core + Workspace pair
+
+**Functional commit `0351b667ec910480fd61c30f18cf3bb0dd0ae842`.**
+All checks below are local/private and were performed against that
+exact functional source on the authorized Windows PC + WSL Linux ext4.
+
+- Exact-source native ext4 checkout was refreshed to `0351b667`.
+  Existing read-only Core source projection was built with
+  `uv build --offline --no-create-gitignore`. Independently existing
+  Core Wheel/sdist source verification gates returned
+  `SOURCE_BOUND_WHEEL_QUALIFIED_ONLY` and
+  `SDIST_SCOPE_QUALIFIED_ONLY`, both with **zero issues**.
+- Separately built **Workspace Wheel + sdist** from
+  `apps/workspace` in the same pinned checkout with offline `uv`.
+  Zip entry and **byte-for-byte exact source** comparison passed for
+  all **33 Python module files**. The Workspace Wheel metadata matched
+  MedOrigin's repository and the intended `cryptography==50.0.1`
+  runtime pin. The Core Wheel's `medscale/cli/fhir.py`,
+  `medscale/fhirkit/workspace_demo.py` and
+  `medscale/fhirkit/workspace_ingest.py` also matched exact source
+  module bytes. No generated publisher artifact was uploaded.
+- Core Wheel `medscale-0.3.0-py3-none-any.whl` SHA-256:
+  `25a11917d79edc1432bb28f2dba06ae3327b28a2ec495f619f45ba105fe2e7f6`.
+  Core sdist SHA-256:
+  `acaad0dc4e81d966f40705fbd5f981b919ccfe6661533dc67e7d82c590d2e2d8`.
+- Workspace Wheel `medscale_workspace-0.1.0.dev1-py3-none-any.whl`
+  SHA-256:
+  `c37516f2b7b831b3fcfc417a2d7703c29d0917f3c684c19215f7e07399e05b73`.
+  Workspace sdist SHA-256:
+  `e513f6f943cce76b90596ecd47f5ef89fa517802fce1d35dd4756878623ea47d`.
+- Both exact-hash verified Wheels installed in **one task-owned
+  Windows --target directory** via
+  `pip --no-index --no-deps`, without modifying the system's
+  `site-packages`. Windows Python3.14 `-P -B -s` with only that
+  target in `PYTHONPATH` verified both Core and Workspace module
+  paths resolved **inside the installed Wheel tree**, not source.
+- Real installed Core public dispatcher (`medscale.cli.main`) invoked
+  `fhir workspace-demo --synthetic-only --ephemeral-demo`:
+  **exit0, `SYNTHETIC_ENCRYPTED_ATOMIC_DEMO_PASS`, three encrypted
+  resources, successful reopen and integrity check, temporary store
+  removed, no clinical use authorized**. An unknown supplied
+  fictional file path returned **exit2 with fixed refusal token and
+  no echo of the path**.
+- Python3.14 selected Core CLI/Workspace FHIR tests:
+  **100 PASS, 2 DESELECTED** (raw-Wheel tests invoke unavailable
+  external executable). Python3.11.15/3.12.13 combined portable
+  CLI + direct Workspace batch + atomic Core integration suites:
+  **40 PASS each**, with separate pinned task-only binary
+  `cryptography==50.0.1` and `cffi==2.1.1` and controlled reused
+  pytest; **not hermetic hosted CI**.
+
+The actual Windows `medscale.exe` console shim was not independently
+attested; this run used the exact installed Python public dispatcher,
+not a signed/bundled native launcher. Protected OS key custody,
+production authorization, full FHIR R4 validation, real PHI, hosted
+CI, independent security/clinical review, publication, and merging
+remain out of scope. Result remains a **private synthetic-only NO-GO
+release candidate**, not a production-ready clinical application.
