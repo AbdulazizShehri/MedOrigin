@@ -12,12 +12,21 @@ guard AXIsProcessTrusted() else {
   exit(1)
 }
 let app = AXUIElementCreateApplication(pid)
-var windowsValue: CFTypeRef?
-guard
-  AXUIElementCopyAttributeValue(app, kAXWindowsAttribute as CFString, &windowsValue) == .success,
-  let windows = windowsValue as? [AXUIElement], windows.count == 1
-else {
-  fputs("MACOS_AX_NO_GO: expected exactly one accessible preview window\n", stderr)
+// AccessKit/LaunchServices may initialize the native AX window after PID
+// admission. Bound the read-only wait; NEVER accept two/ambiguous windows.
+var nativeWindow: AXUIElement?
+for _ in 0..<40 {
+  var windowsValue: CFTypeRef?
+  if AXUIElementCopyAttributeValue(app, kAXWindowsAttribute as CFString, &windowsValue)
+    == .success, let windows = windowsValue as? [AXUIElement], windows.count == 1
+  {
+    nativeWindow = windows[0]
+    break
+  }
+  Thread.sleep(forTimeInterval: 0.2)
+}
+guard let nativeWindow else {
+  fputs("MACOS_AX_NO_GO: expected exactly one accessible preview window after bounded wait\n", stderr)
   exit(1)
 }
 func stringValue(_ element: AXUIElement, _ attribute: CFString) -> String {
@@ -67,7 +76,7 @@ func collect() {
   count = 0
   verifyButton = nil
   selectors.removeAll()
-  visit(windows[0], 0)
+  visit(nativeWindow, 0)
 }
 let required = [
   "patient-minimal", "patient-invalid-utf8", "patient-over-limit",

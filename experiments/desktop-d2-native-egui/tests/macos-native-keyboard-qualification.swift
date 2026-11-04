@@ -17,12 +17,18 @@ guard let running = NSRunningApplication(processIdentifier: pid) else {
 }
 guard running.activate() else { fail("could not foreground native app") }
 let app = AXUIElementCreateApplication(pid)
-var windowsValue: CFTypeRef?
-guard
-  AXUIElementCopyAttributeValue(app, kAXWindowsAttribute as CFString, &windowsValue) == .success,
-  let windows = windowsValue as? [AXUIElement], windows.count == 1
-else { fail("expected one native window") }
-let window = windows[0]
+var nativeWindow: AXUIElement?
+for _ in 0..<40 {
+  var windowsValue: CFTypeRef?
+  if AXUIElementCopyAttributeValue(app, kAXWindowsAttribute as CFString, &windowsValue)
+    == .success, let windows = windowsValue as? [AXUIElement], windows.count == 1
+  {
+    nativeWindow = windows[0]
+    break
+  }
+  Thread.sleep(forTimeInterval: 0.2)
+}
+guard let window = nativeWindow else { fail("expected one native window after bounded wait") }
 func attribute(_ node: AXUIElement, _ key: CFString) -> String {
   var value: CFTypeRef?
   guard AXUIElementCopyAttributeValue(node, key, &value) == .success else { return "" }
@@ -118,14 +124,23 @@ print("MACOS_KEYBOARD_FOCUS_FORWARD_REVERSE_PASS")
 // The action is sent as a genuine Space key, NOT AXPress or a direct Rust hash call.
 for (id, digest) in fixtures {
   var found = false
-  for _ in 0..<7 {
-    if focused()?.title.hasPrefix(id + " (") == true {
+  var visited = [String]()
+  // The UI gained an additional collapsed fixture group, relationship and
+  // comparison controls. Seven Tabs no longer cover a full focus cycle
+  // after Verify repaints the native screen. This bounded search still uses
+  // genuine keyboard Tab only; it never programmatically AXPresses controls.
+  for _ in 0..<28 {
+    let title = focused()?.title ?? "<nil>"
+    if title.hasPrefix(id + " (") {
       found = true
       break
     }
+    visited.append(title)
     tab()
   }
-  guard found else { fail("Tab cannot reach selector \(id)") }
+  guard found else {
+    fail("Tab cannot reach selector \(id) after bounded traversal: \(visited.suffix(8))")
+  }
   space()
   for _ in 0..<7 {
     if focused()?.title == "Verify synthetic SHA-256" { break }
