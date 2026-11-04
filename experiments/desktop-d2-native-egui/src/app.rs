@@ -1721,6 +1721,9 @@ impl MedOriginNativePreview {
             Next,
             Mark,
             Reset,
+            SetType(RecoveredResourceTypeFilter),
+            Search(&'static str),
+            Select(usize),
         }
         let mut action: Option<FocusAction> = None;
         ui.heading("Fictional patient context");
@@ -1739,6 +1742,65 @@ impl MedOriginNativePreview {
                 }
             }
         });
+        ui.separator();
+        ui.heading("Source-verified resource browser");
+        ui.label("Choose a reviewed resource type or identity keyword; there is no free-text patient input.");
+        ui.horizontal_wrapped(|ui| {
+            for kind in [
+                RecoveredResourceTypeFilter::All,
+                RecoveredResourceTypeFilter::Patient,
+                RecoveredResourceTypeFilter::Encounter,
+                RecoveredResourceTypeFilter::Observation,
+            ] {
+                if ui.button(format!("Focus: Type {}", kind.label())).clicked() {
+                    action = Some(FocusAction::SetType(kind));
+                }
+            }
+        });
+        ui.horizontal_wrapped(|ui| {
+            for (label, query) in [
+                ("All", ""),
+                ("Patient", "patient"),
+                ("Encounter", "encounter"),
+                ("Observation", "observation"),
+            ] {
+                if ui.button(format!("Focus: Find {label}")).clicked() {
+                    action = Some(FocusAction::Search(query));
+                }
+            }
+        });
+        ui.label(format!(
+            "Focus: Active type {} | identity keyword {}",
+            self.encrypted_readback_filter.label(),
+            if self.encrypted_readback_query.is_empty() {
+                "All"
+            } else {
+                self.encrypted_readback_query.as_str()
+            }
+        ));
+        ui.strong(format!(
+            "Focus: {} of 3 source-verified fictional resources visible",
+            self.recovered_visible_count()
+        ));
+        let mut visible = 0usize;
+        for (index, resource) in resources.iter().enumerate() {
+            if !self.recovered_search_matches(resource) {
+                continue;
+            }
+            visible += 1;
+            if ui
+                .button(format!(
+                    "Focus: Inspect {}/{}",
+                    resource.resource_type, resource.resource_id
+                ))
+                .clicked()
+            {
+                action = Some(FocusAction::Select(index));
+            }
+        }
+        if visible == 0 {
+            ui.label("No fictional resources match the chosen type and identity keyword.");
+        }
         ui.separator();
         ui.strong(format!(
             "Fictional walkthrough: {} of 3 visited this session",
@@ -1812,6 +1874,15 @@ impl MedOriginNativePreview {
             }
             Some(FocusAction::Reset) => {
                 let _ = self.reset_fictional_walkthrough();
+            }
+            Some(FocusAction::SetType(kind)) => {
+                self.set_recovered_type_filter(kind);
+            }
+            Some(FocusAction::Search(query)) => {
+                let _ = self.set_recovered_search_query(query);
+            }
+            Some(FocusAction::Select(index)) => {
+                let _ = self.select_encrypted_readback_resource(index);
             }
             None => {}
         }
@@ -2457,6 +2528,77 @@ impl eframe::App for MedOriginNativePreview {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn focused_browser_filters_source_verified_resources_and_refuses_hidden_selection() {
+        for raw in [
+            include_bytes!("../fixtures/core/encrypted-readback-projection.json").as_slice(),
+            include_bytes!("../fixtures/core/encrypted-persistent-readback-projection.json")
+                .as_slice(),
+        ] {
+            let mut app =
+                MedOriginNativePreview::from_one_time_synthetic_encrypted_readback_stdin(raw)
+                    .unwrap();
+            app.set_focused_fictional_workspace(true).unwrap();
+            assert_eq!(app.recovered_visible_count(), 3);
+            app.set_recovered_type_filter(RecoveredResourceTypeFilter::Patient);
+            assert_eq!(app.recovered_visible_count(), 1);
+            app.set_recovered_search_query("encounter").unwrap();
+            assert_eq!(app.recovered_visible_count(), 0);
+            assert_eq!(app.encrypted_readback_selected, None);
+            assert!(app.encrypted_readback.is_some());
+            app.set_recovered_type_filter(RecoveredResourceTypeFilter::Encounter);
+            assert_eq!(app.recovered_visible_count(), 1);
+            let chart =
+                verified_fictional_patient_chart(app.encrypted_readback.as_ref().unwrap()).unwrap();
+            app.select_encrypted_readback_resource(chart.encounter)
+                .unwrap();
+            assert_eq!(app.encrypted_readback_selected, Some(chart.encounter));
+            app.set_recovered_search_query("patient").unwrap();
+            assert_eq!(app.recovered_visible_count(), 0);
+            assert_eq!(app.encrypted_readback_selected, None);
+            app.set_recovered_type_filter(RecoveredResourceTypeFilter::All);
+            assert_eq!(app.recovered_visible_count(), 1);
+            app.select_encrypted_readback_resource(chart.patient)
+                .unwrap();
+            assert_eq!(app.encrypted_readback_selected, Some(chart.patient));
+            app.set_recovered_search_query("").unwrap();
+            assert_eq!(app.recovered_visible_count(), 3);
+            app.set_focused_fictional_workspace(false).unwrap();
+            assert!(app.encrypted_readback.is_some());
+            app.set_focused_fictional_workspace(true).unwrap();
+            assert_eq!(app.recovered_visible_count(), 3);
+            assert_eq!(app.encrypted_readback_selected, None);
+        }
+    }
+
+    #[test]
+    fn focused_browser_source_type_and_search_guards_fail_closed_for_hidden_and_invalid_data() {
+        let raw = include_bytes!("../fixtures/core/encrypted-readback-projection.json");
+        let mut app =
+            MedOriginNativePreview::from_one_time_synthetic_encrypted_readback_stdin(raw).unwrap();
+        app.set_focused_fictional_workspace(true).unwrap();
+        app.set_recovered_type_filter(RecoveredResourceTypeFilter::Patient);
+        let chart =
+            verified_fictional_patient_chart(app.encrypted_readback.as_ref().unwrap()).unwrap();
+        assert_eq!(
+            app.select_encrypted_readback_resource(chart.observation),
+            Err("encrypted_readback_filtered_resource_refused")
+        );
+        assert!(!app.focused_workspace_visible);
+        assert!(app.encrypted_readback.is_none());
+
+        let mut app =
+            MedOriginNativePreview::from_one_time_synthetic_encrypted_readback_stdin(raw).unwrap();
+        app.set_focused_fictional_workspace(true).unwrap();
+        assert_eq!(
+            app.set_recovered_search_query("real patient@example.com"),
+            Err("fictional_search_unreviewed_characters_or_length")
+        );
+        assert!(!app.focused_workspace_visible);
+        assert!(app.encrypted_readback.is_none());
+        assert_eq!(app.recovered_visible_count(), 0);
+    }
 
     #[test]
     fn focused_workspace_switch_preserves_verified_source_and_never_promotes_clinical_use() {

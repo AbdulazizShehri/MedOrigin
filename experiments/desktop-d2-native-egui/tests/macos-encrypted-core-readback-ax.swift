@@ -134,6 +134,39 @@ guard eventuallyText("MedOrigin focused Workspace"),
       textPresent("3 fictional identities | encrypted reopen: true | audit: true"),
       textPresent("Source: Ephemeral encrypted QA test vault, removed after readback")
 else { noGo("focused native fictional Workspace home missing") }
+guard eventuallyText("Source-verified resource browser"),
+      eventuallyText("Focus: 3 of 3 source-verified fictional resources visible")
+else { noGo("focused verified resource browser missing") }
+press("Focus: Type Patient")
+guard eventuallyText("Focus: 1 of 3 source-verified fictional resources visible")
+else { noGo("focused type facet did not narrow to Patient") }
+if textPresent("Focus: Inspect Observation/fictional-observation-001") {
+  noGo("focused Patient type facet leaked Observation row")
+}
+press("Focus: Find Encounter")
+guard eventuallyText("Focus: 0 of 3 source-verified fictional resources visible"),
+      eventuallyText("No fictional resources match the chosen type and identity keyword.")
+else { noGo("focused type and identity keyword did not compose") }
+press("Focus: Type Encounter")
+guard eventuallyText("Focus: 1 of 3 source-verified fictional resources visible")
+else { noGo("focused Encounter facet did not restore one result") }
+press("Focus: Inspect Encounter/fictional-encounter-001")
+guard eventuallyText("Focused fictional record: Encounter/fictional-encounter-001")
+else { noGo("focused selected visible Encounter source row did not open") }
+press("Focus: Find All")
+press("Focus: Type All")
+guard eventuallyText("Focus: 3 of 3 source-verified fictional resources visible")
+else { noGo("focused filters did not restore full verified Core worklist") }
+press("Focus: Find Observation")
+guard eventuallyText("Focus: 1 of 3 source-verified fictional resources visible")
+else { noGo("focused Observation search did not narrow source worklist") }
+press("Focus: Inspect Observation/fictional-observation-001")
+guard eventuallyText("Focused fictional record: Observation/fictional-observation-001")
+else { noGo("focused filtered source Observation row did not open") }
+press("Focus: Find All")
+guard eventuallyText("Focus: 3 of 3 source-verified fictional resources visible")
+else { noGo("focused keyword clearing did not restore source worklist") }
+print("MACOS_NATIVE_FOCUSED_SOURCE_BROWSER_FILTER_SEARCH_OPEN_AX_PASS_NONCLINICAL")
 press("Focus: Open Patient")
 guard eventuallyText("Focused fictional record: Patient/fictional-patient-001")
 else { noGo("focused patient not source-linked") }
