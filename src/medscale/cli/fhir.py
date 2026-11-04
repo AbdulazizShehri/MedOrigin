@@ -86,8 +86,42 @@ def _workspace_demo_main(argv: list[str]) -> int:
     return 0
 
 
+def _workspace_catalog_demo_main(argv: list[str]) -> int:
+    parser = argparse.ArgumentParser(
+        prog="medscale fhir workspace-catalog-demo",
+        description=(
+            "Ephemeral, offline synthetic-only encrypted FHIR import catalog; "
+            "no arbitrary file, real patient data, EHR or clinical conformance."
+        ),
+    )
+    parser.add_argument("--synthetic-only", action="store_true")
+    parser.add_argument("--ephemeral-demo", action="store_true")
+    if argv in (["-h"], ["--help"]):
+        print(parser.format_help())
+        return 0
+    # Exact flag admission: never echo unknown source filenames, tokens
+    # or patient-like text through argparse's default errors.
+    if len(argv) != 2 or set(argv) != {"--synthetic-only", "--ephemeral-demo"}:
+        print("catalog demo refused: explicit_synthetic_demo_flags_required", file=sys.stderr)
+        return 2
+    try:
+        from medscale.fhirkit.workspace_catalog_demo import receipt_json
+
+        result = receipt_json()
+    except ImportError:
+        print("catalog demo unavailable: optional_workspace_runtime_missing", file=sys.stderr)
+        return 2
+    except Exception:
+        print("catalog demo refused: encrypted_synthetic_catalog_blocked", file=sys.stderr)
+        return 2
+    print(result)
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     tokens = list(sys.argv[1:] if argv is None else argv)
+    if tokens and tokens[0] == "workspace-catalog-demo":
+        return _workspace_catalog_demo_main(tokens[1:])
     if tokens and tokens[0] == "workspace-demo":
         return _workspace_demo_main(tokens[1:])
     if tokens and tokens[0] == "bundle-preflight":
