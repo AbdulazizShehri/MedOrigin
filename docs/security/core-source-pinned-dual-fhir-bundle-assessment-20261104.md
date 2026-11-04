@@ -119,3 +119,91 @@ third-party security review (#603), full Developer Beta/GUI
 negative-truth reconciliation (#882), dependency advisory
 closure (#622), native executable launcher integrity (#893),
 actual hosted CI, and founder release permission (#574).
+
+
+## Final source, offline package and native installed Windows evidence
+
+**Functional commit:** `a6ddce33ac21d8484839fd1a56d91fd3f6d9ccc6`.
+Broad source Core/Workspace/crypto/audit/FHIR suite, with the
+**real SHA-pinned official** HL7 R4 archive configured and isolated
+`jsonschema==4.25.1`: **379 PASS, 3 DESELECTED**, zero
+test failures. Ruff check+format and Git whitespace PASS. Focused
+new command suite: **22 PASS** with the exact permanent official
+FHIR R4 v4.0.1 archive. Verified archive SHA256
+`75e5560da3cf503895a44c8ca7af17a83b4cca6c2cb5ba1883d2aec0d1cb5ac6`.
+One real source fixture proves the official schema detects a
+mis-typed Patient `active` in an otherwise correctly linked
+Bundle; a structurally passing fictional Bundle returns
+`not_validated` and the wrong type `invalid`, never
+`valid` or full R4 conformance.
+
+A task-only Windows **exact HEAD Git** checkout supplied
+`scripts/stage_medorigin_core_projection.py`. It generated a
+source-attested Core projection of **266 files**, with
+`source_git_commit=a6ddce33...` and
+`publication_authorized=false`. The projection was copied
+to a disposable **Ubuntu WSL2 ext4** build directory for
+`uv build --offline --no-create-gitignore`. An initial
+unqualified build was rejected by the existing strict
+source-bound Wheel gate due to incorrect POSIX permission bits
+inherited from Windows NTFS. This rejection was **not ignored**:
+the files in the **task-only WSL projection** were normalized
+to 0644, directories 0755, then rebuilt offline without
+changing any committed source, root pyproject, lock file,
+system Python or protected main.
+
+The corrected, local, **unpublished** artifacts are:
+
+- Core Wheel `medscale-0.3.0-py3-none-any.whl` SHA256:
+  `0c7930553d7e9dd70ac53a45deade66d5b4166731210855c78aa06cdf78336c1`
+- Core sdist `medscale-0.3.0.tar.gz` SHA256:
+  `973b986f652872680ac41eb5203b995bed0a3d061446687bb6c9f49eed392df3`
+
+The repository's independent, **Windows Git-backed** exact
+source-bound Core Wheel identity,
+`SOURCE_BOUND_WHEEL_QUALIFIED_ONLY`, sdist publication-scope,
+`SDIST_SCOPE_QUALIFIED_ONLY`, and wheel metadata,
+`METADATA_QUALIFIED_ONLY`, returned **ZERO issues each**.
+Five Core FHIR modules including the new
+`bundle_assessment.py` and CLI `fhir.py` matched the
+built Wheel members **byte-for-byte**.
+
+The exact SHA-checked Wheel was installed locally with
+`pip --no-index --no-deps --target` into a **task-only
+Windows package directory**; no global/site Python
+installation, registry, release or signed launcher changed.
+An independent test script forced six imported Core modules
+to resolve strictly **inside that installed Wheel target**,
+not from Git/source checkout. The *real installed public
+Python Core dispatcher* `fhir bundle-assess` executed with
+the **same official pinned HL7 R4 ZIP** and separate qualified
+`jsonschema==4.25.1` dependencies on:
+
+- Native Windows **Python 3.14**.
+- Native Windows **Python 3.11.15**, with a separately
+  installed task-only pinned jsonschema dependency tree.
+- Native Windows **Python 3.12.13**, with its own separate
+  task-only pinned jsonschema dependency tree.
+
+On **all three** runtimes, two actually executed fictional
+sources passed independently: correctly typed, locally linked
+Bundle -> `r4_structural_status=not_validated`,
+`issue.severity=warning` and **exit2**; same local
+links but `Patient.active` wrong type ->
+`r4_structural_status=invalid`, error+warning and
+**exit2**. Printed receipts contained no patient name,
+resource identity, fullUrl, input path or schema path.
+No local report was written. All full FHIR conformance,
+clinical, and publication flags were explicitly FALSE.
+Source-independent installed package import provenance was
+checked for each runtime. This does NOT independently qualify
+the native Windows `medscale.exe` shim (#893).
+
+**These are author-side exact-source technical tests, not hosted
+CI, full R4 validator qualification, clinical review or
+release approval.** The pre-existing release gates, including
+historically RED full Beta/Browser QA (#882), production
+key custody/RBAC, dependency advisories (#622), independent
+security (#603), clinical review, FHIRPath/profiles/terminology
+(#877), Windows shim (#893) and founder authority (#574),
+remain **NO-GO**. No publication or main merge.
