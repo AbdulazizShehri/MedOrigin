@@ -245,6 +245,28 @@ jobs:
           & $py -m unittest discover -s experiments/desktop-d2-native-egui/scripts -p test_windows_live_core_workspace_gui.py -v
           if ($LASTEXITCODE -ne 0) { throw 'Windows live Core Workspace-to-D2 synthetic safety source checks failed' }
           Write-Output 'WINDOWS_LIVE_CORE_WORKSPACE_GUI_SOURCE_ONLY_NOT_HOSTED_FUNCTIONAL_PROOF'
+      - name: Source-bound Core encrypted readback into native D2 QA guards
+        shell: pwsh
+        run: |
+          $py = if ($IsWindows) { 'python' } else { 'python3' }
+          & $py -m unittest discover -s experiments/desktop-d2-native-egui/scripts -p test_encrypted_readback_projection_source.py -v
+          if ($LASTEXITCODE -ne 0) { throw 'Encrypted Core readback GUI source controls failed' }
+          Write-Output 'CORE_ENCRYPTED_READBACK_SOURCE_ONLY_NO_HOSTED_CLINICAL_OR_ACTUAL_GUI_CLAIM'
+      - name: Parse Windows real encrypted Core memory-readback GUI QA source
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $path = 'experiments/desktop-d2-native-egui/tests/windows-encrypted-core-readback-uia.ps1'
+          $tokens = $null
+          $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile(
+            (Resolve-Path $path).Path, [ref]$tokens, [ref]$errors
+          ) | Out-Null
+          if (@($errors).Count -ne 0) { throw 'Encrypted Core readback native UIA PowerShell syntax invalid' }
+          if (-not (Get-Content -LiteralPath $path -Raw).Contains('WINDOWS_REAL_ENCRYPTED_CORE_READBACK_THREE_RESOURCES_LINK_AND_BACK_UIA_PASS_NOT_CLINICAL')) {
+            throw 'Encrypted Core readback GUI functional QA marker missing'
+          }
+          Write-Output 'WINDOWS_ENCRYPTED_READBACK_UIA_SOURCE_SYNTAX_ONLY_NOT_ACTUAL_INTERACTION'
       - name: Verify checks did not alter tracked code or lockfiles
         shell: pwsh
         run: |
