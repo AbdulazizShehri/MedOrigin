@@ -4,6 +4,9 @@ use crate::core_provenance::{
     CoreProvenanceReceipt, FictionalCoreInput, PINNED_CORE_CASE_LABELS,
     admit_exact_source_reviewed_external_core_report, inspect_pinned_core_report,
 };
+use crate::encrypted_import_catalog::{
+    FictionalEncryptedImportCatalog, admit_exact_fictional_import_history,
+};
 use crate::encrypted_readback::{
     FictionalEncryptedReadback, admit_exact_encrypted_readback_projection,
 };
@@ -586,6 +589,9 @@ pub struct MedOriginNativePreview {
     core_report_notice: Option<&'static str>,
     external_core_source_visible: bool,
     encrypted_workspace_receipt: Option<FictionalEncryptedWorkspaceReceipt>,
+    encrypted_import_catalog: Option<FictionalEncryptedImportCatalog>,
+    encrypted_import_catalog_external: bool,
+    encrypted_import_selected: Option<usize>,
     encrypted_readback: Option<FictionalEncryptedReadback>,
     encrypted_readback_source_external: bool,
     encrypted_readback_selected: Option<usize>,
@@ -654,6 +660,37 @@ impl MedOriginNativePreview {
             encrypted_readback_source_external: true,
             ..Default::default()
         })
+    }
+
+    pub fn from_one_time_synthetic_import_history_stdin(raw: &[u8]) -> Result<Self, &'static str> {
+        let catalog = admit_exact_fictional_import_history(raw)?;
+        Ok(Self {
+            encrypted_import_catalog: Some(catalog),
+            encrypted_import_catalog_external: true,
+            ..Default::default()
+        })
+    }
+
+    pub fn has_external_synthetic_import_history(&self) -> bool {
+        self.encrypted_import_catalog_external && self.encrypted_import_catalog.is_some()
+    }
+
+    fn select_encrypted_import(&mut self, index: usize) -> Result<(), &'static str> {
+        if self
+            .encrypted_import_catalog
+            .as_ref()
+            .and_then(|catalog| catalog.imports.get(index))
+            .is_none()
+        {
+            self.clear_fictional_output();
+            return Err("fictional_import_history_index_refused");
+        }
+        self.encrypted_import_selected = Some(index);
+        Ok(())
+    }
+
+    fn back_to_import_history(&mut self) {
+        self.encrypted_import_selected = None;
     }
 
     pub fn has_external_synthetic_encrypted_readback(&self) -> bool {
@@ -757,6 +794,9 @@ impl MedOriginNativePreview {
         self.core_report_notice = None;
         self.external_core_source_visible = false;
         self.encrypted_workspace_receipt = None;
+        self.encrypted_import_catalog = None;
+        self.encrypted_import_catalog_external = false;
+        self.encrypted_import_selected = None;
         self.encrypted_readback = None;
         self.encrypted_readback_source_external = false;
         self.encrypted_readback_selected = None;
@@ -785,6 +825,9 @@ impl MedOriginNativePreview {
         self.core_report_notice = None;
         self.external_core_source_visible = false;
         self.encrypted_workspace_receipt = None;
+        self.encrypted_import_catalog = None;
+        self.encrypted_import_catalog_external = false;
+        self.encrypted_import_selected = None;
         self.encrypted_readback = None;
         self.encrypted_readback_source_external = false;
         self.encrypted_readback_selected = None;
@@ -1305,6 +1348,64 @@ impl eframe::App for MedOriginNativePreview {
                         }
                     }
                 });
+            // Historical import identities are derived by actual encrypted
+            // Core Workspace catalog verification. Only source-approved fixed
+            // fictional metadata; this is NOT a patient record navigator.
+            egui::CollapsingHeader::new("Encrypted import history — two fictional imports")
+                .default_open(self.encrypted_import_catalog_external)
+                .show(ui, |ui| {
+                    ui.strong("Historical synthetic FHIR imports from encrypted Core — NOT validated");
+                    ui.label("No EHR, clinical data, production key, sender authentication, or FHIR R4 validation.");
+                    let mut select = None;
+                    if let Some(catalog) = &self.encrypted_import_catalog {
+                        ui.label(format!(
+                            "Verified encrypted fictional import count: {}",
+                            catalog.imports.len()
+                        ));
+                        ui.label(format!("Total fictional resources across imports: {}", catalog.resource_count));
+                        ui.label(format!("Verified audit events across imports: {}", catalog.verified_audit_events));
+                        ui.label(format!("Ephemeral encrypted catalog store removed: {}", catalog.ephemeral_store_removed));
+                        ui.monospace(format!("Source-approved encrypted catalog SHA-256: {}", catalog.report_sha256));
+                        ui.strong(catalog.disclosure);
+                        for (index, entry) in catalog.imports.iter().enumerate() {
+                            if ui.button(format!(
+                                "Open encrypted fictional import {} ({} resources)",
+                                index + 1,
+                                entry.resource_count
+                            )).clicked() {
+                                select = Some(index);
+                            }
+                        }
+                        if let Some(index) = self.encrypted_import_selected
+                            && let Some(selected) = catalog.imports.get(index)
+                        {
+                            ui.strong(format!(
+                                "Selected encrypted fictional import: {}",
+                                index + 1
+                            ));
+                            ui.label(format!("Fictional resources in selected import: {}", selected.resource_count));
+                            ui.label(format!("Verified import audit sequence: {}", selected.audit_sequence));
+                            ui.monospace(format!("Original fictional Bundle source SHA-256: {}", selected.source_content_sha256));
+                            ui.monospace(format!("Import audit event digest: {}", selected.import_audit_event_digest));
+                            ui.label("Only digest metadata is available here. No FHIR body, keys, patient list or clinical permission.");
+                        }
+                    } else {
+                        ui.label("No Core encrypted import history loaded. Explicit fictional-only one-shot startup required.");
+                    }
+                    if let Some(index) = select {
+                        let _ = self.select_encrypted_import(index);
+                    }
+                    if self.encrypted_import_selected.is_some()
+                        && ui.button("Back to encrypted fictional import list").clicked()
+                    {
+                        self.back_to_import_history();
+                    }
+                    if self.encrypted_import_catalog.is_some()
+                        && ui.button("Clear encrypted import history").clicked()
+                    {
+                        self.clear_fictional_output();
+                    }
+                });
             // Source-bound result of actual decrypted Core Workspace memory
             // readback, not the six separate D0 compiled navigation fixtures.
             egui::CollapsingHeader::new("Encrypted Core readback — three recovered fictional resources")
@@ -1627,6 +1728,45 @@ impl eframe::App for MedOriginNativePreview {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn synthetic_encrypted_historical_import_worklist_select_back_and_clear() {
+        let raw = include_bytes!("../fixtures/core/encrypted-import-catalog-demo.json");
+        let mut app = MedOriginNativePreview::from_one_time_synthetic_import_history_stdin(raw)
+            .expect("source-pinned metadata-only Core encrypted import catalog");
+        assert!(app.has_external_synthetic_import_history());
+        assert!(!app.has_external_synthetic_encrypted_readback());
+        assert_eq!(
+            app.encrypted_import_catalog.as_ref().unwrap().imports.len(),
+            2
+        );
+        app.select_encrypted_import(0).unwrap();
+        assert_eq!(app.encrypted_import_selected, Some(0));
+        assert_eq!(
+            app.encrypted_import_catalog.as_ref().unwrap().imports[0].resource_count,
+            3
+        );
+        app.select_encrypted_import(1).unwrap();
+        assert_eq!(app.encrypted_import_selected, Some(1));
+        assert_eq!(
+            app.encrypted_import_catalog.as_ref().unwrap().imports[1].audit_sequence,
+            3
+        );
+        app.back_to_import_history();
+        assert!(app.encrypted_import_selected.is_none());
+        app.select_encrypted_import(usize::MAX)
+            .expect_err("unknown import must refuse");
+        assert!(!app.has_external_synthetic_import_history());
+        assert!(app.encrypted_import_catalog.is_none());
+        assert!(app.encrypted_import_selected.is_none());
+        let mut app =
+            MedOriginNativePreview::from_one_time_synthetic_import_history_stdin(raw).unwrap();
+        app.select_encrypted_import(0).unwrap();
+        app.clear_fictional_output();
+        assert!(app.encrypted_import_catalog.is_none());
+        assert!(app.encrypted_import_selected.is_none());
+        assert!(!app.has_external_synthetic_import_history());
+    }
 
     #[test]
     fn recovered_encrypted_core_resources_have_live_source_projected_navigation() {

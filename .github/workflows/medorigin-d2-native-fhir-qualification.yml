@@ -274,6 +274,28 @@ jobs:
           & $py -m unittest discover -s experiments/desktop-d2-native-egui/scripts -p test_attest_installed_encrypted_readback.py -v
           if ($LASTEXITCODE -ne 0) { throw 'Offline Core Wheel/source/install byte-integrity adversarial guards failed' }
           Write-Output 'INSTALLED_PYTHON_TWO_WHEELS_ADVERSARIAL_SOURCE_TESTS_ONLY_NOT_HOSTED_RUNTIME_PROOF'
+      - name: Test exact synthetic encrypted historical Core import catalog interface
+        shell: pwsh
+        run: |
+          $py = if ($IsWindows) { 'python' } else { 'python3' }
+          & $py -m unittest discover -s experiments/desktop-d2-native-egui/scripts -p test_encrypted_import_catalog_source.py -v
+          if ($LASTEXITCODE -ne 0) { throw 'Historical encrypted Core import catalog source/clinical-gate tests failed' }
+          Write-Output 'SOURCE_COMPILED_ENCRYPTED_HISTORY_NOT_LIVE_HOSTED_GUI_OR_CLINICAL'
+      - name: Parse Windows encrypted historical import native UIAutomation source
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $path = 'experiments/desktop-d2-native-egui/tests/windows-encrypted-import-catalog-uia.ps1'
+          $tokens = $null
+          $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile(
+            (Resolve-Path $path).Path, [ref]$tokens, [ref]$errors
+          ) | Out-Null
+          if (@($errors).Count -ne 0) { throw 'Historical import native Windows UIA PowerShell syntax invalid' }
+          if (-not (Get-Content -LiteralPath $path -Raw).Contains('WINDOWS_REAL_ENCRYPTED_CORE_TWO_HISTORICAL_IMPORTS_NATIVE_UIA_PASS_NOT_CLINICAL')) {
+            throw 'Historical import GUI QA marker missing'
+          }
+          Write-Output 'WINDOWS_HISTORICAL_IMPORT_GUI_SYNTAX_ONLY_NOT_REAL_UIA'
       - name: Verify checks did not alter tracked code or lockfiles
         shell: pwsh
         run: |

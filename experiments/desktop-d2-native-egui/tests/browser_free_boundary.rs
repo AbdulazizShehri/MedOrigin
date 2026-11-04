@@ -113,6 +113,7 @@ fn audited_native_source_files(root: &Path) -> Vec<PathBuf> {
         [
             "app.rs",
             "core_provenance.rs",
+            "encrypted_import_catalog.rs",
             "encrypted_readback.rs",
             "lib.rs",
             "main.rs",
@@ -292,6 +293,7 @@ fn guard_refuses_unreviewed_nested_module_layout() {
     for name in [
         "app.rs",
         "core_provenance.rs",
+        "encrypted_import_catalog.rs",
         "encrypted_readback.rs",
         "lib.rs",
         "main.rs",
@@ -299,7 +301,7 @@ fn guard_refuses_unreviewed_nested_module_layout() {
     ] {
         fs::write(root.join(name), "// synthetic, no execution").expect("fixture");
     }
-    assert_eq!(audited_native_source_files(&root).len(), 6);
+    assert_eq!(audited_native_source_files(&root).len(), 7);
     let nested = root.join("hidden");
     fs::create_dir(&nested).expect("create nested fixture");
     fs::write(nested.join("socket.rs"), "// unreviewed nested source").expect("fixture");
