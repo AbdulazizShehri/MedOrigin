@@ -122,6 +122,33 @@ for label in [
 ] {
   guard textPresent(label) else { noGo("native Workspace home absent: " + label) }
 }
+guard textPresent("Fictional session walkthrough: 0 of 3 identities visited")
+else { noGo("fictional session walkthrough did not start empty") }
+press("Open next unvisited fictional identity")
+guard textPresent("Recovered fictional record: Patient/fictional-patient-001")
+else { noGo("walkthrough did not start from fictional Patient") }
+press("Mark fictional identity visited (demo only)")
+guard textPresent("Fictional session walkthrough: 1 of 3 identities visited")
+else { noGo("fictional patient walkthrough not recorded in memory") }
+press("Open next unvisited fictional identity")
+guard textPresent("Recovered fictional record: Encounter/fictional-encounter-001")
+else { noGo("fictional walkthrough next Encounter missing") }
+press("Mark fictional identity visited (demo only)")
+guard textPresent("Fictional session walkthrough: 2 of 3 identities visited")
+else { noGo("fictional encounter walkthrough not recorded in memory") }
+press("Open next unvisited fictional identity")
+guard textPresent("Recovered fictional record: Observation/fictional-observation-001")
+else { noGo("fictional walkthrough next Observation missing") }
+press("Mark fictional identity visited (demo only)")
+guard textPresent("Fictional session walkthrough: 3 of 3 identities visited")
+else { noGo("fictional walkthrough did not complete all three") }
+press("Open next unvisited fictional identity")
+guard textPresent("All three fictional walkthrough steps complete (session only)")
+else { noGo("fictional walkthrough completion notice missing") }
+press("Reset fictional walkthrough (session only)")
+guard textPresent("Fictional session walkthrough: 0 of 3 identities visited")
+else { noGo("fictional walkthrough reset did not clear in-memory progress") }
+print("MACOS_NATIVE_FICTIONAL_WALKTHROUGH_3_RESOURCES_AX_PASS_NOT_CLINICAL")
 press("Open workspace home: fictional patient chart")
 guard textPresent("Recovered fictional record: Patient/fictional-patient-001"),
       textPresent("Fictional patient chart: source-verified relationships"),

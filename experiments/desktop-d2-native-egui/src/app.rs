@@ -680,6 +680,9 @@ pub struct MedOriginNativePreview {
     encrypted_readback_history: Vec<usize>,
     encrypted_readback_filter: RecoveredResourceTypeFilter,
     encrypted_readback_query: String,
+    // Three source-verified imaginary identities only. In-memory demo UX
+    // walkthrough, NOT professional sign-off, triage or clinical review.
+    fictional_walkthrough_done: [bool; 3],
     encrypted_readback_notice: Option<&'static str>,
     workspace_report_external: bool,
     workspace_report_notice: Option<&'static str>,
@@ -810,6 +813,106 @@ impl MedOriginNativePreview {
                 self.clear_fictional_output();
                 self.encrypted_readback_notice =
                     Some("FAIL CLOSED: fictional patient chart member not verified");
+                Err(reason)
+            }
+        }
+    }
+
+    /// Mark one exact fictional source identity walked through in the current
+    /// GUI session. Never writes clinical status, audit, or database records.
+    fn mark_selected_fictional_walkthrough(&mut self) -> Result<(), &'static str> {
+        let candidate = (|| {
+            let readback = self
+                .encrypted_readback
+                .as_ref()
+                .ok_or("fictional_walkthrough_no_source")?;
+            verified_fictional_patient_chart(readback)?;
+            let index = self
+                .encrypted_readback_selected
+                .ok_or("fictional_walkthrough_no_selection")?;
+            if index >= readback.resources.len() || index >= self.fictional_walkthrough_done.len() {
+                return Err("fictional_walkthrough_selected_identity_refused");
+            }
+            Ok(index)
+        })();
+        match candidate {
+            Ok(index) => {
+                self.fictional_walkthrough_done[index] = true;
+                self.encrypted_readback_notice = None;
+                Ok(())
+            }
+            Err(reason) => {
+                self.clear_fictional_output();
+                self.encrypted_readback_notice =
+                    Some("FAIL CLOSED: fictional walkthrough source or identity not verified");
+                Err(reason)
+            }
+        }
+    }
+
+    /// A bounded source-derived walkthrough order (Patient, Encounter,
+    /// Observation). This is not a clinical priority or event chronology.
+    fn next_unvisited_fictional_resource(&mut self) -> Result<(), &'static str> {
+        let candidate = (|| {
+            let readback = self
+                .encrypted_readback
+                .as_ref()
+                .ok_or("fictional_walkthrough_no_source")?;
+            let chart = verified_fictional_patient_chart(readback)?;
+            if let Some(index) = self.encrypted_readback_selected
+                && index >= readback.resources.len()
+            {
+                return Err("fictional_walkthrough_stale_selection");
+            }
+            let order = [chart.patient, chart.encounter, chart.observation];
+            let start = self
+                .encrypted_readback_selected
+                .and_then(|index| order.iter().position(|item| *item == index))
+                .map_or(0, |index| (index + 1) % order.len());
+            Ok((0..order.len())
+                .map(|offset| order[(start + offset) % order.len()])
+                .find(|index| !self.fictional_walkthrough_done[*index]))
+        })();
+        match candidate {
+            Ok(Some(index)) => {
+                self.encrypted_readback_filter = RecoveredResourceTypeFilter::All;
+                self.encrypted_readback_query.clear();
+                self.encrypted_readback_selected = Some(index);
+                // A walkthrough jump is not a verified relationship edge.
+                self.encrypted_readback_history.clear();
+                self.encrypted_readback_notice = None;
+                Ok(())
+            }
+            Ok(None) => {
+                self.encrypted_readback_notice =
+                    Some("All three fictional walkthrough steps complete (session only)");
+                Err("fictional_walkthrough_all_visited")
+            }
+            Err(reason) => {
+                self.clear_fictional_output();
+                self.encrypted_readback_notice =
+                    Some("FAIL CLOSED: fictional walkthrough source graph changed");
+                Err(reason)
+            }
+        }
+    }
+
+    fn reset_fictional_walkthrough(&mut self) -> Result<(), &'static str> {
+        let checked = self
+            .encrypted_readback
+            .as_ref()
+            .ok_or("fictional_walkthrough_no_source")
+            .and_then(verified_fictional_patient_chart);
+        match checked {
+            Ok(_) => {
+                self.fictional_walkthrough_done = [false; 3];
+                self.encrypted_readback_notice = None;
+                Ok(())
+            }
+            Err(reason) => {
+                self.clear_fictional_output();
+                self.encrypted_readback_notice =
+                    Some("FAIL CLOSED: fictional walkthrough reset source refused");
                 Err(reason)
             }
         }
@@ -1068,6 +1171,7 @@ impl MedOriginNativePreview {
         self.encrypted_readback_history.clear();
         self.encrypted_readback_filter = RecoveredResourceTypeFilter::All;
         self.encrypted_readback_query.clear();
+        self.fictional_walkthrough_done = [false; 3];
         self.encrypted_readback_notice = None;
         self.workspace_report_external = false;
         self.workspace_report_notice = None;
@@ -1098,6 +1202,7 @@ impl MedOriginNativePreview {
         self.encrypted_readback_history.clear();
         self.encrypted_readback_filter = RecoveredResourceTypeFilter::All;
         self.encrypted_readback_query.clear();
+        self.fictional_walkthrough_done = [false; 3];
         self.encrypted_readback_notice = None;
         self.workspace_report_external = false;
         self.workspace_report_notice = None;
@@ -1531,6 +1636,8 @@ impl eframe::App for MedOriginNativePreview {
             // through historical developer fixtures. It exposes no PHI and
             // cannot create a patient, write to SQLite, or launch Core.
             let mut open_home_chart = false;
+            let mut walkthrough_next = false;
+            let mut walkthrough_reset = false;
             ui.group(|ui| {
                 ui.heading("Workspace home: fictional Core source only");
                 if let Some(readback) = &self.encrypted_readback {
@@ -1554,6 +1661,18 @@ impl eframe::App for MedOriginNativePreview {
                     if ui.button("Open workspace home: fictional patient chart").clicked() {
                         open_home_chart = true;
                     }
+                    ui.separator();
+                    ui.strong(format!(
+                        "Fictional session walkthrough: {} of 3 identities visited",
+                        self.fictional_walkthrough_done.iter().filter(|done| **done).count()
+                    ));
+                    ui.label("Walkthrough means only a fictional demo navigation step; NOT clinician review, diagnosis or signed approval.");
+                    if ui.button("Open next unvisited fictional identity").clicked() {
+                        walkthrough_next = true;
+                    }
+                    if ui.button("Reset fictional walkthrough (session only)").clicked() {
+                        walkthrough_reset = true;
+                    }
                 } else {
                     ui.label("No verified encrypted Core Workspace is attached to this GUI session.");
                     ui.label("Launch the separate fictional-only portable Core demo to display verified identities.");
@@ -1561,6 +1680,12 @@ impl eframe::App for MedOriginNativePreview {
             });
             if open_home_chart {
                 let _ = self.open_recovered_fictional_patient_chart();
+            }
+            if walkthrough_next {
+                let _ = self.next_unvisited_fictional_resource();
+            }
+            if walkthrough_reset {
+                let _ = self.reset_fictional_walkthrough();
             }
             ui.separator();
             // Keep all four original controls visible in the same order.
@@ -1662,6 +1787,7 @@ impl eframe::App for MedOriginNativePreview {
                     let mut breadcrumb_jump = None;
                     let mut chart_open = false;
                     let mut chart_member = None;
+                    let mut mark_walkthrough = false;
                     let mut filter_change = None;
                     let mut search_change: Option<String> = None;
                     if let Some(readback) = &self.encrypted_readback {
@@ -1741,6 +1867,19 @@ impl eframe::App for MedOriginNativePreview {
                                     resource.resource_type, resource.resource_id
                                 ));
                                 ui.monospace(format!("Recovered entry reference: {}", resource.full_url));
+                                ui.label(format!(
+                                    "Fictional walkthrough status: {}",
+                                    if self.fictional_walkthrough_done[index] {
+                                        "visited this session"
+                                    } else {
+                                        "not visited"
+                                    }
+                                ));
+                                if !self.fictional_walkthrough_done[index]
+                                    && ui.button("Mark fictional identity visited (demo only)").clicked()
+                                {
+                                    mark_walkthrough = true;
+                                }
                                 let incoming_count = readback.resources.iter()
                                     .flat_map(|source| source.links.iter())
                                     .filter(|edge| edge.target == resource.full_url)
@@ -1835,6 +1974,9 @@ impl eframe::App for MedOriginNativePreview {
                     }
                     if let Some(index) = chart_member {
                         let _ = self.open_recovered_fictional_patient_chart_member(index);
+                    }
+                    if mark_walkthrough {
+                        let _ = self.mark_selected_fictional_walkthrough();
                     }
                     if let Some(index) = follow {
                         let _ = self.follow_encrypted_readback_link(index);
@@ -2113,6 +2255,93 @@ impl eframe::App for MedOriginNativePreview {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn fictional_session_walkthrough_visits_three_actual_core_identities_once() {
+        for raw in [
+            include_bytes!("../fixtures/core/encrypted-readback-projection.json").as_slice(),
+            include_bytes!("../fixtures/core/encrypted-persistent-readback-projection.json")
+                .as_slice(),
+        ] {
+            let mut app =
+                MedOriginNativePreview::from_one_time_synthetic_encrypted_readback_stdin(raw)
+                    .unwrap();
+            assert_eq!(app.fictional_walkthrough_done, [false; 3]);
+            app.next_unvisited_fictional_resource().unwrap();
+            assert_eq!(app.encrypted_readback_selected, Some(1)); // fictional Patient
+            app.mark_selected_fictional_walkthrough().unwrap();
+            assert_eq!(app.fictional_walkthrough_done, [false, true, false]);
+            app.set_recovered_search_query("encounter").unwrap();
+            assert_eq!(app.fictional_walkthrough_done, [false, true, false]);
+            app.next_unvisited_fictional_resource().unwrap();
+            assert!(app.encrypted_readback_query.is_empty());
+            assert_eq!(app.encrypted_readback_selected, Some(2)); // fictional Encounter
+            app.mark_selected_fictional_walkthrough().unwrap();
+            app.next_unvisited_fictional_resource().unwrap();
+            assert_eq!(app.encrypted_readback_selected, Some(0)); // fictional Observation
+            app.mark_selected_fictional_walkthrough().unwrap();
+            assert_eq!(app.fictional_walkthrough_done, [true; 3]);
+            assert_eq!(
+                app.next_unvisited_fictional_resource(),
+                Err("fictional_walkthrough_all_visited")
+            );
+            assert_eq!(app.encrypted_readback_selected, Some(0));
+            assert!(app.encrypted_readback_history.is_empty());
+            assert!(app.encrypted_readback.is_some());
+            assert_eq!(
+                app.encrypted_readback_notice,
+                Some("All three fictional walkthrough steps complete (session only)")
+            );
+            app.reset_fictional_walkthrough().unwrap();
+            assert_eq!(app.fictional_walkthrough_done, [false; 3]);
+            assert!(app.encrypted_readback_notice.is_none());
+            app.next_unvisited_fictional_resource().unwrap();
+            assert_eq!(app.encrypted_readback_selected, Some(1));
+            app.clear_fictional_output();
+            assert_eq!(app.fictional_walkthrough_done, [false; 3]);
+            assert!(app.encrypted_readback.is_none());
+        }
+    }
+
+    #[test]
+    fn fictional_walkthrough_rejects_unverified_graph_stale_index_and_no_selection() {
+        let raw = include_bytes!("../fixtures/core/encrypted-readback-projection.json");
+        let mut app =
+            MedOriginNativePreview::from_one_time_synthetic_encrypted_readback_stdin(raw).unwrap();
+        assert_eq!(
+            app.mark_selected_fictional_walkthrough(),
+            Err("fictional_walkthrough_no_selection")
+        );
+        assert!(app.encrypted_readback.is_none());
+        assert_eq!(app.fictional_walkthrough_done, [false; 3]);
+        let mut app =
+            MedOriginNativePreview::from_one_time_synthetic_encrypted_readback_stdin(raw).unwrap();
+        app.encrypted_readback_selected = Some(usize::MAX);
+        assert_eq!(
+            app.next_unvisited_fictional_resource(),
+            Err("fictional_walkthrough_stale_selection")
+        );
+        assert!(app.encrypted_readback.is_none());
+        let mut app =
+            MedOriginNativePreview::from_one_time_synthetic_encrypted_readback_stdin(raw).unwrap();
+        app.open_recovered_fictional_patient_chart().unwrap();
+        app.mark_selected_fictional_walkthrough().unwrap();
+        app.encrypted_readback.as_mut().unwrap().resources[0].links[1].target =
+            "urn:uuid:00000000-0000-4000-8000-000000000002".to_owned();
+        assert_eq!(
+            app.next_unvisited_fictional_resource(),
+            Err("fictional_patient_chart_unverified_relationship_refused")
+        );
+        assert!(app.encrypted_readback.is_none());
+        assert_eq!(app.fictional_walkthrough_done, [false; 3]);
+        let mut app =
+            MedOriginNativePreview::from_one_time_synthetic_encrypted_readback_stdin(raw).unwrap();
+        app.open_recovered_fictional_patient_chart().unwrap();
+        app.mark_selected_fictional_walkthrough().unwrap();
+        app.hash_selected().unwrap();
+        assert!(app.encrypted_readback.is_none());
+        assert_eq!(app.fictional_walkthrough_done, [false; 3]);
+    }
 
     #[test]
     fn fictional_patient_chart_reconciles_source_verified_encounter_observation_and_back() {
