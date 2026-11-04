@@ -267,6 +267,13 @@ jobs:
             throw 'Encrypted Core readback GUI functional QA marker missing'
           }
           Write-Output 'WINDOWS_ENCRYPTED_READBACK_UIA_SOURCE_SYNTAX_ONLY_NOT_ACTUAL_INTERACTION'
+      - name: Verify offline installed Core Wheel source integrity adversarial guards
+        shell: pwsh
+        run: |
+          $py = if ($IsWindows) { 'python' } else { 'python3' }
+          & $py -m unittest discover -s experiments/desktop-d2-native-egui/scripts -p test_attest_installed_encrypted_readback.py -v
+          if ($LASTEXITCODE -ne 0) { throw 'Offline Core Wheel/source/install byte-integrity adversarial guards failed' }
+          Write-Output 'INSTALLED_PYTHON_TWO_WHEELS_ADVERSARIAL_SOURCE_TESTS_ONLY_NOT_HOSTED_RUNTIME_PROOF'
       - name: Verify checks did not alter tracked code or lockfiles
         shell: pwsh
         run: |
