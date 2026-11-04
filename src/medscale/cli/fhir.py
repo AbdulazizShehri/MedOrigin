@@ -53,8 +53,43 @@ def _bundle_preflight_main(argv: list[str]) -> int:
     return 0
 
 
+def _workspace_demo_main(argv: list[str]) -> int:
+    parser = argparse.ArgumentParser(
+        prog="medscale fhir workspace-demo",
+        description=(
+            "Offline encrypted ephemeral Workspace proof with a built-in "
+            "fictional FHIR Bundle; NOT clinical validation or production use."
+        ),
+    )
+    parser.add_argument("--synthetic-only", action="store_true")
+    parser.add_argument("--ephemeral-demo", action="store_true")
+    if argv in (["-h"], ["--help"]):
+        print(parser.format_help())
+        return 0
+    # Exact token admission: argparse's default error echo can disclose
+    # an unknown file path or other caller-provided secret in stderr.
+    if len(argv) != 2 or set(argv) != {"--synthetic-only", "--ephemeral-demo"}:
+        print("workspace demo refused: explicit_synthetic_demo_flags_required", file=sys.stderr)
+        return 2
+    try:
+        from medscale.fhirkit.workspace_demo import receipt_json
+
+        result = receipt_json()
+    except ImportError:
+        print("workspace demo unavailable: optional_workspace_runtime_missing", file=sys.stderr)
+        return 2
+    except Exception:
+        # Never display caller paths, object contents or cryptographic material.
+        print("workspace demo refused: encrypted_synthetic_demo_blocked", file=sys.stderr)
+        return 2
+    print(result)
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     tokens = list(sys.argv[1:] if argv is None else argv)
+    if tokens and tokens[0] == "workspace-demo":
+        return _workspace_demo_main(tokens[1:])
     if tokens and tokens[0] == "bundle-preflight":
         return _bundle_preflight_main(tokens[1:])
     parser = argparse.ArgumentParser(

@@ -91,3 +91,44 @@ hosted CI, independently reviewed dependency vulnerabilities,
 independent clinical/security signoff, and #574, #603, #622, #877,
 #882 and #893 remain separate blocking gates. The draft is source
 qualification only until independently reviewed.
+
+
+## Native installed developer CLI — fixture is embedded (no checkout needed)
+
+An additional Core-only product command exercises the *fully installed*
+Core and Workspace packages without relying on the repository's
+`examples/` fixture or source checkout:
+
+```sh
+medscale fhir workspace-demo --synthetic-only --ephemeral-demo
+```
+
+The command requires two exact opt-in flags, uses a **fresh hardcoded
+three-record fictional Bundle** shipped with Core, creates one encrypted
+temporary Workspace with a freshly generated in-memory test key, saves
+3 resource objects + 3 provenance objects + 1 audit event atomically,
+closes and reopens to verify the audit chain, and deletes the temporary
+directory. It emits a single **redacted** JSON status and counts, with
+all clinical/conformance/release authorizations set `false`.
+It accepts **no external FHIR file, network address, EHR, key or
+persistent output destination**. Unknown tokens and supplied paths
+are refused with a fixed error code without echoing their value.
+
+The optional Workspace package must actually be installed; Core does
+not add `medscale-workspace` as a mandatory runtime dependency.
+The native generated console shim remains a separate unqualified
+attestation issue (#893), so **local installed-module invocation
+does not certify a generated `medscale.exe` launcher's origin**.
+
+`tests/test_core_portable_workspace_demo_cli.py` covers the real
+public Core dispatcher, successful encrypted ephemeral reopen,
+both flag requirements, no caller-input echo, negative error outputs
+and fresh independent fictional payload instances. The broader
+Windows Python3.14 selected functional suite: **100 PASS,
+2 DESELECTED**. Two historical raw-wheel tests in
+`tests/test_fhir_cli.py` failed at fixture setup because an expected
+external build executable was not available in that particular
+Windows test environment, **not because their assertions passed**;
+they were explicitly excluded in this test selection. Exact-source
+Wheel build, source identity and installed-binary smoke are separate
+gates, not inferred from the functional test selection.
