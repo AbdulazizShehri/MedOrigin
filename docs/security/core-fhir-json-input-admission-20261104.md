@@ -90,3 +90,53 @@ four-file Core FHIR/input suite on the changed worktree:
   qualifies the optional genuine R4 schema path.
 - All fixtures are fictional and no network or patient data used in
   the selected tests. No clinical or public release permission granted.
+
+## Additional exact-source artifact qualification — 2026-11-04
+
+**Source:** HEAD `423a681dec6f59089c742704c049d59e98bef853`.
+In the PC's native WSL Linux `ext4` filesystem, a task-only local Git clone
+was checked out to this exact SHA. The repository's existing, accepted
+`scripts/stage_medorigin_core_projection.py` projected a separate packaging
+tree, preserving the Git-frozen root, lock, MRL evidence and `src/medscale`
+bytes. Offline `uv build --no-create-gitignore` built both artifacts:
+
+- Source-qualified Wheel `medscale-0.3.0-py3-none-any.whl` SHA-256
+  `8f21b5256f259dfb9439d4f4908d12d8fc961fe0fcd1264610d4f85d4fccf052`.
+  Independent `check_core_wheel_source_identity.py` returned
+  `SOURCE_BOUND_WHEEL_QUALIFIED_ONLY`, **0 issues**, exit0.
+- Source-qualified sdist `medscale-0.3.0.tar.gz` SHA-256
+  `bdf0100386aa83cfed1b337b76eca3d231f17d1dd0f379e4d5cedb24cc7d5127`.
+  `check_sdist_publication_scope.py` returned
+  `SDIST_SCOPE_QUALIFIED_ONLY`, **0 issues**, exit0.
+
+**Honest negative controls:** A direct Wheel build on the Windows-mounted
+repository was rejected by the exact source gate for file-mode/source
+identity and metadata issues. A direct `ext4` checkout build without the
+approved projection was rejected for incorrect historical project URL
+metadata. These artifacts were **not** treated as qualified or published.
+Using the existing read-only Core projection, not modifying the frozen
+root, produced the two source-qualified artifacts above.
+
+The source-qualified Wheel was then copied to task-owned Windows QA,
+installed from a **local file only** with `pip --no-index --no-deps --target`
+under native Windows Python 3.14. The installed distribution contained
+`medscale/fhirkit/input.py`. Running the actual installed Core FHIR
+module from an isolated working directory and installed package path:
+
+- fictional Patient JSON: **exit 2, report.status=not_validated**, one report
+  stored as expected;
+- duplicate `resourceType` JSON: **exit 1**, `duplicate_json_key` warning,
+  **no report directory** created;
+- E2E harness returned `SOURCE_BOUND_INSTALLED_CORE_FHIR_INPUT_E2E_PASS`
+  / exit0.
+
+A separate Linux stdlib smoke at the same changed source demonstrated
+a normal synthetic JSON object accepted and both a real POSIX symlink
+and duplicated JSON key rejected, exit0. This is narrower than all-platform
+native complete testing.
+
+**Still no qualified public release:** optional extras #622, full FHIR R4
+conformance/clinical safety #877, independent security review #603, installed
+console-shim attestation #893, historic demo #882 and owner release authority
+#574 remain open. The Wheel/sdist are LOCAL TEST ARTIFACTS ONLY.
+No protected-main merge, tag, signing, package upload or patient-data use.
