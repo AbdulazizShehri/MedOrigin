@@ -164,6 +164,13 @@ jobs:
             throw 'Native fictional Workspace real GUI test marker is missing'
           }
           Write-Output 'WINDOWS_FICTIONAL_WORKSPACE_UIA_SOURCE_ONLY_NOT_HOSTED_GUI_APPROVAL'
+      - name: Verify installed-Wheel Core to Rust synthetic provenance source guards
+        shell: pwsh
+        run: |
+          $py = if ($IsWindows) { 'python' } else { 'python3' }
+          & $py -m unittest discover -s experiments/desktop-d2-native-egui/scripts -p test_qualify_installed_synthetic_core.py -v
+          if ($LASTEXITCODE -ne 0) { throw 'Installed Core wheel provenance/record negative guards failed' }
+          Write-Output 'INSTALLED_WHEEL_CORE_SOURCE_ONLY_NO_CI_INSTALL_OR_OS_SANDBOX_CLAIM'
       - name: Verify checks did not alter tracked code or lockfiles
         shell: pwsh
         run: |
