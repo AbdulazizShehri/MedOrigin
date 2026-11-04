@@ -194,10 +194,35 @@ else {
   noGo("focused patient not source-linked; actual AX labels: " +
        String(describing: Array(labels)))
 }
+guard eventuallyText("Focus: 0 outgoing and 2 incoming source links")
+else { noGo("focused real-source Patient incoming edge count incorrect") }
+press("Focus: Open incoming Encounter/fictional-encounter-001 via subject")
+guard eventuallyText("Focused fictional record: Encounter/fictional-encounter-001")
+else { noGo("focused incoming Encounter.subject not resolved") }
+press("Focus: Follow outgoing subject to Patient/fictional-patient-001")
+guard eventuallyText("Focused fictional record: Patient/fictional-patient-001"),
+      eventuallyText("Focus: Verified navigation trail 2 of 16 steps")
+else { noGo("focused outgoing Encounter.subject or trail not verified") }
+press("Focus: Jump history 2: Encounter/fictional-encounter-001")
+guard eventuallyText("Focused fictional record: Encounter/fictional-encounter-001")
+else { noGo("focused verified breadcrumb did not jump to Encounter") }
+press("Focus: Back along verified path")
+guard eventuallyText("Focused fictional record: Patient/fictional-patient-001")
+else { noGo("focused back along source history failed") }
+press("Focus: Open incoming Observation/fictional-observation-001 via subject")
+guard eventuallyText("Focused fictional record: Observation/fictional-observation-001")
+else { noGo("focused Observation.subject reverse edge missing") }
+press("Focus: Follow outgoing encounter to Encounter/fictional-encounter-001")
+guard eventuallyText("Focused fictional record: Encounter/fictional-encounter-001")
+else { noGo("focused Observation.encounter outgoing edge missing") }
+press("Focus: Jump history 1: Patient/fictional-patient-001")
+guard eventuallyText("Focused fictional record: Patient/fictional-patient-001")
+else { noGo("focused verified patient breadcrumb not restored") }
+print("MACOS_NATIVE_FOCUSED_WORKSPACE_SOURCE_LINK_GRAPH_AND_HISTORY_AX_PASS_NONCLINICAL")
 press("Focus: Open Encounter")
 guard eventuallyText("Focused fictional record: Encounter/fictional-encounter-001")
 else { noGo("focused Encounter not source-linked") }
-press("Focus: Back to patient")
+press("Focus: Back along verified path")
 guard eventuallyText("Focused fictional record: Patient/fictional-patient-001")
 else { noGo("focused Back did not return to patient") }
 press("Focus: Open Observation")
