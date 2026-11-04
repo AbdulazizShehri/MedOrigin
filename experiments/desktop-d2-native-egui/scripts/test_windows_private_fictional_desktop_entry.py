@@ -11,8 +11,19 @@ from unittest.mock import patch
 
 import install_windows_private_fictional_desktop_entry as entry
 
+# An arbitrary runner OS temp path can include CMD metacharacters which the
+# installer deliberately refuses. Use the reviewed Git checkout directory for
+# source-only temporary fixtures instead; NEVER relax the installer path guard.
+_REVIEWED_TEST_PARENT = Path(__file__).resolve().parents[3]
+
 
 class PrivateFictionalOneClickTests(unittest.TestCase):
+    @unittest.skipUnless(sys.platform == "win32", "Windows reviewed checkout path")
+    def test_fixture_root_is_shell_safe_but_metacharacter_root_is_not(self):
+        self.assertIsNotNone(entry._REVIEWED_PATH.fullmatch(str(_REVIEWED_TEST_PARENT)))
+        self.assertIsNone(entry._REVIEWED_PATH.fullmatch(r"C:\Test\unsafe@runner"))
+        self.assertIsNone(entry._REVIEWED_PATH.fullmatch(r"C:\Test\unsafe&cmd"))
+
     def _fixture(self, base: Path) -> tuple[Namespace, Path, Path]:
         kit = base / "known-source-verified-kit"
         (kit / "scripts").mkdir(parents=True)
@@ -36,7 +47,9 @@ class PrivateFictionalOneClickTests(unittest.TestCase):
 
     @unittest.skipUnless(sys.platform == "win32", "Actual Windows local test root")
     def test_one_time_shortcut_is_exact_pinned_and_never_overwritten(self):
-        with TemporaryDirectory(prefix="medorigin-private-entry-QA-") as tmp:
+        with TemporaryDirectory(
+            prefix="medorigin-private-entry-QA-", dir=_REVIEWED_TEST_PARENT
+        ) as tmp:
             args, parent, gui = self._fixture(Path(tmp))
             reporter = Path(tmp) / "fictional.json"
             with (
@@ -71,7 +84,9 @@ class PrivateFictionalOneClickTests(unittest.TestCase):
 
     @unittest.skipUnless(sys.platform == "win32", "Windows local no-network path guard")
     def test_refuse_wrong_python_hash_and_injected_metacharacters(self):
-        with TemporaryDirectory(prefix="medorigin-private-entry-QA-") as tmp:
+        with TemporaryDirectory(
+            prefix="medorigin-private-entry-QA-", dir=_REVIEWED_TEST_PARENT
+        ) as tmp:
             args, parent, gui = self._fixture(Path(tmp))
             reporter = Path(tmp) / "fictional.json"
             with (
@@ -95,7 +110,9 @@ class PrivateFictionalOneClickTests(unittest.TestCase):
 
     @unittest.skipUnless(sys.platform == "win32", "Windows private test root")
     def test_all_three_modes_allow_only_fixed_output_names_and_nonclinical_flags(self):
-        with TemporaryDirectory(prefix="medorigin-private-entry-QA-") as tmp:
+        with TemporaryDirectory(
+            prefix="medorigin-private-entry-QA-", dir=_REVIEWED_TEST_PARENT
+        ) as tmp:
             args, parent, gui = self._fixture(Path(tmp))
             reporter = Path(tmp) / "fictional.json"
             with (
