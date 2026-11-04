@@ -104,10 +104,110 @@ pub fn admit_fixed_fictional_core_report(
     })
 }
 
+/// Stable labels for two Source-PINNED reports actually emitted by Python Core
+/// at the reviewed synthetic QA commit. Not a live Python or clinical bridge.
+pub const PINNED_CORE_CASE_LABELS: [&str; 2] = [
+    "Known fictional StructureDefinition — provenance only",
+    "Unknown fictional resource — negative control",
+];
+
+const CORE_KNOWN_REPORT: &[u8] = include_bytes!("../fixtures/core/known-structure-definition.json");
+const CORE_NEGATIVE_REPORT: &[u8] =
+    include_bytes!("../fixtures/core/unknown-fictional-negative.json");
+
+const CORE_KNOWN_REPORT_HASH: &str =
+    "165b41acdc416617e8f207366d454ac6a713ecf4c9a5efd740d14a0af882bd08";
+const CORE_NEGATIVE_REPORT_HASH: &str =
+    "7962d747049185ce33f252d8760e1197942e6f945d22e9f640df27eaeff1129c";
+
+/// Inspect the exact two compiled, source-backed synthetic Core reports.
+/// Refuses source mutations at runtime; no file opens, processes, network
+/// access, patient data or inference. Only a bounded non-sensitive receipt
+/// reaches the native UI.
+pub fn inspect_pinned_core_report(index: usize) -> Result<CoreProvenanceReceipt, &'static str> {
+    let (raw, digest, expected_case) = match index {
+        0 => (
+            CORE_KNOWN_REPORT,
+            CORE_KNOWN_REPORT_HASH,
+            FictionalCoreInput::KnownStructureDefinition,
+        ),
+        1 => (
+            CORE_NEGATIVE_REPORT,
+            CORE_NEGATIVE_REPORT_HASH,
+            FictionalCoreInput::UnknownResourceNegativeControl,
+        ),
+        _ => return Err("core_report_unknown_source_refused"),
+    };
+    let receipt = admit_fixed_fictional_core_report(raw)?;
+    if receipt.report_sha256 != digest || receipt.case != expected_case {
+        return Err("core_report_compiled_source_changed");
+    }
+    Ok(receipt)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use serde_json::{Value, json};
+
+    #[test]
+    fn two_real_core_source_embedded_reports_have_exact_pinned_hashes_and_disclosure() {
+        for (index, expected, actual_bytes, pinned_hash) in [
+            (
+                0usize,
+                FictionalCoreInput::KnownStructureDefinition,
+                CORE_KNOWN_REPORT,
+                CORE_KNOWN_REPORT_HASH,
+            ),
+            (
+                1usize,
+                FictionalCoreInput::UnknownResourceNegativeControl,
+                CORE_NEGATIVE_REPORT,
+                CORE_NEGATIVE_REPORT_HASH,
+            ),
+        ] {
+            let receipt =
+                inspect_pinned_core_report(index).expect("exact source-reviewed Core QA report");
+            assert_eq!(receipt.case, expected);
+            assert_eq!(receipt.status, "not_validated");
+            assert_eq!(receipt.report_sha256, pinned_hash);
+            assert!(receipt.disclosure.contains("FHIR R4 NOT validated"));
+            assert!(actual_bytes.len() <= MAX_REPORT_BYTES);
+            assert_eq!(
+                Sha256::digest(actual_bytes)
+                    .iter()
+                    .map(|byte| format!("{byte:02x}"))
+                    .collect::<String>(),
+                pinned_hash
+            );
+        }
+    }
+
+    #[test]
+    fn embedded_source_refuses_modified_claim_or_unknown_selection() {
+        for index in [2, usize::MAX] {
+            assert_eq!(
+                inspect_pinned_core_report(index),
+                Err("core_report_unknown_source_refused")
+            );
+        }
+        let mut changed = CORE_KNOWN_REPORT.to_vec();
+        let value = std::str::from_utf8(&changed).expect("known source-only fixture");
+        let position = value.find("not_validated").expect("expected status marker");
+        changed[position] = b'x';
+        assert!(admit_fixed_fictional_core_report(&changed).is_err());
+
+        let mut forged = CORE_NEGATIVE_REPORT.to_vec();
+        forged.push(b' ');
+        assert!(admit_fixed_fictional_core_report(&forged).is_err());
+        let wrong_id = String::from_utf8(CORE_KNOWN_REPORT.to_vec())
+            .expect("known source-only fixture")
+            .replace(
+                KNOWN_STRUCTURE_DEFINITION_HASH,
+                "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+            );
+        assert!(admit_fixed_fictional_core_report(wrong_id.as_bytes()).is_err());
+    }
 
     fn packet(hash: &str) -> Value {
         json!({
