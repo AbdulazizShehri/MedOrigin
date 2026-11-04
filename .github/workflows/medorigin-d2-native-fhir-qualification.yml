@@ -90,6 +90,13 @@ jobs:
             throw 'New preview script lacks full acceptance marker'
           }
           Write-Output 'NEW_JSON_PREVIEW_UIA_POWERSHELL_SOURCE_ONLY_PASS'
+      - name: Test synthetic Core-to-D2 report admission and fail-closed Mac sandbox preflight
+        shell: pwsh
+        run: |
+          $py = if ($IsWindows) { 'python' } else { 'python3' }
+          & $py -m unittest discover -s experiments/desktop-d2-native-egui/scripts -p test_qualify_sandboxed_synthetic_core.py -v
+          if ($LASTEXITCODE -ne 0) { throw 'Core-to-D2 synthetic report/sandbox contract failed' }
+          Write-Output 'D2_CORE_QA_SOURCE_ONLY_OS_SANDBOX_NOT_EXECUTED_ON_RUNNER'
       - name: Verify checks did not alter tracked code or lockfiles
         shell: pwsh
         run: |
