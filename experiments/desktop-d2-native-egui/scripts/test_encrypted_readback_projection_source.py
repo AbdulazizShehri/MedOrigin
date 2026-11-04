@@ -63,6 +63,26 @@ class SourcePinnedEncryptedReadbackTests(unittest.TestCase):
         self.assertIn(b"arguments_refused", attempt.stderr)
         self.assertNotIn(b"/fake/secret", attempt.stderr)
 
+    def test_windows_live_core_harness_has_fixed_source_and_no_patient_inputs(self):
+        import qualify_windows_encrypted_readback_native_gui as windows_qa
+        from unittest.mock import patch
+
+        self.assertEqual(windows_qa.CORE_SHA, "8e5ed5430f4ab2ebc8981c52c67234023382954b")
+        self.assertEqual(windows_qa.PROJECTION_SHA, DIGEST)
+        text = Path(windows_qa.__file__).read_text()
+        self.assertIn('sys.path[:0]=[sys.argv[1],sys.argv[2],sys.argv[3]]', text)
+        self.assertIn('script=sys.argv[4];sys.argv=[script]', text)
+        self.assertIn('ignored_python_bytecode_cache_refused', text)
+        self.assertIn('source_bound_core(core)', text)
+        self.assertIn('capture_output=True, timeout=45', text)
+        self.assertIn('executed.stdout != fixture.read_bytes()', text)
+        self.assertIn('LiveReceiptPath', text)
+        self.assertNotIn("shell=True", text)
+        self.assertNotIn("requests.", text)
+        with patch.object(windows_qa.sys, "platform", "darwin"):
+            with self.assertRaisesRegex(ValueError, "real_windows_native_ui_qa_required"):
+                windows_qa.qualify(None)
+
     def test_native_rust_stdin_only_and_forgery_refusals_remain(self):
         main = GUI.read_text(encoding="utf-8")
         admitted = ACCEPTOR.read_text(encoding="utf-8")
