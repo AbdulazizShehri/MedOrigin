@@ -14,7 +14,7 @@ class NativeOneShotCoreSourceTests(unittest.TestCase):
     def test_real_mac_gui_source_is_present_with_qa_outcome(self):
         native = (ROOT / "src/main.rs").read_text(encoding="utf-8")
         self.assertIn('EXPLICIT_SYNTHETIC_CORE_FLAG: &str = "--synthetic-core-stdin"', native)
-        self.assertIn("fn make_app<R: Read>", native)
+        self.assertIn("fn make_app<R: Read + Send + 'static>", native)
         self.assertIn(".take(MAX_FICTIONAL_CORE_STDIN as u64 + 1)", native)
         self.assertIn("read_to_end(&mut bytes)", native)
         self.assertIn("if args.is_empty()", native)

@@ -5,16 +5,35 @@
 
 use std::ffi::OsString;
 use std::io::{self, Read};
+use std::sync::mpsc::{self, RecvTimeoutError};
+use std::time::Duration;
 
 use medorigin_desktop_d2_native_egui::MedOriginNativePreview;
 
 const MAX_FICTIONAL_CORE_STDIN: usize = 2048;
 const EXPLICIT_SYNTHETIC_CORE_FLAG: &str = "--synthetic-core-stdin";
+const SYNTHETIC_CORE_STDIN_DEADLINE: Duration = Duration::from_secs(5);
 
 /// Only this opt-in command-line switch permits reading a finite stdin
 /// synthetic Core report. Default desktop launch does not read stdin at all.
 /// No file path, subprocess, socket, HTTP, arbitrary FHIR input or model call.
-fn make_app<R: Read>(args: &[OsString], reader: R) -> Result<MedOriginNativePreview, io::Error> {
+fn make_app<R: Read + Send + 'static>(
+    args: &[OsString],
+    reader: R,
+) -> Result<MedOriginNativePreview, io::Error> {
+    make_app_with_deadline(args, reader, SYNTHETIC_CORE_STDIN_DEADLINE)
+}
+
+/// A malicious/abandoned pipe must not block native startup indefinitely.
+/// The worker thread only reads the already-open stdin stream. It never
+/// spawns processes or touches the filesystem or network. On timeout, the
+/// GUI process exits before creating a window; the blocked reader is ended
+/// with process termination (no background service persists).
+fn make_app_with_deadline<R: Read + Send + 'static>(
+    args: &[OsString],
+    reader: R,
+    deadline: Duration,
+) -> Result<MedOriginNativePreview, io::Error> {
     if args.is_empty() {
         return Ok(MedOriginNativePreview::default());
     }
@@ -26,10 +45,32 @@ fn make_app<R: Read>(args: &[OsString], reader: R) -> Result<MedOriginNativePrev
     }
     // 2049 bytes are sufficient to detect oversized source data, without
     // reading an unbounded incoming payload or buffering clinical documents.
-    let mut bytes = Vec::with_capacity(512);
-    reader
-        .take(MAX_FICTIONAL_CORE_STDIN as u64 + 1)
-        .read_to_end(&mut bytes)?;
+    let (sender, receiver) = mpsc::sync_channel(1);
+    std::thread::Builder::new()
+        .name("synthetic-core-stdin-once".to_owned())
+        .spawn(move || {
+            let mut bytes = Vec::with_capacity(512);
+            let outcome = reader
+                .take(MAX_FICTIONAL_CORE_STDIN as u64 + 1)
+                .read_to_end(&mut bytes)
+                .map(|_| bytes);
+            let _ = sender.send(outcome);
+        })?;
+    let bytes = match receiver.recv_timeout(deadline) {
+        Ok(result) => result?,
+        Err(RecvTimeoutError::Timeout) => {
+            return Err(io::Error::new(
+                io::ErrorKind::TimedOut,
+                "synthetic_core_stdin_deadline_refused",
+            ));
+        }
+        Err(RecvTimeoutError::Disconnected) => {
+            return Err(io::Error::new(
+                io::ErrorKind::BrokenPipe,
+                "synthetic_core_stdin_worker_disconnected",
+            ));
+        }
+    };
     if bytes.is_empty() || bytes.len() > MAX_FICTIONAL_CORE_STDIN {
         return Err(io::Error::new(
             io::ErrorKind::InvalidData,
@@ -46,7 +87,7 @@ fn make_app<R: Read>(args: &[OsString], reader: R) -> Result<MedOriginNativePrev
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args: Vec<OsString> = std::env::args_os().skip(1).collect();
-    let app = make_app(&args, io::stdin().lock())?;
+    let app = make_app(&args, io::stdin())?;
     let options = eframe::NativeOptions {
         viewport: eframe::egui::ViewportBuilder::default()
             .with_inner_size([920.0, 600.0])
@@ -117,6 +158,86 @@ mod tests {
                 "invalid stdin must fail closed"
             );
         }
+    }
+
+    #[test]
+    fn stalled_one_shot_stdin_refuses_on_deadline_without_starting_gui() {
+        struct StalledReader(std::sync::mpsc::Receiver<()>);
+        impl Read for StalledReader {
+            fn read(&mut self, _buf: &mut [u8]) -> io::Result<usize> {
+                let _ = self.0.recv();
+                Ok(0)
+            }
+        }
+        let (release, wait) = std::sync::mpsc::channel::<()>();
+        let error = make_app_with_deadline(
+            &[OsString::from(EXPLICIT_SYNTHETIC_CORE_FLAG)],
+            StalledReader(wait),
+            Duration::from_millis(35),
+        )
+        .err()
+        .expect("abandoned stdin must fail closed");
+        drop(release);
+        assert_eq!(error.kind(), io::ErrorKind::TimedOut);
+        assert_eq!(error.to_string(), "synthetic_core_stdin_deadline_refused");
+    }
+
+    #[test]
+    fn complete_report_without_eof_is_not_accepted() {
+        struct FullBytesWithoutEof {
+            sent: bool,
+            release: std::sync::mpsc::Receiver<()>,
+        }
+        impl Read for FullBytesWithoutEof {
+            fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+                if !self.sent {
+                    assert!(buf.len() >= CORE_KNOWN.len());
+                    buf[..CORE_KNOWN.len()].copy_from_slice(CORE_KNOWN);
+                    self.sent = true;
+                    Ok(CORE_KNOWN.len())
+                } else {
+                    let _ = self.release.recv();
+                    Ok(0)
+                }
+            }
+        }
+        let (release, wait) = std::sync::mpsc::channel::<()>();
+        let result = make_app_with_deadline(
+            &[OsString::from(EXPLICIT_SYNTHETIC_CORE_FLAG)],
+            FullBytesWithoutEof {
+                sent: false,
+                release: wait,
+            },
+            Duration::from_millis(35),
+        );
+        drop(release);
+        assert_eq!(
+            result
+                .err()
+                .expect("report without EOF should be refused")
+                .kind(),
+            io::ErrorKind::TimedOut
+        );
+    }
+
+    #[test]
+    fn permission_denied_stdin_read_is_not_silently_coerced_to_empty() {
+        struct DeniedReader;
+        impl Read for DeniedReader {
+            fn read(&mut self, _buf: &mut [u8]) -> io::Result<usize> {
+                Err(io::Error::new(
+                    io::ErrorKind::PermissionDenied,
+                    "synthetic denied",
+                ))
+            }
+        }
+        let error = make_app(
+            &[OsString::from(EXPLICIT_SYNTHETIC_CORE_FLAG)],
+            DeniedReader,
+        )
+        .err()
+        .expect("read error must not launch GUI");
+        assert_eq!(error.kind(), io::ErrorKind::PermissionDenied);
     }
 
     #[test]

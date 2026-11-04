@@ -194,6 +194,13 @@ jobs:
             throw 'Two-case Windows one-shot Core stdin GUI test marker missing'
           }
           Write-Output 'D2_WINDOWS_ONE_SHOT_STDIN_UIA_SOURCE_ONLY_NOT_GUI_EXECUTION'
+      - name: Verify bounded native Core stdin no-EOF and stalled-pipe source contract
+        shell: pwsh
+        run: |
+          $py = if ($IsWindows) { 'python' } else { 'python3' }
+          & $py -m unittest discover -s experiments/desktop-d2-native-egui/scripts -p test_native_stdin_deadline.py -v
+          if ($LASTEXITCODE -ne 0) { throw 'Native D2 one-shot synthetic stdin deadline source regression failed' }
+          Write-Output 'D2_NATIVE_CORE_STDIN_SOURCE_DEADLINE_NOT_HOSTED_GUI_TEST'
       - name: Verify checks did not alter tracked code or lockfiles
         shell: pwsh
         run: |
