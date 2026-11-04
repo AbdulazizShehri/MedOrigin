@@ -201,6 +201,20 @@ jobs:
           & $py -m unittest discover -s experiments/desktop-d2-native-egui/scripts -p test_native_stdin_deadline.py -v
           if ($LASTEXITCODE -ne 0) { throw 'Native D2 one-shot synthetic stdin deadline source regression failed' }
           Write-Output 'D2_NATIVE_CORE_STDIN_SOURCE_DEADLINE_NOT_HOSTED_GUI_TEST'
+      - name: Verify synthetic Windows Job Object descendant kill on-close source contract
+        shell: pwsh
+        run: |
+          $py = if ($IsWindows) { 'python' } else { 'python3' }
+          & $py -m unittest discover -s experiments/desktop-d2-native-egui/scripts -p test_windows_job_subtree.py -v
+          if ($LASTEXITCODE -ne 0) { throw 'Windows synthetic subprocess Job Object source contract failed' }
+          Write-Output 'WINDOWS_JOB_SUBTREE_SOURCE_ONLY_NO_HOSTED_DESCENDANT_KILL_CLAIM'
+      - name: Real Windows kernel Job Object descendant kill-on-close (synthetic only)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          & python experiments/desktop-d2-native-egui/scripts/qualify_windows_job_subtree.py
+          if ($LASTEXITCODE -ne 0) { throw 'Windows Job Object OS descendant lifecycle proof NO-GO' }
+          Write-Output 'WINDOWS_JOB_OBJECT_REAL_OS_SYNTHETIC_CHILD_SUBTREE_KILLED_NO_PATIENT_DATA'
       - name: Verify checks did not alter tracked code or lockfiles
         shell: pwsh
         run: |
