@@ -50,12 +50,14 @@ def read_synthetic_fhir_bundle_in_memory(
     actor_id: str,
     synthetic_only: bool = False,
     allow_in_memory_readback: bool = False,
+    expected_current_audit_head_digest: str | None = None,
 ) -> dict[str, object]:
     """Reconstruct one original fictional collection Bundle, in RAM only.
 
     The exact in-memory key-provider instance and the original import actor
-    must be supplied. The caller supplies an audit-head anchor from outside
-    the encrypted database so a truncated/replaced chain cannot self-attest.
+    must be supplied. The original imported event digest must be retained
+    outside the store. For later unrelated events, also supply the current
+    external audit-head digest; the complete chain binds both anchors.
     If ANY of the admitted resource versions, source payload, provenance,
     source-member references or audit refs disagrees, return nothing.
     """
@@ -76,6 +78,16 @@ def read_synthetic_fhir_bundle_in_memory(
         or _DIGEST_RE.fullmatch(expected_audit_head_digest) is None
     ):
         raise SyntheticFhirReadbackError("source_or_audit_anchor_refused")
+    if expected_current_audit_head_digest is not None and (
+        not isinstance(expected_current_audit_head_digest, str)
+        or _DIGEST_RE.fullmatch(expected_current_audit_head_digest) is None
+    ):
+        raise SyntheticFhirReadbackError("current_audit_anchor_refused")
+    current_anchor = (
+        expected_audit_head_digest
+        if expected_current_audit_head_digest is None
+        else expected_current_audit_head_digest
+    )
     try:
         actor = fhir._admit_identifier(actor_id, "actor id")
     except (TypeError, ValueError) as exc:
@@ -141,7 +153,7 @@ def read_synthetic_fhir_bundle_in_memory(
                 if item.binding.object_type is WorkspaceObjectType.AUDIT_EVENT
             )
         )
-        if not events or events[-1].event_digest != expected_audit_head_digest:
+        if not events or events[-1].event_digest != current_anchor:
             raise SyntheticFhirReadbackError("audit_head_anchor_mismatch")
         exact_metadata = (
             ("action", "synthetic_bundle_atomic_import"),
@@ -149,15 +161,15 @@ def read_synthetic_fhir_bundle_in_memory(
             ("resource_count", str(len(entries))),
         )
         matches = tuple(
-            event
-            for event in events
+            (index, event)
+            for index, event in enumerate(events)
             if event.actor_id == actor
             and event.event_type is AuditEventType.OBJECT_CREATE
             and event.metadata == exact_metadata
         )
-        if len(matches) != 1 or matches[0] is not events[-1]:
-            raise SyntheticFhirReadbackError("source_import_event_not_current")
-        import_event = matches[0]
+        if len(matches) != 1 or matches[0][1].event_digest != expected_audit_head_digest:
+            raise SyntheticFhirReadbackError("source_import_event_anchor_mismatch")
+        import_index, import_event = matches[0]
         if len(import_event.object_refs) != len(entries):
             raise SyntheticFhirReadbackError("import_event_resource_count_mismatch")
 
@@ -239,15 +251,42 @@ def read_synthetic_fhir_bundle_in_memory(
             ):
                 raise SyntheticFhirReadbackError("stored_source_provenance_refused")
             provenance.verify_payload(payload)
+        # Later events are allowed only when explicitly anchored AND
+        # unrelated to this import's resources, provenance or source manifest.
+        # A future event describing a mutation is NOT proof the content remains
+        # unchanged; refuse destructive/security/rekey events even without
+        # object references. This conservative synthetic contract is not a
+        # substitute for production authorization/version history.
+        protected_object_ids = {manifest_binding.object_id}
+        for binding in expected_bindings:
+            protected_object_ids.add(binding.object_id)
+            protected_object_ids.add(provenance_binding_for(binding).object_id)
+        for later in events[import_index + 1 :]:
+            if later.event_type not in (
+                AuditEventType.WORKSPACE_OPEN,
+                AuditEventType.WORKSPACE_CLOSE,
+                AuditEventType.LOGIN,
+                AuditEventType.OBJECT_CREATE,
+            ):
+                raise SyntheticFhirReadbackError("post_import_audit_event_not_admitted")
+            if any(ref.object_id in protected_object_ids for ref in later.object_refs):
+                raise SyntheticFhirReadbackError("post_import_resource_audit_refused")
         # Disallow additional revisions for any resource belonging to this
         # returned Bundle; they would create ambiguity in a naive exporter.
-        for binding in stored:
-            if (
-                binding.object_type is WorkspaceObjectType.FHIR_RESOURCE
-                and any(binding.object_id == expected.object_id for expected in expected_bindings)
-                and binding not in expected_bindings
-            ):
+        expected_object_ids = {binding.object_id for binding in expected_bindings}
+        for binding, raw in stored.items():
+            if binding.object_type is not WorkspaceObjectType.FHIR_RESOURCE:
+                continue
+            if binding in expected_bindings:
+                continue
+            if binding.object_id in expected_object_ids:
                 raise SyntheticFhirReadbackError("unapproved_resource_revision_present")
+            # FHIR identities include resource_version in the UUID. A new
+            # version of the same Type/id can have a DIFFERENT object UUID;
+            # checking the original object ID alone misses that conflict.
+            other = fhir.FhirResource.from_document(json.loads(raw.decode("ascii")))
+            if (other.resource_type.value, other.fhir_id) in identities:
+                raise SyntheticFhirReadbackError("unapproved_logical_resource_revision_present")
     except SyntheticFhirReadbackError:
         raise
     except Exception as exc:
@@ -262,6 +301,7 @@ def read_synthetic_fhir_bundle_in_memory(
         "bundle": document,
         "source_content_sha256": source_content_sha256,
         "audit_head_digest": expected_audit_head_digest,
+        "current_audit_head_digest": current_anchor,
         "resource_count": len(entries),
         "filesystem_export_performed": False,
         "clinical_use_authorized": False,
