@@ -38,10 +38,12 @@ from supervise_windows_encrypted_core_job import execute_encrypted_source_under_
 SCHEMA = "medorigin-d2-private-portable-fictional-core-windows/v1"
 PINNED_COMMIT = "8e5ed5430f4ab2ebc8981c52c67234023382954b"
 EXPORTER_SHA256 = "12e9cdd5def9c794aafa975d232062a456eec6c558728ac119868fb876505a7c"
+PERSISTENT_PROJECTION_SHA256 = "3673eb77b2dbef25fd6cb33d9c345d2f37d38a86bcf1652ed9defae4da139243"
 GUI_NAME = "medorigin-desktop-d2-native-egui.exe"
 RUNTIME_FILES = (
     "scripts/launch_windows_portable_fictional_core.py",
     "scripts/fictional_session_frame.py",
+    "scripts/windows_fictional_persistent_vault.py",
     "scripts/portable_core_tree.py",
     "scripts/supervise_windows_encrypted_core_job.py",
     "scripts/qualify_windows_job_subtree.py",
@@ -50,6 +52,7 @@ RUNTIME_FILES = (
     "scripts/qualify_windows_encrypted_readback_native_gui.py",
     "tests/windows-encrypted-core-readback-uia.ps1",
     "fixtures/core/encrypted-readback-projection.json",
+    "fixtures/core/encrypted-persistent-readback-projection.json",
     f"native/{GUI_NAME}",
 )
 SUCCESS = "WINDOWS_PORTABLE_INSTALLED_FICTIONAL_CORE_NO_GIT_NATIVE_D2_PASS_NOT_CLINICAL"
@@ -125,6 +128,9 @@ def attest_kit(root: Path) -> tuple[Path, Path, Path]:
     fixture = root / "fixtures/core/encrypted-readback-projection.json"
     if sha(exporter) != EXPORTER_SHA256 or sha(fixture) != PROJECTION_SHA:
         raise ValueError("portable_core_exporter_or_projection_changed")
+    persistent_fixture = root / "fixtures/core/encrypted-persistent-readback-projection.json"
+    if sha(persistent_fixture) != PERSISTENT_PROJECTION_SHA256:
+        raise ValueError("portable_persistent_fictional_projection_changed")
     attest_portable_core_tree(root / "core")
     return root / "native" / GUI_NAME, exporter, fixture
 
@@ -187,6 +193,8 @@ def _qa_native_clicks(
     framed: bytes,
     nonce: bytes,
     key: bytes,
+    *,
+    persistent: bool = False,
 ) -> None:
     receipt = work / "reviewed-portable-core-projection.json"
     if receipt.exists() or receipt.is_symlink():
@@ -211,7 +219,7 @@ def _qa_native_clicks(
             str(gui),
             "-ExpectedSha256",
             sha(gui),
-            "-LiveReceiptPath",
+            ("-PersistentQaReceiptPath" if persistent else "-LiveReceiptPath"),
             str(receipt),
             "-SessionFramePath",
             str(session_path),
@@ -256,6 +264,13 @@ def launch(args: argparse.Namespace) -> None:
         raise ValueError("portable_fictional_runtime_python_refused")
     root = Path(__file__).resolve().parent.parent
     gui, exporter, fixture = attest_kit(root)
+    persistent_qa_root = getattr(args, "fictional_persistent_qa_root", None)
+    if persistent_qa_root is not None:
+        exporter = root / "scripts/windows_fictional_persistent_vault.py"
+        fixture = root / "fixtures/core/encrypted-persistent-readback-projection.json"
+    expected_sha = (
+        PERSISTENT_PROJECTION_SHA256 if persistent_qa_root is not None else PROJECTION_SHA
+    )
     with TemporaryDirectory(prefix="medorigin-portable-fictional-dev-") as temp:
         work = Path(temp).resolve()
         raw = execute_encrypted_source_under_job(
@@ -265,11 +280,12 @@ def launch(args: argparse.Namespace) -> None:
             exporter=exporter,
             work=work,
             installed_site=root / "core",
+            persistent_qa_root=persistent_qa_root,
         )
         if (
-            len(raw) != 1164
+            len(raw) != (1215 if persistent_qa_root is not None else 1164)
             or raw != fixture.read_bytes()
-            or hashlib.sha256(raw).hexdigest() != PROJECTION_SHA
+            or hashlib.sha256(raw).hexdigest() != expected_sha
         ):
             raise ValueError("portable_source_installed_encrypted_readback_refused")
         # Per-launch, source-bound MAC with independent 128-bit nonce and
@@ -279,7 +295,16 @@ def launch(args: argparse.Namespace) -> None:
         nonce, key = fresh_ephemeral_session()
         framed = frame_one_time_fictional_core(raw, nonce, key)
         if args.qa_uia:
-            _qa_native_clicks(root, gui, work, raw, framed, nonce, key)
+            _qa_native_clicks(
+                root,
+                gui,
+                work,
+                raw,
+                framed,
+                nonce,
+                key,
+                persistent=persistent_qa_root is not None,
+            )
         else:
             _launch_gui(
                 gui,
@@ -300,6 +325,11 @@ if __name__ == "__main__":
     parser.add_argument("--python", type=Path, required=True)
     parser.add_argument("--crypto-site", type=Path, required=True)
     parser.add_argument("--python-sha", type=str, required=True)
+    parser.add_argument(
+        "--fictional-persistent-qa-root",
+        type=Path,
+        help="EXPLICIT existing fixed-name, DPAPI fictional QA vault only; never PHI",
+    )
     modes = parser.add_mutually_exclusive_group()
     modes.add_argument(
         "--qa-auto-close",

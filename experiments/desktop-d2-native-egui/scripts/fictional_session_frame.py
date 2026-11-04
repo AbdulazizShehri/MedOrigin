@@ -18,6 +18,8 @@ NONCE_ENV = "MEDORIGIN_D2_FICTIONAL_SESSION_NONCE"
 MAX_FRAME = 2048
 REVIEWED_RAW_SIZE = 1164
 REVIEWED_RAW_SHA = "c99af04367aeaedeecb29b7fccc8a8fb58f2a85753eeae874eae5ad363307a49"
+REVIEWED_PERSISTENT_RAW_SIZE = 1215
+REVIEWED_PERSISTENT_RAW_SHA = "3673eb77b2dbef25fd6cb33d9c345d2f37d38a86bcf1652ed9defae4da139243"
 
 
 def fresh_ephemeral_session() -> tuple[bytes, bytes]:
@@ -27,8 +29,11 @@ def fresh_ephemeral_session() -> tuple[bytes, bytes]:
 def frame_one_time_fictional_core(raw: bytes, nonce: bytes, key: bytes) -> bytes:
     if (
         type(raw) is not bytes
-        or len(raw) != REVIEWED_RAW_SIZE
-        or hashlib.sha256(raw).hexdigest() != REVIEWED_RAW_SHA
+        or (len(raw), hashlib.sha256(raw).hexdigest())
+        not in (
+            (REVIEWED_RAW_SIZE, REVIEWED_RAW_SHA),
+            (REVIEWED_PERSISTENT_RAW_SIZE, REVIEWED_PERSISTENT_RAW_SHA),
+        )
         or type(nonce) is not bytes
         or len(nonce) != 16
         or type(key) is not bytes

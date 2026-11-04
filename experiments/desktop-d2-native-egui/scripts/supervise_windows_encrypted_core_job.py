@@ -9,6 +9,7 @@ policy. This is NOT network confinement, authenticated IPC or clinical use.
 from __future__ import annotations
 
 import ctypes
+import hashlib
 import os
 import subprocess
 from ctypes import wintypes
@@ -30,6 +31,11 @@ from qualify_windows_job_subtree import (
 
 CREATE_UNICODE_ENVIRONMENT = 0x00000400
 REVIEWED_PROJECTION_BYTES = 1164
+PERSISTENT_REVIEWED_PROJECTION_BYTES = 1215
+PERSISTENT_REVIEWED_PROJECTION_SHA256 = (
+    "3673eb77b2dbef25fd6cb33d9c345d2f37d38a86bcf1652ed9defae4da139243"
+)
+PERSISTENT_QA_DIR_NAME = "medorigin-d2-fixed-fictional-persistent-vault-qa"
 SOURCE_RUNNER = (
     "import sys,runpy,importlib.metadata as m,pathlib;"
     "sys.path[:0]=[sys.argv[1],sys.argv[2],sys.argv[3]];"
@@ -61,6 +67,40 @@ INSTALLED_RUNNER = (
     "pathlib.Path(out).write_bytes(payload)"
 )
 
+# Same independently pinned Python/Core process boundary, but *read-only*
+# reopen of an already created and user-DPAPI-protected fictional test vault.
+# No generic patient import, arbitrary Python command, producer or network.
+PERSISTENT_SOURCE_RUNNER = (
+    SOURCE_RUNNER.replace(
+        "source=sys.argv[4];out=sys.argv[5];sys.argv=[source];",
+        "source=sys.argv[4];qa_root=pathlib.Path(sys.argv[5]);out=sys.argv[6];sys.argv=[source];",
+    )
+    .replace(
+        "module['exact_synthetic_encrypted_readback_projection']();",
+        "module['exact_persistent_fictional_projection'](qa_root);",
+    )
+    .replace(
+        "len(payload)==1164;",
+        "len(payload)==1215 and __import__('hashlib').sha256(payload).hexdigest()=="
+        "'3673eb77b2dbef25fd6cb33d9c345d2f37d38a86bcf1652ed9defae4da139243';",
+    )
+)
+PERSISTENT_INSTALLED_RUNNER = (
+    INSTALLED_RUNNER.replace(
+        "source=sys.argv[3];out=sys.argv[4];sys.argv=[source];",
+        "source=sys.argv[3];qa_root=pathlib.Path(sys.argv[4]);out=sys.argv[5];sys.argv=[source];",
+    )
+    .replace(
+        "module['exact_synthetic_encrypted_readback_projection']();",
+        "module['exact_persistent_fictional_projection'](qa_root);",
+    )
+    .replace(
+        "len(payload)==1164;",
+        "len(payload)==1215 and __import__('hashlib').sha256(payload).hexdigest()=="
+        "'3673eb77b2dbef25fd6cb33d9c345d2f37d38a86bcf1652ed9defae4da139243';",
+    )
+)
+
 
 def execute_encrypted_source_under_job(
     python: Path,
@@ -70,6 +110,7 @@ def execute_encrypted_source_under_job(
     work: Path,
     *,
     installed_site: Path | None = None,
+    persistent_qa_root: Path | None = None,
 ) -> bytes:
     if (
         os.name != "nt"
@@ -94,6 +135,21 @@ def execute_encrypted_source_under_job(
         or any((installed_site / p).is_symlink() for p in ("medscale", "medscale_workspace"))
     ):
         raise ValueError("installed_core_target_not_attested_or_unavailable")
+    if persistent_qa_root is not None and (
+        persistent_qa_root.is_symlink()
+        or not persistent_qa_root.is_dir()
+        or persistent_qa_root.name != PERSISTENT_QA_DIR_NAME
+        or exporter.name != "windows_fictional_persistent_vault.py"
+        or any(
+            (persistent_qa_root / name).is_symlink() or not (persistent_qa_root / name).is_file()
+            for name in (
+                "fictional-root-key.dpapi",
+                "fictional-audit-anchor.dpapi",
+                "6cd9e9f4-1c3b-40b4-b10f-5b16db71a9fe.workspace.sqlite3",
+            )
+        )
+    ):
+        raise ValueError("windows_persistent_fictional_test_vault_unreviewed")
     output = work / "synthetic-core-readback-job-only.json"
     if output.exists() or output.is_symlink():
         raise ValueError("fictional_job_output_preexisting_refused")
@@ -133,19 +189,23 @@ def execute_encrypted_source_under_job(
             "set_core_job_kill_on_close",
         )
         if installed_site is not None:
-            runner = INSTALLED_RUNNER
-            worker_args = [str(installed_site), str(site), str(exporter), str(output)]
+            runner = (
+                PERSISTENT_INSTALLED_RUNNER if persistent_qa_root is not None else INSTALLED_RUNNER
+            )
+            worker_args = [str(installed_site), str(site), str(exporter)]
         else:
             if core is None:
                 raise ValueError("source_checkpoint_required_for_noninstalled_worker")
-            runner = SOURCE_RUNNER
+            runner = PERSISTENT_SOURCE_RUNNER if persistent_qa_root is not None else SOURCE_RUNNER
             worker_args = [
                 str(core / "src"),
                 str(core / "apps/workspace/src"),
                 str(site),
                 str(exporter),
-                str(output),
             ]
+        if persistent_qa_root is not None:
+            worker_args.append(str(persistent_qa_root))
+        worker_args.append(str(output))
         command = subprocess.list2cmdline(
             [
                 str(python),
@@ -194,14 +254,18 @@ def execute_encrypted_source_under_job(
         )
         if exit_status.value != 0:
             raise ValueError("real_core_supervised_worker_returned_nonzero")
-        if (
-            output.is_symlink()
-            or not output.is_file()
-            or output.stat().st_size != REVIEWED_PROJECTION_BYTES
-        ):
+        expected_len = (
+            PERSISTENT_REVIEWED_PROJECTION_BYTES
+            if persistent_qa_root is not None
+            else REVIEWED_PROJECTION_BYTES
+        )
+        if output.is_symlink() or not output.is_file() or output.stat().st_size != expected_len:
             raise ValueError("real_core_job_output_missing_or_wrong_size")
         raw = output.read_bytes()
-        if len(raw) != REVIEWED_PROJECTION_BYTES:
+        if len(raw) != expected_len or (
+            persistent_qa_root is not None
+            and hashlib.sha256(raw).hexdigest() != PERSISTENT_REVIEWED_PROJECTION_SHA256
+        ):
             raise ValueError("real_core_job_output_bytes_refused")
         print("WINDOWS_REAL_CORE_JOB_WORKER_EXIT_ZERO_AND_OUTPUT_BOUNDED")
         return raw
