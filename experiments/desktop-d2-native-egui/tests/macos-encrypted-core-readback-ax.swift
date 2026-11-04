@@ -122,6 +122,33 @@ for label in [
 ] {
   guard textPresent(label) else { noGo("native Workspace home absent: " + label) }
 }
+press("Open focused fictional Workspace")
+guard textPresent("MedOrigin focused Workspace"),
+      textPresent("3 fictional identities | encrypted reopen: true | audit: true"),
+      textPresent("Source: Ephemeral encrypted QA test vault, removed after readback")
+else { noGo("focused native fictional Workspace home missing") }
+press("Focus: Open Patient")
+guard textPresent("Focused fictional record: Patient/fictional-patient-001")
+else { noGo("focused patient not source-linked") }
+press("Focus: Open Encounter")
+guard textPresent("Focused fictional record: Encounter/fictional-encounter-001")
+else { noGo("focused Encounter not source-linked") }
+press("Focus: Back to patient")
+guard textPresent("Focused fictional record: Patient/fictional-patient-001")
+else { noGo("focused Back did not return to patient") }
+press("Focus: Open Observation")
+guard textPresent("Focused fictional record: Observation/fictional-observation-001")
+else { noGo("focused Observation not source-linked") }
+press("Focus: Mark visited (demo only)")
+guard textPresent("Fictional walkthrough: 1 of 3 visited this session")
+else { noGo("focused visit state did not update") }
+press("Focus: Reset visits")
+guard textPresent("Fictional walkthrough: 0 of 3 visited this session")
+else { noGo("focused visit state did not reset") }
+press("Focus: Return to developer evidence")
+guard textPresent("Workspace home: fictional Core source only")
+else { noGo("focused view did not return to prior developer UI") }
+print("MACOS_NATIVE_FOCUSED_FICTIONAL_WORKSPACE_PATIENT_CONTEXT_AX_PASS_NONCLINICAL")
 guard textPresent("Fictional session walkthrough: 0 of 3 identities visited")
 else { noGo("fictional session walkthrough did not start empty") }
 press("Open next unvisited fictional identity")

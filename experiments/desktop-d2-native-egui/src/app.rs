@@ -676,6 +676,9 @@ pub struct MedOriginNativePreview {
     encrypted_workspace_receipt: Option<FictionalEncryptedWorkspaceReceipt>,
     encrypted_readback: Option<FictionalEncryptedReadback>,
     encrypted_readback_source_external: bool,
+    // Separates the source-verified fictional Workspace from developer proof
+    // controls. UI-only mode: never changes Core data, keys, privileges or IO.
+    focused_workspace_visible: bool,
     encrypted_readback_selected: Option<usize>,
     encrypted_readback_history: Vec<usize>,
     encrypted_readback_filter: RecoveredResourceTypeFilter,
@@ -1167,6 +1170,7 @@ impl MedOriginNativePreview {
         self.encrypted_workspace_receipt = None;
         self.encrypted_readback = None;
         self.encrypted_readback_source_external = false;
+        self.focused_workspace_visible = false;
         self.encrypted_readback_selected = None;
         self.encrypted_readback_history.clear();
         self.encrypted_readback_filter = RecoveredResourceTypeFilter::All;
@@ -1198,6 +1202,7 @@ impl MedOriginNativePreview {
         self.encrypted_workspace_receipt = None;
         self.encrypted_readback = None;
         self.encrypted_readback_source_external = false;
+        self.focused_workspace_visible = false;
         self.encrypted_readback_selected = None;
         self.encrypted_readback_history.clear();
         self.encrypted_readback_filter = RecoveredResourceTypeFilter::All;
@@ -1623,10 +1628,204 @@ impl MedOriginNativePreview {
     }
 }
 
+// The focused native screen keeps one trustworthy source-to-view mapping.
+// It never reads files, spawns Core, uses the network or accepts patient input.
+impl MedOriginNativePreview {
+    fn set_focused_fictional_workspace(&mut self, visible: bool) -> Result<(), &'static str> {
+        if visible {
+            let admitted = self
+                .encrypted_readback
+                .as_ref()
+                .ok_or("focused_workspace_no_verified_source")
+                .and_then(verified_fictional_patient_chart);
+            if let Err(reason) = admitted {
+                self.clear_fictional_output();
+                self.encrypted_readback_notice =
+                    Some("FAIL CLOSED: focused fictional Workspace source graph refused");
+                return Err(reason);
+            }
+        }
+        self.focused_workspace_visible = visible;
+        Ok(())
+    }
+
+    fn focused_workspace_ui(&mut self, ui: &mut egui::Ui) {
+        ui.heading("MedOrigin focused Workspace");
+        ui.strong("Imaginary Core records only. No clinical use, treatment, diagnosis or PHI.");
+        let mut leave = false;
+        let mut clear = false;
+        ui.horizontal(|ui| {
+            if ui.button("Focus: Return to developer evidence").clicked() {
+                leave = true;
+            }
+            if ui.button("Focus: Clear fictional session").clicked() {
+                clear = true;
+            }
+        });
+        if leave {
+            let _ = self.set_focused_fictional_workspace(false);
+            return;
+        }
+        if clear {
+            self.clear_fictional_output();
+            return;
+        }
+        let (chart, readback) = match self.encrypted_readback.as_ref() {
+            None => {
+                ui.label("No verified fictional encrypted Workspace is connected.");
+                ui.label("There is no file, patient import or external connection in this view.");
+                return;
+            }
+            Some(readback) => match verified_fictional_patient_chart(readback) {
+                Ok(chart) => (chart, readback),
+                Err(_) => {
+                    self.clear_fictional_output();
+                    self.encrypted_readback_notice =
+                        Some("FAIL CLOSED: focused fictional Workspace graph changed");
+                    ui.label("FAIL CLOSED: source graph could not be verified.");
+                    return;
+                }
+            },
+        };
+        let resources = readback.resources.clone();
+        let source_sha = readback.source_content_sha256.clone();
+        let reopened = readback.encrypted_reopen_verified;
+        let audited = readback.audit_chain_verified;
+        let persistent = readback.persistent_test_vault_reopened;
+        let selected = self.encrypted_readback_selected;
+        let history_len = self.encrypted_readback_history.len();
+        let visited = self.fictional_walkthrough_done;
+        let notice = self.encrypted_readback_notice;
+
+        ui.group(|ui| {
+            ui.strong("Verified local fictional Workspace");
+            ui.label(format!(
+                "3 fictional identities | encrypted reopen: {reopened} | audit: {audited}"
+            ));
+            ui.label(format!(
+                "Source: {}",
+                if persistent {
+                    "Cold-reopened persistent DPAPI QA test vault"
+                } else {
+                    "Ephemeral encrypted QA test vault, removed after readback"
+                }
+            ));
+            ui.label("Source and freshness are not independently authenticated for clinical use.");
+        });
+        ui.separator();
+
+        enum FocusAction {
+            OpenPatient,
+            OpenMember(usize),
+            Back,
+            Next,
+            Mark,
+            Reset,
+        }
+        let mut action: Option<FocusAction> = None;
+        ui.heading("Fictional patient context");
+        ui.label("Patient, Encounter and Observation shown in source graph order, NOT time order.");
+        ui.horizontal_wrapped(|ui| {
+            if ui.button("Focus: Open Patient").clicked() {
+                action = Some(FocusAction::OpenPatient);
+            }
+            for index in [chart.encounter, chart.observation] {
+                let member = &resources[index];
+                if ui
+                    .button(format!("Focus: Open {}", member.resource_type))
+                    .clicked()
+                {
+                    action = Some(FocusAction::OpenMember(index));
+                }
+            }
+        });
+        ui.separator();
+        ui.strong(format!(
+            "Fictional walkthrough: {} of 3 visited this session",
+            visited.iter().filter(|done| **done).count()
+        ));
+        ui.horizontal_wrapped(|ui| {
+            if ui.button("Focus: Next unvisited").clicked() {
+                action = Some(FocusAction::Next);
+            }
+            if ui.button("Focus: Reset visits").clicked() {
+                action = Some(FocusAction::Reset);
+            }
+        });
+        if let Some(index) = selected
+            && let Some(resource) = resources.get(index)
+        {
+            ui.group(|ui| {
+                ui.strong(format!(
+                    "Focused fictional record: {}/{}",
+                    resource.resource_type, resource.resource_id
+                ));
+                ui.monospace(format!("Verified source reference: {}", resource.full_url));
+                ui.label(format!(
+                    "Session visit status: {}",
+                    if visited[index] {
+                        "visited"
+                    } else {
+                        "not visited"
+                    }
+                ));
+                if !visited[index] && ui.button("Focus: Mark visited (demo only)").clicked() {
+                    action = Some(FocusAction::Mark);
+                }
+                for link in &resource.links {
+                    ui.monospace(format!("Verified {0} -> {1}", link.field, link.target));
+                }
+                if history_len > 0 && ui.button("Focus: Back to patient").clicked() {
+                    action = Some(FocusAction::Back);
+                }
+                ui.label("No clinical note, event date, order, diagnosis or status was inferred.");
+            });
+        } else {
+            ui.label("Select a fictional resource to view its verified identity and references.");
+        }
+        if let Some(notice) = notice {
+            ui.label(notice);
+        }
+        ui.collapsing("Source verification information", |ui| {
+            ui.monospace(format!("Original synthetic Bundle SHA-256: {source_sha}"));
+            ui.label(
+                "Identity and links are admitted from an exact source-reviewed Core projection.",
+            );
+        });
+        match action {
+            Some(FocusAction::OpenPatient) => {
+                let _ = self.open_recovered_fictional_patient_chart();
+            }
+            Some(FocusAction::OpenMember(index)) => {
+                if self.open_recovered_fictional_patient_chart().is_ok() {
+                    let _ = self.open_recovered_fictional_patient_chart_member(index);
+                }
+            }
+            Some(FocusAction::Back) => {
+                let _ = self.back_encrypted_readback_resource();
+            }
+            Some(FocusAction::Next) => {
+                let _ = self.next_unvisited_fictional_resource();
+            }
+            Some(FocusAction::Mark) => {
+                let _ = self.mark_selected_fictional_walkthrough();
+            }
+            Some(FocusAction::Reset) => {
+                let _ = self.reset_fictional_walkthrough();
+            }
+            None => {}
+        }
+    }
+}
+
 impl eframe::App for MedOriginNativePreview {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         if ui.input(|input| input.key_pressed(egui::Key::Escape)) {
             self.clear_fictional_output();
+        }
+        if self.focused_workspace_visible {
+            egui::CentralPanel::default().show(ui, |ui| self.focused_workspace_ui(ui));
+            return;
         }
         egui::CentralPanel::default().show(ui, |ui| {
             ui.heading("MedOrigin — Native Rust Experiment");
@@ -1660,6 +1859,9 @@ impl eframe::App for MedOriginNativePreview {
                     ui.label("Only source-approved imaginary FHIR-shaped identities; no real patient data.");
                     if ui.button("Open workspace home: fictional patient chart").clicked() {
                         open_home_chart = true;
+                    }
+                    if ui.button("Open focused fictional Workspace").clicked() {
+                        let _ = self.set_focused_fictional_workspace(true);
                     }
                     ui.separator();
                     ui.strong(format!(
@@ -2255,6 +2457,66 @@ impl eframe::App for MedOriginNativePreview {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn focused_workspace_switch_preserves_verified_source_and_never_promotes_clinical_use() {
+        for raw in [
+            include_bytes!("../fixtures/core/encrypted-readback-projection.json").as_slice(),
+            include_bytes!("../fixtures/core/encrypted-persistent-readback-projection.json")
+                .as_slice(),
+        ] {
+            let mut app =
+                MedOriginNativePreview::from_one_time_synthetic_encrypted_readback_stdin(raw)
+                    .unwrap();
+            assert!(!app.focused_workspace_visible);
+            app.set_focused_fictional_workspace(true).unwrap();
+            assert!(app.focused_workspace_visible);
+            assert!(
+                app.encrypted_readback
+                    .as_ref()
+                    .unwrap()
+                    .audit_chain_verified
+            );
+            app.open_recovered_fictional_patient_chart().unwrap();
+            assert_eq!(app.encrypted_readback_selected, Some(1));
+            let chart =
+                verified_fictional_patient_chart(app.encrypted_readback.as_ref().unwrap()).unwrap();
+            app.open_recovered_fictional_patient_chart_member(chart.encounter)
+                .unwrap();
+            assert_eq!(app.encrypted_readback_selected, Some(chart.encounter));
+            app.back_encrypted_readback_resource().unwrap();
+            assert_eq!(app.encrypted_readback_selected, Some(chart.patient));
+            app.set_focused_fictional_workspace(false).unwrap();
+            assert!(!app.focused_workspace_visible);
+            assert!(app.encrypted_readback.is_some());
+            app.set_focused_fictional_workspace(true).unwrap();
+            app.clear_fictional_output();
+            assert!(!app.focused_workspace_visible);
+            assert!(app.encrypted_readback.is_none());
+            assert_eq!(app.fictional_walkthrough_done, [false; 3]);
+        }
+    }
+
+    #[test]
+    fn focused_workspace_refuses_no_source_or_mutated_fictional_graph() {
+        let mut empty = MedOriginNativePreview::default();
+        assert_eq!(
+            empty.set_focused_fictional_workspace(true),
+            Err("focused_workspace_no_verified_source")
+        );
+        assert!(!empty.focused_workspace_visible);
+        let raw = include_bytes!("../fixtures/core/encrypted-readback-projection.json");
+        let mut forged =
+            MedOriginNativePreview::from_one_time_synthetic_encrypted_readback_stdin(raw).unwrap();
+        forged.encrypted_readback.as_mut().unwrap().resources[0].links[1].target =
+            "urn:uuid:00000000-0000-4000-8000-000000000002".to_owned();
+        assert_eq!(
+            forged.set_focused_fictional_workspace(true),
+            Err("fictional_patient_chart_unverified_relationship_refused")
+        );
+        assert!(!forged.focused_workspace_visible);
+        assert!(forged.encrypted_readback.is_none());
+    }
 
     #[test]
     fn fictional_session_walkthrough_visits_three_actual_core_identities_once() {

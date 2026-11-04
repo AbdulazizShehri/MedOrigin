@@ -179,6 +179,29 @@ try {
   } else {
     Expect 'Workspace source: Reopened ephemeral encrypted test vault (removed after QA)'
   }
+  Press 'Open focused fictional Workspace'
+  Expect 'MedOrigin focused Workspace'
+  Expect '3 fictional identities | encrypted reopen: true | audit: true'
+  if($PersistentQaReceiptPath) {
+    Expect 'Source: Cold-reopened persistent DPAPI QA test vault'
+  } else {
+    Expect 'Source: Ephemeral encrypted QA test vault, removed after readback'
+  }
+  Expect 'Fictional walkthrough: 0 of 3 visited this session'
+  Press 'Focus: Open Patient'
+  Expect 'Focused fictional record: Patient/fictional-patient-001'
+  Press 'Focus: Open Encounter'
+  Expect 'Focused fictional record: Encounter/fictional-encounter-001'
+  Press 'Focus: Back to patient'
+  Expect 'Focused fictional record: Patient/fictional-patient-001'
+  Press 'Focus: Open Observation'
+  Expect 'Focused fictional record: Observation/fictional-observation-001'
+  Press 'Focus: Mark visited (demo only)'
+  Expect 'Fictional walkthrough: 1 of 3 visited this session'
+  Press 'Focus: Reset visits'
+  Expect 'Fictional walkthrough: 0 of 3 visited this session'
+  Press 'Focus: Return to developer evidence'
+  Expect 'Workspace home: fictional Core source only'
   Expect 'Fictional session walkthrough: 0 of 3 identities visited'
   Press 'Open next unvisited fictional identity'
   Expect 'Recovered fictional record: Patient/fictional-patient-001'
