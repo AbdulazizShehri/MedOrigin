@@ -136,3 +136,69 @@ from all Windows path reparse attacks, authenticated users,
 provenance for the Windows-installed `medscale.exe` shim, release
 signing, published packages or protected-main merge. The private
 Core Draft remains **NO-GO** for real patient use and release.
+
+
+## Exact-source offline package and installed Windows proof
+
+The functional Core implementation commit is
+`b72f7e8e7b33675bd0c93b9b47f95354b63b4af8`. A fresh
+**task-owned** Git checkout at that exact SHA was created on
+Ubuntu WSL2 ext4 from the private source repository. The existing
+approved read-only Core projection script was executed, followed by
+`uv build --offline --no-create-gitignore`. No root
+`pyproject.toml`, `uv.lock`, v0.2 artifacts or protected main
+code changed.
+
+Source-qualified, **unpublished** outputs:
+
+- `medscale-0.3.0-py3-none-any.whl` SHA256
+  `2038dc0ddba63fbb758d9838209fdbcdf0965b733ebcf188ad63d8d88b55d6c4`
+- `medscale-0.3.0.tar.gz` SHA256
+  `34e5eab3d6c0cd3469f51b2967fb590ab5c4ebac525b391da096a1928c9510e9`.
+
+The repository's independent existing Core Wheel identity and sdist
+publication-scope gates both passed with **zero issues**:
+`SOURCE_BOUND_WHEEL_QUALIFIED_ONLY` and
+`SDIST_SCOPE_QUALIFIED_ONLY`. The exact built Wheel's bytes matched
+all five selected FHIR/outcome/CLI source modules byte-for-byte.
+These gates establish only the scoped source package identity, not
+the Windows `medscale.exe` console-launcher chain of custody.
+
+The exact SHA-checked Wheel was installed locally with
+`pip --no-index --no-deps --target` into a **task-owned** Windows
+directory, not into user/system Python. A separate task-owned
+testing script ran the **real imported Core public Python CLI
+dispatcher** via `-P -B -s` and checked that Core's
+`cli.fhir`, `fhirkit.r4_schema` and `fhirkit.r4_outcome`
+modules all resolved from the installed Wheel directory, not
+the source checkout.
+
+**All three native Windows runtimes passed** with the identical
+source-qualified Wheel and unchanged official archive:
+
+- Windows **Python 3.14** with task-local pinned
+  `jsonschema==4.25.1` (the system's separately installed
+  `jsonschema 4.26.0` remained unchanged).
+- Windows **Python 3.11.15** with separately task-local pinned
+  `jsonschema==4.25.1` and test dependencies.
+- Windows **Python 3.12.13** with separately task-local pinned
+  `jsonschema==4.25.1` and test dependencies.
+
+On each interpreter, the exact installed Core Python dispatcher
+produced a successful **structural-only** OperationOutcome for a
+fictional source `Patient` with no schema errors (warning issue,
+**CLI exit2**) and an invalid invented resourceType
+(structural error + warning, **CLI exit2**). Every generated
+OperationOutcome was **again** checked against the exact pinned
+official R4 schema and accepted **structurally only** with
+`not_validated`, never `valid`. The redacted stdout contained
+no input name, patient text, filesystem path or other FHIR field.
+No report was persisted or source files uploaded.
+
+The CLI does **not** attempt, claim or supply full FHIR R4
+profiles, FHIRPath invariants, clinical safety, terminology
+and cross-resource validation. Additional independent
+security/clinical review, full validation, qualified native
+Windows `medscale.exe` console shim (#893), hosted GitHub
+exact-head CI, OS protected production keys, PHI authorization,
+dependency audit and founder release decisions remain **NO-GO**.
