@@ -41,8 +41,13 @@ class NativeOneShotDeadlineTests(unittest.TestCase):
         with TemporaryDirectory() as tmp:
             root = Path(tmp)
             file = root / qa.EXPECTED_NAME
-            file.symlink_to(root / 'outside-missing')
-            with mock.patch.object(qa.subprocess, 'Popen') as mock_spawn:
+            try:
+                file.symlink_to(root / "outside-missing")
+            except (OSError, NotImplementedError):
+                # Some Windows hosts disallow nonprivileged symlinks. The
+                # missing-file/hash refusal must still be tested there.
+                pass
+            with mock.patch.object(qa.subprocess, "Popen") as mock_spawn:
                 with self.assertRaisesRegex(ValueError, "binary_identity_invalid"):
                     qa.qualify(file, "0" * 64)
                 with self.assertRaisesRegex(ValueError, "expected_sha_invalid"):
