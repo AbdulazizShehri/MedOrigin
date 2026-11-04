@@ -114,6 +114,54 @@ def _bundle_preflight_main(argv: list[str]) -> int:
     return 0
 
 
+def _batch_bundle_local_diagnostics_main(argv: list[str]) -> int:
+    """Developer-only triage of marked invented Bundle-local relationships.
+
+    No schema validation, network or partial output from unmarked sources.
+    Names and raw errors never appear in output. Exit 2 even when triage
+    succeeds; a passing preflight is NOT successful clinical validation.
+    """
+    if argv in (["-h"], ["--help"]):
+        print(
+            "usage: medscale fhir batch-bundle-diagnose --synthetic-only "
+            "FICTIONAL_BUNDLE_1 FICTIONAL_BUNDLE_2 "
+            "[FICTIONAL_BUNDLE_3 ... FICTIONAL_BUNDLE_8]\n"
+            "Separate redacted local-reference OperationOutcome for every "
+            "synthetic-marker-qualified invented Bundle. No filenames or "
+            "patient data. NOT HL7 R4 schema/profile/clinical validation."
+        )
+        return 0
+    if (
+        not 3 <= len(argv) <= 9
+        or argv[0] != "--synthetic-only"
+        or any(not name or name.startswith("--") for name in argv[1:])
+    ):
+        print(
+            "batch diagnostics refused: explicit_fictional_batch_flags_required",
+            file=sys.stderr,
+        )
+        return 2
+    try:
+        from medscale.fhirkit.bundle_batch_diagnostics import (
+            synthetic_bundle_batch_triage_json,
+        )
+
+        payloads = [read_fhir_json_document(Path(name)) for name in argv[1:]]
+    except FhirInputError:
+        print("batch diagnostics refused: source_input_refused", file=sys.stderr)
+        return 1
+    except Exception:
+        print("batch diagnostics refused: source_reader_unavailable", file=sys.stderr)
+        return 2
+    try:
+        result = synthetic_bundle_batch_triage_json(payloads, synthetic_only=True)
+    except Exception:
+        print("batch diagnostics refused: source_qualification_refused", file=sys.stderr)
+        return 2
+    print(result, end="")
+    return 2
+
+
 def _batch_bundle_structural_assessment_main(argv: list[str]) -> int:
     """Bounded multi-document synthetic relationship + offline R4 structural check.
 
@@ -463,6 +511,8 @@ def main(argv: list[str] | None = None) -> int:
         return _multi_timeline_demo_main(tokens[1:])
     if tokens and tokens[0] == "timeline-demo":
         return _timeline_demo_main(tokens[1:])
+    if tokens and tokens[0] == "batch-bundle-diagnose":
+        return _batch_bundle_local_diagnostics_main(tokens[1:])
     if tokens and tokens[0] == "batch-bundle-assess":
         return _batch_bundle_structural_assessment_main(tokens[1:])
     if tokens and tokens[0] == "bundle-assess":
