@@ -281,6 +281,13 @@ jobs:
           & $py -m unittest discover -s experiments/desktop-d2-native-egui/scripts -p test_windows_installed_fictional_core.py -v
           if ($LASTEXITCODE -ne 0) { throw 'Installed-Wheel interactive Core source-only safeguards failed' }
           Write-Output 'INSTALLED_WINDOWS_CORE_TO_D2_TESTS_SOURCE_ONLY_NOT_WHEEL_RUNTIME_OR_PHI'
+      - name: Verify source-only portable fictional Core package and manifest refusal gates
+        shell: pwsh
+        run: |
+          $py = if ($IsWindows) { 'python' } else { 'python3' }
+          & $py -m unittest discover -s experiments/desktop-d2-native-egui/scripts -p test_portable_fictional_core.py -v
+          if ($LASTEXITCODE -ne 0) { throw 'Portable 290-file fictional Core source/manifest guard failed' }
+          Write-Output 'PORTABLE_D2_CORE_SOURCE_ONLY_TESTS_NOT_PACKAGED_RUNTIME_OR_RELEASE'
       - name: Verify checks did not alter tracked code or lockfiles
         shell: pwsh
         run: |
