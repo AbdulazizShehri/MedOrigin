@@ -126,6 +126,15 @@ class AttestedInstalledCoreTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "wheel_does_not_match"):
                 self.verified()
 
+    def test_explicit_empty_or_partial_wheel_pinset_never_falls_back_to_default(self):
+        with self.assertRaisesRegex(ValueError, "two_exact_approved_wheel_packages_required"):
+            qa.attest_installed(self.core, self.wheels, self.site, approved_wheels=())
+        with self.assertRaisesRegex(ValueError, "two_exact_approved_wheel_packages_required"):
+            qa.attest_installed(
+                self.core, self.wheels, self.site,
+                approved_wheels=(qa.EXPECTED_WHEELS[0],),
+            )
+
     def test_installed_readback_runner_requires_mac_sandbox_and_explicit_site(self):
         import qualify_mac_installed_encrypted_readback_gui as runner
         from unittest.mock import patch as patched
