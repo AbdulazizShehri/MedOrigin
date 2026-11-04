@@ -69,3 +69,35 @@ independent security review #603, source/optional-extras #622, version and
 release authority #574, and desktop/network/accessibility qualification outside
 this Core slice. No tag, public release, merge to main, real patient processing
 or clinical claims are authorized by these tests.
+
+## Actual private local engineering receipt — Windows + WSL, 2026-11-04
+
+- Parent Core Draft #901 source SHA `ad0c62b4366789f5c7e41fc601bb6d0f9d640873`.
+  Feature code commit `a22f9c06cf7446fea38723c802f22f6fa2cb9654`.
+- Downloaded **only the public HL7 R4 schema archive** for bounded fictional QA;
+  retrieved ZIP SHA-256 exactly matched the pin. No patient or project data was
+  uploaded. JSON Schema 4.25.1 was installed into a task-only Python target,
+  leaving the global Python environment and frozen root untouched.
+- Native Windows Python 3.14: selected existing FHIR + new Core tests:
+  **37 PASS, 3 DESELECTED** with actual official ZIP and correct library, including
+  positive Patient, three invalid synthetic controls and the incomplete
+  StructureDefinition blind spot. Two pre-commit formatting-only follow-ups
+  then passed **36 PASS, 4 DESELECTED** without rerunning official opt-in.
+- Native Windows Python 3.11.15 and 3.12.13: **33 PASS, 7 DESELECTED each**;
+  borrowed preinstalled pure pytest from Python 3.14 via temporary PYTHONPATH.
+  These runs did NOT claim real R4 schema execution or hermetic environments.
+- `ruff check`, `ruff format --check`, and `git diff --check` passed.
+- Real `uv build --offline --wheel` in PC's WSL produced local unpublished
+  `medscale-0.3.0-py3-none-any.whl`, SHA-256
+  `bdf5ad391313e4e1a46c2a4dc17da8dcda2dd24cf87581c6be2c9ecfeff9c25a`.
+  The temporary archive was NOT committed or distributed.
+- Actual Windows Python 3.14 offline/no-deps installation of that Wheel into
+  task-only target contained `medscale/fhirkit/r4_schema.py`. Running the
+  installed module with the exact official ZIP and pinned JSON Schema reported:
+  structurally acceptable fictional Patient **exit 2 / not_validated**;
+  fictional wrong-type Patient **exit 2 / invalid**. Both local report files
+  persisted successfully. Generated console launchers were NOT independently
+  attested; issue #893 stays open.
+- This is local author-side QA, **not exact-head hosted CI or independent
+  security/clinical review**. Default-branch security alerts and release NO-GO
+  remain open. No PR merge, tag, PyPI upload, signing, or clinical deployment.
