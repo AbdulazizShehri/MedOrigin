@@ -1,0 +1,27 @@
+# D2 native Workspace home and source-verified fictional patient context
+
+**2026-11-04. PRIVATE stacked draft above #947. This is NOT a clinical patient chart, FHIR R4 conformance, diagnoses, treatment advice, or real patient handling.**
+
+## Actual native Desktop functionality
+
+D2's earlier screen showed multiple developer fixtures and provenance tools before the recovered encrypted Workspace. The **native Workspace home** now appears at the top without hiding or reordering historical developer tools. When a verified real Core fictional encrypted readback is passed via explicit one-shot offline startup, the home reports:
+- **Verified fictional resources: 3 (read-only)**, based on the actual admitted Core projection, not a mock or hardcoded user claim.
+- Whether the source was a **cold-reopened persistent QA AES-GCM vault** or a **reopened ephemeral encrypted vault, deleted after QA**, without conflating those modes.
+- Explicit Core encrypted reopen and audit-chain verification flags.
+- A direct, keyboard/accessibility-exposed **Open workspace home: fictional patient chart** action, which selects the one *fictional* Patient identity and clears any old search, filter or navigation history.
+
+The recovered worklist also has **Open recovered fictional patient chart**. Both actions independently compute a read-only resource graph: exactly one source-projected Patient, one Observation, one Encounter, one `Encounter.subject -> Patient`, one `Observation.subject -> Patient`, and one `Observation.encounter -> Encounter`, with no unexpected outgoing edges. Each source must be accepted by D2's existing two SHA256-pinned exact byte manifests and attested Core audit/reopen flags; no ambiguous or dangling patient link may produce a chart. In a selected Patient record, a new **Fictional patient chart: source-verified relationships** group displays *1 Encounter and 1 Observation*, with two actionable native links. Clicking the related Encounter or Observation follows the **verified patient-linked graph** into the actual recovered resource, retains bounded navigation and permits Back to Patient. Invalid target, missing selection, altered relationship, duplicate resource type or unapproved source fails closed and discards the fictional readback. This does not derive medical chronology, dates, medications, clinical conditions or physician insights. No arbitrary medical fields, raw FHIR content, network API, patient import, file-picker, local persistence, OS process or model capability is added to the native Rust app.
+
+This is a product-facing **read-only patient-context UX pattern** over three invented test records, not a certified patient viewer or a generic EHR adapter. This code deliberately exposes no unsafe claim to be ready for real personal health data.
+
+## Actual qualification
+
+- Rust **58 library + 11 main + 7 browser/network source boundary = 76 PASS** offline and locked. New Rust unit tests cover both separately SHA-pinned source Core projections (ephemeral 1164-byte and DPAPI-protected persistent 1215-byte), graph reconciliation, one-tap chart, search and facet reset, Encounter/Observation chart-link navigation and Back; wrong target, missing selection, forged reference and duplicate/missing member fail-closed.
+- Offline locked `cargo clippy --all-targets -- -D warnings`, Rustfmt and `git diff --check` PASS. No new Rust crates or native network/process APIs.
+- Actual Windows 11 compiled native Rust egui GUI SHA256 `cdf9129b9094f6d436ac7c1494499d13fcd05196984349ab1fcda56f9f196de6`. Real Windows UIAutomation `tests/windows-encrypted-core-readback-uia.ps1` clicked the **top-level Workspace home action** and the recovered worklist chart action, checked the exact patient chart and source-derived relationship counts, opened both chart members, returned via Back to Patient, then independently exercised search/facets/incoming/outgoing links/direct history breadcrumbs and full clear. Exit0 `WINDOWS_REAL_ENCRYPTED_CORE_READBACK_THREE_RESOURCES_LINK_AND_BACK_UIA_PASS_NOT_CLINICAL`. The UIA title uses ASCII punctuation for stable Windows PowerShell 5.1 accessibility names.
+- Independently executed **actual pinned Windows Python3.14 encrypted Core AES-GCM fictional import/reopen/audit-readback** under suspended-before-execution kill-on-close Job Object into this exact compiled native GUI, then the same expanded UIAutomation. Exact Core commit `8e5ed5430f4ab2ebc8981c52c67234023382954b`; no patient data. Exit0 `WINDOWS_LIVE_ENCRYPTED_CORE_READBACK_TO_NATIVE_D2_GUI_PASS_NOT_CLINICAL`.
+- Hosted Windows/Ubuntu PR-head CI on the new stacked draft is separately checked. No remote green claim until independently verified.
+
+## Unresolved NO-GO gates
+
+The fixed fictional FHIR-shaped graph has **no dates or clinical content** and is intentionally unsuitable for treating real patient information. The production key provider, encrypted user Workspace identity/role/consent model, OS-secure client provenance, independent session sender authentication, OS-enforced network egress controls (Windows Job Objects are lifecycle controls only), full FHIR R4 profile and terminology validation, clinician QA, clinical and accessibility review, signed Windows/macOS/Linux packaging, supply chain attestations and default-branch dependency remediation remain open. Do not merge main, release, publish, notarize, accept PHI, process real patient records, perform clinical inference or describe this as a production chart.
