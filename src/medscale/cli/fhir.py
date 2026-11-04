@@ -12,6 +12,8 @@ import json
 import sys
 from pathlib import Path
 
+from medscale.fhirkit.errors import FhirMissingDependencyError, UnavailableValidatorError
+from medscale.fhirkit.r4_schema import validate_offline_r4_json_structure
 from medscale.fhirkit.report import load_report_from_json, report_to_json
 from medscale.fhirkit.storage import store_report
 from medscale.fhirkit.validate import validate_fhir
@@ -40,6 +42,17 @@ def main(argv: list[str] | None = None) -> int:
         help=(
             "Optional external validator command, split on whitespace. "
             "When omitted, local provenance is recorded with status not_validated."
+        ),
+    )
+    parser.add_argument(
+        "--offline-r4-schema",
+        type=Path,
+        default=None,
+        metavar="OFFICIAL_FHIR_R4_ZIP",
+        help=(
+            "Optional locally supplied, source-pinned HL7 FHIR R4 v4.0.1 JSON "
+            "Schema ZIP. Runs structural checks only; a pass is not full FHIR "
+            "conformance. Needs locally installed jsonschema==4.25.1."
         ),
     )
     parser.add_argument(
@@ -81,7 +94,16 @@ def main(argv: list[str] | None = None) -> int:
         )
         return 2
 
-    report = validate_fhir(payload, created_at=args.created_at)
+    if args.offline_r4_schema is not None:
+        try:
+            report = validate_offline_r4_json_structure(
+                payload, args.offline_r4_schema, created_at=args.created_at
+            )
+        except (UnavailableValidatorError, FhirMissingDependencyError) as exc:
+            print(f"offline R4 structural validator unavailable: {exc}", file=sys.stderr)
+            return 2
+    else:
+        report = validate_fhir(payload, created_at=args.created_at)
     path = store_report(report, root=args.output_dir)
     print(report_to_json(load_report_from_json(report_to_json(report))))
     print(f"report stored at: {path}", file=sys.stderr)
