@@ -877,6 +877,34 @@ impl MedOriginNativePreview {
         Ok(())
     }
 
+    /// Jump to an earlier already-visited verified fictional identity.
+    /// Breadcrumb jumps truncate the path rather than inventing a new edge.
+    fn jump_encrypted_readback_history(&mut self, step: usize) -> Result<(), &'static str> {
+        let selected = self.encrypted_readback_selected;
+        let target = self.encrypted_readback_history.get(step).copied();
+        let valid = self.encrypted_readback.as_ref().is_some_and(|r| {
+            selected.is_some_and(|index| index < r.resources.len())
+                && target.is_some_and(|index| index < r.resources.len())
+                && self
+                    .encrypted_readback_history
+                    .iter()
+                    .all(|index| *index < r.resources.len())
+        });
+        if !valid {
+            self.clear_fictional_output();
+            self.encrypted_readback_notice =
+                Some("FAIL CLOSED: fictional breadcrumb outside verified history");
+            return Err("encrypted_readback_breadcrumb_refused");
+        }
+        let previous = target.ok_or("encrypted_readback_breadcrumb_refused")?;
+        self.encrypted_readback_history.truncate(step);
+        self.encrypted_readback_selected = Some(previous);
+        self.encrypted_readback_filter = RecoveredResourceTypeFilter::All;
+        self.encrypted_readback_query.clear();
+        self.encrypted_readback_notice = None;
+        Ok(())
+    }
+
     fn back_encrypted_readback_resource(&mut self) -> Result<(), &'static str> {
         let previous = self
             .encrypted_readback_history
@@ -1475,6 +1503,7 @@ impl eframe::App for MedOriginNativePreview {
                     let mut select = None;
                     let mut follow = None;
                     let mut incoming = None;
+                    let mut breadcrumb_jump = None;
                     let mut filter_change = None;
                     let mut search_change: Option<String> = None;
                     if let Some(readback) = &self.encrypted_readback {
@@ -1549,6 +1578,35 @@ impl eframe::App for MedOriginNativePreview {
                                     resource.resource_type, resource.resource_id
                                 ));
                                 ui.monospace(format!("Recovered entry reference: {}", resource.full_url));
+                                let incoming_count = readback.resources.iter()
+                                    .flat_map(|source| source.links.iter())
+                                    .filter(|edge| edge.target == resource.full_url)
+                                    .count();
+                                ui.strong("Recovered fictional relationship inspector");
+                                ui.label(format!(
+                                    "Verified fictional references: {} outgoing, {} incoming",
+                                    resource.links.len(), incoming_count
+                                ));
+                                if !self.encrypted_readback_history.is_empty() {
+                                    ui.label(format!(
+                                        "Recovered fictional navigation trail: {} previous verified steps",
+                                        self.encrypted_readback_history.len()
+                                    ));
+                                    for (step, previous_index) in
+                                        self.encrypted_readback_history.iter().enumerate()
+                                    {
+                                        if let Some(previous) = readback.resources.get(*previous_index)
+                                            && ui.button(format!(
+                                                "Jump recovered history step {}: {}/{}",
+                                                step + 1,
+                                                previous.resource_type,
+                                                previous.resource_id
+                                            )).clicked()
+                                        {
+                                            breadcrumb_jump = Some(step);
+                                        }
+                                    }
+                                }
                                 for (link_index, link) in resource.links.iter().enumerate() {
                                     if ui.button(format!(
                                         "Follow recovered fictional {} -> {}",
@@ -1593,6 +1651,9 @@ impl eframe::App for MedOriginNativePreview {
                     }
                     if let Some((source_index, link_index)) = incoming {
                         let _ = self.follow_encrypted_readback_incoming(source_index, link_index);
+                    }
+                    if let Some(step) = breadcrumb_jump {
+                        let _ = self.jump_encrypted_readback_history(step);
                     }
                     if !self.encrypted_readback_history.is_empty()
                         && ui.button("Back to previous recovered fictional record").clicked()
@@ -1889,6 +1950,59 @@ mod tests {
         app.back_encrypted_readback_resource().unwrap();
         assert_eq!(app.encrypted_readback_selected, Some(0)); // then Observation
         assert!(app.encrypted_readback_history.is_empty());
+    }
+
+    #[test]
+    fn recovered_fictional_inspector_breadcrumbs_jump_only_to_verified_ancestors() {
+        let raw = include_bytes!("../fixtures/core/encrypted-readback-projection.json");
+        let mut app =
+            MedOriginNativePreview::from_one_time_synthetic_encrypted_readback_stdin(raw).unwrap();
+        app.select_encrypted_readback_resource(0).unwrap(); // Observation
+        app.follow_encrypted_readback_link(1).unwrap(); // Encounter
+        app.follow_encrypted_readback_link(0).unwrap(); // Patient
+        assert_eq!(app.encrypted_readback_history, vec![0, 2]);
+        assert_eq!(app.encrypted_readback_selected, Some(1));
+        app.jump_encrypted_readback_history(1).unwrap(); // Encounter
+        assert_eq!(app.encrypted_readback_history, vec![0]);
+        assert_eq!(app.encrypted_readback_selected, Some(2));
+        app.jump_encrypted_readback_history(0).unwrap(); // Observation
+        assert!(app.encrypted_readback_history.is_empty());
+        assert_eq!(app.encrypted_readback_selected, Some(0));
+
+        // An invented step is not a valid breadcrumb; fail closed.
+        assert_eq!(
+            app.jump_encrypted_readback_history(0),
+            Err("encrypted_readback_breadcrumb_refused")
+        );
+        assert!(app.encrypted_readback.is_none());
+        assert!(app.encrypted_readback_selected.is_none());
+        assert!(app.encrypted_readback_history.is_empty());
+
+        let mut app =
+            MedOriginNativePreview::from_one_time_synthetic_encrypted_readback_stdin(raw).unwrap();
+        app.select_encrypted_readback_resource(0).unwrap();
+        app.follow_encrypted_readback_link(0).unwrap();
+        app.encrypted_readback_history.push(usize::MAX);
+        assert_eq!(
+            app.jump_encrypted_readback_history(0),
+            Err("encrypted_readback_breadcrumb_refused")
+        );
+        assert!(app.encrypted_readback.is_none());
+        assert!(app.encrypted_readback_history.is_empty());
+
+        // Searching or filtering hides breadcrumbs and must never leave a
+        // history shortcut attached to a different fictional selection.
+        let mut app =
+            MedOriginNativePreview::from_one_time_synthetic_encrypted_readback_stdin(raw).unwrap();
+        app.select_encrypted_readback_resource(0).unwrap();
+        app.follow_encrypted_readback_link(0).unwrap();
+        app.set_recovered_search_query("patient").unwrap();
+        assert!(app.encrypted_readback_selected.is_none());
+        assert!(app.encrypted_readback_history.is_empty());
+        app.select_encrypted_readback_resource(1).unwrap();
+        app.set_recovered_type_filter(RecoveredResourceTypeFilter::Encounter);
+        assert!(app.encrypted_readback_history.is_empty());
+        assert!(app.encrypted_readback_selected.is_none());
     }
 
     #[test]
