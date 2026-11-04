@@ -145,6 +145,23 @@ pub fn inspect_pinned_core_report(index: usize) -> Result<CoreProvenanceReceipt,
     Ok(receipt)
 }
 
+/// Admit ONE external synthetic Core report only if it is byte-identical
+/// to a source-compiled, known Core report. This never proves transport
+/// authenticity or freshness; it is an allowlist, NOT a digital signature.
+pub fn admit_exact_source_reviewed_external_core_report(
+    raw: &[u8],
+) -> Result<CoreProvenanceReceipt, &'static str> {
+    let receipt = admit_fixed_fictional_core_report(raw)?;
+    let expected = match receipt.case {
+        FictionalCoreInput::KnownStructureDefinition => inspect_pinned_core_report(0)?,
+        FictionalCoreInput::UnknownResourceNegativeControl => inspect_pinned_core_report(1)?,
+    };
+    if receipt != expected {
+        return Err("external_core_report_not_exact_source_bound");
+    }
+    Ok(receipt)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

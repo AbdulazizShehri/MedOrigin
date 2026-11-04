@@ -1,7 +1,8 @@
 // Adapted from emilk/eframe_template under Apache-2.0, see UPSTREAM-NOTICE.md.
 // Synthetic-only, in-process native Rust eframe + D0; no browser, EHR, PHI or network.
 use crate::core_provenance::{
-    CoreProvenanceReceipt, PINNED_CORE_CASE_LABELS, inspect_pinned_core_report,
+    CoreProvenanceReceipt, FictionalCoreInput, PINNED_CORE_CASE_LABELS,
+    admit_exact_source_reviewed_external_core_report, inspect_pinned_core_report,
 };
 use eframe::egui;
 use medorigin_desktop_d0_rust_prototype::{
@@ -545,6 +546,7 @@ pub struct MedOriginNativePreview {
     core_report_selection: usize,
     core_report: Option<CoreProvenanceReceipt>,
     core_report_notice: Option<&'static str>,
+    external_core_source_visible: bool,
     fictional_workspace_unlocked: bool,
     fictional_workspace_filter: FictionalWorkspaceFilter,
     fictional_workspace_selected: Option<usize>,
@@ -553,6 +555,27 @@ pub struct MedOriginNativePreview {
 }
 
 impl MedOriginNativePreview {
+    /// Explicit one-shot, bounded external stdin QA transport. The caller is
+    /// UNTRUSTED; only the two exact canonical source-compiled fictional
+    /// reports are accepted. This never attests freshness or a running Core.
+    pub fn from_one_time_fictional_core_stdin(raw: &[u8]) -> Result<Self, &'static str> {
+        let receipt = admit_exact_source_reviewed_external_core_report(raw)?;
+        Ok(Self {
+            core_report_selection: match receipt.case {
+                FictionalCoreInput::KnownStructureDefinition => 0,
+                FictionalCoreInput::UnknownResourceNegativeControl => 1,
+            },
+            core_report: Some(receipt),
+            external_core_source_visible: true,
+            ..Default::default()
+        })
+    }
+
+    /// Read-only source marker for the strict one-shot synthetic stdin path.
+    pub fn has_external_fictional_core_stdin(&self) -> bool {
+        self.external_core_source_visible && self.core_report.is_some()
+    }
+
     /// Remove all previously rendered synthetic content while keeping only
     /// allowlisted selection indices. This is not secure memory erasure.
     pub fn clear_fictional_output(&mut self) {
@@ -564,6 +587,7 @@ impl MedOriginNativePreview {
         self.relationship_notice = None;
         self.core_report = None;
         self.core_report_notice = None;
+        self.external_core_source_visible = false;
         self.fictional_workspace_selected = None;
         self.fictional_workspace_detail = None;
         self.fictional_workspace_notice = None;
@@ -582,6 +606,7 @@ impl MedOriginNativePreview {
         self.relationship_notice = None;
         self.core_report = None;
         self.core_report_notice = None;
+        self.external_core_source_visible = false;
         self.fictional_workspace_selected = None;
         self.fictional_workspace_detail = None;
         self.fictional_workspace_notice = None;
@@ -932,7 +957,7 @@ impl eframe::App for MedOriginNativePreview {
             // fictional QA cases, embedded as build-time bytes. All admission
             // is reverified locally on click; NO live Core worker or file IO.
             egui::CollapsingHeader::new("Core provenance: two fictional reports (NOT validated)")
-                .default_open(false)
+                .default_open(self.external_core_source_visible)
                 .show(ui, |ui| {
                     ui.strong("Source-compiled Python Core QA receipts. NOT live or clinical.");
                     for (index, label) in PINNED_CORE_CASE_LABELS.iter().enumerate() {
@@ -958,6 +983,9 @@ impl eframe::App for MedOriginNativePreview {
                         ui.monospace(format!("Source report SHA-256: {}", receipt.report_sha256));
                         ui.strong(format!("Core status: {}", receipt.status));
                         ui.strong(receipt.disclosure);
+                        if self.external_core_source_visible {
+                            ui.strong("One-shot external stdin synthetic Core report accepted (exact source hash). GUI does not authenticate its origin or freshness.");
+                        }
                         ui.label("Not a live Python Core connection, full R4 validator, EHR import or patient workspace.");
                     }
                 });
@@ -1175,6 +1203,29 @@ impl eframe::App for MedOriginNativePreview {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn external_one_shot_core_report_clears_on_other_native_actions() {
+        let known = include_bytes!("../fixtures/core/known-structure-definition.json");
+        let negative = include_bytes!("../fixtures/core/unknown-fictional-negative.json");
+        for (raw, expected_selection) in [(known.as_slice(), 0usize), (negative.as_slice(), 1usize)]
+        {
+            let mut app = MedOriginNativePreview::from_one_time_fictional_core_stdin(raw)
+                .expect("exact canonical fictional source bytes");
+            assert!(app.has_external_fictional_core_stdin());
+            assert_eq!(app.core_report_selection, expected_selection);
+            assert_eq!(app.core_report.as_ref().unwrap().status, "not_validated");
+            app.clear_fictional_output();
+            assert!(!app.has_external_fictional_core_stdin());
+            assert!(app.core_report.is_none());
+            // Embedded source viewer must never inherit the external marker.
+            app.inspect_selected_core_receipt().unwrap();
+            assert!(!app.has_external_fictional_core_stdin());
+            assert!(app.core_report.is_some());
+            app.hash_selected().unwrap();
+            assert!(app.core_report.is_none());
+        }
+    }
 
     #[test]
     fn fictional_workspace_is_closed_by_default_and_denies_case_opening() {

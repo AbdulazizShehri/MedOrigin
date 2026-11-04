@@ -171,6 +171,13 @@ jobs:
           & $py -m unittest discover -s experiments/desktop-d2-native-egui/scripts -p test_qualify_installed_synthetic_core.py -v
           if ($LASTEXITCODE -ne 0) { throw 'Installed Core wheel provenance/record negative guards failed' }
           Write-Output 'INSTALLED_WHEEL_CORE_SOURCE_ONLY_NO_CI_INSTALL_OR_OS_SANDBOX_CLAIM'
+      - name: Source-only strict native GUI one-shot installed Core stdin contract
+        shell: pwsh
+        run: |
+          $py = if ($IsWindows) { 'python' } else { 'python3' }
+          & $py -m unittest discover -s experiments/desktop-d2-native-egui/scripts -p test_qualify_installed_core_into_native_gui.py -v
+          if ($LASTEXITCODE -ne 0) { throw 'One-shot installed Core to native GUI source guard refused' }
+          Write-Output 'NATIVE_GUI_CORE_STDIN_SOURCE_ONLY_NO_HOSTED_MAC_AX_OR_INSTALLED_CORE_PROOF'
       - name: Verify checks did not alter tracked code or lockfiles
         shell: pwsh
         run: |
