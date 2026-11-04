@@ -113,6 +113,8 @@ def test_truthful_browser_handoff_requires_identical_attested_hashes(
     assert "Not validated" in seen[0][1]
     assert "script-src 'none'" in seen[0][1]
     assert "connect-src 'none'" in seen[0][1]
+    assert "word-break: break-all" in seen[0][1]
+    assert "article { min-width: 0;" in seen[0][1]
     assert seen[0][2:] == ("a" * 64, "b" * 64)
     assert "PASSED" not in seen[0][1]
 

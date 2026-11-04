@@ -40,6 +40,15 @@ input into its captured memory-only envelope. No network telemetry.
 
 ## Verification boundaries
 
+Hosted Windows attempt on first functional head `349273b5` rebuilt exact
+Core Wheel+sdist, independently qualified package source and interpreter
+execution, then reached real Playwright Edge and correctly caught **phone-width
+horizontal overflow** of the long SHA-256 report digest. This was a genuine UI
+bug, not a package provenance or clinical-status failure. A follow-up makes
+SHA-256 code blocks wrapping display blocks and allows grid items to shrink,
+without hiding/truncating any digest or relaxing the Playwright assertion.
+The second exact-head hosted browser result must be checked independently.
+
 At author-source level, Windows Python 3.14 Ruff and formatting checks
 passed. The existing negative-truth/full-gate regression plus additional
 new source-bound handoff adversarial tests: **47 PASS**. The first pytest

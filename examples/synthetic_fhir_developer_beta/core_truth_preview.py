@@ -135,12 +135,14 @@ body {{ margin: 0; background: #0d121a; color: #f2f5fa; }}
 main {{ max-width: 840px; margin: auto; padding: 56px 24px; }}
 h1 {{ font-size: clamp(30px, 5vw, 52px); letter-spacing: -.04em; }}
 p {{ color: #c2cad7; line-height: 1.6; }}
-.grid {{ display: grid;
+.grid {{ display: grid; min-width: 0;
  grid-template-columns: repeat(auto-fit,minmax(min(100%,260px),1fr));
  gap: 16px; }}
-article {{ padding: 20px; border: 1px solid #3b4453; border-radius: 14px; }}
+article {{ min-width: 0; max-width: 100%; padding: 20px;
+ border: 1px solid #3b4453; border-radius: 14px; }}
 strong {{ color: #ffbe8f; }}
-code {{ overflow-wrap: anywhere; font-size: 12px; }}
+code {{ display: block; max-width: 100%; font-size: 12px;
+ overflow-wrap: anywhere; word-break: break-all; white-space: normal; }}
 footer {{ margin-top: 36px; border-top: 1px solid #3b4453; padding-top: 16px; }}
 </style>
 </head>
