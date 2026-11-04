@@ -110,3 +110,93 @@ with production readiness.
 #574 founder release decisions, and exact-head hosted
 CI qualification remain separate uncompleted gates.
 No protected main merge, signing, tag or publication is authorized.
+
+
+## Exact-source build and installed Windows evidence
+
+**Functional Git commit:** `efe7e4dc8a2996ed261006dbab62181bdfad8f0e`.
+A task-owned WSL2 Ubuntu ext4 checkout was pinned to this exact
+SHA. Its read-only Core projection was built with
+`uv build --offline --no-create-gitignore`. POSIX file modes
+were normalized **only on this disposable projected tree**,
+never in the source Git checkout or protected repository.
+
+All three existing independent Core package gates passed with
+**zero issues**:
+`SOURCE_BOUND_WHEEL_QUALIFIED_ONLY`,
+`SDIST_SCOPE_QUALIFIED_ONLY`, and
+`METADATA_QUALIFIED_ONLY`. Five exact source modules
+(including the new negative Outcome, existing positive dual
+assessment, Bundle relationships, R4 schema and public Core
+CLI) were byte-identical to the corresponding member bytes
+of the generated Core Wheel.
+
+Locally qualified, **unpublished** exact-source artifact
+SHA-256 digests:
+
+- Core Wheel `medscale-0.3.0-py3-none-any.whl`:
+  `caa84f53e85f83375d6778b125dc851b5edb17c5e2e25cdd57c604d9a6de6c2f`.
+- Core sdist `medscale-0.3.0.tar.gz`:
+  `e9d5875178e2dd61de8bb8bb4de24b043fa1fa737a63cbec29e9feefc0740028`.
+
+The exact SHA-checked Wheel was installed with
+`pip --no-index --no-deps --target` into a task-only native
+Windows package directory, **not** into system Python.
+A separate installed-only test proved seven imported
+Core/FHIR/CLI modules resolve **from the installed Wheel
+destination**, not from this Git checkout.
+
+The same actual **installed Core public Python dispatcher**
+was tested under **three native Windows runtimes**:
+
+- Python **3.14**, with task-isolated pinned
+  `jsonschema==4.25.1`.
+- Python **3.11.15**, with an independently isolated
+  `jsonschema==4.25.1` dependency tree.
+- Python **3.12.13**, with its own independently
+  isolated `jsonschema==4.25.1` dependency tree.
+
+The first Py3.11 test-only dependency installation deliberately
+used `--no-deps` and therefore lacked `attrs`;
+that initial QA invocation failed at dependency import.
+No MedOrigin source change or relaxed validation occurred.
+After installing the normal transitive dependencies **only**
+into the disposable task test directory, the identical
+SHA-checked Wheel passed on both Py3.11 and Py3.12.
+
+Every native runtime completed with exit0
+`REAL_INSTALLED_CORE_OFFICIAL_R4_BUNDLE_NEGATIVE_OUTCOME_PASS`.
+For a fully invented, relationship-valid 3-resource Bundle,
+the actual SHA-pinned official R4 structural check still
+returns **`not_validated` and public CLI exit2**.
+For a missing local Patient reference, it emits only the
+redacted error+warning FHIR `OperationOutcome`,
+**without** needing the official schema to process the
+rejected source, and still exits2. The generated rejected
+`OperationOutcome` was separately checked against the
+source-pinned **official R4 JSON Schema**, giving
+`not_validated` structural shape only, not clinical
+conformance. Removing the exact synthetic marker yielded
+**no FHIR-looking document** and the fixed refusal code
+while staying exit2. No report was written, no network or
+EHR invoked, no source identifiers/UUIDs/paths returned;
+all FHIR/clinical/publication authorization flags remained
+false.
+
+Native Windows Python3.14 official-schema source tests:
+**58 PASS**, no skips. Broader Core/FHIR/Workspace
+selected regression: **253 PASS, 3 DESELECTED** historical
+external Wheel fixture cases; Ruff check/format and Git
+whitespace PASS.
+
+**CI and authority limits:** At last check the new private
+Draft #945 was open/mergeable, but exact-head GitHub Actions
+workflow runs/commit statuses were **not surfaced**;
+do not report hosted CI green. The test exercised the
+installed **Python public Core dispatcher**, not a
+source-attested generated `medscale.exe` native Windows
+launcher (#893). This Wheel does not authorize patient data,
+full FHIR R4 conformance, independent security/medical review,
+production OS keys or RBAC, live EHR integration, protected
+main merge, signing, publication, or founder release (#574).
+**Release remains NO-GO.**
