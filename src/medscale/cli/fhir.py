@@ -21,6 +21,36 @@ from medscale.fhirkit.storage import store_report
 from medscale.fhirkit.validate import validate_fhir
 
 
+def _timeline_demo_main(argv: list[str]) -> int:
+    """Real encrypted fictional source -> verified chronological patient UI data."""
+    if argv in (["-h"], ["--help"]):
+        print(
+            "usage: medscale fhir timeline-demo --synthetic-only --ephemeral-demo\n"
+            "Real AES-GCM encrypted fictional Bundle, closed/reopened verified "
+            "source timeline, bounded UTC-day metadata. NO patient files, "
+            "production keys, EHR, FHIR conformance or clinical authorization."
+        )
+        return 0
+    if argv != ["--synthetic-only", "--ephemeral-demo"]:
+        print(
+            "timeline demo refused: exact_synthetic_ephemeral_flags_required",
+            file=sys.stderr,
+        )
+        return 2
+    try:
+        from medscale.fhirkit.workspace_timeline_demo import timeline_json
+
+        receipt = timeline_json()
+    except Exception:
+        print(
+            "timeline demo refused: encrypted_fictional_timeline_unavailable",
+            file=sys.stderr,
+        )
+        return 2
+    print(receipt)
+    return 0
+
+
 def _bundle_preflight_main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(
         prog="medscale fhir bundle-preflight",
@@ -283,6 +313,8 @@ def _workspace_catalog_demo_main(argv: list[str]) -> int:
 
 def main(argv: list[str] | None = None) -> int:
     tokens = list(sys.argv[1:] if argv is None else argv)
+    if tokens and tokens[0] == "timeline-demo":
+        return _timeline_demo_main(tokens[1:])
     if tokens and tokens[0] == "bundle-assess":
         return _bundle_structural_assessment_main(tokens[1:])
     if tokens and tokens[0] == "encrypted-structural-demo":
