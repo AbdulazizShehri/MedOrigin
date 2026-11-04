@@ -53,6 +53,62 @@ def _bundle_preflight_main(argv: list[str]) -> int:
     return 0
 
 
+def _r4_structural_outcome_main(argv: list[str]) -> int:
+    """Source-pinned optional local structural-only FHIR OperationOutcome.
+
+    The only admitted order is explicit synthetic consent, a user-supplied
+    official-schema ZIP path, then a fictional source JSON file. Neither
+    caller path nor raw FHIR content ever appears in stdout/stderr.
+    """
+    if argv in (["-h"], ["--help"]):
+        print(
+            "usage: medscale fhir structural-outcome "
+            "--synthetic-only --offline-r4-schema OFFICIAL_R4_ZIP "
+            "FICTIONAL_FHIR_JSON\n"
+            "Requires source-pinned official R4 4.0.1 JSON Schema and "
+            "jsonschema 4.25.1 installed locally. Structure ONLY; "
+            "NOT full FHIR R4 clinical conformance. Never pass patient data."
+        )
+        return 0
+    if (
+        len(argv) != 4
+        or argv[0] != "--synthetic-only"
+        or argv[1] != "--offline-r4-schema"
+        or not argv[2]
+        or not argv[3]
+        or argv[2].startswith("--")
+        or argv[3].startswith("--")
+    ):
+        print(
+            "structural outcome refused: explicit_synthetic_offline_schema_flags_required",
+            file=sys.stderr,
+        )
+        return 2
+    try:
+        from medscale.fhirkit.r4_outcome import structural_outcome_to_json
+    except ImportError:
+        print("structural outcome unavailable: core_outcome_module_missing", file=sys.stderr)
+        return 2
+    try:
+        payload = read_fhir_json_document(Path(argv[3]))
+    except FhirInputError:
+        print("structural outcome refused: source_input_refused", file=sys.stderr)
+        return 1
+    try:
+        report = validate_offline_r4_json_structure(payload, Path(argv[2]))
+        encoded = structural_outcome_to_json(report)
+    except (UnavailableValidatorError, FhirMissingDependencyError):
+        print("structural outcome unavailable: qualified_offline_schema_missing", file=sys.stderr)
+        return 2
+    except Exception:
+        print("structural outcome refused: bounded_structural_diagnostic_failure", file=sys.stderr)
+        return 2
+    # Only fixed issue keywords and general caveat in the stdout document.
+    # A structurally passing input *must not* yield validated/success exit.
+    print(encoded, end="")
+    return 2
+
+
 def _workspace_demo_main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(
         prog="medscale fhir workspace-demo",
@@ -120,6 +176,8 @@ def _workspace_catalog_demo_main(argv: list[str]) -> int:
 
 def main(argv: list[str] | None = None) -> int:
     tokens = list(sys.argv[1:] if argv is None else argv)
+    if tokens and tokens[0] == "structural-outcome":
+        return _r4_structural_outcome_main(tokens[1:])
     if tokens and tokens[0] == "workspace-catalog-demo":
         return _workspace_catalog_demo_main(tokens[1:])
     if tokens and tokens[0] == "workspace-demo":
