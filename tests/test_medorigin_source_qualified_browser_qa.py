@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import importlib.util
 import sys
+from html.parser import HTMLParser
 from pathlib import Path
 from typing import Any
 
@@ -117,6 +118,24 @@ def test_truthful_browser_handoff_requires_identical_attested_hashes(
     assert "article { min-width: 0;" in seen[0][1]
     assert seen[0][2:] == ("a" * 64, "b" * 64)
     assert "PASSED" not in seen[0][1]
+
+    class Structure(HTMLParser):
+        def __init__(self) -> None:
+            super().__init__()
+            self.tags: list[str] = []
+            self.csp: str | None = None
+
+        def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+            self.tags.append(tag)
+            if tag == "meta" and dict(attrs).get("http-equiv") == "Content-Security-Policy":
+                self.csp = dict(attrs).get("content")
+
+    parsed = Structure()
+    parsed.feed(seen[0][1])
+    assert parsed.tags.count("title") == 1
+    assert parsed.tags.count("style") == 1
+    assert parsed.tags.count("body") == 1
+    assert parsed.csp is not None and parsed.csp.strip().endswith("base-uri 'none'")
 
 
 @pytest.mark.parametrize(

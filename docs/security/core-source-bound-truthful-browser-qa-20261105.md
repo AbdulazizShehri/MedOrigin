@@ -44,10 +44,23 @@ Hosted Windows attempt on first functional head `349273b5` rebuilt exact
 Core Wheel+sdist, independently qualified package source and interpreter
 execution, then reached real Playwright Edge and correctly caught **phone-width
 horizontal overflow** of the long SHA-256 report digest. This was a genuine UI
-bug, not a package provenance or clinical-status failure. A follow-up makes
-SHA-256 code blocks wrapping display blocks and allows grid items to shrink,
-without hiding/truncating any digest or relaxing the Playwright assertion.
-The second exact-head hosted browser result must be checked independently.
+bug, not a package provenance or clinical-status failure. A second exact
+hosted attempt on `9142cc60` also failed overflow, proving the CSS-only
+change was insufficient. The root cause was an **unterminated `content` quote
+on the CSP meta tag**. Edge parsed `<title>`, `<style>` and much of the page
+as CSP directive text; no CSS stylesheet was actually applied. We now close
+the attribute correctly, keep the SHA-wrapping defensive CSS, and require a
+parsed stylesheet, CSP tag, and zero body margin in real Edge QA.
+
+Independent **actual owner Windows Edge/Playwright** rendered the corrected
+immutable fictional preview at 375×667, 850×610 and 1440×900. Exact
+`documentElement.scrollWidth == innerWidth` at all three, body margin 0,
+`document.styleSheets.length == 1`, SHA codes display as wrapping blocks,
+no overflowing elements and no CSP parsing console errors. This is a
+renderer/viewport proof with fictional fixed digests, NOT the separate
+installed artifact/source-qualified hosted proof. A subsequent exact-head
+hosted CI result still must be inspected. Without the quote fix, the new
+HTML-parser regression fails, even if a future CSS rule looks valid.
 
 At author-source level, Windows Python 3.14 Ruff and formatting checks
 passed. The existing negative-truth/full-gate regression plus additional

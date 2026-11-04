@@ -126,7 +126,7 @@ def render_negative_truth_preview(receipt: object) -> str:
 <meta http-equiv="Content-Security-Policy"
  content="default-src 'none'; style-src 'unsafe-inline';
  script-src 'none'; connect-src 'none'; img-src 'none';
- form-action 'none'; base-uri 'none'>
+ form-action 'none'; base-uri 'none'">
 <title>MedOrigin | Local FHIR provenance — Not validated</title>
 <style>
 :root {{ color-scheme: dark; font-family: system-ui, sans-serif; }}

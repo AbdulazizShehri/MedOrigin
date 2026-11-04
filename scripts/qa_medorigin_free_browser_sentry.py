@@ -63,6 +63,13 @@ def _browser_checks(html: Path, edge: Path, known_sha: str, unknown_sha: str) ->
                 failures, external = _assert_page(page)
                 page.goto(html.as_uri(), wait_until="load")
                 page.locator("article").first.wait_for()
+                if (
+                    page.locator("style").count() != 1
+                    or page.locator('meta[http-equiv="Content-Security-Policy"]').count() != 1
+                    or page.evaluate("document.styleSheets.length") != 1
+                    or page.evaluate("getComputedStyle(document.body).margin") != "0px"
+                ):
+                    raise AssertionError("truthful preview CSS/CSP markup was not parsed")
                 if page.locator("article").count() != 2:
                     raise AssertionError("two independently proven fictional cases required")
                 if page.locator("article strong").all_inner_texts() != [
