@@ -54,6 +54,19 @@ class WindowsRealCoreWorkspaceSourceTests(unittest.TestCase):
                     qa.verify_pinned_core(root)
                 run.assert_called()
 
+    def test_only_one_terminal_crlf_or_lf_is_removed_and_other_bytes_preserved(self):
+        expected = b'{"synthetic":true}'
+        self.assertEqual(qa.strip_platform_one_newline(expected + b"\r\n"), expected)
+        self.assertEqual(qa.strip_platform_one_newline(expected + b"\n"), expected)
+        # Normalization never makes malformed/extra-text output equal to a
+        # reviewed canonical receipt; only its last line terminator is removed.
+        self.assertNotEqual(qa.strip_platform_one_newline(expected + b"\n\n"), expected)
+        self.assertNotEqual(qa.strip_platform_one_newline(expected + b" \r\n"), expected)
+        with self.assertRaisesRegex(ValueError, "single_terminal_newline_missing"):
+            qa.strip_platform_one_newline(expected)
+        with self.assertRaisesRegex(ValueError, "single_terminal_newline_missing"):
+            qa.strip_platform_one_newline(b"")
+
     def test_native_windows_uia_live_file_is_exact_hash_and_size_bounded(self):
         observer = Path(__file__).resolve().parent.parent / "tests/windows-encrypted-workspace-native-uia.ps1"
         text = observer.read_text()

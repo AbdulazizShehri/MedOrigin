@@ -79,6 +79,18 @@ def verify_pinned_core(core: Path) -> None:
             raise ValueError("core_workspace_python_source_files_missing")
     print("WINDOWS_SOURCE_FIXED_CORE_WORKSPACE_GIT_INVENTORY_ATTESTED")
 
+def strip_platform_one_newline(payload: bytes) -> bytes:
+    """Remove exactly one Python print newline (Windows CRLF or POSIX LF).
+
+    Do not strip other whitespace, JSON suffixes or arbitrary extra newlines.
+    The caller must still demand byte-for-byte canonical source equality.
+    """
+    if payload.endswith(b"\r\n"):
+        return payload[:-2]
+    if payload.endswith(b"\n"):
+        return payload[:-1]
+    raise ValueError("windows_core_cli_single_terminal_newline_missing")
+
 
 def qualify(args: argparse.Namespace) -> None:
     if sys.platform != "win32":
@@ -126,10 +138,10 @@ def qualify(args: argparse.Namespace) -> None:
         )
         if (
             result.returncode != 0 or len(result.stdout) > 1024
-            or len(result.stderr) > 2048 or not result.stdout.endswith(b"\n")
+            or len(result.stderr) > 2048
         ):
             raise ValueError("windows_source_core_ephemeral_workspace_demo_no_go")
-        raw = result.stdout[:-1]
+        raw = strip_platform_one_newline(result.stdout)
         if raw != source_receipt.read_bytes() or hashlib.sha256(raw).hexdigest() != RECEIPT_SHA:
             raise ValueError("windows_source_core_encrypted_receipt_source_mismatch")
         receipt_file = work / "only-fictional-aggregate.json"
