@@ -2,5 +2,6 @@
 pub mod app;
 pub mod core_provenance;
 pub mod encrypted_readback;
+pub mod session;
 pub mod workspace_receipt;
 pub use app::{FIXTURES, MedOriginNativePreview};

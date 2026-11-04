@@ -288,6 +288,13 @@ jobs:
           & $py -m unittest discover -s experiments/desktop-d2-native-egui/scripts -p test_portable_fictional_core.py -v
           if ($LASTEXITCODE -ne 0) { throw 'Portable 290-file fictional Core source/manifest guard failed' }
           Write-Output 'PORTABLE_D2_CORE_SOURCE_ONLY_TESTS_NOT_PACKAGED_RUNTIME_OR_RELEASE'
+      - name: Verify fictional one-time Core session HMAC and refusal rules (source-only)
+        shell: pwsh
+        run: |
+          $py = if ($IsWindows) { 'python' } else { 'python3' }
+          & $py -m unittest discover -s experiments/desktop-d2-native-egui/scripts -p test_fictional_session_frame.py -v
+          if ($LASTEXITCODE -ne 0) { throw 'Session MAC/nonce source-only adversarial guards failed' }
+          Write-Output 'FICTIONAL_PER_LAUNCH_MAC_SOURCE_ONLY_NOT_SENDER_AUTHENTICATION_OR_OS_EGRESS'
       - name: Verify checks did not alter tracked code or lockfiles
         shell: pwsh
         run: |

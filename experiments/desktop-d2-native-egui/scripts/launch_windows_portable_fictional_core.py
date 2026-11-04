@@ -19,8 +19,14 @@ import threading
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
+from fictional_session_frame import (
+    KEY_ENV,
+    NONCE_ENV,
+    SESSION_FLAG,
+    frame_one_time_fictional_core,
+    fresh_ephemeral_session,
+)
 from launch_windows_encrypted_fictional_preview import (
-    GUI_FLAG,
     QA_WINDOW_TIMEOUT_SECONDS,
     WINDOW_TIMEOUT_SECONDS,
     _qa_close_exact_owned_window,
@@ -35,6 +41,7 @@ EXPORTER_SHA256 = "12e9cdd5def9c794aafa975d232062a456eec6c558728ac119868fb876505
 GUI_NAME = "medorigin-desktop-d2-native-egui.exe"
 RUNTIME_FILES = (
     "scripts/launch_windows_portable_fictional_core.py",
+    "scripts/fictional_session_frame.py",
     "scripts/portable_core_tree.py",
     "scripts/supervise_windows_encrypted_core_job.py",
     "scripts/qualify_windows_job_subtree.py",
@@ -128,9 +135,13 @@ def _launch_gui(
     work: Path,
     *,
     qa_auto_close: bool,
+    nonce: bytes,
+    key: bytes,
 ) -> None:
     system = Path(os.environ.get("SYSTEMROOT", r"C:\Windows"))
     env = {
+        KEY_ENV: key.hex(),
+        NONCE_ENV: nonce.hex(),
         "SYSTEMROOT": str(system),
         "WINDIR": str(system),
         "PATH": os.pathsep.join((str(gui.parent), str(system / "System32"))),
@@ -141,7 +152,7 @@ def _launch_gui(
     process = None
     try:
         process = subprocess.Popen(
-            [str(gui), GUI_FLAG],
+            [str(gui), SESSION_FLAG],
             cwd=work,
             env=env,
             stdin=subprocess.PIPE,
@@ -168,11 +179,23 @@ def _launch_gui(
             process.communicate(timeout=5)
 
 
-def _qa_native_clicks(root: Path, gui: Path, work: Path, raw: bytes) -> None:
+def _qa_native_clicks(
+    root: Path,
+    gui: Path,
+    work: Path,
+    raw: bytes,
+    framed: bytes,
+    nonce: bytes,
+    key: bytes,
+) -> None:
     receipt = work / "reviewed-portable-core-projection.json"
     if receipt.exists() or receipt.is_symlink():
         raise ValueError("portable_core_stale_receipt_refused")
     receipt.write_bytes(raw)
+    session_path = work / "fictional-qa-one-time-session-frame.bin"
+    if session_path.exists() or session_path.is_symlink():
+        raise ValueError("session_frame_path_preexisting")
+    session_path.write_bytes(framed)
     observer = root / "tests/windows-encrypted-core-readback-uia.ps1"
     system = Path(os.environ.get("SYSTEMROOT", r"C:\Windows"))
     result = subprocess.run(
@@ -190,12 +213,16 @@ def _qa_native_clicks(root: Path, gui: Path, work: Path, raw: bytes) -> None:
             sha(gui),
             "-LiveReceiptPath",
             str(receipt),
+            "-SessionFramePath",
+            str(session_path),
         ],
         cwd=work,
         capture_output=True,
         timeout=85,
         check=False,
         env={
+            KEY_ENV: key.hex(),
+            NONCE_ENV: nonce.hex(),
             "SYSTEMROOT": str(system),
             "WINDIR": str(system),
             "PATH": str(system / "System32"),
@@ -245,10 +272,23 @@ def launch(args: argparse.Namespace) -> None:
             or hashlib.sha256(raw).hexdigest() != PROJECTION_SHA
         ):
             raise ValueError("portable_source_installed_encrypted_readback_refused")
+        # Per-launch, source-bound MAC with independent 128-bit nonce and
+        # 256-bit key from the OS CSPRNG; never persisted to the kit or logs.
+        # The shared environment secret is a QA owner-bound control, NOT
+        # production sender authentication, key custody or OS secrecy.
+        nonce, key = fresh_ephemeral_session()
+        framed = frame_one_time_fictional_core(raw, nonce, key)
         if args.qa_uia:
-            _qa_native_clicks(root, gui, work, raw)
+            _qa_native_clicks(root, gui, work, raw, framed, nonce, key)
         else:
-            _launch_gui(gui, raw, work, qa_auto_close=args.qa_auto_close)
+            _launch_gui(
+                gui,
+                framed,
+                work,
+                qa_auto_close=args.qa_auto_close,
+                nonce=nonce,
+                key=key,
+            )
     attest_kit(root)
     if sha(python) != args.python_sha.lower():
         raise ValueError("portable_runtime_python_changed_after_close")

@@ -9,6 +9,9 @@ use std::sync::mpsc::{self, RecvTimeoutError};
 use std::time::Duration;
 
 use medorigin_desktop_d2_native_egui::MedOriginNativePreview;
+use medorigin_desktop_d2_native_egui::session::{
+    self, ENV_SESSION_KEY, ENV_SESSION_NONCE, SESSION_FLAG,
+};
 
 const MAX_FICTIONAL_CORE_STDIN: usize = 2048;
 const EXPLICIT_SYNTHETIC_CORE_FLAG: &str = "--synthetic-core-stdin";
@@ -42,7 +45,8 @@ fn make_app_with_deadline<R: Read + Send + 'static>(
     if args.len() != 1
         || (args[0] != EXPLICIT_SYNTHETIC_CORE_FLAG
             && args[0] != EXPLICIT_SYNTHETIC_WORKSPACE_FLAG
-            && args[0] != EXPLICIT_SYNTHETIC_READBACK_FLAG)
+            && args[0] != EXPLICIT_SYNTHETIC_READBACK_FLAG
+            && args[0] != SESSION_FLAG)
     {
         return Err(io::Error::new(
             io::ErrorKind::InvalidInput,
@@ -83,7 +87,46 @@ fn make_app_with_deadline<R: Read + Send + 'static>(
             "unapproved_d2_synthetic_core_stdin_size",
         ));
     }
-    if args[0] == EXPLICIT_SYNTHETIC_READBACK_FLAG {
+    if args[0] == SESSION_FLAG {
+        // Session key/nonce are generated per GUI launch by the private owner.
+        // Never fall back to the legacy unbound static readback when absent.
+        // This is NOT an externally authenticated sender or OS secret store.
+        let nonce_hex = std::env::var(ENV_SESSION_NONCE).map_err(|_| {
+            io::Error::new(
+                io::ErrorKind::PermissionDenied,
+                "fictional_session_nonce_missing",
+            )
+        })?;
+        let key_hex = std::env::var(ENV_SESSION_KEY).map_err(|_| {
+            io::Error::new(
+                io::ErrorKind::PermissionDenied,
+                "fictional_session_key_missing",
+            )
+        })?;
+        let nonce = session::decode_fixed_hex::<16>(&nonce_hex).map_err(|_| {
+            io::Error::new(
+                io::ErrorKind::InvalidData,
+                "fictional_session_nonce_invalid",
+            )
+        })?;
+        let key = session::decode_fixed_hex::<32>(&key_hex).map_err(|_| {
+            io::Error::new(io::ErrorKind::InvalidData, "fictional_session_key_invalid")
+        })?;
+        let inner = session::verify_fictional_frame(&bytes, &nonce, &key).map_err(|_| {
+            io::Error::new(
+                io::ErrorKind::PermissionDenied,
+                "fictional_session_mac_or_freshness_refused",
+            )
+        })?;
+        MedOriginNativePreview::from_one_time_synthetic_encrypted_readback_stdin(inner).map_err(
+            |_| {
+                io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    "fictional_session_unreviewed_inner_projection",
+                )
+            },
+        )
+    } else if args[0] == EXPLICIT_SYNTHETIC_READBACK_FLAG {
         MedOriginNativePreview::from_one_time_synthetic_encrypted_readback_stdin(&bytes).map_err(
             |_| {
                 io::Error::new(
