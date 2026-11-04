@@ -7,6 +7,7 @@ use crate::core_provenance::{
 use crate::encrypted_readback::{
     FictionalEncryptedReadback, admit_exact_encrypted_readback_projection,
 };
+use crate::synthetic_bundle::{SyntheticBundlePreview, admit_bounded_synthetic_fhir_bundle};
 use crate::workspace_receipt::{
     FictionalEncryptedWorkspaceReceipt, admit_source_pinned_encrypted_workspace_receipt,
     inspect_compiled_encrypted_workspace_receipt,
@@ -679,6 +680,12 @@ pub struct MedOriginNativePreview {
     // Separates the source-verified fictional Workspace from developer proof
     // controls. UI-only mode: never changes Core data, keys, privileges or IO.
     focused_workspace_visible: bool,
+    synthetic_bundle: Option<SyntheticBundlePreview>,
+    synthetic_bundle_selected: Option<usize>,
+    synthetic_bundle_history: Vec<usize>,
+    synthetic_bundle_patient: Option<usize>,
+    synthetic_bundle_type: &'static str,
+    synthetic_bundle_notice: Option<&'static str>,
     encrypted_readback_selected: Option<usize>,
     encrypted_readback_history: Vec<usize>,
     encrypted_readback_filter: RecoveredResourceTypeFilter,
@@ -750,6 +757,30 @@ impl MedOriginNativePreview {
             encrypted_readback_source_external: true,
             ..Default::default()
         })
+    }
+
+    /// Distinct structural FHIR-shaped multi-patient demo, not the SHA-pinned
+    /// encrypted Core transport. Strict fake IDs, exact field allowlist,
+    /// canonical JSON and complete patient-reference graph; NO PHI fields.
+    pub fn from_one_time_synthetic_bundle_stdin(raw: &[u8]) -> Result<Self, &'static str> {
+        let bundle = admit_bounded_synthetic_fhir_bundle(raw)?;
+        let first_patient = bundle
+            .resources
+            .iter()
+            .position(|r| r.resource_type == "Patient");
+        Ok(Self {
+            synthetic_bundle: Some(bundle),
+            synthetic_bundle_patient: first_patient,
+            synthetic_bundle_selected: first_patient,
+            synthetic_bundle_type: "All",
+            ..Default::default()
+        })
+    }
+
+    pub fn synthetic_bundle_resource_count(&self) -> usize {
+        self.synthetic_bundle
+            .as_ref()
+            .map_or(0, |b| b.resources.len())
     }
 
     /// Same strict verified fictional source as the developer readback mode,
@@ -1186,6 +1217,12 @@ impl MedOriginNativePreview {
         self.encrypted_readback = None;
         self.encrypted_readback_source_external = false;
         self.focused_workspace_visible = false;
+        self.synthetic_bundle = None;
+        self.synthetic_bundle_selected = None;
+        self.synthetic_bundle_history.clear();
+        self.synthetic_bundle_patient = None;
+        self.synthetic_bundle_type = "";
+        self.synthetic_bundle_notice = None;
         self.encrypted_readback_selected = None;
         self.encrypted_readback_history.clear();
         self.encrypted_readback_filter = RecoveredResourceTypeFilter::All;
@@ -1218,6 +1255,12 @@ impl MedOriginNativePreview {
         self.encrypted_readback = None;
         self.encrypted_readback_source_external = false;
         self.focused_workspace_visible = false;
+        self.synthetic_bundle = None;
+        self.synthetic_bundle_selected = None;
+        self.synthetic_bundle_history.clear();
+        self.synthetic_bundle_patient = None;
+        self.synthetic_bundle_type = "";
+        self.synthetic_bundle_notice = None;
         self.encrypted_readback_selected = None;
         self.encrypted_readback_history.clear();
         self.encrypted_readback_filter = RecoveredResourceTypeFilter::All;
@@ -1977,10 +2020,325 @@ impl MedOriginNativePreview {
     }
 }
 
+// A second, independent STRUCTURAL ONLY multi-patient FHIR-shaped preview.
+// It cannot be promoted to the SHA-pinned encrypted Core readback, has no
+// clinical fields or free-text import, and has no filesystem/network access.
+impl MedOriginNativePreview {
+    fn bundle_visible(&self, index: usize) -> bool {
+        let Some(bundle) = self.synthetic_bundle.as_ref() else {
+            return false;
+        };
+        let Some(resource) = bundle.resources.get(index) else {
+            return false;
+        };
+        (self.synthetic_bundle_type == "All"
+            || self.synthetic_bundle_type == resource.resource_type)
+            && self
+                .synthetic_bundle_patient
+                .is_none_or(|patient| bundle.owner_patient(index) == Some(patient))
+    }
+
+    fn bundle_select(&mut self, index: usize) -> Result<(), &'static str> {
+        if !self.bundle_visible(index) {
+            self.clear_fictional_output();
+            return Err("synthetic_bundle_hidden_or_unknown_selection");
+        }
+        self.synthetic_bundle_selected = Some(index);
+        self.synthetic_bundle_history.clear();
+        self.synthetic_bundle_notice = None;
+        Ok(())
+    }
+
+    fn bundle_set_patient(&mut self, patient: Option<usize>) -> Result<(), &'static str> {
+        if let Some(index) = patient
+            && !self.synthetic_bundle.as_ref().is_some_and(|bundle| {
+                bundle
+                    .resources
+                    .get(index)
+                    .is_some_and(|resource| resource.resource_type == "Patient")
+            })
+        {
+            self.clear_fictional_output();
+            return Err("synthetic_bundle_patient_group_refused");
+        }
+        self.synthetic_bundle_patient = patient;
+        self.synthetic_bundle_type = "All";
+        self.synthetic_bundle_selected = None;
+        self.synthetic_bundle_history.clear();
+        self.synthetic_bundle_notice = None;
+        Ok(())
+    }
+
+    fn bundle_set_type(&mut self, kind: &'static str) -> Result<(), &'static str> {
+        if !["All", "Patient", "Encounter", "Observation"].contains(&kind) {
+            self.clear_fictional_output();
+            return Err("synthetic_bundle_unknown_facet");
+        }
+        self.synthetic_bundle_type = kind;
+        self.synthetic_bundle_selected = None;
+        self.synthetic_bundle_history.clear();
+        self.synthetic_bundle_notice = None;
+        Ok(())
+    }
+
+    fn bundle_move(&mut self, index: usize) -> Result<(), &'static str> {
+        let Some(bundle) = self.synthetic_bundle.as_ref() else {
+            return Err("synthetic_bundle_missing");
+        };
+        let destination = bundle.owner_patient(index);
+        if index >= bundle.resources.len()
+            || destination.is_none()
+            || self.synthetic_bundle_history.len() >= 24
+        {
+            self.clear_fictional_output();
+            return Err("synthetic_bundle_history_or_destination_refused");
+        }
+        let Some(current) = self.synthetic_bundle_selected else {
+            self.clear_fictional_output();
+            return Err("synthetic_bundle_no_current_resource");
+        };
+        if current >= bundle.resources.len() {
+            self.clear_fictional_output();
+            return Err("synthetic_bundle_stale_current_resource");
+        }
+        self.synthetic_bundle_history.push(current);
+        self.synthetic_bundle_patient = destination;
+        self.synthetic_bundle_type = "All";
+        self.synthetic_bundle_selected = Some(index);
+        self.synthetic_bundle_notice = None;
+        Ok(())
+    }
+
+    fn bundle_follow_outgoing(&mut self, link_index: usize) -> Result<(), &'static str> {
+        let destination = (|| {
+            let bundle = self.synthetic_bundle.as_ref()?;
+            let current = bundle.resources.get(self.synthetic_bundle_selected?)?;
+            let link = current.links.get(link_index)?;
+            bundle.index_for(&link.target)
+        })();
+        match destination {
+            Some(index) => self.bundle_move(index),
+            None => {
+                self.clear_fictional_output();
+                Err("synthetic_bundle_outgoing_reference_refused")
+            }
+        }
+    }
+
+    fn bundle_follow_incoming(
+        &mut self,
+        source_index: usize,
+        link_index: usize,
+    ) -> Result<(), &'static str> {
+        let matches = self.synthetic_bundle.as_ref().is_some_and(|bundle| {
+            self.synthetic_bundle_selected
+                .and_then(|target| bundle.resources.get(target))
+                .is_some_and(|target| {
+                    bundle
+                        .resources
+                        .get(source_index)
+                        .and_then(|source| source.links.get(link_index))
+                        .is_some_and(|edge| edge.target == target.full_url)
+                })
+        });
+        if !matches {
+            self.clear_fictional_output();
+            return Err("synthetic_bundle_incoming_reference_refused");
+        }
+        self.bundle_move(source_index)
+    }
+
+    fn bundle_back(&mut self) -> Result<(), &'static str> {
+        let Some(previous) = self.synthetic_bundle_history.pop() else {
+            return Err("synthetic_bundle_no_history");
+        };
+        let dest = self
+            .synthetic_bundle
+            .as_ref()
+            .and_then(|bundle| bundle.owner_patient(previous));
+        match dest {
+            Some(owner) => {
+                self.synthetic_bundle_selected = Some(previous);
+                self.synthetic_bundle_patient = Some(owner);
+                self.synthetic_bundle_type = "All";
+                Ok(())
+            }
+            None => {
+                self.clear_fictional_output();
+                Err("synthetic_bundle_stale_history_refused")
+            }
+        }
+    }
+
+    fn synthetic_bundle_ui(&mut self, ui: &mut egui::Ui) {
+        let Some(bundle) = self.synthetic_bundle.clone() else {
+            return;
+        };
+        enum Action {
+            Clear,
+            Patient(Option<usize>),
+            Type(&'static str),
+            Select(usize),
+            Follow(usize),
+            Incoming(usize, usize),
+            Back,
+        }
+        let mut next: Option<Action> = None;
+        egui::ScrollArea::vertical().show(ui, |ui| {
+            ui.heading("MedOrigin — Fictional Multi-Patient Workspace");
+            ui.strong("STRUCTURAL DEMO ONLY — no clinical content, patient identity, EHR or PHI.");
+            ui.label(format!(
+                "{} imaginary source-only records across {} fictional patients",
+                bundle.resources.len(), bundle.patient_count
+            ));
+            ui.label("Read-only FHIR-shaped Bundle. No encrypted Core connection or authenticated sender.");
+            if ui.button("Bundle: Clear fictional records").clicked() {
+                next = Some(Action::Clear);
+            }
+            ui.separator();
+            ui.strong("Fictional patient groups");
+            ui.horizontal_wrapped(|ui| {
+                if ui.button("Bundle: All patients").clicked() {
+                    next = Some(Action::Patient(None));
+                }
+                for (index, record) in bundle.resources.iter().enumerate() {
+                    if record.resource_type == "Patient"
+                        && ui
+                            .button(format!("Bundle: Patient {}", record.resource_id))
+                            .clicked()
+                    {
+                        next = Some(Action::Patient(Some(index)));
+                    }
+                }
+            });
+            ui.strong("Resource types");
+            ui.horizontal_wrapped(|ui| {
+                for kind in ["All", "Patient", "Encounter", "Observation"] {
+                    if ui.button(format!("Bundle: Type {kind}")).clicked() {
+                        next = Some(Action::Type(kind));
+                    }
+                }
+            });
+            let visible = (0..bundle.resources.len())
+                .filter(|index| self.bundle_visible(*index))
+                .count();
+            ui.strong(format!(
+                "Bundle: {} of {} fictional resources visible",
+                visible, bundle.resources.len()
+            ));
+            for (index, resource) in bundle.resources.iter().enumerate() {
+                if self.bundle_visible(index)
+                    && ui
+                        .button(format!(
+                            "Bundle: Open {}/{}",
+                            resource.resource_type, resource.resource_id
+                        ))
+                        .clicked()
+                {
+                    next = Some(Action::Select(index));
+                }
+            }
+            if visible == 0 {
+                ui.label("No fictional resources for this patient group and type.");
+            }
+            ui.separator();
+            if let Some(index) = self.synthetic_bundle_selected
+                && let Some(current) = bundle.resources.get(index)
+            {
+                ui.strong(format!(
+                    "Bundle record: {}/{}",
+                    current.resource_type, current.resource_id
+                ));
+                ui.monospace(format!("Verified fictional URN: {}", current.full_url));
+                let incoming = bundle.resources.iter()
+                    .flat_map(|resource| resource.links.iter())
+                    .filter(|link| link.target == current.full_url)
+                    .count();
+                ui.label(format!(
+                    "Bundle: {} outgoing and {} incoming local references",
+                    current.links.len(), incoming
+                ));
+                for (link_index, link) in current.links.iter().enumerate() {
+                    if let Some(target) = bundle.index_for(&link.target)
+                        && let Some(resource) = bundle.resources.get(target)
+                        && ui
+                            .button(format!(
+                                "Bundle: Follow {} to {}/{}",
+                                link.field, resource.resource_type, resource.resource_id
+                            ))
+                            .clicked()
+                    {
+                        next = Some(Action::Follow(link_index));
+                    }
+                }
+                for (source_index, source) in bundle.resources.iter().enumerate() {
+                    for (link_index, link) in source.links.iter().enumerate() {
+                        if link.target == current.full_url
+                            && ui
+                                .button(format!(
+                                    "Bundle: Incoming {}/{} via {}",
+                                    source.resource_type, source.resource_id, link.field
+                                ))
+                                .clicked()
+                        {
+                            next = Some(Action::Incoming(source_index, link_index));
+                        }
+                    }
+                }
+                if !self.synthetic_bundle_history.is_empty() {
+                    ui.label(format!(
+                        "Bundle: {} of 24 navigation steps",
+                        self.synthetic_bundle_history.len()
+                    ));
+                    if ui.button("Bundle: Back to previous resource").clicked() {
+                        next = Some(Action::Back);
+                    }
+                }
+                ui.label("No clinical values, names, dates, codes or notes accepted in this preview.");
+            } else {
+                ui.label("Choose a fictional resource from the reviewed patient group.");
+            }
+            if let Some(notice) = self.synthetic_bundle_notice {
+                ui.label(notice);
+            }
+            ui.collapsing("Structural source evidence (not identity proof)", |ui| {
+                ui.monospace(format!("Canonical synthetic Bundle SHA-256: {}", bundle.sha256));
+                ui.label("Source input is untrusted and no FHIR R4 profile conformance is asserted.");
+            });
+        });
+        match next {
+            Some(Action::Clear) => self.clear_fictional_output(),
+            Some(Action::Patient(index)) => {
+                let _ = self.bundle_set_patient(index);
+            }
+            Some(Action::Type(kind)) => {
+                let _ = self.bundle_set_type(kind);
+            }
+            Some(Action::Select(index)) => {
+                let _ = self.bundle_select(index);
+            }
+            Some(Action::Follow(index)) => {
+                let _ = self.bundle_follow_outgoing(index);
+            }
+            Some(Action::Incoming(source, link)) => {
+                let _ = self.bundle_follow_incoming(source, link);
+            }
+            Some(Action::Back) => {
+                let _ = self.bundle_back();
+            }
+            None => {}
+        }
+    }
+}
+
 impl eframe::App for MedOriginNativePreview {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         if ui.input(|input| input.key_pressed(egui::Key::Escape)) {
             self.clear_fictional_output();
+        }
+        if self.synthetic_bundle.is_some() {
+            egui::CentralPanel::default().show(ui, |ui| self.synthetic_bundle_ui(ui));
+            return;
         }
         if self.focused_workspace_visible {
             egui::CentralPanel::default().show(ui, |ui| self.focused_workspace_ui(ui));
@@ -2616,6 +2974,107 @@ impl eframe::App for MedOriginNativePreview {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn bounded_multi_patient_navigation_refuses_step_twenty_five_and_clears_source() {
+        let raw = include_bytes!("../fixtures/core/synthetic-multipatient-fhir-bundle.json");
+        let mut app = MedOriginNativePreview::from_one_time_synthetic_bundle_stdin(raw).unwrap();
+        for _ in 0..12 {
+            app.bundle_follow_incoming(1, 0).unwrap();
+            app.bundle_follow_outgoing(0).unwrap();
+        }
+        assert_eq!(app.synthetic_bundle_history.len(), 24);
+        assert_eq!(
+            app.bundle_follow_incoming(1, 0),
+            Err("synthetic_bundle_history_or_destination_refused")
+        );
+        assert!(app.synthetic_bundle.is_none());
+        assert!(app.synthetic_bundle_history.is_empty());
+    }
+
+    #[test]
+    fn bounded_fictional_multi_patient_bundle_is_a_distinct_ui_mode() {
+        let raw = include_bytes!("../fixtures/core/synthetic-multipatient-fhir-bundle.json");
+        let mut app = MedOriginNativePreview::from_one_time_synthetic_bundle_stdin(raw).unwrap();
+        assert_eq!(app.synthetic_bundle_resource_count(), 8);
+        assert_eq!(app.synthetic_bundle_patient, Some(0));
+        assert_eq!(app.synthetic_bundle_selected, Some(0));
+        assert!(app.synthetic_bundle.is_some());
+        assert!(!app.has_external_synthetic_encrypted_readback());
+
+        app.bundle_follow_incoming(1, 0).unwrap();
+        assert_eq!(app.synthetic_bundle_selected, Some(1));
+        assert_eq!(app.synthetic_bundle_history, vec![0]);
+        app.bundle_follow_outgoing(0).unwrap();
+        assert_eq!(app.synthetic_bundle_selected, Some(0));
+        app.bundle_back().unwrap();
+        assert_eq!(app.synthetic_bundle_selected, Some(1));
+        app.bundle_back().unwrap();
+        assert_eq!(app.synthetic_bundle_selected, Some(0));
+        assert!(app.synthetic_bundle_history.is_empty());
+
+        app.bundle_set_patient(Some(4)).unwrap();
+        assert_eq!(app.synthetic_bundle_patient, Some(4));
+        assert_eq!(app.synthetic_bundle_selected, None);
+        app.bundle_set_type("Observation").unwrap();
+        assert!(!app.bundle_visible(2));
+        assert!(app.bundle_visible(6));
+        assert!(app.bundle_visible(7));
+        app.bundle_select(6).unwrap();
+        app.bundle_follow_outgoing(1).unwrap();
+        assert_eq!(app.synthetic_bundle_selected, Some(5));
+        assert_eq!(app.synthetic_bundle_patient, Some(4));
+        app.bundle_back().unwrap();
+        assert_eq!(app.synthetic_bundle_selected, Some(6));
+        app.bundle_set_patient(None).unwrap();
+        app.bundle_set_type("All").unwrap();
+        assert!((0..8).all(|index| app.bundle_visible(index)));
+        app.clear_fictional_output();
+        assert_eq!(app.synthetic_bundle_resource_count(), 0);
+        assert!(app.synthetic_bundle_history.is_empty());
+    }
+
+    #[test]
+    fn bounded_fictional_bundle_refuses_hidden_groups_stale_links_and_invalid_history() {
+        let raw = include_bytes!("../fixtures/core/synthetic-multipatient-fhir-bundle.json");
+        let mut app = MedOriginNativePreview::from_one_time_synthetic_bundle_stdin(raw).unwrap();
+        assert_eq!(
+            app.bundle_select(7),
+            Err("synthetic_bundle_hidden_or_unknown_selection")
+        );
+        assert_eq!(app.synthetic_bundle_resource_count(), 0);
+
+        let mut app = MedOriginNativePreview::from_one_time_synthetic_bundle_stdin(raw).unwrap();
+        assert_eq!(
+            app.bundle_set_patient(Some(2)),
+            Err("synthetic_bundle_patient_group_refused")
+        );
+        assert_eq!(app.synthetic_bundle_resource_count(), 0);
+
+        let mut app = MedOriginNativePreview::from_one_time_synthetic_bundle_stdin(raw).unwrap();
+        assert_eq!(
+            app.bundle_set_type("MedicationRequest"),
+            Err("synthetic_bundle_unknown_facet")
+        );
+        assert_eq!(app.synthetic_bundle_resource_count(), 0);
+
+        let mut app = MedOriginNativePreview::from_one_time_synthetic_bundle_stdin(raw).unwrap();
+        assert_eq!(
+            app.bundle_follow_incoming(5, 0),
+            Err("synthetic_bundle_incoming_reference_refused")
+        );
+        assert_eq!(app.synthetic_bundle_resource_count(), 0);
+
+        let mut app = MedOriginNativePreview::from_one_time_synthetic_bundle_stdin(raw).unwrap();
+        assert_eq!(app.bundle_back(), Err("synthetic_bundle_no_history"));
+        assert_eq!(app.synthetic_bundle_resource_count(), 8);
+        app.synthetic_bundle_history.push(usize::MAX);
+        assert_eq!(
+            app.bundle_back(),
+            Err("synthetic_bundle_stale_history_refused")
+        );
+        assert_eq!(app.synthetic_bundle_resource_count(), 0);
+    }
 
     #[test]
     fn focused_relationship_navigation_reuses_source_links_and_bounded_breadcrumbs() {
