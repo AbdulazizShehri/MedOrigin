@@ -122,6 +122,42 @@ try{
   if(-not(HasLabel '/entry/1/resource/subject/reference')){
     throw 'known fictional bundle pointer not exposed through native GUI'
   }
+  # Resource-type facets and genuine native linked-resource navigation.
+  # Never accept free text, a patient import path or unreviewed FHIR refs.
+  Press 'All fictional cases'
+  Press 'Observation (fictional)'
+  if(-not (HasLabel 'Fictional worklist: 2 of 6 fixed source cases visible')){
+    throw 'Observation resource facet did not show exactly two source cases'
+  }
+  Press 'Open fictional case: observation-minimal*'
+  Press 'Follow fictional reference: Patient/synthetic'
+  if(-not(HasLabel 'FAIL CLOSED: fictional linked reference') -or
+     (HasLabel 'Fictional case: patient-minimal')){
+    throw 'hidden patient target was reached or source detail persisted'
+  }
+  Press 'All resource types'
+  if(-not(HasLabel 'Fictional worklist: 6 of 6 fixed source cases visible')){
+    throw 'All resource type facet did not restore six cases'
+  }
+  Press 'Open fictional case: observation-minimal*'
+  Press 'Follow fictional reference: Patient/synthetic'
+  Detail 'patient-minimal' '747e1e038d6cc9a39a9cee209f621841cf6a9748d82be42fa545f19cfd6877a0' 'FHIR_ENVELOPE_OK'
+  Press 'Back to previous fictional case'
+  Detail 'observation-minimal' '527806e5427cc45e55424d1b8dc8ddcdc86a2b37df2ae116735e6832268b5e19' 'FHIR_ENVELOPE_OK'
+  if(HasLabel 'Back to previous fictional case'){throw 'one-step back history retained previous case'}
+  Press 'Bundle (fictional)'
+  if(-not(HasLabel 'Fictional worklist: 3 of 6 fixed source cases visible')){
+    throw 'Bundle type facet did not show exactly three source cases'
+  }
+  Press 'Open fictional case: bundle-linked*'
+  Detail 'bundle-linked' '1d24976b74ab0481ce2acc1010d58ec5e4b9da9ba93071e1042afeb299a03d88' 'BUNDLE_GRAPH_OK'
+  Press 'All resource types'
+  Press 'Open fictional case: bundle-linked*'
+  Press 'Follow fictional reference: urn:uuid:00000000-0000-4000-8000-000000000002'
+  Detail 'observation-minimal' '527806e5427cc45e55424d1b8dc8ddcdc86a2b37df2ae116735e6832268b5e19' 'FHIR_ENVELOPE_OK'
+  Press 'Back to previous fictional case'
+  Detail 'bundle-linked' '1d24976b74ab0481ce2acc1010d58ec5e4b9da9ba93071e1042afeb299a03d88' 'BUNDLE_GRAPH_OK'
+  Write-Output 'D2_WINDOWS_FICTIONAL_WORKSPACE_RESOURCE_FACET_LINK_AND_BACK_PASS_NOT_CLINICAL'
   Press 'Close fictional workspace and clear details'
   if(HasLabel 'Fictional case: bundle-linked'){throw 'workspace close retained source detail'}
   if(-not(HasLabel 'Enter fictional workspace (synthetic only)')){

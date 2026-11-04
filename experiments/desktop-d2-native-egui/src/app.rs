@@ -474,6 +474,37 @@ impl FictionalWorkspaceFilter {
     }
 }
 
+/// Read-only fixed resource-type facets. No free-text search field accepts
+/// human or patient input: even a fictional worklist is strictly allowlisted.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+enum FictionalResourceTypeFilter {
+    #[default]
+    All,
+    Patient,
+    Observation,
+    Bundle,
+}
+
+impl FictionalResourceTypeFilter {
+    fn label(self) -> &'static str {
+        match self {
+            Self::All => "All resource types",
+            Self::Patient => "Patient (fictional)",
+            Self::Observation => "Observation (fictional)",
+            Self::Bundle => "Bundle (fictional)",
+        }
+    }
+
+    fn admits(self, resource_type: &str) -> bool {
+        match self {
+            Self::All => true,
+            Self::Patient => resource_type == "Patient",
+            Self::Observation => resource_type == "Observation",
+            Self::Bundle => resource_type == "Bundle",
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug)]
 struct FictionalWorkspaceSpec {
     fixture_index: usize,
@@ -556,7 +587,9 @@ pub struct MedOriginNativePreview {
     workspace_report_notice: Option<&'static str>,
     fictional_workspace_unlocked: bool,
     fictional_workspace_filter: FictionalWorkspaceFilter,
+    fictional_workspace_resource_type: FictionalResourceTypeFilter,
     fictional_workspace_selected: Option<usize>,
+    fictional_workspace_back: Option<usize>,
     fictional_workspace_detail: Option<FictionalWorkspaceDetail>,
     fictional_workspace_notice: Option<&'static str>,
 }
@@ -629,6 +662,7 @@ impl MedOriginNativePreview {
         self.workspace_report_external = false;
         self.workspace_report_notice = None;
         self.fictional_workspace_selected = None;
+        self.fictional_workspace_back = None;
         self.fictional_workspace_detail = None;
         self.fictional_workspace_notice = None;
     }
@@ -651,6 +685,7 @@ impl MedOriginNativePreview {
         self.workspace_report_external = false;
         self.workspace_report_notice = None;
         self.fictional_workspace_selected = None;
+        self.fictional_workspace_back = None;
         self.fictional_workspace_detail = None;
         self.fictional_workspace_notice = None;
         let Some(fixture) = FIXTURES.get(self.selected) else {
@@ -883,17 +918,31 @@ impl MedOriginNativePreview {
         self.clear_fictional_output();
         self.fictional_workspace_unlocked = true;
         self.fictional_workspace_filter = FictionalWorkspaceFilter::All;
+        self.fictional_workspace_resource_type = FictionalResourceTypeFilter::All;
     }
 
     fn close_fictional_workspace(&mut self) {
         self.clear_fictional_output();
         self.fictional_workspace_unlocked = false;
         self.fictional_workspace_filter = FictionalWorkspaceFilter::All;
+        self.fictional_workspace_resource_type = FictionalResourceTypeFilter::All;
     }
 
     fn filter_fictional_workspace(&mut self, filter: FictionalWorkspaceFilter) {
         self.clear_fictional_output();
         self.fictional_workspace_filter = filter;
+    }
+
+    fn filter_fictional_resource_type(&mut self, filter: FictionalResourceTypeFilter) {
+        self.clear_fictional_output();
+        self.fictional_workspace_resource_type = filter;
+    }
+
+    fn admits_fictional_case(&self, spec: FictionalWorkspaceSpec) -> bool {
+        self.fictional_workspace_filter.admits(spec.negative)
+            && self
+                .fictional_workspace_resource_type
+                .admits(spec.resource_type)
     }
 
     /// A bounded native developer workflow. A case is never a path, record
@@ -908,7 +957,7 @@ impl MedOriginNativePreview {
             self.fictional_workspace_notice = Some("FAIL CLOSED: unapproved fictional case");
             return Err("fictional_workspace_case_not_allowed");
         };
-        if !self.fictional_workspace_filter.admits(spec.negative) {
+        if !self.admits_fictional_case(spec) {
             self.fictional_workspace_notice =
                 Some("FAIL CLOSED: fictional case not in selected filter");
             return Err("fictional_workspace_case_filtered_out");
@@ -964,6 +1013,91 @@ impl MedOriginNativePreview {
             relations,
         });
         Ok(())
+    }
+
+    /// Follow ONLY a relation whose exact source SHA/envelope and fixed graph
+    /// have been independently verified again. This is a native user flow,
+    /// never a generic FHIR resolver or patient-record navigation.
+    fn follow_fictional_relation(&mut self, edge_index: usize) -> Result<(), &'static str> {
+        let target = (|| {
+            if !self.fictional_workspace_unlocked {
+                return Err("fictional_workspace_closed");
+            }
+            let source_index = self
+                .fictional_workspace_selected
+                .ok_or("fictional_workspace_source_not_selected")?;
+            let spec = FICTIONAL_WORKSPACE_CASES
+                .get(source_index)
+                .copied()
+                .ok_or("fictional_workspace_source_not_approved")?;
+            if !self.admits_fictional_case(spec) {
+                return Err("fictional_workspace_source_filtered_out");
+            }
+            let detail = self
+                .fictional_workspace_detail
+                .as_ref()
+                .ok_or("fictional_workspace_source_not_open")?;
+            let fixture = FIXTURES
+                .get(spec.fixture_index)
+                .ok_or("fictional_workspace_source_not_approved")?;
+            if detail.fixture.sha256 != fixture.sha256 || detail.fixture.id != fixture.id {
+                return Err("fictional_workspace_source_not_verified");
+            }
+            let raw = Self::verified_json_for(spec.fixture_index)?;
+            let edges = project_pinned_fictional_relations(fixture.id, raw)?;
+            if edges != detail.relations {
+                return Err("fictional_workspace_relation_graph_changed");
+            }
+            let edge = edges
+                .get(edge_index)
+                .ok_or("fictional_workspace_relation_not_approved")?;
+            let target_index = match (edge.relationship, edge.target) {
+                ("fictional_subject_reference", "Patient/synthetic")
+                | (
+                    "fictional_subject_reference",
+                    "urn:uuid:00000000-0000-4000-8000-000000000001",
+                )
+                | (
+                    "fictional_bundle_patient_member",
+                    "urn:uuid:00000000-0000-4000-8000-000000000001",
+                ) => 0,
+                (
+                    "fictional_bundle_observation_member",
+                    "urn:uuid:00000000-0000-4000-8000-000000000002",
+                ) => 1,
+                _ => return Err("fictional_workspace_relation_target_not_approved"),
+            };
+            let target_spec = FICTIONAL_WORKSPACE_CASES
+                .get(target_index)
+                .copied()
+                .ok_or("fictional_workspace_relation_target_not_approved")?;
+            if target_spec.negative || !self.admits_fictional_case(target_spec) {
+                return Err("fictional_workspace_relation_target_filtered_out");
+            }
+            Ok((source_index, target_index))
+        })();
+        let (source_index, target_index) = match target {
+            Ok(target) => target,
+            Err(reason) => {
+                self.clear_fictional_output();
+                self.fictional_workspace_notice = Some(
+                    "FAIL CLOSED: fictional linked reference is unapproved or hidden by the current filter",
+                );
+                return Err(reason);
+            }
+        };
+        self.open_fictional_workspace_case(target_index)?;
+        self.fictional_workspace_back = Some(source_index);
+        Ok(())
+    }
+
+    fn back_to_previous_fictional_case(&mut self) -> Result<(), &'static str> {
+        let Some(previous) = self.fictional_workspace_back.take() else {
+            self.clear_fictional_output();
+            self.fictional_workspace_notice = Some("FAIL CLOSED: no previous fictional case");
+            return Err("fictional_workspace_no_previous_case");
+        };
+        self.open_fictional_workspace_case(previous)
     }
 }
 
@@ -1063,9 +1197,9 @@ impl eframe::App for MedOriginNativePreview {
                         }
                     }
                 });
-            // Actual native workspace navigation, but restricted to six
-            // source-compiled fictional controls. No clinical records, search
-            // text box, imports, writes, sessions, inference or network.
+            // Actual native resource-type facets and approved relationship
+            // navigation, limited to six source-compiled fictional controls.
+            // No clinical records, free-text entry, import, persistence or network.
             egui::CollapsingHeader::new("Fictional Workspace — six source-verified cases (NO PHI)")
                 .default_open(false)
                 .show(ui, |ui| {
@@ -1079,8 +1213,8 @@ impl eframe::App for MedOriginNativePreview {
                         if ui.button("Close fictional workspace and clear details").clicked() {
                             self.close_fictional_workspace();
                         } else {
-                            ui.label("Choose a fixed developer status filter:");
                             ui.horizontal_wrapped(|ui| {
+                                ui.label("Status:");
                                 for filter in [
                                     FictionalWorkspaceFilter::All,
                                     FictionalWorkspaceFilter::ExpectedEnvelopeOk,
@@ -1097,9 +1231,34 @@ impl eframe::App for MedOriginNativePreview {
                                     }
                                 }
                             });
-                            ui.label("Select an in-memory source-approved case:");
+                            ui.horizontal_wrapped(|ui| {
+                                ui.label("Resource type (fictional only):");
+                                for filter in [
+                                    FictionalResourceTypeFilter::All,
+                                    FictionalResourceTypeFilter::Patient,
+                                    FictionalResourceTypeFilter::Observation,
+                                    FictionalResourceTypeFilter::Bundle,
+                                ] {
+                                    if ui
+                                        .selectable_label(
+                                            self.fictional_workspace_resource_type == filter,
+                                            filter.label(),
+                                        )
+                                        .clicked()
+                                    {
+                                        self.filter_fictional_resource_type(filter);
+                                    }
+                                }
+                            });
+                            let visible_count = FICTIONAL_WORKSPACE_CASES
+                                .iter()
+                                .filter(|case| self.admits_fictional_case(**case))
+                                .count();
+                            ui.label(format!(
+                                "Fictional worklist: {visible_count} of 6 fixed source cases visible"
+                            ));
                             for (index, spec) in FICTIONAL_WORKSPACE_CASES.iter().enumerate() {
-                                if !self.fictional_workspace_filter.admits(spec.negative) {
+                                if !self.admits_fictional_case(*spec) {
                                     continue;
                                 }
                                 let fixture = FIXTURES[spec.fixture_index];
@@ -1120,6 +1279,7 @@ impl eframe::App for MedOriginNativePreview {
                             if let Some(notice) = self.fictional_workspace_notice {
                                 ui.label(notice);
                             }
+                            let mut follow_edge = None;
                             if let Some(detail) = &self.fictional_workspace_detail {
                                 ui.separator();
                                 ui.strong(format!("Fictional case: {}", detail.fixture.id));
@@ -1142,16 +1302,33 @@ impl eframe::App for MedOriginNativePreview {
                                 if detail.relations.is_empty() {
                                     ui.label("No approved relationship projection for this case.");
                                 } else {
-                                    for relation in &detail.relations {
+                                    for (edge_index, relation) in detail.relations.iter().enumerate() {
                                         ui.monospace(format!(
                                             "{} -> {} ({})",
                                             relation.source_pointer,
                                             relation.target,
                                             relation.relationship
                                         ));
+                                        if ui
+                                            .button(format!(
+                                                "Follow fictional reference: {}",
+                                                relation.target
+                                            ))
+                                            .clicked()
+                                        {
+                                            follow_edge = Some(edge_index);
+                                        }
                                     }
                                 }
                                 ui.strong("Clinical data: PROHIBITED · FHIR R4: NOT VALIDATED");
+                            }
+                            if let Some(edge_index) = follow_edge {
+                                let _ = self.follow_fictional_relation(edge_index);
+                            }
+                            if self.fictional_workspace_back.is_some()
+                                && ui.button("Back to previous fictional case").clicked()
+                            {
+                                let _ = self.back_to_previous_fictional_case();
                             }
                         }
                     }
@@ -1277,6 +1454,151 @@ impl eframe::App for MedOriginNativePreview {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn fictional_resource_type_facets_show_only_exact_allowlisted_cases() {
+        let mut app = MedOriginNativePreview::default();
+        app.enter_fictional_workspace();
+        for (filter, indexes) in [
+            (FictionalResourceTypeFilter::Patient, vec![0usize]),
+            (FictionalResourceTypeFilter::Observation, vec![1, 2]),
+            (FictionalResourceTypeFilter::Bundle, vec![3, 4, 5]),
+            (FictionalResourceTypeFilter::All, vec![0, 1, 2, 3, 4, 5]),
+        ] {
+            app.filter_fictional_resource_type(filter);
+            let visible: Vec<usize> = FICTIONAL_WORKSPACE_CASES
+                .iter()
+                .enumerate()
+                .filter(|(_, spec)| app.admits_fictional_case(**spec))
+                .map(|(index, _)| index)
+                .collect();
+            assert_eq!(visible, indexes);
+            for index in 0..FICTIONAL_WORKSPACE_CASES.len() {
+                if indexes.contains(&index) {
+                    app.open_fictional_workspace_case(index).unwrap();
+                } else {
+                    assert_eq!(
+                        app.open_fictional_workspace_case(index),
+                        Err("fictional_workspace_case_filtered_out")
+                    );
+                    assert!(app.fictional_workspace_detail.is_none());
+                }
+            }
+        }
+        app.filter_fictional_resource_type(FictionalResourceTypeFilter::Observation);
+        app.filter_fictional_workspace(FictionalWorkspaceFilter::ExpectedNegative);
+        assert_eq!(
+            (0..6)
+                .filter(|index| app.admits_fictional_case(FICTIONAL_WORKSPACE_CASES[*index]))
+                .collect::<Vec<_>>(),
+            vec![2]
+        );
+        app.close_fictional_workspace();
+        assert_eq!(
+            app.fictional_workspace_resource_type,
+            FictionalResourceTypeFilter::All
+        );
+        assert!(!app.fictional_workspace_unlocked);
+    }
+
+    #[test]
+    fn native_fictional_reference_navigation_follows_reviewed_source_and_back() {
+        let mut app = MedOriginNativePreview::default();
+        app.enter_fictional_workspace();
+        app.open_fictional_workspace_case(1).unwrap();
+        app.follow_fictional_relation(0).unwrap();
+        assert_eq!(app.fictional_workspace_selected, Some(0));
+        assert_eq!(app.fictional_workspace_back, Some(1));
+        assert_eq!(
+            app.fictional_workspace_detail.as_ref().unwrap().fixture.id,
+            "patient-minimal"
+        );
+        app.back_to_previous_fictional_case().unwrap();
+        assert_eq!(app.fictional_workspace_selected, Some(1));
+        assert!(app.fictional_workspace_back.is_none());
+
+        app.open_fictional_workspace_case(3).unwrap();
+        app.follow_fictional_relation(0).unwrap(); // source-pinned Bundle Patient member
+        assert_eq!(app.fictional_workspace_selected, Some(0));
+        app.back_to_previous_fictional_case().unwrap();
+        assert_eq!(app.fictional_workspace_selected, Some(3));
+        app.follow_fictional_relation(1).unwrap(); // source-pinned Bundle Observation member
+        assert_eq!(app.fictional_workspace_selected, Some(1));
+        app.back_to_previous_fictional_case().unwrap();
+        assert_eq!(app.fictional_workspace_selected, Some(3));
+        app.open_fictional_workspace_case(4).unwrap();
+        app.follow_fictional_relation(2).unwrap(); // UUID patient subject
+        assert_eq!(app.fictional_workspace_selected, Some(0));
+    }
+
+    #[test]
+    fn navigation_refuses_hidden_targets_unknown_edges_and_stale_details() {
+        let mut app = MedOriginNativePreview::default();
+        app.enter_fictional_workspace();
+        app.filter_fictional_resource_type(FictionalResourceTypeFilter::Bundle);
+        app.open_fictional_workspace_case(3).unwrap();
+        assert_eq!(
+            app.follow_fictional_relation(0),
+            Err("fictional_workspace_relation_target_filtered_out")
+        );
+        assert!(app.fictional_workspace_detail.is_none());
+        assert!(app.fictional_workspace_back.is_none());
+        assert!(app.fictional_workspace_notice.is_some());
+        app.filter_fictional_resource_type(FictionalResourceTypeFilter::All);
+        app.open_fictional_workspace_case(5).unwrap();
+        assert_eq!(
+            app.follow_fictional_relation(0),
+            Err("fictional_relation_fixture_not_approved")
+        );
+        assert!(app.fictional_workspace_detail.is_none());
+
+        app.open_fictional_workspace_case(3).unwrap();
+        assert_eq!(
+            app.follow_fictional_relation(usize::MAX),
+            Err("fictional_workspace_relation_not_approved")
+        );
+        assert!(app.fictional_workspace_selected.is_none());
+        app.open_fictional_workspace_case(3).unwrap();
+        app.clear_fictional_output();
+        assert_eq!(
+            app.follow_fictional_relation(0),
+            Err("fictional_workspace_source_not_selected")
+        );
+        assert!(app.fictional_workspace_detail.is_none());
+        app.close_fictional_workspace();
+        assert_eq!(
+            app.follow_fictional_relation(0),
+            Err("fictional_workspace_closed")
+        );
+    }
+
+    #[test]
+    fn fictional_back_is_one_step_and_never_survives_clear_filter_or_close() {
+        let mut app = MedOriginNativePreview::default();
+        app.enter_fictional_workspace();
+        assert_eq!(
+            app.back_to_previous_fictional_case(),
+            Err("fictional_workspace_no_previous_case")
+        );
+        app.open_fictional_workspace_case(1).unwrap();
+        app.follow_fictional_relation(0).unwrap();
+        app.back_to_previous_fictional_case().unwrap();
+        assert_eq!(
+            app.back_to_previous_fictional_case(),
+            Err("fictional_workspace_no_previous_case")
+        );
+        app.open_fictional_workspace_case(1).unwrap();
+        app.follow_fictional_relation(0).unwrap();
+        app.filter_fictional_workspace(FictionalWorkspaceFilter::ExpectedNegative);
+        assert!(app.fictional_workspace_back.is_none());
+        assert!(app.fictional_workspace_detail.is_none());
+        app.filter_fictional_workspace(FictionalWorkspaceFilter::All);
+        app.open_fictional_workspace_case(1).unwrap();
+        app.follow_fictional_relation(0).unwrap();
+        app.close_fictional_workspace();
+        assert!(app.fictional_workspace_back.is_none());
+        assert!(app.fictional_workspace_detail.is_none());
+    }
 
     #[test]
     fn encrypted_workspace_receipt_clear_switch_and_embedded_mode_never_retain_external_claim() {
