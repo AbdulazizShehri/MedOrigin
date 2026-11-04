@@ -122,6 +122,15 @@ try {
   Expect 'Encrypted store reopened: true'
   Expect 'Ephemeral encrypted store removed: true'
   Expect 'Sender/freshness NOT authenticated'
+  Expect 'Recovered fictional worklist: 3 of 3 source-derived resources visible'
+  Press 'Filter recovered resource type: Patient'
+  Expect 'Active recovered type: Patient'
+  Expect 'Recovered fictional worklist: 1 of 3 source-derived resources visible'
+  if(Has 'Open recovered fictional resource: Observation/fictional-observation-001') {
+    throw 'filtered_core_observation_still_visible'
+  }
+  Press 'Filter recovered resource type: All'
+  Expect 'Recovered fictional worklist: 3 of 3 source-derived resources visible'
   Press 'Open recovered fictional resource: Observation/fictional-observation-001'
   Expect 'Recovered fictional record: Observation/fictional-observation-001'
   Press 'Follow recovered fictional subject -> urn:uuid:00000000-0000-4000-8000-000000000002'
