@@ -309,6 +309,13 @@ jobs:
           & $py -m unittest discover -s experiments/desktop-d2-native-egui/scripts -p test_windows_fictional_demo_first_run.py -v
           if ($LASTEXITCODE -ne 0) { throw 'First-launch persistent fictional Workspace guards failed' }
           Write-Output 'EXPLICIT_FICTIONAL_FIRST_LAUNCH_SOURCE_ONLY_NOT_PRODUCTION_STORAGE_OR_PHI'
+      - name: Verify private Windows one-click fictional Desktop launcher guards (source-only)
+        shell: pwsh
+        run: |
+          $py = if ($IsWindows) { 'python' } else { 'python3' }
+          & $py -m unittest discover -s experiments/desktop-d2-native-egui/scripts -p test_windows_private_fictional_desktop_entry.py -v
+          if ($LASTEXITCODE -ne 0) { throw 'Private fictional Windows one-click launcher source contract tests failed' }
+          Write-Output 'PRIVATE_ONE_CLICK_GUI_ENTRY_QA_ONLY_NOT_INSTALLER_PATIENT_DATA_OR_SIGNED_BINARY'
       - name: Verify checks did not alter tracked code or lockfiles
         shell: pwsh
         run: |
