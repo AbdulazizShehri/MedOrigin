@@ -8,6 +8,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import runpy
 import subprocess
 import sys
 from pathlib import Path
@@ -131,6 +132,14 @@ def verify_workspace_shell(interpreter: Path, directory: Path) -> dict[str, obje
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--core-provenance-only",
+        action="store_true",
+        help=(
+            "Explicit Core-only negative-truth rehearsal; checks installed CLI "
+            "not_validated/exit2 and DOES NOT run the legacy false-valid preview."
+        ),
+    )
     parser.add_argument("--cli", required=True, type=Path, help="Installed medscale executable")
     parser.add_argument(
         "--workspace-python",
@@ -149,7 +158,7 @@ def main(argv: list[str] | None = None) -> int:
         clis.append(args.alt_cli.resolve())
     for cli in clis:
         if not cli.is_file():
-            parser.error(f"installed CLI not found: {cli}")
+            parser.error("installed CLI not found")
     workspace_python = args.workspace_python.resolve() if args.workspace_python else None
     if workspace_python is not None and not workspace_python.is_file():
         parser.error("installed Workspace Python interpreter not found")
@@ -158,7 +167,24 @@ def main(argv: list[str] | None = None) -> int:
             parser.error(f"missing synthetic fixture: {fixture}")
     output = args.out.resolve()
     if output.exists():
-        parser.error(f"refusing to overwrite existing evidence directory: {output}")
+        parser.error("refusing to overwrite existing evidence directory")
+    if args.core_provenance_only:
+        if workspace_python is not None:
+            print("MEDORIGIN_CORE_FHIR_PROVENANCE_ONLY_BLOCKED", file=sys.stderr)
+            return 2
+        try:
+            helper = runpy.run_path(str(HERE / "core_only.py"))
+            safe = helper["qualified_receipt"](clis)
+            helper["commit_new_receipt"](output, safe)
+        except (OSError, RuntimeError, TypeError, ValueError, KeyError):
+            # The source-gated installed CLI can include paths or patient-like
+            # text in failures; do not forward any exception or raw output.
+            print("MEDORIGIN_CORE_FHIR_PROVENANCE_ONLY_BLOCKED", file=sys.stderr)
+            return 2
+        print("MEDORIGIN_CORE_FHIR_PROVENANCE_ONLY_PASS")
+        print("fhir_conformance_validated=false")
+        print("prepublication_rehearsal_qualified=false")
+        return 0
     output.mkdir(parents=True)
     try:
         runs = [run_one(cli, output, f"run_{i + 1}") for i, cli in enumerate(clis)]
