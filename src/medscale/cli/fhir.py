@@ -88,8 +88,20 @@ def _bundle_structural_assessment_main(argv: list[str]) -> int:
         from medscale.fhirkit.bundle_assessment import synthetic_bundle_assessment_json
 
         result = synthetic_bundle_assessment_json(source, Path(argv[2]), synthetic_only=True)
-    except BundlePreflightError:
-        print("bundle assessment refused: relationship_preflight_refused", file=sys.stderr)
+    except BundlePreflightError as refusal:
+        # A marker-backed synthetic failure may return an actual finite
+        # FHIR-shaped OperationOutcome with no source data, without running
+        # the official R4 schema. A missing/malformed marker stays silent.
+        try:
+            from medscale.fhirkit.bundle_diagnostics import (
+                rejected_synthetic_bundle_outcome_json,
+            )
+
+            negative_outcome = rejected_synthetic_bundle_outcome_json(source, refusal)
+        except Exception:
+            print("bundle assessment refused: relationship_preflight_refused", file=sys.stderr)
+            return 2
+        print(negative_outcome, end="")
         return 2
     except (UnavailableValidatorError, FhirMissingDependencyError):
         print("bundle assessment unavailable: qualified_offline_schema_missing", file=sys.stderr)
