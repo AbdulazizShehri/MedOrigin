@@ -178,6 +178,22 @@ jobs:
           & $py -m unittest discover -s experiments/desktop-d2-native-egui/scripts -p test_qualify_installed_core_into_native_gui.py -v
           if ($LASTEXITCODE -ne 0) { throw 'One-shot installed Core to native GUI source guard refused' }
           Write-Output 'NATIVE_GUI_CORE_STDIN_SOURCE_ONLY_NO_HOSTED_MAC_AX_OR_INSTALLED_CORE_PROOF'
+      - name: Parse Windows exact-binary native one-shot Core stdin UIA tests
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $path = 'experiments/desktop-d2-native-egui/tests/windows-native-core-stdin-uia.ps1'
+          $tokens = $null
+          $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile(
+            (Resolve-Path $path).Path, [ref]$tokens, [ref]$errors
+          ) | Out-Null
+          if (@($errors).Count -ne 0) { throw 'One-shot native stdin UIA PowerShell syntax invalid' }
+          $source = Get-Content -LiteralPath $path -Raw
+          if (-not $source.Contains('D2_WINDOWS_ONE_SHOT_CORE_STDIN_NATIVE_UIA_2_OF_2_PASS_NOT_CLINICAL')) {
+            throw 'Two-case Windows one-shot Core stdin GUI test marker missing'
+          }
+          Write-Output 'D2_WINDOWS_ONE_SHOT_STDIN_UIA_SOURCE_ONLY_NOT_GUI_EXECUTION'
       - name: Verify checks did not alter tracked code or lockfiles
         shell: pwsh
         run: |

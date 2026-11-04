@@ -45,6 +45,21 @@ class NativeOneShotCoreSourceTests(unittest.TestCase):
         self.assertIn("One-shot external stdin synthetic Core report accepted", ax)
         self.assertIn("MACOS_INSTALLED_CORE_STDIN_GUI_AX_EXACT_SHA_NOT_VALIDATED_PASS", ax)
 
+    def test_windows_actual_uia_source_checks_two_canonical_reports_and_forgery(self):
+        script = (ROOT / "tests/windows-native-core-stdin-uia.ps1").read_text()
+        self.assertIn("RedirectStandardInput=$true", script)
+        self.assertIn("medorigin-desktop-d2-native-egui.exe", script)
+        self.assertIn("Get-FileHash -LiteralPath $exe -Algorithm SHA256", script)
+        self.assertIn("Core status: not_validated", script)
+        self.assertIn("FHIR R4 NOT validated", script)
+        self.assertIn("D2_WINDOWS_ONE_SHOT_CORE_STDIN_FORGED_VALID_REFUSED", script)
+        self.assertIn("D2_WINDOWS_ONE_SHOT_CORE_STDIN_NATIVE_UIA_2_OF_2_PASS_NOT_CLINICAL", script)
+        for sha in (
+            "165b41acdc416617e8f207366d454ac6a713ecf4c9a5efd740d14a0af882bd08",
+            "7962d747049185ce33f252d8760e1197942e6f945d22e9f640df27eaeff1129c",
+        ):
+            self.assertIn(sha, script)
+
     def test_actual_gui_runner_denies_non_mac_before_running_any_process(self):
         with patch.object(guiqa.sys, "platform", "win32"):
             with self.assertRaisesRegex(ValueError, "apple_silicon"):
