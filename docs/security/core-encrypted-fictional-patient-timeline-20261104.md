@@ -125,3 +125,72 @@ real user authentication or protected OS key custody. Existing
 advisories, and #574 founder approval remain blocked.
 No protected main merge, signed/tagged/public package, paid
 service, real EHR or patient data is authorized.
+
+
+## Exact functional-source offline packages and installed native Windows evidence
+
+The functional code source Git SHA is
+`5e7e1e2368dc75d5d153db6b2177464022753997`.
+A separate task-only WSL2 Ubuntu ext4 Git checkout pinned to **exactly**
+that SHA was staged with the existing authorized Core source projection
+and built with `uv build --offline --no-create-gitignore`.
+Only the disposable projection had its POSIX file modes normalized
+for the existing source-identity gate; protected checkout/main,
+root project files and dependency lock remained unmodified.
+
+Independent existing Core Wheel source identity, sdist publication
+scope, and Wheel metadata gates all **PASS with zero issues**:
+`SOURCE_BOUND_WHEEL_QUALIFIED_ONLY`,
+`SDIST_SCOPE_QUALIFIED_ONLY`, `METADATA_QUALIFIED_ONLY`.
+Six Core source modules covering the new timeline, demo,
+source readback, ingest, FHIR local relationships and public
+CLI matched the byte content inside the built Core Wheel.
+**All 36 Workspace Python modules** matched the Workspace Wheel.
+
+**Unpublished offline exact-source artifact SHA-256:**
+
+- Core Wheel `medscale-0.3.0-py3-none-any.whl`:
+  `af920487e321128c1f08c3d123e05c5ddceec34a5c2e463942c251dad9b252bc`.
+- Core sdist `medscale-0.3.0.tar.gz`:
+  `6f5d93a7734a8199a9f80a90d5cefa429153d9946438fd18c62ebf445009ad0f`.
+- Workspace Wheel `medscale_workspace-0.1.0.dev1-py3-none-any.whl`:
+  `a744f01581a3a2fbb6731ad86dfe0be7a953eb98dda2dd10aad934843e5e7a3d`.
+- Workspace sdist `medscale_workspace-0.1.0.dev1.tar.gz`:
+  `feef904cc34b1b14987aac1d455d380123bb88c270b4aacdc33a21596b50394b`.
+
+Both Core and Workspace SHA-verified Wheels installed **side by
+side** with `pip --no-index --no-deps --target` into a task-owned
+native Windows directory. A separate source-independent QA script
+asserted that **nine imported Core+Workspace modules** resolved
+strictly under that installed package directory, **not** from
+the Git source checkout. It then executed the real
+**installed Core public Python CLI dispatcher**, not a substituted
+mock, on all of these native Windows runtimes:
+
+- Python **3.14**, using its existing qualified local cryptography.
+- Python **3.11.15**, with disposable task-only pinned
+  `cryptography==50.0.1` and `cffi==2.1.1`.
+- Python **3.12.13**, with a separately disposable task-only
+  pinned `cryptography==50.0.1` and `cffi==2.1.1`.
+
+**All three PASSED**, emitting
+`INSTALLED_CORE_WORKSPACE_ENCRYPTED_FICTIONAL_TIMELINE_PASS`:
+actual source-bound AES-GCM import, original/import/current audit
+anchors, unrelated benign second audit event, completed storage
+close and cold reopen, chronological two-event fictional patient
+activity data, disposable Workspace deleted, and all patient identity/
+raw payload/FHIR conformance/clinical/release authority flags FALSE.
+The test separately checked wrong CLI flags were refused without
+echoing a caller-supplied fake secret. No global Python environment
+was modified and no package was signed or published.
+
+Source author-side Windows Python3.14 **34 focused PASS**,
+**358 wider PASS, 3 SKIPPED** optional official HL7 ZIP
+not configured on that suite, **2 DESELECTED** historical
+external raw-wheel fixture tests; Ruff check and format PASS.
+This does not independently qualify the generated native Windows
+`medscale.exe` console shim (#893), production OS-managed
+key storage/RBAC, full HL7 FHIR profile/terminology/FHIRPath
+validation, clinical use, independent security review, hosted CI,
+protected main merge, signing or founder release authority.
+**Release NO-GO**, no actual patient data.
