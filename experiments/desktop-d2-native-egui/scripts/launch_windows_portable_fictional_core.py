@@ -33,7 +33,10 @@ from launch_windows_encrypted_fictional_preview import (
 )
 from portable_core_tree import APPROVED_TREE_SHA256, attest_portable_core_tree
 from qualify_windows_encrypted_readback_native_gui import PROJECTION_SHA, sha
-from supervise_windows_encrypted_core_job import execute_encrypted_source_under_job
+from supervise_windows_encrypted_core_job import (
+    PERSISTENT_CREATE_MARKER,
+    execute_encrypted_source_under_job,
+)
 
 SCHEMA = "medorigin-d2-private-portable-fictional-core-windows/v1"
 PINNED_COMMIT = "8e5ed5430f4ab2ebc8981c52c67234023382954b"
@@ -265,6 +268,9 @@ def launch(args: argparse.Namespace) -> None:
     root = Path(__file__).resolve().parent.parent
     gui, exporter, fixture = attest_kit(root)
     persistent_qa_root = getattr(args, "fictional_persistent_qa_root", None)
+    ensure_demo = getattr(args, "ensure_fictional_demo", False)
+    if ensure_demo and persistent_qa_root is None:
+        raise ValueError("fictional_demo_requires_explicit_fixed_vault_path")
     if persistent_qa_root is not None:
         exporter = root / "scripts/windows_fictional_persistent_vault.py"
         fixture = root / "fixtures/core/encrypted-persistent-readback-projection.json"
@@ -273,6 +279,25 @@ def launch(args: argparse.Namespace) -> None:
     )
     with TemporaryDirectory(prefix="medorigin-portable-fictional-dev-") as temp:
         work = Path(temp).resolve()
+        if ensure_demo and persistent_qa_root is not None and not persistent_qa_root.exists():
+            created = execute_encrypted_source_under_job(
+                python=python,
+                core=None,
+                site=site,
+                exporter=exporter,
+                work=work,
+                installed_site=root / "core",
+                persistent_create_root=persistent_qa_root,
+            )
+            if created != PERSISTENT_CREATE_MARKER:
+                raise ValueError("first_run_fictional_vault_initialization_refused")
+            print("WINDOWS_PRIVATE_FICTIONAL_FIRST_RUN_VAULT_CREATED_NOT_CLINICAL")
+            # A new independent Core process reopens the actual encrypted
+            # persistent test vault; no fallback to overwrite on error.
+            first_output = work / "synthetic-core-readback-job-only.json"
+            if first_output.is_symlink() or not first_output.is_file():
+                raise ValueError("first_run_fictional_job_marker_disappeared")
+            first_output.unlink()
         raw = execute_encrypted_source_under_job(
             python=python,
             core=None,
@@ -328,7 +353,15 @@ if __name__ == "__main__":
     parser.add_argument(
         "--fictional-persistent-qa-root",
         type=Path,
-        help="EXPLICIT existing fixed-name, DPAPI fictional QA vault only; never PHI",
+        help="EXPLICIT fixed-name, DPAPI-protected fictional QA vault only; never PHI",
+    )
+    parser.add_argument(
+        "--ensure-fictional-demo",
+        action="store_true",
+        help=(
+            "Opt in: create only if absent, then independently cold-reopen the "
+            "same fixed fictional test vault; never replace an existing vault"
+        ),
     )
     modes = parser.add_mutually_exclusive_group()
     modes.add_argument(

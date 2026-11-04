@@ -302,6 +302,13 @@ jobs:
           & $py -m unittest discover -s experiments/desktop-d2-native-egui/scripts -p test_windows_fictional_persistent_vault.py -v
           if ($LASTEXITCODE -ne 0) { throw 'Windows protected persistent synthetic Core contract tests failed' }
           Write-Output 'PERSISTENT_FICTIONAL_WORKSPACE_QA_ONLY_NOT_PRODUCTION_KEY_PROVIDER_OR_PATIENT_DATA'
+      - name: Verify first-launch persistent fictional Core workspace safety (source-only)
+        shell: pwsh
+        run: |
+          $py = if ($IsWindows) { 'python' } else { 'python3' }
+          & $py -m unittest discover -s experiments/desktop-d2-native-egui/scripts -p test_windows_fictional_demo_first_run.py -v
+          if ($LASTEXITCODE -ne 0) { throw 'First-launch persistent fictional Workspace guards failed' }
+          Write-Output 'EXPLICIT_FICTIONAL_FIRST_LAUNCH_SOURCE_ONLY_NOT_PRODUCTION_STORAGE_OR_PHI'
       - name: Verify checks did not alter tracked code or lockfiles
         shell: pwsh
         run: |
