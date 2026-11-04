@@ -180,3 +180,81 @@ console shim (#893), complete Beta preview (#882),
 hosted exact-head CI, security review (#603),
 full HL7 FHIR R4 compliance (#877), OS protected keys,
 clinical use or publication. Release **NO-GO**.
+
+
+## Final source-bound native Windows package qualification
+
+The final **functional** Core source HEAD, after the fail-closed
+legacy full-Beta path redaction and the attributed #923
+cherry-pick, is
+`51934ee0f21edf0a1a6fcdd7f813d531b9985614`.
+This commit was checked out in a fresh, task-owned WSL2 Ubuntu
+ext4 Git checkout and built via the existing Core projector and
+`uv build --offline --no-create-gitignore`. The existing
+independent Core Wheel-source identity, sdist scope and wheel
+metadata gates all passed **zero issues**. The four checked
+Core validator/CLI source members were byte-identical to the
+exact built Wheel.
+
+**Unpublished final-source artifacts (SHA256):**
+
+- `medscale-0.3.0-py3-none-any.whl`:
+  `d93381ba128c2cce2718f1d5c007a83b846bdb5f6a65141e5ebc2a1ed2694c08`
+- `medscale-0.3.0.tar.gz`:
+  `492a9a4fdb41f812cb2ed80b158d584679cbedd0fe0dd0b301ee3a9b380d12fb`
+
+The final-source Wheel bytes are **identical** to the earlier
+functional-source Wheel already installed separately in
+task-owned Windows Python3.11.15 and Python3.12.13 virtualenvs;
+the final-source sdist SHA differs because nonpackaged
+example/test/evidence content was updated. An existing,
+independent installed-Wheel verifier then compared **all 260
+installed Core Python source members** with the exact final
+Wheel **on EACH Windows runtime**; both passed byte-for-byte.
+This is source inventory equality only, **not** source-attested
+Windows `medscale.exe` launcher manufacture or signing.
+
+Both real native `Scripts/medscale.exe` installations
+were used by the local Core FHIR provenance gate:
+both emitted fixed `status=not_validated` plus fixed warning and
+exit2 for the known and invalid/unknown fictional resourceType
+sources, agreed on the identical deterministic report digests
+listed above and created no cross-runtime mismatches.
+The real `reproduce.py --core-provenance-only` Core-only
+Developer Beta path produced exactly one negative-truth
+receipt, no static/native preview and no release approval.
+The independent **installed-Wheel** Python API probe on
+both Python3.11 and Python3.12 demonstrated that an external
+unqualified tool explicitly printing `status=valid`
+could only yield `not_validated`, and that fake fatal
+diagnostics only yielded fixed redacted `invalid`,
+never a source name/patient text/host path.
+
+The legacy default Beta demonstration still fails **exit1**
+because it requires historical false-valid reports. On the
+source with the revised generic failure handler,
+an actual installed CLI run returned the fixed
+`legacy_preview_contract_unqualified` message with
+no user-file/report path and created no accepted
+`evidence.json` or `preview.html`. This is a *correct
+negative gate*, **not** full Developer Beta qualification.
+
+Final changed-source native Windows Python3.14 FHIR/Workspace
+selected regression: **209 PASS, 3 SKIPPED**
+(optionally supplied official R4 archive not configured
+for that source run), **3 DESELECTED** historical package
+fixture cases; Ruff lint/format and Git whitespace passed.
+The official R4 structural-only validator and encrypted
+synthetic Workspace were qualified separately in prior
+private Core Draft #936; this code change does not expand
+that qualified scope or lift the conformance/clinical gates.
+
+**Remaining NO-GO blockers:** independent Windows executable
+launcher chain of custody (#893), full truthful static/native
+Desktop preview contract (#882), independently
+source-qualified full HL7 FHIR R4 profile/terminology/FHIRPath
+validation (#877), OS production key custody/RBAC, 66 GitHub
+dependency advisories including six critical, independent
+security (#603) and clinical review, exact-head hosted CI,
+founder release authorization (#574), signing or publication.
+The protected main remains untouched.
