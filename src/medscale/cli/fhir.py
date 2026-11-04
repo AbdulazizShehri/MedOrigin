@@ -114,6 +114,67 @@ def _bundle_preflight_main(argv: list[str]) -> int:
     return 0
 
 
+def _batch_bundle_structural_assessment_main(argv: list[str]) -> int:
+    """Bounded multi-document synthetic relationship + offline R4 structural check.
+
+    Exact argument order, no caller-provided filename/path echoes, no partial
+    output on any source/read/validator error. No clinical validation success.
+    """
+    if argv in (["-h"], ["--help"]):
+        print(
+            "usage: medscale fhir batch-bundle-assess "
+            "--synthetic-only --offline-r4-schema OFFICIAL_R4_ZIP "
+            "FICTIONAL_BUNDLE_1 FICTIONAL_BUNDLE_2 "
+            "[FICTIONAL_BUNDLE_3 ... FICTIONAL_BUNDLE_8]\n"
+            "Each invented Bundle independently receives local relationship "
+            "preflight and source-pinned R4 JSON Schema structural assessment. "
+            "No patient identity joins, filenames in output, network, "
+            "full FHIR R4 clinical conformance or successful validation exit."
+        )
+        return 0
+    if (
+        not 5 <= len(argv) <= 11
+        or argv[0:2] != ["--synthetic-only", "--offline-r4-schema"]
+        or not argv[2]
+        or any(not item or item.startswith("--") for item in argv[2:])
+    ):
+        print(
+            "batch assessment refused: explicit_synthetic_offline_batch_flags_required",
+            file=sys.stderr,
+        )
+        return 2
+    try:
+        from medscale.fhirkit.bundle_batch_assessment import (
+            synthetic_bundle_batch_assessment_json,
+        )
+        from medscale.fhirkit.input import read_fhir_json_document
+
+        # Validate all documents before any result, and never retain raw data
+        # across process exit. Per-file diagnostics deliberately lack paths.
+        sources = [read_fhir_json_document(Path(name)) for name in argv[3:]]
+    except FhirInputError:
+        print("batch assessment refused: source_input_refused", file=sys.stderr)
+        return 1
+    except Exception:
+        print("batch assessment refused: bounded_batch_source_unavailable", file=sys.stderr)
+        return 2
+    try:
+        output = synthetic_bundle_batch_assessment_json(
+            sources,
+            Path(argv[2]),
+            synthetic_only=True,
+        )
+    except (UnavailableValidatorError, FhirMissingDependencyError):
+        print("batch assessment unavailable: qualified_offline_schema_missing", file=sys.stderr)
+        return 2
+    except Exception:
+        print("batch assessment refused: verified_batch_contract_refused", file=sys.stderr)
+        return 2
+    print(output, end="")
+    # Not a validation-conformance or clinical-readiness success.
+    return 2
+
+
 def _bundle_structural_assessment_main(argv: list[str]) -> int:
     """Real relationship + official R4 structural-only check, source-redacted."""
     if argv in (["-h"], ["--help"]):
@@ -402,6 +463,8 @@ def main(argv: list[str] | None = None) -> int:
         return _multi_timeline_demo_main(tokens[1:])
     if tokens and tokens[0] == "timeline-demo":
         return _timeline_demo_main(tokens[1:])
+    if tokens and tokens[0] == "batch-bundle-assess":
+        return _batch_bundle_structural_assessment_main(tokens[1:])
     if tokens and tokens[0] == "bundle-assess":
         return _bundle_structural_assessment_main(tokens[1:])
     if tokens and tokens[0] == "encrypted-structural-demo":
