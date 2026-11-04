@@ -21,6 +21,37 @@ from medscale.fhirkit.storage import store_report
 from medscale.fhirkit.validate import validate_fhir
 
 
+def _multi_timeline_demo_main(argv: list[str]) -> int:
+    """Real encrypted fictional two-import chronology, never identity joining."""
+    if argv in (["-h"], ["--help"]):
+        print(
+            "usage: medscale fhir multi-timeline-demo "
+            "--synthetic-only --ephemeral-demo\n"
+            "Multiple independently source-verified fictional imports, "
+            "per-import activity timeline only. NO cross-import patient "
+            "identity linkage, clinical authority, or patient source inputs."
+        )
+        return 0
+    if argv != ["--synthetic-only", "--ephemeral-demo"]:
+        print(
+            "multi timeline demo refused: exact_synthetic_ephemeral_flags_required",
+            file=sys.stderr,
+        )
+        return 2
+    try:
+        from medscale.fhirkit.workspace_multi_timeline_demo import receipt_json
+
+        result = receipt_json()
+    except Exception:
+        print(
+            "multi timeline demo refused: encrypted_fictional_multi_timeline_unavailable",
+            file=sys.stderr,
+        )
+        return 2
+    print(result)
+    return 0
+
+
 def _timeline_demo_main(argv: list[str]) -> int:
     """Real encrypted fictional source -> verified chronological patient UI data."""
     if argv in (["-h"], ["--help"]):
@@ -313,6 +344,8 @@ def _workspace_catalog_demo_main(argv: list[str]) -> int:
 
 def main(argv: list[str] | None = None) -> int:
     tokens = list(sys.argv[1:] if argv is None else argv)
+    if tokens and tokens[0] == "multi-timeline-demo":
+        return _multi_timeline_demo_main(tokens[1:])
     if tokens and tokens[0] == "timeline-demo":
         return _timeline_demo_main(tokens[1:])
     if tokens and tokens[0] == "bundle-assess":
