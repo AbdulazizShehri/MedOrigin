@@ -123,7 +123,7 @@ def test_roundtrip_original_uuid_bundle_source_digest_and_encryption(tmp_path: P
     [
         ({"synthetic_only": False}, "explicit_synthetic_attestation_required"),
         ({"allow_in_memory_readback": False}, "explicit_in_memory_readback_required"),
-        ({"actor_id": "different-actor"}, "source_import_event_not_current"),
+        ({"actor_id": "different-actor"}, "source_import_event_anchor_mismatch"),
         ({"source_content_sha256": "f" * 64}, "source_manifest_missing"),
         ({"source_content_sha256": "not-a-digest"}, "source_or_audit_anchor_refused"),
         ({"expected_audit_head_digest": "0" * 64}, "audit_head_anchor_mismatch"),

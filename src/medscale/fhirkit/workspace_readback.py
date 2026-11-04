@@ -26,6 +26,7 @@ def read_synthetic_bundle_in_memory(
     actor_id: str,
     synthetic_only: bool = False,
     allow_in_memory_readback: bool = False,
+    expected_current_audit_head_digest: str | None = None,
 ) -> dict[str, object]:
     """Return only a source-verified, fully linked fictional Bundle in RAM.
 
@@ -54,6 +55,7 @@ def read_synthetic_bundle_in_memory(
             actor_id=actor_id,
             synthetic_only=True,
             allow_in_memory_readback=True,
+            expected_current_audit_head_digest=expected_current_audit_head_digest,
         )
     except SyntheticFhirReadbackError as exc:
         raise SyntheticWorkspaceReadbackError(str(exc)) from None
@@ -86,6 +88,7 @@ def read_synthetic_bundle_in_memory(
         "schema": "medorigin-core-synthetic-fhir-memory-readback/v1",
         "source_content_sha256": source_content_sha256,
         "audit_head_digest": expected_audit_head_digest,
+        "current_audit_head_digest": result["current_audit_head_digest"],
         "resource_count": preflight["resource_count"],
         "bundle": reconstructed,
         "filesystem_export_performed": False,
