@@ -13,6 +13,7 @@ import sys
 from pathlib import Path
 
 from medscale.fhirkit.errors import FhirMissingDependencyError, UnavailableValidatorError
+from medscale.fhirkit.input import FhirInputError, read_fhir_json_document
 from medscale.fhirkit.r4_schema import validate_offline_r4_json_structure
 from medscale.fhirkit.report import load_report_from_json, report_to_json
 from medscale.fhirkit.storage import store_report
@@ -72,13 +73,10 @@ def main(argv: list[str] | None = None) -> int:
     if tokens and tokens[0] == "validate":
         tokens.pop(0)
     args = parser.parse_args(tokens)
-    if args.input_file is None or not args.input_file.exists():
-        print(f"input read error: {args.input_file} does not exist", file=sys.stderr)
-        return 1
-
     try:
-        payload = json.loads(args.input_file.read_text(encoding="utf-8"))
-    except (json.JSONDecodeError, OSError) as exc:
+        payload = read_fhir_json_document(args.input_file)
+    except FhirInputError as exc:
+        # Never echo input bytes, file path, JSON snippets or PII in errors.
         print(f"input read error: {exc}", file=sys.stderr)
         return 1
 
