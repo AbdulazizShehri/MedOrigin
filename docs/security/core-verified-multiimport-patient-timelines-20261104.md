@@ -107,3 +107,77 @@ Browser QA CI (#882); independently attested Windows CLI launcher
 closure (#622); founder clinical release authorization (#574).
 No merge to protected main, signing, tag, public package, PHI
 or EHR calls.
+
+
+## Final source-bound package qualification and installed Windows evidence
+
+**Exact functional Git source SHA:** `950d23133a1bd59cc36bbad238796086bbef58ef`.
+
+A disposable task-owned WSL2 Ubuntu ext4 Git checkout at this exact
+SHA used the existing authorized Core staging projector and
+`uv build --offline --no-create-gitignore` to build real **Core
+and Workspace Wheels and sdists** without package publication.
+Only file modes of the disposable projected Core source tree
+were normalized for the existing provenance gate; the original Git
+checkout, main, lock files and other agents' worktrees were not modified.
+The existing three independent Core source identity, sdist scope and
+metadata gates returned:
+
+- `SOURCE_BOUND_WHEEL_QUALIFIED_ONLY`, **zero issues**
+- `SDIST_SCOPE_QUALIFIED_ONLY`, **zero issues**
+- `METADATA_QUALIFIED_ONLY`, **zero issues**
+
+All seven changed/referenced Core Python files matched the built
+Core Wheel member bytes; **all 36 Workspace Python modules**
+matched the exact Workspace Wheel member bytes.
+
+**Local unpublished SHA256 artifacts:**
+
+- Core Wheel `medscale-0.3.0-py3-none-any.whl`:
+  `ec79654b61942f496f4b64b9c582e272266bd0eaa09da849f9116394ade7f6b3`.
+- Core sdist `medscale-0.3.0.tar.gz`:
+  `52c9814feeb9c3019eebeca7aa0ae6b1091bbe06e528bd6fab7b8c7596b9605e`.
+- Workspace Wheel `medscale_workspace-0.1.0.dev1-py3-none-any.whl`:
+  `a744f01581a3a2fbb6731ad86dfe0be7a953eb98dda2dd10aad934843e5e7a3d`.
+- Workspace sdist `medscale_workspace-0.1.0.dev1.tar.gz`:
+  `feef904cc34b1b14987aac1d455d380123bb88c270b4aacdc33a21596b50394b`.
+
+The two SHA-checked Wheels were installed **side by side** in
+a disposable Windows-only target with
+`pip --no-index --no-deps --target`. The independent installed
+functional test insisted all **10 Core/Workspace imported modules**
+were loaded strictly from that installed target directory, not
+from the project source tree. It then ran the **real installed
+public Core Python CLI dispatcher** on native Windows
+**Python 3.14, 3.11.15 and 3.12.13**. For each version the same
+actual fictional AES-GCM two-Bundle import, three chained audit
+events, close/cold-reopen, original/current source verification,
+independent per-import 2+2-event chronology, secure temporary
+DB cleanup, and refusal to expose arbitrary caller-passed
+patient identifiers **PASSED with exit0**. The returned
+metadata explicitly set
+`cross_import_patient_identity_join_performed=false`,
+`patient_identity_included=false`,
+`fhir_r4_conformance_validated=false`,
+`clinical_use_authorized=false`,
+`release_authorized=false`.
+
+Py3.11/3.12 used separately installed **task-only**
+`cryptography==50.0.1` and `cffi==2.1.1` runtime dependencies.
+Global/system Python environments were not modified.
+This test covers the installed **public Python dispatcher**,
+**not** independent source provenance of a manufactured Windows
+`medscale.exe` console shim (#893).
+
+Final native Windows Python3.14 **26 focused PASS**,
+**432 broader Core/FHIR/Workspace PASS**, **3 SKIPPED**
+(optional official R4 ZIP not supplied in that source test run),
+**4 DESELECTED** preexisting raw-Wheel external build fixtures;
+Ruff check and format PASS; Git whitespace PASS.
+
+Hosted GitHub Actions exact final PR HEAD must be checked separately;
+no locally passing suite or successful install implies hosted CI.
+All clinical/production authorization limits above remain:
+**release NO-GO** without real identity matching, full FHIR R4
+validation, authenticated RBAC, protected production keys,
+independent security/medical review and founder release approval.
