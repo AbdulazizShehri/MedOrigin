@@ -70,7 +70,9 @@ def run_ephemeral_fictional_workspace_demo() -> dict[str, object]:
     from medscale_workspace.storage import WorkspaceStore
 
     from medscale.fhirkit.workspace_ingest import ingest_synthetic_bundle_atomic
+    from medscale.fhirkit.workspace_readback import read_synthetic_bundle_in_memory
 
+    fictional = _fictional_bundle()
     provider = InMemoryTestKeyProvider(new_root_secret())
     with TemporaryDirectory(prefix="medorigin-fictional-core-") as directory:
         with WorkspaceStore.open(
@@ -80,14 +82,14 @@ def run_ephemeral_fictional_workspace_demo() -> dict[str, object]:
             application_version="0.1.0.dev1",
         ) as store:
             result = ingest_synthetic_bundle_atomic(
-                _fictional_bundle(),
+                fictional,
                 store,
                 test_key_provider=provider,
                 actor_id="fictional-core-demo",
                 occurred_at=_TIME,
                 synthetic_only=True,
             )
-            if store.object_count() != 7 or AuditTrail(store).verify().events_verified != 1:
+            if store.object_count() != 8 or AuditTrail(store).verify().events_verified != 1:
                 raise ValueError("synthetic_workspace_demo_integrity_refused")
 
         with WorkspaceStore.open(
@@ -99,8 +101,19 @@ def run_ephemeral_fictional_workspace_demo() -> dict[str, object]:
             report = AuditTrail(store).verify(
                 expected_head_event_digest=str(result["audit_head_digest"])
             )
-            if store.object_count() != 7 or report.events_verified != 1:
+            if store.object_count() != 8 or report.events_verified != 1:
                 raise ValueError("synthetic_workspace_demo_reopen_refused")
+            readback = read_synthetic_bundle_in_memory(
+                store,
+                test_key_provider=provider,
+                source_content_sha256=str(result["source_content_sha256"]),
+                expected_audit_head_digest=str(result["audit_head_digest"]),
+                actor_id="fictional-core-demo",
+                synthetic_only=True,
+                allow_in_memory_readback=True,
+            )
+            if readback["bundle"] != fictional or readback["resource_count"] != 3:
+                raise ValueError("synthetic_workspace_demo_readback_refused")
     if Path(directory).exists():
         raise ValueError("synthetic_workspace_demo_cleanup_refused")
     return {
