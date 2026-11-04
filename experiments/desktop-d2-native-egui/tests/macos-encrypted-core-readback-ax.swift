@@ -115,6 +115,31 @@ for required in [
     noGo("recovered Core window did not expose reviewed field: " + required)
   }
 }
+for label in [
+  "Workspace home: fictional Core source only",
+  "Verified fictional resources: 3 (read-only)",
+  "Workspace source: Reopened ephemeral encrypted test vault (removed after QA)"
+] {
+  guard textPresent(label) else { noGo("native Workspace home absent: " + label) }
+}
+press("Open workspace home: fictional patient chart")
+guard textPresent("Recovered fictional record: Patient/fictional-patient-001"),
+      textPresent("Fictional patient chart: source-verified relationships"),
+      textPresent("Associated fictional resources: 1 Encounter, 1 Observation")
+else { noGo("native fictional patient chart graph not displayed from Workspace home") }
+press("Open patient chart member: Encounter/fictional-encounter-001")
+guard textPresent("Recovered fictional record: Encounter/fictional-encounter-001")
+else { noGo("source-linked fictional Encounter chart navigation failed") }
+press("Back to previous recovered fictional record")
+guard textPresent("Recovered fictional record: Patient/fictional-patient-001")
+else { noGo("Back from fictional Encounter chart to Patient failed") }
+press("Open patient chart member: Observation/fictional-observation-001")
+guard textPresent("Recovered fictional record: Observation/fictional-observation-001")
+else { noGo("source-linked fictional Observation chart navigation failed") }
+press("Back to previous recovered fictional record")
+guard textPresent("Recovered fictional record: Patient/fictional-patient-001")
+else { noGo("Back from fictional Observation chart to Patient failed") }
+print("MACOS_NATIVE_WORKSPACE_HOME_PATIENT_CHART_AX_PASS_NONCLINICAL")
 press("Open recovered fictional resource: Observation/fictional-observation-001")
 guard textPresent("Recovered fictional record: Observation/fictional-observation-001")
   else { noGo("recovered encrypted Observation detail not visible") }
