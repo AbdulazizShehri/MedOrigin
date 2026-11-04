@@ -589,7 +589,7 @@ pub struct MedOriginNativePreview {
     encrypted_readback: Option<FictionalEncryptedReadback>,
     encrypted_readback_source_external: bool,
     encrypted_readback_selected: Option<usize>,
-    encrypted_readback_back: Option<usize>,
+    encrypted_readback_history: Vec<usize>,
     encrypted_readback_notice: Option<&'static str>,
     workspace_report_external: bool,
     workspace_report_notice: Option<&'static str>,
@@ -677,7 +677,7 @@ impl MedOriginNativePreview {
             return Err("encrypted_readback_unknown_resource");
         }
         self.encrypted_readback_selected = Some(index);
-        self.encrypted_readback_back = None;
+        self.encrypted_readback_history.clear();
         self.encrypted_readback_notice = None;
         Ok(())
     }
@@ -716,15 +716,74 @@ impl MedOriginNativePreview {
                 return Err(reason);
             }
         };
+        self.navigate_encrypted_readback_resource(current, position)
+    }
+
+    /// Incoming relationships are derived ONLY from the same decrypted,
+    /// pinned Core projection. A forged or stale edge clears all evidence.
+    fn follow_encrypted_readback_incoming(
+        &mut self,
+        source_index: usize,
+        link_index: usize,
+    ) -> Result<(), &'static str> {
+        let incoming = (|| {
+            let readback = self
+                .encrypted_readback
+                .as_ref()
+                .ok_or("encrypted_readback_not_loaded")?;
+            let current = self
+                .encrypted_readback_selected
+                .ok_or("encrypted_readback_no_selection")?;
+            let target = readback
+                .resources
+                .get(current)
+                .ok_or("encrypted_readback_unknown_resource")?;
+            let source = readback
+                .resources
+                .get(source_index)
+                .ok_or("encrypted_readback_unknown_incoming_resource")?;
+            let link = source
+                .links
+                .get(link_index)
+                .ok_or("encrypted_readback_unknown_incoming_link")?;
+            if link.target != target.full_url {
+                return Err("encrypted_readback_incoming_edge_mismatch");
+            }
+            Ok::<_, &'static str>(current)
+        })();
+        match incoming {
+            Ok(current) => self.navigate_encrypted_readback_resource(current, source_index),
+            Err(reason) => {
+                self.clear_fictional_output();
+                self.encrypted_readback_notice =
+                    Some("FAIL CLOSED: encrypted fictional incoming reference rejected");
+                Err(reason)
+            }
+        }
+    }
+
+    fn navigate_encrypted_readback_resource(
+        &mut self,
+        current: usize,
+        position: usize,
+    ) -> Result<(), &'static str> {
+        // Bounded, source-only navigation history; no persistent record state.
+        if self.encrypted_readback_history.len() >= 16 {
+            self.clear_fictional_output();
+            self.encrypted_readback_notice =
+                Some("FAIL CLOSED: fictional navigation history limit reached");
+            return Err("encrypted_readback_navigation_limit");
+        }
+        self.encrypted_readback_history.push(current);
         self.encrypted_readback_selected = Some(position);
-        self.encrypted_readback_back = Some(current);
+        self.encrypted_readback_notice = None;
         Ok(())
     }
 
     fn back_encrypted_readback_resource(&mut self) -> Result<(), &'static str> {
         let previous = self
-            .encrypted_readback_back
-            .take()
+            .encrypted_readback_history
+            .pop()
             .ok_or("encrypted_readback_no_previous")?;
         if self
             .encrypted_readback
@@ -760,7 +819,7 @@ impl MedOriginNativePreview {
         self.encrypted_readback = None;
         self.encrypted_readback_source_external = false;
         self.encrypted_readback_selected = None;
-        self.encrypted_readback_back = None;
+        self.encrypted_readback_history.clear();
         self.encrypted_readback_notice = None;
         self.workspace_report_external = false;
         self.workspace_report_notice = None;
@@ -788,7 +847,7 @@ impl MedOriginNativePreview {
         self.encrypted_readback = None;
         self.encrypted_readback_source_external = false;
         self.encrypted_readback_selected = None;
-        self.encrypted_readback_back = None;
+        self.encrypted_readback_history.clear();
         self.encrypted_readback_notice = None;
         self.workspace_report_external = false;
         self.workspace_report_notice = None;
@@ -1314,6 +1373,7 @@ impl eframe::App for MedOriginNativePreview {
                     ui.label("This native app does not launch Core or authenticate the source of stdin.");
                     let mut select = None;
                     let mut follow = None;
+                    let mut incoming = None;
                     if let Some(readback) = &self.encrypted_readback {
                         ui.label(format!("Recovered fictional resource count: {}", readback.resources.len()));
                         ui.monospace(format!("Encrypted readback SHA-256: {}", readback.report_sha256));
@@ -1346,6 +1406,21 @@ impl eframe::App for MedOriginNativePreview {
                                         follow = Some(link_index);
                                     }
                                 }
+                                // These reverse edges are computed from the
+                                // actually decrypted fictional Core projection.
+                                // No independent patient database is queried.
+                                for (source_index, source) in readback.resources.iter().enumerate() {
+                                    for (link_index, link) in source.links.iter().enumerate() {
+                                        if link.target == resource.full_url
+                                            && ui.button(format!(
+                                                "Open recovered incoming {}/{} via {}",
+                                                source.resource_type, source.resource_id, link.field
+                                            )).clicked()
+                                        {
+                                            incoming = Some((source_index, link_index));
+                                        }
+                                    }
+                                }
                         }
                     } else {
                         ui.label("No encrypted Core readback loaded. Explicit fictional-only startup receipt is required.");
@@ -1359,7 +1434,10 @@ impl eframe::App for MedOriginNativePreview {
                     if let Some(index) = follow {
                         let _ = self.follow_encrypted_readback_link(index);
                     }
-                    if self.encrypted_readback_back.is_some()
+                    if let Some((source_index, link_index)) = incoming {
+                        let _ = self.follow_encrypted_readback_incoming(source_index, link_index);
+                    }
+                    if !self.encrypted_readback_history.is_empty()
                         && ui.button("Back to previous recovered fictional record").clicked()
                     {
                         let _ = self.back_encrypted_readback_resource();
@@ -1639,15 +1717,68 @@ mod tests {
         assert_eq!(app.encrypted_readback_selected, Some(0));
         app.follow_encrypted_readback_link(0).unwrap();
         assert_eq!(app.encrypted_readback_selected, Some(1)); // recovered Patient
-        assert_eq!(app.encrypted_readback_back, Some(0));
+        assert_eq!(app.encrypted_readback_history, vec![0]);
         app.back_encrypted_readback_resource().unwrap();
         assert_eq!(app.encrypted_readback_selected, Some(0));
-        assert!(app.encrypted_readback_back.is_none());
+        assert!(app.encrypted_readback_history.is_empty());
         app.follow_encrypted_readback_link(1).unwrap();
         assert_eq!(app.encrypted_readback_selected, Some(2)); // recovered Encounter
         app.follow_encrypted_readback_link(0).unwrap();
         assert_eq!(app.encrypted_readback_selected, Some(1)); // recovered Patient
-        assert_eq!(app.encrypted_readback_back, Some(2));
+        assert_eq!(app.encrypted_readback_history, vec![0, 2]);
+        app.back_encrypted_readback_resource().unwrap();
+        assert_eq!(app.encrypted_readback_selected, Some(2)); // multi-hop back to Encounter
+        assert_eq!(app.encrypted_readback_history, vec![0]);
+        app.back_encrypted_readback_resource().unwrap();
+        assert_eq!(app.encrypted_readback_selected, Some(0)); // then Observation
+        assert!(app.encrypted_readback_history.is_empty());
+    }
+
+    #[test]
+    fn incoming_core_relationships_navigate_only_verified_decrypted_edges() {
+        let raw = include_bytes!("../fixtures/core/encrypted-readback-projection.json");
+        let mut app =
+            MedOriginNativePreview::from_one_time_synthetic_encrypted_readback_stdin(raw).unwrap();
+        app.select_encrypted_readback_resource(1).unwrap(); // Patient
+        app.follow_encrypted_readback_incoming(2, 0).unwrap(); // Encounter.subject
+        assert_eq!(app.encrypted_readback_selected, Some(2));
+        app.follow_encrypted_readback_incoming(0, 1).unwrap(); // Observation.encounter
+        assert_eq!(app.encrypted_readback_selected, Some(0));
+        assert_eq!(app.encrypted_readback_history, vec![1, 2]);
+        app.back_encrypted_readback_resource().unwrap();
+        assert_eq!(app.encrypted_readback_selected, Some(2));
+        app.back_encrypted_readback_resource().unwrap();
+        assert_eq!(app.encrypted_readback_selected, Some(1));
+        assert!(app.encrypted_readback_history.is_empty());
+    }
+
+    #[test]
+    fn mismatched_incoming_edge_and_unbounded_history_fail_closed() {
+        let raw = include_bytes!("../fixtures/core/encrypted-readback-projection.json");
+        let mut app =
+            MedOriginNativePreview::from_one_time_synthetic_encrypted_readback_stdin(raw).unwrap();
+        app.select_encrypted_readback_resource(1).unwrap(); // Patient
+        assert_eq!(
+            app.follow_encrypted_readback_incoming(0, 1), // Observation.encounter != Patient
+            Err("encrypted_readback_incoming_edge_mismatch")
+        );
+        assert!(app.encrypted_readback.is_none());
+        assert!(app.encrypted_readback_history.is_empty());
+
+        let mut app =
+            MedOriginNativePreview::from_one_time_synthetic_encrypted_readback_stdin(raw).unwrap();
+        app.select_encrypted_readback_resource(1).unwrap();
+        for _ in 0..8 {
+            app.follow_encrypted_readback_incoming(0, 0).unwrap(); // Patient -> Observation
+            app.follow_encrypted_readback_link(0).unwrap(); // Observation -> Patient
+        }
+        assert_eq!(app.encrypted_readback_history.len(), 16);
+        assert_eq!(
+            app.follow_encrypted_readback_incoming(0, 0),
+            Err("encrypted_readback_navigation_limit")
+        );
+        assert!(app.encrypted_readback.is_none());
+        assert!(app.encrypted_readback_history.is_empty());
     }
 
     #[test]
@@ -1682,7 +1813,7 @@ mod tests {
         app.follow_encrypted_readback_link(0).unwrap();
         app.clear_fictional_output();
         assert!(app.encrypted_readback.is_none());
-        assert!(app.encrypted_readback_back.is_none());
+        assert!(app.encrypted_readback_history.is_empty());
         assert!(!app.has_external_synthetic_encrypted_readback());
     }
 
