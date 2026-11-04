@@ -175,3 +175,73 @@ depend on an external build executable missing in this
 harness; these are NOT treated as passes. No deployed source,
 OS-native signed launcher, independent security review or
 clinical acceptance is claimed from this result.
+
+
+## Exact-source offline artifacts and native installed qualification
+
+**Functional source SHA:** `8bcde85a9dcef876a55a5f915f6848a4126813a0`.
+
+A separate task-only Git checkout of this exact commit on **Ubuntu WSL2
+ext4** was projected using the existing Core staging script. Core
+and Workspace were built via `uv build --offline --no-create-gitignore`,
+without changing the root project or lock file. Existing independent
+Core Wheel-source and sdist-scope gates both returned **zero issues**:
+`SOURCE_BOUND_WHEEL_QUALIFIED_ONLY` and
+`SDIST_SCOPE_QUALIFIED_ONLY`.
+
+The **seven relevant Core modules** and **all 36 Workspace Python
+modules** were byte-identical to the corresponding files inside
+the Wheels. The locally built, **unpublished** artifacts have
+these SHA-256 digests:
+
+- Core Wheel `medscale-0.3.0-py3-none-any.whl`:
+  `8b61b29e19dc1b6d45d8d22617d582a2985dce8d2df23e738b6ff44c1fec4770`.
+- Core sdist `medscale-0.3.0.tar.gz`:
+  `05d8bd01cb8bbff17e44a810335cd7b5e3df4d9fcc0dd537332f7e4a01c39f1f`.
+- Workspace Wheel `medscale_workspace-0.1.0.dev1-py3-none-any.whl`:
+  `a744f01581a3a2fbb6731ad86dfe0be7a953eb98dda2dd10aad934843e5e7a3d`.
+- Workspace sdist `medscale_workspace-0.1.0.dev1.tar.gz`:
+  `feef904cc34b1b14987aac1d455d380123bb88c270b4aacdc33a21596b50394b`.
+
+**Both SHA-checked Wheels** were installed into the **same
+task-only Windows package directory** using
+`pip --no-index --no-deps --target`, without modifying global
+Python installations. A separate installed-module QA script required
+**nine imported Core and Workspace modules**, including both new
+Core and Workspace structural receipt interfaces, to resolve
+strictly under that exact installed package destination,
+not the Git checkout.
+
+The same real installed-Wheel public Core Python dispatcher
+`fhir encrypted-structural-demo --synthetic-only --ephemeral-demo
+--offline-r4-schema <exact-HL7-R4-ZIP>` completed **exit0** on
+all three native Windows runtimes:
+
+- **Python 3.14:** uses separate task-owned `jsonschema==4.25.1`
+  (user's installed jsonschema 4.26.0 unchanged).
+- **Python 3.11.15:** task-owned pinned `jsonschema==4.25.1`,
+  `cryptography==50.0.1`, `cffi==2.1.1` dependency tree.
+- **Python 3.12.13:** its own separate pinned versions of the
+  above dependencies.
+
+Every runtime produced
+`REAL_TWO_INSTALLED_WHEELS_OFFICIAL_R4_ENCRYPTED_STRUCTURAL_RECEIPT_PASS`,
+with a real **11-object encrypted Workspace**, **two chained
+audit events**, fully verified source manifest and immutable
+provenance, encrypted `OperationOutcome` re-read after closing and
+reopening, source-independent package import paths, and removed
+temporary store. On the invented built-in Bundle, the official
+structural report status was **`not_validated`**. No FHIR
+source body or patient identifiers appeared in the returned
+metadata; all FHIR-conformance/clinical/release authority flags
+remained **false**.
+
+This is author-side **test-only** offline installation evidence,
+**not** independent supply-chain approval, qualified installed
+native Windows `medscale.exe` launcher (#893), hosted exact-head
+CI, full HL7 R4 conformance, clinical safety evaluation or a
+release decision. There was **no** package publication, signing,
+protected-main merge, network service, EHR interaction or PHI.
+
+The private stacked PR is strictly DRAFT / **release NO-GO** until
+those separately owned gates complete.
