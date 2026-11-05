@@ -200,6 +200,6 @@ def test_optional_no_export_still_discards_ephemeral_preview(tmp_path: Path) -> 
         Path("fictional-python311"),
         Path("fictional-python312"),
     )
-    assert result["durable_negative_truth_preview_exported"] is False
+    assert "durable_negative_truth_preview_exported" not in result
     assert result["source_qualified_negative_truth_preview"] is True
     assert {p.name for p in tmp_path.iterdir()} == {checkout.name}
