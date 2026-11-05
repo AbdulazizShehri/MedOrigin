@@ -37,7 +37,7 @@ def assess_fictional_file_batch_readiness(
         raise SyntheticFileBatchReadinessError(
             "fictional_readiness_synthetic_attestation_required"
         )
-    if offline_r4_schema is not None and type(offline_r4_schema) is not Path:
+    if offline_r4_schema is not None and not isinstance(offline_r4_schema, Path):
         raise SyntheticFileBatchReadinessError(
             "fictional_readiness_schema_path_refused"
         )
