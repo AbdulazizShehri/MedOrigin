@@ -23,7 +23,8 @@ class NativeOneShotCoreSourceTests(unittest.TestCase):
             r"let size_limit = if args\[0\] == EXPLICIT_SYNTHETIC_MULTIPATIENT_FLAG \{\s*"
             r"MAX_SYNTHETIC_BUNDLE_BYTES\s*\} else if args\[0\] == EXPLICIT_CORE_FILE_BATCH_FLAG \{\s*"
             r"FILE_BATCH_RECEIPT_MAX_BYTES\s*\} else if args\[0\] == SESSION_CORE_BATCH_FLAG \{\s*"
-            r"session::CORE_BATCH_FRAME_MAX_BYTES\s*\} else \{\s*MAX_FICTIONAL_CORE_STDIN\s*\};",
+            r"session::CORE_BATCH_FRAME_MAX_BYTES\s*\} else if args\[0\] == SESSION_PROTECTED_AUDIT_FLAG \{\s*"
+            r"session::PROTECTED_AUDIT_MAX_FRAME\s*\} else \{\s*MAX_FICTIONAL_CORE_STDIN\s*\};",
         )
         self.assertIn(".take(size_limit as u64 + 1)", native)
         self.assertIn("bytes.len() > size_limit", native)
