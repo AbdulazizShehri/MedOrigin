@@ -682,6 +682,7 @@ pub struct MedOriginNativePreview {
     core_file_batch_selected: Option<usize>,
     core_file_batch_inspected: Vec<bool>,
     core_file_batch_activity_only: bool,
+    core_file_batch_opened_only: bool,
     core_file_batch_notice: Option<&'static str>,
     core_report_notice: Option<&'static str>,
     external_core_source_visible: bool,
@@ -813,7 +814,9 @@ impl MedOriginNativePreview {
             .as_ref()
             .and_then(|batch| batch.imports.get(index))
             .is_some_and(|item| {
-                !self.core_file_batch_activity_only || item.timeline_event_count > 0
+                (!self.core_file_batch_activity_only || item.timeline_event_count > 0)
+                    && (!self.core_file_batch_opened_only
+                        || self.core_file_batch_inspected.get(index) == Some(&true))
             })
     }
 
@@ -918,6 +921,27 @@ impl MedOriginNativePreview {
         Ok(())
     }
 
+    /// Fixed, in-memory view facet. "Opened" records navigation, never
+    /// approval, patient review, or persisted history. Combines with activity.
+    fn core_batch_opened_filter(&mut self, opened_only: bool) -> Result<(), &'static str> {
+        let Some(batch) = self.core_file_batch.as_ref() else {
+            return Err("fictional_batch_missing_source");
+        };
+        if self.core_file_batch_inspected.len() != batch.imports.len() {
+            self.clear_fictional_output();
+            return Err("fictional_batch_stale_progress_refused");
+        }
+        self.core_file_batch_opened_only = opened_only;
+        if self
+            .core_file_batch_selected
+            .is_some_and(|index| !self.core_batch_visible(index))
+        {
+            self.core_file_batch_selected = None;
+        }
+        self.core_file_batch_notice = None;
+        Ok(())
+    }
+
     fn core_batch_reset_exploration(&mut self) -> Result<(), &'static str> {
         let Some(batch) = self.core_file_batch.as_ref() else {
             return Err("fictional_batch_missing_source");
@@ -929,6 +953,7 @@ impl MedOriginNativePreview {
         self.core_file_batch_inspected.fill(false);
         self.core_file_batch_selected = None;
         self.core_file_batch_activity_only = false;
+        self.core_file_batch_opened_only = false;
         self.core_file_batch_notice = None;
         Ok(())
     }
@@ -1408,6 +1433,7 @@ impl MedOriginNativePreview {
         self.core_file_batch_selected = None;
         self.core_file_batch_inspected.clear();
         self.core_file_batch_activity_only = false;
+        self.core_file_batch_opened_only = false;
         self.core_file_batch_notice = None;
         self.core_report_notice = None;
         self.external_core_source_visible = false;
@@ -1453,6 +1479,7 @@ impl MedOriginNativePreview {
         self.core_file_batch_selected = None;
         self.core_file_batch_inspected.clear();
         self.core_file_batch_activity_only = false;
+        self.core_file_batch_opened_only = false;
         self.core_file_batch_notice = None;
         self.core_report_notice = None;
         self.external_core_source_visible = false;
@@ -2787,6 +2814,7 @@ impl MedOriginNativePreview {
             Step(bool),
             NextUninspected,
             ActivityOnly(bool),
+            OpenedOnly(bool),
             Reset,
         }
         let mut action = None;
@@ -2831,8 +2859,12 @@ impl MedOriginNativePreview {
                 if ui.button("Core batch: Next visible import").clicked() {
                     action = Some(Action::Step(true));
                 }
-                if ui.button("Core batch: Open next unexplored import").clicked() {
-                    action = Some(Action::NextUninspected);
+                if !self.core_file_batch_opened_only {
+                    if ui.button("Core batch: Open next unexplored import").clicked() {
+                        action = Some(Action::NextUninspected);
+                    }
+                } else {
+                    ui.label("Core batch: Show unopened imports before exploring a new source.");
                 }
             });
             ui.horizontal_wrapped(|ui| {
@@ -2842,6 +2874,13 @@ impl MedOriginNativePreview {
                     }
                 } else if ui.button("Core batch: Only imports with activity").clicked() {
                     action = Some(Action::ActivityOnly(true));
+                }
+                if self.core_file_batch_opened_only {
+                    if ui.button("Core batch: Show opened and unopened imports").clicked() {
+                        action = Some(Action::OpenedOnly(false));
+                    }
+                } else if ui.button("Core batch: Only imports opened this session").clicked() {
+                    action = Some(Action::OpenedOnly(true));
                 }
                 if ui.button("Core batch: Reset session exploration").clicked() {
                     action = Some(Action::Reset);
@@ -2934,6 +2973,9 @@ impl MedOriginNativePreview {
             }
             Some(Action::ActivityOnly(only)) => {
                 let _ = self.core_batch_activity_filter(only);
+            }
+            Some(Action::OpenedOnly(only)) => {
+                let _ = self.core_batch_opened_filter(only);
             }
             Some(Action::Reset) => {
                 let _ = self.core_batch_reset_exploration();
@@ -3784,6 +3826,70 @@ mod tests {
         assert!(app.core_batch_visible(1));
         assert_eq!(app.core_batch_step(true), Ok(()));
         assert_eq!(app.core_file_batch_selected, Some(1));
+    }
+
+    #[test]
+    fn core_file_batch_opened_facet_is_in_memory_and_combines_with_activity_filter() {
+        let mut value: serde_json::Value = serde_json::from_slice(CORE_FILE_BATCH_REAL).unwrap();
+        // The second imaginary import contains no timeline activity.
+        value["imports"][1]["verified_timeline_event_count"] = serde_json::json!(0);
+        value["verified_timeline_event_count"] = serde_json::json!(2);
+        let mut bytes = serde_json::to_vec(&value).unwrap();
+        bytes.push(b'\n');
+        let mut app =
+            MedOriginNativePreview::from_one_time_core_file_batch_receipt_stdin(&bytes).unwrap();
+        assert!(!app.core_file_batch_opened_only);
+        assert_eq!(app.core_batch_opened_filter(true), Ok(()));
+        assert!(!app.core_batch_visible(0));
+        assert!(!app.core_batch_visible(1));
+        assert_eq!(
+            app.core_batch_select(0),
+            Err("fictional_batch_hidden_source_refused")
+        );
+        assert_eq!(app.core_batch_opened_filter(false), Ok(()));
+        assert_eq!(app.core_batch_select(1), Ok(()));
+        assert_eq!(app.core_batch_opened_filter(true), Ok(()));
+        assert!(!app.core_batch_visible(0));
+        assert!(app.core_batch_visible(1));
+        assert_eq!(app.core_file_batch_selected, Some(1));
+
+        assert_eq!(app.core_batch_activity_filter(true), Ok(()));
+        assert!(!app.core_batch_visible(1));
+        assert_eq!(app.core_file_batch_selected, None);
+        assert_eq!(app.core_file_batch_inspected, [false, true]);
+        assert_eq!(app.core_batch_activity_filter(false), Ok(()));
+        assert!(app.core_batch_visible(1));
+        assert_eq!(app.core_batch_opened_filter(false), Ok(()));
+        assert!(app.core_batch_visible(0));
+        assert!(app.core_batch_visible(1));
+
+        assert_eq!(app.core_batch_reset_exploration(), Ok(()));
+        assert!(!app.core_file_batch_opened_only);
+        assert!(!app.core_file_batch_activity_only);
+        assert_eq!(app.core_file_batch_inspected, [false, false]);
+        assert!(app.core_file_batch.is_some());
+        assert_eq!(app.core_batch_opened_filter(true), Ok(()));
+        app.clear_fictional_output();
+        assert!(!app.core_file_batch_opened_only);
+        assert_eq!(
+            app.core_batch_opened_filter(false),
+            Err("fictional_batch_missing_source")
+        );
+    }
+
+    #[test]
+    fn core_file_batch_opened_facet_denies_inconsistent_session_progress() {
+        let mut app = MedOriginNativePreview::from_one_time_core_file_batch_receipt_stdin(
+            CORE_FILE_BATCH_REAL,
+        )
+        .unwrap();
+        app.core_file_batch_inspected.pop();
+        assert_eq!(
+            app.core_batch_opened_filter(true),
+            Err("fictional_batch_stale_progress_refused")
+        );
+        assert!(app.core_file_batch.is_none());
+        assert!(!app.core_file_batch_opened_only);
     }
 
     #[test]
