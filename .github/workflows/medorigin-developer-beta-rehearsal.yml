@@ -99,12 +99,31 @@ jobs:
           # this exact source before the installed-Wheel CLI/Windows GUI E2E.
           # Reuse the same existing Linux/Windows job and ephemeral uv Python,
           # with pinned offline-only test inputs; never publish artifacts.
-          uv run --no-project --python $pythonBuild --with 'pytest==8.4.2' `
-            -- python -m pytest -q `
-            tests/test_truthful_synthetic_fhir_beta_v2.py `
-            tests/test_synthetic_fhir_native_desktop_demo.py `
-            tests/test_medorigin_prepublication_rehearsal.py
-          if ($LASTEXITCODE -ne 0) {
+          # The source-only unit environment intentionally has no installed
+          # application Wheel. Make the checkout packages importable for only
+          # this unit step, then scrub PYTHONPATH before source-bound CLI E2E.
+          $oldPythonPath = $env:PYTHONPATH
+          $sourceTestPaths = @(
+            (Join-Path (Get-Location).Path 'src'),
+            (Join-Path (Get-Location).Path 'apps/workspace/src'),
+            (Join-Path (Get-Location).Path 'tests')
+          )
+          $env:PYTHONPATH = $sourceTestPaths -join [System.IO.Path]::PathSeparator
+          try {
+            uv run --no-project --python $pythonBuild --with 'pytest==8.4.2' `
+              -- python -m pytest -q `
+              tests/test_truthful_synthetic_fhir_beta_v2.py `
+              tests/test_synthetic_fhir_native_desktop_demo.py `
+              tests/test_medorigin_prepublication_rehearsal.py
+            $unitTestExit = $LASTEXITCODE
+          } finally {
+            if ([string]::IsNullOrEmpty($oldPythonPath)) {
+              Remove-Item Env:PYTHONPATH -ErrorAction SilentlyContinue
+            } else {
+              $env:PYTHONPATH = $oldPythonPath
+            }
+          }
+          if ($unitTestExit -ne 0) {
             throw 'Truthful Developer Beta v2 source contract tests failed'
           }
           Write-Output 'TRUTHFUL_SYNTHETIC_BETA_V2_UNIT_PASS_NOT_RELEASE'
