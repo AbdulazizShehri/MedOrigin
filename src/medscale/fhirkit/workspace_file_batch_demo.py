@@ -106,6 +106,7 @@ def run_fictional_file_batch_encrypted_demo(
     from_day_utc: str | None = None,
     through_day_utc: str | None = None,
     resource_type: str | None = None,
+    offline_r4_schema: Path | None = None,
 ) -> dict[str, object]:
     """Commit provided fictional Bundles; independently verify cold-reopened data.
 
@@ -138,6 +139,25 @@ def run_fictional_file_batch_encrypted_demo(
 
     filter_requested = start is not None or end is not None or resource_type is not None
     snapshots, preflights = _freeze_and_preflight(payloads)
+
+    # When explicitly requested, qualify every original invented FHIR
+    # source against the exact official offline HL7 R4 JSON Schema BEFORE
+    # creating or writing any encrypted Workspace. A structural pass does
+    # NOT authorize full R4 or clinical conformance.
+    r4_gate: dict[str, object] | None = None
+    if offline_r4_schema is not None:
+        try:
+            from medscale.fhirkit.workspace_file_r4_gate import (
+                require_official_r4_structural_preflight,
+            )
+
+            r4_gate = require_official_r4_structural_preflight(
+                snapshots, preflights, offline_r4_schema
+            )
+        except Exception as exc:
+            raise SyntheticFileImportDemoError(
+                "fictional_import_official_r4_structural_gate_refused"
+            ) from exc
 
     try:
         from medscale_workspace.audit import AuditTrail
@@ -356,6 +376,8 @@ def run_fictional_file_batch_encrypted_demo(
                 }
                 if filtered_review is not None:
                     result["filtered_review"] = filtered_review
+                if r4_gate is not None:
+                    result["official_r4_structural_gate"] = r4_gate
         except SyntheticFileImportDemoError:
             raise
         except Exception as exc:
@@ -381,6 +403,7 @@ def fictional_file_batch_receipt_json(
     from_day_utc: str | None = None,
     through_day_utc: str | None = None,
     resource_type: str | None = None,
+    offline_r4_schema: Path | None = None,
 ) -> str:
     return (
         json.dumps(
@@ -391,6 +414,7 @@ def fictional_file_batch_receipt_json(
                 from_day_utc=from_day_utc,
                 through_day_utc=through_day_utc,
                 resource_type=resource_type,
+                offline_r4_schema=offline_r4_schema,
             ),
             sort_keys=True,
             separators=(",", ":"),

@@ -126,6 +126,7 @@ def _fictional_encrypted_file_batch_demo_main(argv: list[str]) -> int:
             "--synthetic-only --ephemeral-demo "
             "[--from-day YYYY-MM-DD] [--through-day YYYY-MM-DD] "
             "[--event-type Encounter|Observation] "
+            "[--offline-r4-schema OFFICIAL_FHIR_R4_ZIP] "
             "FICTIONAL_BUNDLE_1 FICTIONAL_BUNDLE_2 "
             "[FICTIONAL_BUNDLE_3 ... FICTIONAL_BUNDLE_4]\\n"
             "Imports invented source files into a temporary AES-GCM Workspace, "
@@ -144,6 +145,7 @@ def _fictional_encrypted_file_batch_demo_main(argv: list[str]) -> int:
         "--from-day": "from_day_utc",
         "--through-day": "through_day_utc",
         "--event-type": "resource_type",
+        "--offline-r4-schema": "offline_r4_schema",
     }
     filters: dict[str, str] = {}
     cursor = 2
@@ -174,8 +176,13 @@ def _fictional_encrypted_file_batch_demo_main(argv: list[str]) -> int:
         print("file batch demo refused: source_reader_unavailable", file=sys.stderr)
         return 2
     try:
+        official_zip = filters.pop("offline_r4_schema", None)
         output = fictional_file_batch_receipt_json(
-            sources, synthetic_only=True, ephemeral_demo=True, **filters
+            sources,
+            synthetic_only=True,
+            ephemeral_demo=True,
+            offline_r4_schema=Path(official_zip) if official_zip is not None else None,
+            **filters,
         )
     except Exception:
         print(
