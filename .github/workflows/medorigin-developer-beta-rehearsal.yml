@@ -15,7 +15,12 @@ on:
       - "tests/test_medorigin_prepublication_rehearsal.py"
       - "tests/test_core_r4_required_status_bindings.py"
       - "tests/test_core_r4_observation_exclusive_choice.py"
+      - "tests/test_core_file_batch_readiness.py"
       - "src/medscale/fhirkit/bundle.py"
+      - "src/medscale/fhirkit/workspace_file_batch_demo.py"
+      - "src/medscale/fhirkit/workspace_file_readiness.py"
+      - "src/medscale/cli/fhir.py"
+      - "scripts/qa_medorigin_installed_batch_readiness.py"
       - "src/medscale/fhirkit/bundle_diagnostics.py"
       - "scripts/qa_medorigin_installed_r4_status_binding.py"
       - ".github/workflows/medorigin-developer-beta-rehearsal.yml"
@@ -174,6 +179,7 @@ jobs:
               -- python -m pytest -q `
               tests/test_core_r4_required_status_bindings.py `
               tests/test_core_r4_observation_exclusive_choice.py `
+              tests/test_core_file_batch_readiness.py `
               tests/test_core_synthetic_bundle_preflight.py `
               tests/test_core_multi_patient_reference_consistency.py `
               tests/test_core_bundle_rejection_operationoutcome.py `
@@ -258,6 +264,18 @@ jobs:
             --cli311 $r4Cli311 --cli312 $r4Cli312
           if ($LASTEXITCODE -ne 0) {
             throw 'Real installed Core R4 required-code behavior failed'
+          }
+
+          # New actual end-user CLI: source-scoped read-only import plan with
+          # exact offline HL7 R4 structure and timezone/date readiness,
+          # before ANY encrypted store exists. Reuse already-attested real
+          # installed Python3.11/3.12 console entrypoints and the same
+          # official SHA-pinned archive from this single existing job.
+          & $pythonBuild scripts/qa_medorigin_installed_batch_readiness.py `
+            --cli311 $r4Cli311 --cli312 $r4Cli312 `
+            --official-r4-schema $r4Zip
+          if ($LASTEXITCODE -ne 0) {
+            throw 'Real installed source-bound FHIR batch readiness refused'
           }
 
           if ($IsWindows) {
