@@ -12,13 +12,46 @@ D1 source candidate, the Python Research Core or the Workspace.
   intentionally present in this source. Dependency auditing is still required.
 - Native application compilation is distinct from proving zero network egress:
   an OS-scoped packet-level observation is still required on each platform.
-- The UI does not persist state or read from an arbitrary path.
+- The UI does not persist state. In the new opt-in drag/drop demo it reads only
+  the file explicitly dropped by the user, under a strict fictional-only JSON
+  allowlist; this is NOT a general patient file opener. Explicitly selected
+  paths may still be OS-mounted drives, so packet-level isolation remains NO-GO.
 - `eframe`'s `accesskit` feature is enabled explicitly (default features are
   disabled). Before enabling it, Windows UI Automation exposed **0** descendants
   of the native window; after enabling it, Windows exposed **10** accessible
   controls/text nodes, including the four synthetic fixture selectors and
   the verification button. This added Rust/Windows accessibility dependencies
   to the locked dependency graph; their licenses and advisories require review.
+
+## Drag-and-drop local synthetic Bundle demo (private, NONCLINICAL)
+
+A user can now launch the native egui program normally, then drag **one**
+canonical FHIR-shaped **fictional-only** JSON file into the window. For an
+admitted example use
+`fixtures/core/synthetic-multipatient-fhir-bundle.json` from this reviewed
+source checkout. The existing multi-patient fictional chart opens with a
+visible "Opened local synthetic-only JSON" indicator. The demo can be cleared
+with its existing fictional records Clear control or Escape.
+
+The file is read locally with a 32,768-byte upper bound and only after an
+explicit drop. Non-JSON files, multiple dropped files, symlinks/reparse paths,
+noncanonical bytes, real-world patient names, observations/values, extraneous
+fields, nonfictional resource IDs, malformed references or cross-patient
+relationships fail closed. Rejected names, paths, or source bytes are not
+shown in the UI or logged. Existing protected Core session modes cannot be
+replaced by a dropped file; clear them first. The app does not save, export,
+watch a directory, create an account, use a model or call an application
+network API. It does not qualify PHI processing or network isolation. A
+Windows mapped drive is not independently ruled out by an ordinary drive
+letter, so operators must use a reviewed local fixture drive for offline QA.
+
+This is useful end-user interaction work in the **experimental** native
+Desktop only; it is neither an EHR file importer nor a clinical validator.
+The Windows drag-and-drop action still requires real interactive UI testing
+on the exact commit. Rust tests cover positive canonical fictional input,
+invalid/oversize/noncanonical input, safe path checks and source/session
+fail-closed behavior. Source tests or compilation alone do not prove Windows
+drag-and-drop or an installed user journey.
 
 ## Browser/network dependency regression guard
 
