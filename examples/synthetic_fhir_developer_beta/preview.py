@@ -341,7 +341,8 @@ using only fictional synthetic FHIR data and an installed <code>medscale 0.3.0</
 <section class="results" aria-label="Verified results">{result_cards}</section>
 <footer>
 <strong>Developer evidence, not clinical validation.</strong> This check
-reports <code>not_validated</code>; no HL7 FHIR validator was executed. It does not establish conformance,
+reports <code>not_validated</code>; no HL7 FHIR validator was executed.
+It does not establish conformance,
 diagnostic reliability, clinical safety, or production EHR compatibility.
 No historical dataset migration, publisher approval or independent security
 signoff is implied. This page is a standalone file and requires no server.
