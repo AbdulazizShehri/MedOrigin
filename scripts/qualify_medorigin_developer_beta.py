@@ -293,13 +293,12 @@ def source_qualified_core_negative_truth_preview(
         # patient-like strings must never be reflected in the CI log.
         raise QualificationError("source-qualified_core_negative_preview_refused") from exc
 
-    return {
+    response: dict[str, Any] = {
         "status": "TECHNICAL_CORE_NEGATIVE_TRUTH_PREVIEW_ONLY",
         "distribution": "medscale",
         "installed_python_source_files_verified_per_runtime": None,
         "native_python_module_execution": True,
         "source_qualified_negative_truth_preview": True,
-        "durable_negative_truth_preview_exported": checked_destination is not None,
         "known_report_sha256": proof["known_report_sha256"],
         "unknown_report_sha256": proof["unknown_report_sha256"],
         "record_sha256": created["record_sha256"],
@@ -314,6 +313,11 @@ def source_qualified_core_negative_truth_preview(
         "full_beta_preview_qualified": False,
         "merge_or_tag_authorized": False,
     }
+    # Preserve the exact historical Core-only receipt shape when no durable
+    # export is requested. This opt-in field is never a clinical/release GO.
+    if checked_destination is not None:
+        response["durable_negative_truth_preview_exported"] = True
+    return response
 
 
 def qualify(
