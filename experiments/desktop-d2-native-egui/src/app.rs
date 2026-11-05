@@ -1,5 +1,6 @@
 // Adapted from emilk/eframe_template under Apache-2.0, see UPSTREAM-NOTICE.md.
 // Synthetic-only, in-process native Rust eframe + D0; no browser, EHR, PHI or network.
+use crate::core_file_batch::{FictionalCoreFileBatch, admit_fictional_core_file_batch};
 use crate::core_provenance::{
     CoreProvenanceReceipt, FictionalCoreInput, PINNED_CORE_CASE_LABELS,
     admit_exact_source_reviewed_external_core_report, inspect_pinned_core_report,
@@ -672,6 +673,7 @@ pub struct MedOriginNativePreview {
     relationship_notice: Option<&'static str>,
     core_report_selection: usize,
     core_report: Option<CoreProvenanceReceipt>,
+    core_file_batch: Option<FictionalCoreFileBatch>,
     core_report_notice: Option<&'static str>,
     external_core_source_visible: bool,
     encrypted_workspace_receipt: Option<FictionalEncryptedWorkspaceReceipt>,
@@ -759,6 +761,21 @@ impl MedOriginNativePreview {
             encrypted_readback_source_external: true,
             ..Default::default()
         })
+    }
+
+    /// The real Core #963 receipt contains only redacted counts and SHA anchors.
+    /// Do NOT turn this receipt into patient records or confuse it with an
+    /// authenticated source or an approved FHIR R4 validator.
+    pub fn from_one_time_core_file_batch_receipt_stdin(raw: &[u8]) -> Result<Self, &'static str> {
+        let batch = admit_fictional_core_file_batch(raw)?;
+        Ok(Self {
+            core_file_batch: Some(batch),
+            ..Default::default()
+        })
+    }
+
+    pub fn core_file_batch_import_count(&self) -> usize {
+        self.core_file_batch.as_ref().map_or(0, |b| b.imports.len())
     }
 
     /// Distinct structural FHIR-shaped multi-patient demo, not the SHA-pinned
@@ -1231,6 +1248,7 @@ impl MedOriginNativePreview {
         self.relationships = None;
         self.relationship_notice = None;
         self.core_report = None;
+        self.core_file_batch = None;
         self.core_report_notice = None;
         self.external_core_source_visible = false;
         self.encrypted_workspace_receipt = None;
@@ -1270,6 +1288,7 @@ impl MedOriginNativePreview {
         self.relationships = None;
         self.relationship_notice = None;
         self.core_report = None;
+        self.core_file_batch = None;
         self.core_report_notice = None;
         self.external_core_source_visible = false;
         self.encrypted_workspace_receipt = None;
@@ -2564,10 +2583,63 @@ impl MedOriginNativePreview {
     }
 }
 
+impl MedOriginNativePreview {
+    fn core_file_batch_ui(&mut self, ui: &mut egui::Ui) {
+        let Some(batch) = self.core_file_batch.clone() else {
+            return;
+        };
+        let mut clear = false;
+        egui::ScrollArea::vertical().show(ui, |ui| {
+            ui.heading("MedOrigin - Core encrypted fictional file batch");
+            ui.strong("REDACTED RECEIPT ONLY - no patient chart, imported clinical record or PHI.");
+            ui.label("Source-shaped Core v1 report; transport sender and freshness NOT authenticated.");
+            ui.label("Source reports actual ephemeral encrypted Workspace close/reopen and audit, not independently re-executed inside this Desktop.");
+            ui.label(format!(
+                "Core: {} independent fictional imports; {} total resources; {} reconstructed timeline events",
+                batch.imports.len(), batch.resource_count, batch.timeline_event_count
+            ));
+            ui.label("Every import has one separately scoped imaginary patient. No cross-import identity joining.");
+            ui.label("No FHIR R4 conformance, release approval, clinical storage, production key custody or real patient use.");
+            if ui.button("Core batch: Clear redacted receipt").clicked() {
+                clear = true;
+            }
+            ui.separator();
+            ui.strong("Source-scoped fictional encrypted import summaries");
+            for source in &batch.imports {
+                ui.group(|ui| {
+                    ui.strong(format!(
+                        "Core batch: Import {} - {} source resources, {} verified timeline events",
+                        source.ordinal, source.resource_count, source.timeline_event_count
+                    ));
+                    ui.collapsing(
+                        format!("Core batch: Audit anchors for import {}", source.ordinal),
+                        |ui| {
+                            ui.monospace(format!("Source SHA-256: {}", source.source_sha256));
+                            ui.monospace(format!("Import audit SHA-256: {}", source.audit_sha256));
+                        },
+                    );
+                });
+            }
+            ui.collapsing("Core batch: Report fingerprint (not attestation)", |ui| {
+                ui.monospace(format!("Canonical receipt SHA-256: {}", batch.receipt_sha256));
+                ui.monospace(format!("Last import audit SHA-256: {}", batch.audit_head_sha256));
+                ui.label("Hashes identify reported bytes only; they do not prove the source process or real patients.");
+            });
+        });
+        if clear {
+            self.clear_fictional_output();
+        }
+    }
+}
+
 impl eframe::App for MedOriginNativePreview {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         if ui.input(|input| input.key_pressed(egui::Key::Escape)) {
             self.clear_fictional_output();
+        }
+        if self.core_file_batch.is_some() {
+            egui::CentralPanel::default().show(ui, |ui| self.core_file_batch_ui(ui));
+            return;
         }
         if self.synthetic_bundle.is_some() {
             egui::CentralPanel::default().show(ui, |ui| self.synthetic_bundle_ui(ui));

@@ -9,6 +9,7 @@ use std::sync::mpsc::{self, RecvTimeoutError};
 use std::time::Duration;
 
 use medorigin_desktop_d2_native_egui::MedOriginNativePreview;
+use medorigin_desktop_d2_native_egui::core_file_batch::FILE_BATCH_RECEIPT_MAX_BYTES;
 use medorigin_desktop_d2_native_egui::session::{
     self, ENV_SESSION_KEY, ENV_SESSION_NONCE, SESSION_FLAG, SESSION_FOCUSED_FLAG,
 };
@@ -17,6 +18,7 @@ use medorigin_desktop_d2_native_egui::synthetic_bundle::MAX_SYNTHETIC_BUNDLE_BYT
 const MAX_FICTIONAL_CORE_STDIN: usize = 2048;
 const EXPLICIT_SYNTHETIC_CORE_FLAG: &str = "--synthetic-core-stdin";
 const EXPLICIT_SYNTHETIC_MULTIPATIENT_FLAG: &str = "--synthetic-multipatient-bundle-stdin";
+const EXPLICIT_CORE_FILE_BATCH_FLAG: &str = "--synthetic-core-file-batch-receipt-stdin";
 const EXPLICIT_SYNTHETIC_WORKSPACE_FLAG: &str = "--synthetic-workspace-receipt-stdin";
 const EXPLICIT_SYNTHETIC_READBACK_FLAG: &str = "--synthetic-encrypted-readback-stdin";
 const EXPLICIT_SYNTHETIC_FOCUSED_READBACK_FLAG: &str =
@@ -49,6 +51,7 @@ fn make_app_with_deadline<R: Read + Send + 'static>(
     if args.len() != 1
         || (args[0] != EXPLICIT_SYNTHETIC_CORE_FLAG
             && args[0] != EXPLICIT_SYNTHETIC_MULTIPATIENT_FLAG
+            && args[0] != EXPLICIT_CORE_FILE_BATCH_FLAG
             && args[0] != EXPLICIT_SYNTHETIC_WORKSPACE_FLAG
             && args[0] != EXPLICIT_SYNTHETIC_READBACK_FLAG
             && args[0] != EXPLICIT_SYNTHETIC_FOCUSED_READBACK_FLAG
@@ -65,6 +68,8 @@ fn make_app_with_deadline<R: Read + Send + 'static>(
     // session keeps its original strict 2048-byte limit.
     let size_limit = if args[0] == EXPLICIT_SYNTHETIC_MULTIPATIENT_FLAG {
         MAX_SYNTHETIC_BUNDLE_BYTES
+    } else if args[0] == EXPLICIT_CORE_FILE_BATCH_FLAG {
+        FILE_BATCH_RECEIPT_MAX_BYTES
     } else {
         MAX_FICTIONAL_CORE_STDIN
     };
@@ -99,6 +104,15 @@ fn make_app_with_deadline<R: Read + Send + 'static>(
             io::ErrorKind::InvalidData,
             "unapproved_d2_synthetic_core_stdin_size",
         ));
+    }
+    if args[0] == EXPLICIT_CORE_FILE_BATCH_FLAG {
+        return MedOriginNativePreview::from_one_time_core_file_batch_receipt_stdin(&bytes)
+            .map_err(|_| {
+                io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    "unapproved_or_noncanonical_core_file_batch_receipt",
+                )
+            });
     }
     if args[0] == EXPLICIT_SYNTHETIC_MULTIPATIENT_FLAG {
         return MedOriginNativePreview::from_one_time_synthetic_bundle_stdin(&bytes).map_err(
@@ -214,6 +228,52 @@ mod tests {
     const ENCRYPTED_READBACK: &[u8] =
         include_bytes!("../fixtures/core/encrypted-readback-projection.json");
     const CORE_NEGATIVE: &[u8] = include_bytes!("../fixtures/core/unknown-fictional-negative.json");
+
+    #[test]
+    fn actual_core963_encrypted_fictional_file_batch_starts_only_receipt_view() {
+        const RAW: &[u8] = include_bytes!(
+            "../fixtures/core/core963-real-encrypted-fictional-file-batch-redacted.json"
+        );
+        let app = make_app(
+            &[OsString::from(EXPLICIT_CORE_FILE_BATCH_FLAG)],
+            Cursor::new(RAW),
+        )
+        .expect("real Core963 encrypted two-file receipt must open only redacted view");
+        assert_eq!(app.core_file_batch_import_count(), 2);
+        assert_eq!(app.synthetic_bundle_resource_count(), 0);
+        assert!(!app.has_external_synthetic_encrypted_readback());
+        for rejected in [
+            vec![],
+            b"{}".to_vec(),
+            vec![b'x'; FILE_BATCH_RECEIPT_MAX_BYTES + 1],
+            [RAW, b" "].concat(),
+            include_bytes!("../fixtures/core/synthetic-multipatient-fhir-bundle.json").to_vec(),
+        ] {
+            assert!(
+                make_app(
+                    &[OsString::from(EXPLICIT_CORE_FILE_BATCH_FLAG)],
+                    Cursor::new(rejected)
+                )
+                .is_err()
+            );
+        }
+        for flag in [
+            EXPLICIT_SYNTHETIC_CORE_FLAG,
+            EXPLICIT_SYNTHETIC_MULTIPATIENT_FLAG,
+        ] {
+            assert!(make_app(&[OsString::from(flag)], Cursor::new(RAW)).is_err());
+        }
+        assert!(
+            make_app(
+                &[
+                    OsString::from(EXPLICIT_CORE_FILE_BATCH_FLAG),
+                    OsString::from("--arbitrary-file")
+                ],
+                Cursor::new(RAW)
+            )
+            .is_err()
+        );
+    }
 
     #[test]
     fn multipatient_structural_bundle_flag_starts_only_bounded_nonclinical_preview() {
