@@ -100,7 +100,10 @@ def test_exact_fictional_report_renders_only_negative_truth(
     assert "patient" not in rendered.lower()
 
 
-@pytest.mark.parametrize("change", ["forged_valid", "fake_validation_exit", "publish", "extra", "wrong_warning", "legacy_schema"])
+@pytest.mark.parametrize(
+    "change",
+    ["forged_valid", "fake_validation_exit", "publish", "extra", "wrong_warning", "legacy_schema"],
+)
 def test_forged_or_legacy_success_never_reaches_inert_preview(
     change: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
