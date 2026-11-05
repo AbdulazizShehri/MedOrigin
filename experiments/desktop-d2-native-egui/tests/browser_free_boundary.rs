@@ -116,6 +116,7 @@ fn audited_native_source_files(root: &Path) -> Vec<PathBuf> {
             "core_provenance.rs",
             "encrypted_readback.rs",
             "lib.rs",
+            "local_bundle_import.rs",
             "main.rs",
             "protected_audit.rs",
             "session.rs",
