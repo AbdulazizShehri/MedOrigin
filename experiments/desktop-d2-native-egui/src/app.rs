@@ -3875,10 +3875,8 @@ mod tests {
     #[test]
     fn local_user_drop_admits_only_the_one_canonical_fictional_bundle() {
         let raw = include_bytes!("../fixtures/core/synthetic-multipatient-fhir-bundle.json");
-        let file = std::env::temp_dir().join(format!(
-            "medorigin-native-drop-{}.json",
-            std::process::id()
-        ));
+        let file =
+            std::env::temp_dir().join(format!("medorigin-native-drop-{}.json", std::process::id()));
         std::fs::write(&file, raw).unwrap();
         let mut app = MedOriginNativePreview::default();
         let accepted = app.import_dropped_fictional_bundle(std::slice::from_ref(&file));

@@ -14,9 +14,7 @@ const REPARSE_POINT: u32 = 0x400;
 /// Read only a single explicitly dropped local file, limit it before allocation,
 /// and admit only the exact synthetic-only FHIR Bundle schema. No filenames,
 /// paths, record values, or rejected file bytes ever appear in error messages.
-pub fn read_dropped_fictional_bundle(
-    path: &Path,
-) -> Result<SyntheticBundlePreview, &'static str> {
+pub fn read_dropped_fictional_bundle(path: &Path) -> Result<SyntheticBundlePreview, &'static str> {
     if path.extension().and_then(|ext| ext.to_str()) != Some("json") {
         return Err("local_fictional_bundle_json_extension_required");
     }
@@ -31,7 +29,10 @@ pub fn read_dropped_fictional_bundle(
         return Err("local_fictional_bundle_non_drive_path_refused");
     }
     #[cfg(not(windows))]
-    if path.components().any(|part| matches!(part, Component::Prefix(_))) {
+    if path
+        .components()
+        .any(|part| matches!(part, Component::Prefix(_)))
+    {
         return Err("local_fictional_bundle_invalid_path_prefix");
     }
 
