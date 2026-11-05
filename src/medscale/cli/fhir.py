@@ -121,7 +121,7 @@ def _file_batch_readiness_main(argv: list[str]) -> int:
             "usage: medscale fhir file-batch-readiness --synthetic-only "
             "[--offline-r4-schema OFFICIAL_R4_ZIP] "
             "FICTIONAL_BUNDLE_1 FICTIONAL_BUNDLE_2 "
-            "[FICTIONAL_BUNDLE_3 ... FICTIONAL_BUNDLE_4]\\n"
+            "[FICTIONAL_BUNDLE_3 ... FICTIONAL_BUNDLE_4]\n"
             "Offline dry run for 2-4 invented local Bundles: reviewed source "
             "relationships, timeline/date readiness and optional source-pinned "
             "official R4 structure. Reports only per-source day/count summary. "
