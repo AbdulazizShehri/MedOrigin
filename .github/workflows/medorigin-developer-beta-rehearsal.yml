@@ -95,6 +95,20 @@ jobs:
           uv pip install --python $python312 --no-index --no-deps $wheel
           if ($LASTEXITCODE -ne 0) { throw 'Python 3.12 offline wheel install failed' }
 
+          # Exercise the VERSIONED truthful Developer Beta v2 contract on
+          # this exact source before the installed-Wheel CLI/Windows GUI E2E.
+          # Reuse the same existing Linux/Windows job and ephemeral uv Python,
+          # with pinned offline-only test inputs; never publish artifacts.
+          uv run --no-project --python $pythonBuild --with 'pytest==8.4.2' `
+            -- python -m pytest -q `
+            tests/test_truthful_synthetic_fhir_beta_v2.py `
+            tests/test_synthetic_fhir_native_desktop_demo.py `
+            tests/test_medorigin_prepublication_rehearsal.py
+          if ($LASTEXITCODE -ne 0) {
+            throw 'Truthful Developer Beta v2 source contract tests failed'
+          }
+          Write-Output 'TRUTHFUL_SYNTHETIC_BETA_V2_UNIT_PASS_NOT_RELEASE'
+
           # Independently verify the truthful Core-only contract on BOTH
           # source-matched installed interpreters. This does NOT waive the
           # historical full Beta/desktop release gate below.
