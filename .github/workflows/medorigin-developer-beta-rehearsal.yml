@@ -98,14 +98,41 @@ jobs:
           # Independently verify the truthful Core-only contract on BOTH
           # source-matched installed interpreters. This does NOT waive the
           # historical full Beta/desktop release gate below.
+          # Save source-qualified, nonclinical HTML+JSON after exact Wheel,
+          # sdist and both installed Python runtimes have been attested.
+          # Reuse this existing CI job; no new runner, model, or cloud service.
+          $coreEvidence = Join-Path $scratch 'qualified-core-negative-truth'
           & $pythonBuild scripts/qualify_medorigin_developer_beta.py `
             --checkout . --wheel $wheel --sdist $sdist `
             --python311 $python311 --python312 $python312 `
-            --core-negative-truth-preview
+            --core-negative-truth-preview --evidence-dir $coreEvidence
           if ($LASTEXITCODE -ne 0) {
-            throw 'Source-qualified Core negative-truth preview refused'
+            throw 'Source-qualified durable Core negative-truth preview refused'
           }
-          Write-Output 'CORE_NEGATIVE_TRUTH_PREVIEW_ONLY_NOT_RELEASE'
+          $expectedNames = @('core-negative-truth.html', 'core-negative-truth.json')
+          $actualNames = @(Get-ChildItem -LiteralPath $coreEvidence -File | Select-Object -ExpandProperty Name | Sort-Object)
+          if ($actualNames.Count -ne 2 -or (Compare-Object $expectedNames $actualNames)) {
+            throw 'Qualified Core evidence output file set was not exact'
+          }
+          $coreJson = Get-Content -LiteralPath (Join-Path $coreEvidence 'core-negative-truth.json') -Raw | ConvertFrom-Json
+          if (
+            $coreJson.status -ne 'CORE_PROVENANCE_PREVIEW_ONLY_NOT_FHIR_VALIDATION' -or
+            $coreJson.clinical_use_authorized -ne $false -or
+            $coreJson.publication_authorized -ne $false -or
+            $coreJson.full_beta_preview_qualified -ne $false
+          ) {
+            throw 'Qualified Core evidence improperly claimed validation or release'
+          }
+          $coreHtml = Get-Content -LiteralPath (Join-Path $coreEvidence 'core-negative-truth.html') -Raw
+          if (
+            !$coreHtml.Contains('Not validated.') -or
+            !$coreHtml.Contains('NOT AUTHORIZED') -or
+            !$coreHtml.Contains("script-src 'none'") -or
+            !$coreHtml.Contains("connect-src 'none'")
+          ) {
+            throw 'Qualified Core preview lacked negative-truth text or offline CSP'
+          }
+          Write-Output 'CORE_NEGATIVE_TRUTH_DURABLE_EVIDENCE_VERIFIED_NOT_RELEASE'
 
           & $pythonBuild scripts/qualify_medorigin_developer_beta.py `
             --checkout . --wheel $wheel --sdist $sdist `
