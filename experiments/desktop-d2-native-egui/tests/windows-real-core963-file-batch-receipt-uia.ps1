@@ -3,7 +3,8 @@
 [CmdletBinding()]
 param(
   [Parameter(Mandatory=$true)][string]$ExePath,
-  [Parameter(Mandatory=$true)][ValidatePattern('^[0-9a-fA-F]{64}$')][string]$ExpectedExeSha256
+  [Parameter(Mandatory=$true)][ValidatePattern('^[0-9a-fA-F]{64}$')][string]$ExpectedExeSha256,
+  [string]$LiveReceiptPath = ''
 )
 $ErrorActionPreference='Stop'
 $process=$null
@@ -22,6 +23,20 @@ try {
     (Get-FileHash -LiteralPath $receipt -Algorithm SHA256).Hash -ine
       '34beba4dd887ab5e26fb8ceaf91d06f85a6ebaca349359aa0f9ecccb612d2292') {
     throw 'unreviewed_fictional_core_receipt'
+  }
+  if($LiveReceiptPath){
+    # One-command Core source runs may supply only the exact SAME reviewed,
+    # redacted 1,341-byte fictional QA receipt, never arbitrary FHIR data.
+    $live=(Resolve-Path -LiteralPath $LiveReceiptPath -ErrorAction Stop).Path
+    $liveItem=Get-Item -LiteralPath $live -ErrorAction Stop
+    if($liveItem.PSIsContainer -or
+       ($liveItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -or
+       $liveItem.Length -ne 1341 -or
+       (Get-FileHash -LiteralPath $live -Algorithm SHA256).Hash -ine
+         '34beba4dd887ab5e26fb8ceaf91d06f85a6ebaca349359aa0f9ecccb612d2292'){
+      throw 'live_core_source_receipt_not_canonical'
+    }
+    $receipt=$live
   }
   Add-Type -AssemblyName UIAutomationClient
   Add-Type -AssemblyName UIAutomationTypes
