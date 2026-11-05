@@ -114,6 +114,59 @@ def _bundle_preflight_main(argv: list[str]) -> int:
     return 0
 
 
+def _fictional_encrypted_file_batch_demo_main(argv: list[str]) -> int:
+    """Actual caller-selected invented JSON -> encrypted ephemeral cold reopen.
+
+    The explicit fictional-only flags and 2-4 local files are mandatory.
+    Never echo user-supplied paths, parse errors or patient-like content.
+    """
+    if argv in (["-h"], ["--help"]):
+        print(
+            "usage: medscale fhir file-batch-encrypted-demo "
+            "--synthetic-only --ephemeral-demo "
+            "FICTIONAL_BUNDLE_1 FICTIONAL_BUNDLE_2 "
+            "[FICTIONAL_BUNDLE_3 ... FICTIONAL_BUNDLE_4]\\n"
+            "Imports invented source files into a temporary AES-GCM Workspace, "
+            "physically closes and reopens it, independently verifies audit, "
+            "source catalog and per-import timelines, then deletes it. "
+            "NO permanent import, PHI, FHIR R4/clinical validation or release."
+        )
+        return 0
+    if (
+        not 4 <= len(argv) <= 6
+        or argv[0:2] != ["--synthetic-only", "--ephemeral-demo"]
+        or any(not name or name.startswith("--") for name in argv[2:])
+    ):
+        print(
+            "file batch demo refused: exact_fictional_ephemeral_file_flags_required",
+            file=sys.stderr,
+        )
+        return 2
+    try:
+        from medscale.fhirkit.workspace_file_batch_demo import fictional_file_batch_receipt_json
+
+        sources = [read_fhir_json_document(Path(name)) for name in argv[2:]]
+    except FhirInputError:
+        print("file batch demo refused: source_file_refused", file=sys.stderr)
+        return 1
+    except Exception:
+        print("file batch demo refused: source_reader_unavailable", file=sys.stderr)
+        return 2
+    try:
+        output = fictional_file_batch_receipt_json(
+            sources, synthetic_only=True, ephemeral_demo=True
+        )
+    except Exception:
+        print(
+            "file batch demo refused: verified_encrypted_fictional_batch_refused",
+            file=sys.stderr,
+        )
+        return 2
+    print(output, end="")
+    # A proven ephemeral synthetic demo is not FHIR R4 or clinical validation.
+    return 2
+
+
 def _batch_bundle_local_diagnostics_main(argv: list[str]) -> int:
     """Developer-only triage of marked invented Bundle-local relationships.
 
@@ -511,6 +564,8 @@ def main(argv: list[str] | None = None) -> int:
         return _multi_timeline_demo_main(tokens[1:])
     if tokens and tokens[0] == "timeline-demo":
         return _timeline_demo_main(tokens[1:])
+    if tokens and tokens[0] == "file-batch-encrypted-demo":
+        return _fictional_encrypted_file_batch_demo_main(tokens[1:])
     if tokens and tokens[0] == "batch-bundle-diagnose":
         return _batch_bundle_local_diagnostics_main(tokens[1:])
     if tokens and tokens[0] == "batch-bundle-assess":
