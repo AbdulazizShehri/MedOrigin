@@ -24,6 +24,7 @@ from tempfile import TemporaryDirectory
 import launch_windows_real_core963_fictional_batch as legacy
 
 CORE971_SHA = "9c27397f956303f92aeaf4bc173257c093a53238"
+CORE979_SHA = "440cee21494a62c458106631931f3610c05d1ea8"
 HL7_R4_ZIP_SHA = "75e5560da3cf503895a44c8ca7af17a83b4cca6c2cb5ba1883d2aec0d1cb5ac6"
 CORE_RECEIPT_FIELDS = frozenset(
     {
@@ -136,7 +137,12 @@ def _attest_offline_r4_schema(archive: Path) -> Path:
     return archive
 
 
-def _attest_core(source: Path) -> Path:
+def _attest_core(source: Path, *, required_core_sha: str = CORE971_SHA) -> Path:
+    # Only two reviewed, literal exact source revisions are permitted here.
+    # Core979 adds strict cross-person local reference checks and SHA guards;
+    # this parameter is not a caller-selectable unbounded repository hash.
+    if required_core_sha not in (CORE971_SHA, CORE979_SHA):
+        raise ValueError("core_source_revision_not_reviewed")
     source = _no_alias(source, directory=True)
     for rel in (
         "src/medscale/fhirkit/workspace_file_r4_gate.py",
@@ -163,7 +169,7 @@ def _attest_core(source: Path) -> Path:
     if (
         head.returncode != 0
         or dirty.returncode != 0
-        or head.stdout.strip() != CORE971_SHA.encode()
+        or head.stdout.strip() != required_core_sha.encode()
         or dirty.stdout.strip()
     ):
         raise ValueError("core971_exact_head_and_clean_source_required")
@@ -236,13 +242,16 @@ def launch(
     *,
     qa_auto_close: bool = False,
     qa_uia: bool = False,
+    required_core_sha: str = CORE971_SHA,
 ) -> None:
+    if required_core_sha not in (CORE971_SHA, CORE979_SHA):
+        raise ValueError("core_source_revision_not_reviewed")
     if sys.platform != "win32":
         raise ValueError("core971_windows_host_required")
     if qa_auto_close and qa_uia:
         raise ValueError("core971_qa_modes_mutually_exclusive")
     archive = _attest_offline_r4_schema(archive)
-    source = _attest_core(source)
+    source = _attest_core(source, required_core_sha=required_core_sha)
     if exe.name != legacy.EXE_NAME or not re.fullmatch(r"[0-9a-f]{64}", sha):
         raise ValueError("core971_unreviewed_native_gui")
     exe = _no_alias(exe)
