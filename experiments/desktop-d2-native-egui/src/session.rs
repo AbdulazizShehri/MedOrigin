@@ -193,9 +193,7 @@ mod tests {
         ] {
             let mut altered = frame.clone();
             altered[i] ^= 1;
-            assert!(
-                verify_fictional_protected_audit_frame(&altered, &nonce, &secret).is_err()
-            );
+            assert!(verify_fictional_protected_audit_frame(&altered, &nonce, &secret).is_err());
         }
         assert!(verify_fictional_protected_audit_frame(payload, &nonce, &secret).is_err());
         assert!(
