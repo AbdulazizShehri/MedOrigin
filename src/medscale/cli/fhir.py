@@ -584,8 +584,87 @@ def _filtered_multi_timeline_demo_main(argv: list[str]) -> int:
     return 0
 
 
+def _windows_protected_audit_preview_main(argv: list[str]) -> int:
+    """Real owner Windows protected-key synthetic audit-only lifecycle CLI.
+
+    No user JSON/document inputs. Strict positional flags, fixed diagnostic
+    strings; neither absolute paths, UUID values nor OS exceptions are echoed.
+    """
+    if argv in (["-h"], ["--help"]):
+        print(
+            "usage: medscale fhir windows-audit-preview "
+            "create|verify|forget --synthetic-only --developer-preview "
+            "--store-root EXISTING_MEDORIGIN_FICTIONAL_WORKSPACE_PREVIEW_DIRECTORY "
+            "--workspace-id UUIDV4 "
+            "[--expected-head LOWERCASE_SHA256] "
+            "[--acknowledge-irreversible-key-loss]\\n"
+            "Windows Credential Manager-backed encrypted audit-only "
+            "fictional developer preview. create prints an independent "
+            "audit head; verify and forget REQUIRE that head. "
+            "forget irrevocably deletes the preview key but preserves "
+            "the now-unreadable encrypted store. No patient records, "
+            "FHIR import, clinical permission or production key custody."
+        )
+        return 0
+    refusal = "windows audit preview refused: exact_fictional_protected_flags_required"
+    if (
+        len(argv) < 7
+        or argv[0] not in ("create", "verify", "forget")
+        or argv[1:5]
+        != [
+            "--synthetic-only",
+            "--developer-preview",
+            "--store-root",
+            argv[4],
+        ]
+        or argv[5] != "--workspace-id"
+    ):
+        print(refusal, file=sys.stderr)
+        return 2
+    action = argv[0]
+    wanted = {"create": 7, "verify": 9, "forget": 10}[action]
+    if len(argv) != wanted or not argv[4] or not argv[6]:
+        print(refusal, file=sys.stderr)
+        return 2
+    if action != "create" and (argv[7] != "--expected-head" or not argv[8]):
+        print(refusal, file=sys.stderr)
+        return 2
+    if action == "forget" and argv[9] != "--acknowledge-irreversible-key-loss":
+        print(refusal, file=sys.stderr)
+        return 2
+    try:
+        from uuid import UUID
+
+        from medscale.fhirkit.windows_protected_audit_preview import (
+            run_windows_audit_preview,
+        )
+
+        wid = UUID(argv[6])
+        if wid.version != 4 or str(wid) != argv[6]:
+            raise ValueError("noncanonical UUIDv4")
+        result = run_windows_audit_preview(
+            action,
+            Path(argv[4]),
+            wid,
+            argv[8] if action != "create" else None,
+            synthetic_only=True,
+            developer_preview=True,
+            irreversible_delete_acknowledged=action == "forget",
+        )
+    except Exception:
+        print(
+            "windows audit preview refused: encrypted_fictional_protected_workspace_unavailable",
+            file=sys.stderr,
+        )
+        return 2
+    print(json.dumps(result, sort_keys=True, separators=(",", ":"), ensure_ascii=True))
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     tokens = list(sys.argv[1:] if argv is None else argv)
+    if tokens and tokens[0] == "windows-audit-preview":
+        return _windows_protected_audit_preview_main(tokens[1:])
     if tokens and tokens[0] == "filtered-multi-timeline-demo":
         return _filtered_multi_timeline_demo_main(tokens[1:])
     if tokens and tokens[0] == "multi-timeline-demo":
