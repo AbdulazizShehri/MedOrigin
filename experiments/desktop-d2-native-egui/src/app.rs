@@ -1,7 +1,6 @@
 // Adapted from emilk/eframe_template under Apache-2.0, see UPSTREAM-NOTICE.md.
 // Synthetic-only, in-process native Rust eframe + D0; no browser, EHR, PHI or network.
 use crate::core_file_batch::{FictionalCoreFileBatch, admit_fictional_core_file_batch};
-use crate::protected_audit::{FictionalProtectedAudit, admit_protected_audit_verification};
 use crate::core_provenance::{
     CoreProvenanceReceipt, FictionalCoreInput, PINNED_CORE_CASE_LABELS,
     admit_exact_source_reviewed_external_core_report, inspect_pinned_core_report,
@@ -9,6 +8,7 @@ use crate::core_provenance::{
 use crate::encrypted_readback::{
     FictionalEncryptedReadback, admit_exact_encrypted_readback_projection,
 };
+use crate::protected_audit::{FictionalProtectedAudit, admit_protected_audit_verification};
 use crate::synthetic_bundle::{SyntheticBundlePreview, admit_bounded_synthetic_fhir_bundle};
 use crate::workspace_receipt::{
     FictionalEncryptedWorkspaceReceipt, admit_source_pinned_encrypted_workspace_receipt,
@@ -3626,8 +3626,7 @@ mod tests {
         .unwrap();
         raw.push(b'\n');
         let mut app =
-            MedOriginNativePreview::from_one_time_protected_audit_verification_stdin(&raw)
-                .unwrap();
+            MedOriginNativePreview::from_one_time_protected_audit_verification_stdin(&raw).unwrap();
         assert_eq!(app.protected_audit_verified_events(), 1);
         assert_eq!(app.core_file_batch_import_count(), 0);
         assert_eq!(app.synthetic_bundle_resource_count(), 0);
@@ -3636,8 +3635,7 @@ mod tests {
         assert_eq!(app.protected_audit_verified_events(), 0);
         raw.extend_from_slice(b" ");
         assert!(
-            MedOriginNativePreview::from_one_time_protected_audit_verification_stdin(&raw)
-                .is_err()
+            MedOriginNativePreview::from_one_time_protected_audit_verification_stdin(&raw).is_err()
         );
     }
 
