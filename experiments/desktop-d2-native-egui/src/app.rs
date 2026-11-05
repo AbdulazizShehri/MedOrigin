@@ -683,6 +683,8 @@ pub struct MedOriginNativePreview {
     synthetic_bundle: Option<SyntheticBundlePreview>,
     synthetic_bundle_selected: Option<usize>,
     synthetic_bundle_history: Vec<usize>,
+    // Ephemeral exploration state; opened != clinician-reviewed or approved.
+    synthetic_bundle_visited: Vec<bool>,
     synthetic_bundle_patient: Option<usize>,
     synthetic_bundle_type: &'static str,
     synthetic_bundle_notice: Option<&'static str>,
@@ -768,8 +770,13 @@ impl MedOriginNativePreview {
             .resources
             .iter()
             .position(|r| r.resource_type == "Patient");
+        let mut visited = vec![false; bundle.resources.len()];
+        if let Some(index) = first_patient {
+            visited[index] = true;
+        }
         Ok(Self {
             synthetic_bundle: Some(bundle),
+            synthetic_bundle_visited: visited,
             synthetic_bundle_patient: first_patient,
             synthetic_bundle_selected: first_patient,
             synthetic_bundle_type: "All",
@@ -1233,6 +1240,7 @@ impl MedOriginNativePreview {
         self.synthetic_bundle = None;
         self.synthetic_bundle_selected = None;
         self.synthetic_bundle_history.clear();
+        self.synthetic_bundle_visited.clear();
         self.synthetic_bundle_patient = None;
         self.synthetic_bundle_type = "";
         self.synthetic_bundle_notice = None;
@@ -1271,6 +1279,7 @@ impl MedOriginNativePreview {
         self.synthetic_bundle = None;
         self.synthetic_bundle_selected = None;
         self.synthetic_bundle_history.clear();
+        self.synthetic_bundle_visited.clear();
         self.synthetic_bundle_patient = None;
         self.synthetic_bundle_type = "";
         self.synthetic_bundle_notice = None;
@@ -2056,7 +2065,16 @@ impl MedOriginNativePreview {
             self.clear_fictional_output();
             return Err("synthetic_bundle_hidden_or_unknown_selection");
         }
+        let expected = self
+            .synthetic_bundle
+            .as_ref()
+            .map_or(0, |bundle| bundle.resources.len());
+        if self.synthetic_bundle_visited.len() != expected {
+            self.clear_fictional_output();
+            return Err("synthetic_bundle_exploration_state_refused");
+        }
         self.synthetic_bundle_selected = Some(index);
+        self.synthetic_bundle_visited[index] = true;
         self.synthetic_bundle_history.clear();
         self.synthetic_bundle_notice = None;
         Ok(())
@@ -2088,6 +2106,41 @@ impl MedOriginNativePreview {
             return Err("synthetic_bundle_unknown_facet");
         }
         self.synthetic_bundle_type = kind;
+        self.synthetic_bundle_selected = None;
+        self.synthetic_bundle_history.clear();
+        self.synthetic_bundle_notice = None;
+        Ok(())
+    }
+
+    // Session-only exploration, not clinical sign-off or persistent review.
+    // Patient and type facets are composed with these source-derived IDs.
+    fn bundle_open_next_unexplored(&mut self) -> Result<(), &'static str> {
+        let bundle = self
+            .synthetic_bundle
+            .as_ref()
+            .ok_or("synthetic_bundle_missing")?;
+        if self.synthetic_bundle_visited.len() != bundle.resources.len() {
+            self.clear_fictional_output();
+            return Err("synthetic_bundle_exploration_state_refused");
+        }
+        let next = (0..bundle.resources.len())
+            .find(|index| self.bundle_visible(*index) && !self.synthetic_bundle_visited[*index]);
+        let Some(index) = next else {
+            return Err("synthetic_bundle_no_unexplored_visible_records");
+        };
+        self.bundle_select(index)
+    }
+
+    fn bundle_reset_exploration(&mut self) -> Result<(), &'static str> {
+        let bundle = self
+            .synthetic_bundle
+            .as_ref()
+            .ok_or("synthetic_bundle_missing")?;
+        if self.synthetic_bundle_visited.len() != bundle.resources.len() {
+            self.clear_fictional_output();
+            return Err("synthetic_bundle_exploration_state_refused");
+        }
+        self.synthetic_bundle_visited.fill(false);
         self.synthetic_bundle_selected = None;
         self.synthetic_bundle_history.clear();
         self.synthetic_bundle_notice = None;
@@ -2152,6 +2205,11 @@ impl MedOriginNativePreview {
         self.synthetic_bundle_patient = destination;
         self.synthetic_bundle_type = "All";
         self.synthetic_bundle_selected = Some(index);
+        if self.synthetic_bundle_visited.len() != bundle.resources.len() {
+            self.clear_fictional_output();
+            return Err("synthetic_bundle_exploration_state_refused");
+        }
+        self.synthetic_bundle_visited[index] = true;
         self.synthetic_bundle_notice = None;
         Ok(())
     }
@@ -2221,12 +2279,19 @@ impl MedOriginNativePreview {
         let Some(bundle) = self.synthetic_bundle.clone() else {
             return;
         };
+        // Never index per-record progress until it matches the admitted source.
+        if self.synthetic_bundle_visited.len() != bundle.resources.len() {
+            self.clear_fictional_output();
+            return;
+        }
         enum Action {
             Clear,
             Patient(Option<usize>),
             Type(&'static str),
             Select(usize),
             Step(bool),
+            NextUnexplored,
+            ResetExploration,
             Follow(usize),
             Incoming(usize, usize),
             Back,
@@ -2274,6 +2339,33 @@ impl MedOriginNativePreview {
                 "Bundle: {} of {} fictional resources visible",
                 visible, bundle.resources.len()
             ));
+            let visited_visible = (0..bundle.resources.len())
+                .filter(|index| self.bundle_visible(*index) && self.synthetic_bundle_visited[*index])
+                .count();
+            ui.label(format!(
+                "Bundle exploration: {} of {} visible fictional records opened (session only, NOT review)",
+                visited_visible, visible
+            ));
+            ui.horizontal(|ui| {
+                if ui
+                    .add_enabled(
+                        visible > visited_visible,
+                        egui::Button::new("Bundle: Open next unexplored visible record"),
+                    )
+                    .clicked()
+                {
+                    next = Some(Action::NextUnexplored);
+                }
+                if ui
+                    .add_enabled(
+                        self.synthetic_bundle_visited.iter().any(|was_opened| *was_opened),
+                        egui::Button::new("Bundle: Reset session exploration"),
+                    )
+                    .clicked()
+                {
+                    next = Some(Action::ResetExploration);
+                }
+            });
             if visible > 0 {
                 ui.horizontal(|ui| {
                     if ui.button("Bundle: Previous visible record").clicked() {
@@ -2377,6 +2469,12 @@ impl MedOriginNativePreview {
             }
             Some(Action::Step(forward)) => {
                 let _ = self.bundle_step_visible(forward);
+            }
+            Some(Action::NextUnexplored) => {
+                let _ = self.bundle_open_next_unexplored();
+            }
+            Some(Action::ResetExploration) => {
+                let _ = self.bundle_reset_exploration();
             }
             Some(Action::Follow(index)) => {
                 let _ = self.bundle_follow_outgoing(index);
@@ -3061,6 +3159,85 @@ mod tests {
         );
         assert!(app.synthetic_bundle.is_none());
         assert!(app.synthetic_bundle_history.is_empty());
+    }
+
+    #[test]
+    fn fictional_exploration_tracks_only_opened_visible_records_and_resets_in_session() {
+        let raw = include_bytes!("../fixtures/core/synthetic-multipatient-fhir-bundle.json");
+        let mut app = MedOriginNativePreview::from_one_time_synthetic_bundle_stdin(raw).unwrap();
+        assert_eq!(app.synthetic_bundle_visited.len(), 8);
+        assert_eq!(
+            app.synthetic_bundle_visited
+                .iter()
+                .filter(|opened| **opened)
+                .count(),
+            1
+        );
+        assert!(app.synthetic_bundle_visited[0]);
+        app.bundle_open_next_unexplored().unwrap();
+        assert_eq!(app.synthetic_bundle_selected, Some(1));
+        app.bundle_open_next_unexplored().unwrap();
+        assert_eq!(app.synthetic_bundle_selected, Some(2));
+        app.bundle_follow_outgoing(1).unwrap();
+        assert_eq!(app.synthetic_bundle_selected, Some(1));
+        assert_eq!(app.synthetic_bundle_history.len(), 1);
+        assert_eq!(
+            app.synthetic_bundle_visited
+                .iter()
+                .filter(|opened| **opened)
+                .count(),
+            3
+        );
+        app.bundle_set_patient(Some(4)).unwrap();
+        app.bundle_set_type("Observation").unwrap();
+        assert_eq!(app.synthetic_bundle_selected, None);
+        app.bundle_open_next_unexplored().unwrap();
+        assert_eq!(app.synthetic_bundle_selected, Some(6));
+        app.bundle_open_next_unexplored().unwrap();
+        assert_eq!(app.synthetic_bundle_selected, Some(7));
+        assert_eq!(
+            app.bundle_open_next_unexplored(),
+            Err("synthetic_bundle_no_unexplored_visible_records")
+        );
+        assert_eq!(app.synthetic_bundle_selected, Some(7));
+        assert!(!app.synthetic_bundle_visited[4]);
+        assert!(!app.synthetic_bundle_visited[5]);
+        app.bundle_reset_exploration().unwrap();
+        assert_eq!(app.synthetic_bundle_selected, None);
+        assert!(app.synthetic_bundle_history.is_empty());
+        assert!(
+            app.synthetic_bundle_visited
+                .iter()
+                .all(|was_opened| !was_opened)
+        );
+        assert!(!app.bundle_visible(2));
+        app.bundle_open_next_unexplored().unwrap();
+        assert_eq!(app.synthetic_bundle_selected, Some(6));
+        app.bundle_set_patient(None).unwrap();
+        assert!(app.synthetic_bundle_visited[6]);
+        app.clear_fictional_output();
+        assert!(app.synthetic_bundle_visited.is_empty());
+        assert!(app.synthetic_bundle.is_none());
+    }
+
+    #[test]
+    fn fictional_exploration_refuses_mutated_progress_array_without_leaking_source() {
+        let raw = include_bytes!("../fixtures/core/synthetic-multipatient-fhir-bundle.json");
+        let mut app = MedOriginNativePreview::from_one_time_synthetic_bundle_stdin(raw).unwrap();
+        app.synthetic_bundle_visited.pop();
+        assert_eq!(
+            app.bundle_open_next_unexplored(),
+            Err("synthetic_bundle_exploration_state_refused")
+        );
+        assert!(app.synthetic_bundle.is_none());
+        assert!(app.synthetic_bundle_visited.is_empty());
+        let mut app = MedOriginNativePreview::from_one_time_synthetic_bundle_stdin(raw).unwrap();
+        app.synthetic_bundle_visited.pop();
+        assert_eq!(
+            app.bundle_select(1),
+            Err("synthetic_bundle_exploration_state_refused")
+        );
+        assert!(app.synthetic_bundle.is_none());
     }
 
     #[test]
