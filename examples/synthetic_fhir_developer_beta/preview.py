@@ -19,8 +19,12 @@ def _safe(value: object) -> str:
 
 
 _HEX_SHA256 = re.compile(r"[0-9a-f]{64}\Z")
-_RECEIPT_SCHEMA = "medorigin-local-synthetic-fhir-example/v1"
-_SCOPE = "synthetic structural validation, not full HL7 conformance"
+_RECEIPT_SCHEMA = "medorigin-local-synthetic-fhir-example/v2"
+_SCOPE = "fictional Core provenance only, not FHIR validation"
+_WARNING = (
+    "FHIR R4 schema, terminology, and profile validation were not performed; "
+    "this local report records deterministic provenance only."
+)
 _INSTALLED_VERSION = "medscale 0.3.0"
 _WORKSPACE = {
     "application": "medscale-workspace",
@@ -57,6 +61,8 @@ def admit_receipt(receipt: object, *, directory: Path) -> dict[str, Any]:
         "clinical_authorized",
         "independent_review_completed",
         "runs",
+        "fhir_conformance_validated",
+        "full_beta_preview_qualified",
     }
     if set(receipt) not in (required, required | {"workspace"}):
         raise ValueError("unexpected synthetic receipt fields")
@@ -69,6 +75,8 @@ def admit_receipt(receipt: object, *, directory: Path) -> dict[str, Any]:
                 "publication_authorized",
                 "clinical_authorized",
                 "independent_review_completed",
+                "fhir_conformance_validated",
+                "full_beta_preview_qualified",
             )
         )
     ):
@@ -91,10 +99,10 @@ def admit_receipt(receipt: object, *, directory: Path) -> dict[str, Any]:
         "format_version": "fhirkit-validation-report/v1",
         "input_hash": expected_input_hash,
         "report_id": "",
-        "status": "valid",
+        "status": "not_validated",
         "validator_name": "medscale-fhirkit-local",
         "validator_version": "0.1.0",
-        "warnings": [],
+        "warnings": [_WARNING],
     }
     expected_runs = {
         "label",
@@ -102,8 +110,8 @@ def admit_receipt(receipt: object, *, directory: Path) -> dict[str, Any]:
         "fixture_sha256",
         "report_sha256",
         "report_path",
-        "structural_status",
-        "valid_exit",
+        "provenance_status",
+        "validation_exit",
         "malformed_exit",
     }
     root = directory.resolve()
@@ -115,9 +123,9 @@ def admit_receipt(receipt: object, *, directory: Path) -> dict[str, Any]:
             row["label"] != f"run_{i}"
             or row["installed_version"] != _INSTALLED_VERSION
             or row["fixture_sha256"] != fixture_hash
-            or row["structural_status"] != "valid"
-            or type(row["valid_exit"]) is not int
-            or row["valid_exit"] != 0
+            or row["provenance_status"] != "not_validated"
+            or type(row["validation_exit"]) is not int
+            or row["validation_exit"] != 2
             or type(row["malformed_exit"]) is not int
             or row["malformed_exit"] != 1
             or not isinstance(row["report_sha256"], str)
@@ -147,8 +155,8 @@ def admit_receipt(receipt: object, *, directory: Path) -> dict[str, Any]:
             raise ValueError("synthetic report content digest mismatch")
         report = json.loads(raw, object_pairs_hook=unique_json_object)
         # A matching digest alone is insufficient: an attacker could replace
-        # both the report and receipt with a fabricated 'valid' record. Admit
-        # only the exact, fictional fixture's known deterministic CLI report.
+        # both the report and receipt with a fabricated success claim. Admit
+        # only the exact fictional fixture's NOT VALIDATED Core receipt.
         if report != expected_report:
             raise ValueError("synthetic report identity or content invalid")
         report_hashes.append(row["report_sha256"])
@@ -176,23 +184,22 @@ def render(receipt: dict[str, Any]) -> str:
         if not isinstance(run, dict):
             raise ValueError("invalid local synthetic CLI result")
         if (
-            run.get("structural_status") != "valid"
+            run.get("provenance_status") != "not_validated"
             or type(run.get("malformed_exit")) is not int
             or run["malformed_exit"] != 1
-            or (
-                "valid_exit" in run
-                and (type(run["valid_exit"]) is not int or run["valid_exit"] != 0)
-            )
+            or type(run.get("validation_exit")) is not int
+            or run["validation_exit"] != 2
         ):
-            raise ValueError("only verified valid synthetic reports may be previewed")
+            raise ValueError("only the checked NOT VALIDATED Core receipt may be previewed")
         label = _safe(run.get("label", "unknown"))
         digest = _safe(run.get("report_sha256", "unavailable"))
         fixture = _safe(run.get("fixture_sha256", "unavailable"))
         cards.append(
             '<article class="result">'
-            '<div class="result-heading"><span class="status">PASSED</span>'
+            '<div class="result-heading"><span class="status">NOT VALIDATED</span>'
             f"<h3>{label}</h3></div>"
-            "<p>Structural fixture validation and negative control succeeded.</p>"
+            "<p>Local source provenance was reproduced, but no FHIR R4 "
+            "validator ran. Clinical use is not authorized.</p>"
             "<dl><dt>Report SHA-256</dt>"
             f"<dd><code>{digest}</code></dd>"
             "<dt>Fixture SHA-256</dt>"
@@ -323,18 +330,18 @@ strong {{color:#f0f3f6}}
 <main>
 <div class="brand"><i>◉</i> MedOrigin</div>
 <div class="kicker">Developer Beta Candidate · Local evidence</div>
-<h1>Synthetic FHIR validation, verified offline.</h1>
+<h1>Local FHIR provenance reproduced. Not validated.</h1>
 <p class="lead">A reproducible demonstration of MedOrigin's local Python tooling,
 using only fictional synthetic FHIR data and an installed <code>medscale 0.3.0</code> CLI.</p>
 <section class="stats" aria-label="Evidence summary">
 <div class="stat"><b>{len(runs)}</b><span>Installed CLI execution(s)</span></div>
-<div class="stat"><b>100%</b><span>Fixture tests passed</span></div>
+<div class="stat"><b>0</b><span>FHIR validators executed</span></div>
 <div class="stat"><b>LOCAL</b><span>Synthetic-only demonstration</span></div>
 </section>
 <section class="results" aria-label="Verified results">{result_cards}</section>
 <footer>
-<strong>Developer evidence, not clinical validation.</strong> The local
-<code>valid</code> status does not establish comprehensive HL7 FHIR conformance,
+<strong>Developer evidence, not clinical validation.</strong> This check
+reports <code>not_validated</code>; no HL7 FHIR validator was executed. It does not establish conformance,
 diagnostic reliability, clinical safety, or production EHR compatibility.
 No historical dataset migration, publisher approval or independent security
 signoff is implied. This page is a standalone file and requires no server.
