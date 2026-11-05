@@ -150,6 +150,13 @@ jobs:
           }
           Write-Output 'CORE981_PROTECTED_AUDIT_UIA_SOURCE_GUARDS_PASS_NO_HOSTED_GUI_EXECUTION'
 
+      - name: Windows owner-private clickable Core971 R4 worklist entry fail-closed source and actual CMD test
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          python -m unittest discover -s experiments/desktop-d2-native-egui/scripts -p test_install_windows_private_r4_desktop_entry.py -v
+          if ($LASTEXITCODE -ne 0) { throw 'Private R4 clickable entry negative-first Windows source or CMD test failed' }
+          Write-Output 'PRIVATE_R4_CLICKABLE_ENTRY_ACTUAL_WINDOWS_CMD_NEGATIVE_PASS_NO_INSTALLER_OR_GUI'
       - name: Windows-only parse real Core971 official R4 UIA source (not execution)
         if: runner.os == 'Windows'
         shell: pwsh
