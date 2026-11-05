@@ -59,16 +59,19 @@ def _sha(path: Path) -> str:
 
 
 def _regular_exact(path: Path, *, directory: bool) -> Path:
-    if path.is_symlink() or not path.exists():
+    # Windows runner temp directories may have OS-canonical names that differ
+    # from Path.absolute(), even for real files. Reject actual filesystem
+    # redirections rather than treating a spelling difference as a symlink.
+    if not path.exists():
         raise ValueError("portable_qa_missing_or_reparse_path")
+    for ancestor in (path, *path.parents):
+        if ancestor.is_symlink() or (hasattr(ancestor, "is_junction") and ancestor.is_junction()):
+            raise ValueError("portable_qa_missing_or_reparse_path")
     if directory and not path.is_dir():
         raise ValueError("portable_qa_expected_directory")
     if not directory and not path.is_file():
         raise ValueError("portable_qa_expected_regular_file")
-    resolved = path.resolve(strict=True)
-    if resolved != path.absolute():
-        raise ValueError("portable_qa_alias_path_refused")
-    return resolved
+    return path.resolve(strict=True)
 
 
 def _extract_verified_archive(archive: Path, stage: Path, expected_binary: str) -> Path:

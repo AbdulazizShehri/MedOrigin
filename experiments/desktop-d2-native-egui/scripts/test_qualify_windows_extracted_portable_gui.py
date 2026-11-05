@@ -206,6 +206,33 @@ class ExtractedPortableWindowsGuiTests(unittest.TestCase):
                 self.exe_sha,
             )
 
+    def test_symlink_parent_and_windows_junction_parent_refused(self):
+        # This is a source-boundary test, not a request to create host links.
+        original_symlink = Path.is_symlink
+        with (
+            patch.object(
+                Path,
+                "is_symlink",
+                autospec=True,
+                side_effect=lambda part: part == self.archive.parent or original_symlink(part),
+            ),
+            self.assertRaisesRegex(ValueError, "missing_or_reparse_path"),
+        ):
+            self._call()
+        if hasattr(Path, "is_junction"):
+            original_junction = Path.is_junction
+            with (
+                patch.object(
+                    Path,
+                    "is_junction",
+                    autospec=True,
+                    side_effect=lambda part: part == self.archive.parent or original_junction(part),
+                ),
+                self.assertRaisesRegex(ValueError, "missing_or_reparse_path"),
+            ):
+                self._call()
+        self.assertEqual(list(self.scratch.iterdir()), [])
+
     def test_bad_digest_encodings_fail_closed(self):
         for malformed in ("A" * 64, "a" * 63, "a" * 64 + chr(10), "not_sha"):
             with (
