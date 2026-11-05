@@ -1,6 +1,7 @@
 // Adapted from emilk/eframe_template under Apache-2.0, see UPSTREAM-NOTICE.md.
 // Synthetic-only, in-process native Rust eframe + D0; no browser, EHR, PHI or network.
 use crate::core_file_batch::{FictionalCoreFileBatch, admit_fictional_core_file_batch};
+use crate::protected_audit::{FictionalProtectedAudit, admit_protected_audit_verification};
 use crate::core_provenance::{
     CoreProvenanceReceipt, FictionalCoreInput, PINNED_CORE_CASE_LABELS,
     admit_exact_source_reviewed_external_core_report, inspect_pinned_core_report,
@@ -674,6 +675,8 @@ pub struct MedOriginNativePreview {
     core_report_selection: usize,
     core_report: Option<CoreProvenanceReceipt>,
     core_file_batch: Option<FictionalCoreFileBatch>,
+    // Separate Core #981 *audit-only* protected fictional read-only status.
+    protected_audit: Option<FictionalProtectedAudit>,
     // Source-scoped, ephemeral *exploration* of Core redacted import summaries.
     // Never represents patient review, clinical verification or approval.
     core_file_batch_selected: Option<usize>,
@@ -767,6 +770,24 @@ impl MedOriginNativePreview {
             encrypted_readback_source_external: true,
             ..Default::default()
         })
+    }
+
+    /// The independently cold-reopened *fictional audit-only* Core #981
+    /// verification status contains NO patient records or clinic credentials.
+    pub fn from_one_time_protected_audit_verification_stdin(
+        raw: &[u8],
+    ) -> Result<Self, &'static str> {
+        let audit = admit_protected_audit_verification(raw)?;
+        Ok(Self {
+            protected_audit: Some(audit),
+            ..Default::default()
+        })
+    }
+
+    pub fn protected_audit_verified_events(&self) -> usize {
+        self.protected_audit
+            .as_ref()
+            .map_or(0, |audit| audit.verified_events)
     }
 
     /// The real Core #963 receipt contains only redacted counts and SHA anchors.
@@ -1383,6 +1404,7 @@ impl MedOriginNativePreview {
         self.relationship_notice = None;
         self.core_report = None;
         self.core_file_batch = None;
+        self.protected_audit = None;
         self.core_file_batch_selected = None;
         self.core_file_batch_inspected.clear();
         self.core_file_batch_activity_only = false;
@@ -1427,6 +1449,7 @@ impl MedOriginNativePreview {
         self.relationship_notice = None;
         self.core_report = None;
         self.core_file_batch = None;
+        self.protected_audit = None;
         self.core_file_batch_selected = None;
         self.core_file_batch_inspected.clear();
         self.core_file_batch_activity_only = false;
@@ -2726,6 +2749,34 @@ impl MedOriginNativePreview {
 }
 
 impl MedOriginNativePreview {
+    fn protected_audit_ui(&mut self, ui: &mut egui::Ui) {
+        let Some(audit) = self.protected_audit.clone() else {
+            return;
+        };
+        egui::ScrollArea::vertical().show(ui, |ui| {
+            ui.heading("MedOrigin — Protected fictional Workspace status");
+            ui.strong("Windows Credential Manager-backed audit verification (DEVELOPER QA ONLY)");
+            ui.label("A separate Core process reported an anchored cold-reopen of an encrypted fictional Workspace.");
+            ui.strong(format!(
+                "Protected audit: {} independently anchored fictional event verified",
+                audit.verified_events
+            ));
+            ui.label("Audit anchor matched. Root credential was NOT deleted. Encrypted store remains on disk.");
+            ui.label("NO patient records were imported. No clinical FHIR validation, access roles or production key custody.");
+            ui.label("This per-launch HMAC result is not a signed Core identity or an authorization to use patient data.");
+            ui.collapsing("Protected audit: Report fingerprint (not signer attestation)", |ui| {
+                ui.monospace(format!(
+                    "Redacted verification receipt SHA-256: {}",
+                    audit.receipt_sha256
+                ));
+            });
+            if ui.button("Protected audit: Clear verification result").clicked() {
+                self.clear_fictional_output();
+            }
+            ui.label("Keyboard: Tab / Shift+Tab to navigate, Space to select, Escape to clear.");
+        });
+    }
+
     fn core_file_batch_ui(&mut self, ui: &mut egui::Ui) {
         let Some(batch) = self.core_file_batch.clone() else {
             return;
@@ -2896,6 +2947,10 @@ impl eframe::App for MedOriginNativePreview {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         if ui.input(|input| input.key_pressed(egui::Key::Escape)) {
             self.clear_fictional_output();
+        }
+        if self.protected_audit.is_some() {
+            egui::CentralPanel::default().show(ui, |ui| self.protected_audit_ui(ui));
+            return;
         }
         if self.core_file_batch.is_some() {
             egui::CentralPanel::default().show(ui, |ui| self.core_file_batch_ui(ui));
@@ -3549,6 +3604,42 @@ impl eframe::App for MedOriginNativePreview {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn protected_audit_result_opens_only_verified_readonly_status_and_clear() {
+        use serde_json::json;
+        let mut raw = serde_json::to_vec(&json!({
+            "schema":"medorigin-core-windows-synthetic-protected-audit-preview/v1",
+            "status":"FICTIONAL_WINDOWS_PROTECTED_AUDIT_PREVIEW_ONLY",
+            "operation":"verify",
+            "verified_audit_events":1,
+            "audit_head_sha256":null,
+            "anchor_matched":true,
+            "protected_credential_destroyed":false,
+            "encrypted_workspace_store_preserved":false,
+            "patient_data_admitted":false,
+            "fhir_r4_conformance_validated":false,
+            "clinical_use_authorized":false,
+            "production_key_provider_selected":false,
+            "publication_authorized":false
+        }))
+        .unwrap();
+        raw.push(b'\n');
+        let mut app =
+            MedOriginNativePreview::from_one_time_protected_audit_verification_stdin(&raw)
+                .unwrap();
+        assert_eq!(app.protected_audit_verified_events(), 1);
+        assert_eq!(app.core_file_batch_import_count(), 0);
+        assert_eq!(app.synthetic_bundle_resource_count(), 0);
+        assert!(!app.has_external_synthetic_encrypted_readback());
+        app.clear_fictional_output();
+        assert_eq!(app.protected_audit_verified_events(), 0);
+        raw.extend_from_slice(b" ");
+        assert!(
+            MedOriginNativePreview::from_one_time_protected_audit_verification_stdin(&raw)
+                .is_err()
+        );
+    }
 
     const CORE_FILE_BATCH_REAL: &[u8] = include_bytes!(
         "../fixtures/core/core963-real-encrypted-fictional-file-batch-redacted.json"
