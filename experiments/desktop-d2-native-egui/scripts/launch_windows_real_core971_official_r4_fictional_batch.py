@@ -14,6 +14,7 @@ import importlib.metadata
 import json
 import os
 import re
+import secrets
 import subprocess
 import sys
 import time
@@ -266,6 +267,18 @@ def launch(
             raise ValueError("core971_subprocess_exit_or_stderr_refused")
         receipt = legacy._canonicalize_windows_stdout(result.stdout)
         _verified_official_receipt(receipt)
+        # Per-launch OS-random test-only transport binding, not clinical
+        # identity. Native Rust checks this HMAC before admitting GUI output.
+        nonce = secrets.token_bytes(16)
+        secret = secrets.token_bytes(32)
+        if len(nonce) != 16 or len(secret) != 32:
+            raise ValueError("core971_os_session_randomness_refused")
+        frame = legacy._per_launch_core_frame(receipt, nonce, secret)
+        session_env = {
+            **os.environ,
+            legacy.ENV_SESSION_NONCE: nonce.hex(),
+            legacy.ENV_SESSION_KEY: secret.hex(),
+        }
         if legacy._file_sha(exe) != sha or legacy._file_sha(archive) != HL7_R4_ZIP_SHA:
             raise ValueError("core971_inputs_changed_after_import")
         if qa_uia:
@@ -276,6 +289,10 @@ def launch(
             _no_alias(verifier)
             location = work / "only-redacted-fake-core971-receipt.json"
             location.write_bytes(receipt)
+            frame_path = work / "only-redacted-fake-core971-session-frame.bin"
+            if frame_path.exists():
+                raise ValueError("core971_live_session_frame_preexisting")
+            frame_path.write_bytes(frame)
             try:
                 result = subprocess.run(
                     [
@@ -292,8 +309,11 @@ def launch(
                         str(location),
                         "-ExpectedReceiptSha256",
                         hashlib.sha256(receipt).hexdigest(),
+                        "-SessionFramePath",
+                        str(frame_path),
                     ],
                     cwd=exe.parent,
+                    env=session_env,
                     capture_output=True,
                     timeout=80,
                     check=False,
@@ -312,15 +332,16 @@ def launch(
         else:
             try:
                 child = subprocess.Popen(
-                    [str(exe), legacy.D2_RECEIPT_FLAG],
+                    [str(exe), legacy.D2_SESSION_BATCH_FLAG],
                     cwd=exe.parent,
+                    env=session_env,
                     stdin=subprocess.PIPE,
                     stdout=subprocess.DEVNULL,
                     stderr=subprocess.DEVNULL,
                 )
                 if child.stdin is None:
                     raise ValueError("core971_native_stdin_missing")
-                child.stdin.write(receipt)
+                child.stdin.write(frame)
                 child.stdin.close()
             except (OSError, BrokenPipeError) as exc:
                 raise ValueError("core971_native_handoff_failed") from exc

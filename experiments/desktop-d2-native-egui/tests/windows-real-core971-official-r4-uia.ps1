@@ -5,7 +5,8 @@ param(
   [Parameter(Mandatory=$true)][string]$ExePath,
   [Parameter(Mandatory=$true)][ValidatePattern('^[0-9a-fA-F]{64}$')][string]$ExpectedExeSha256,
   [Parameter(Mandatory=$true)][string]$LiveReceiptPath,
-  [Parameter(Mandatory=$true)][ValidatePattern('^[0-9a-fA-F]{64}$')][string]$ExpectedReceiptSha256
+  [Parameter(Mandatory=$true)][ValidatePattern('^[0-9a-fA-F]{64}$')][string]$ExpectedReceiptSha256,
+  [Parameter(Mandatory=$true)][string]$SessionFramePath
 )
 $ErrorActionPreference='Stop'
 $process=$null
@@ -33,17 +34,43 @@ try {
      $text -match 'urn:uuid:|fictional-patient|INVENTED_PRIVATE_NAME|imaginary-file-') {
     throw 'core971_live_receipt_missing_r4_or_contains_identity'
   }
+  # The source runner supplies the canonical true Core971 receipt in a
+  # fresh per-launch HMAC-bound session. Never downgrade to legacy stdin.
+  $frameItem=Get-Item -LiteralPath $SessionFramePath -ErrorAction Stop
+  if($frameItem.PSIsContainer -or
+     ($frameItem.Attributes -band [IO.FileAttributes]::ReparsePoint)){
+    throw 'core971_session_frame_not_reviewed'
+  }
+  $frameBytes=[IO.File]::ReadAllBytes($frameItem.FullName)
+  $domain=[Text.Encoding]::ASCII.GetBytes("MedOrigin-D2-FICTIONAL-CORE-BATCH-V1" + [char]0)
+  $headerLength=$domain.Length+16+32
+  if($frameBytes.Length -ne $raw.Length+$headerLength -or
+     $frameBytes.Length -gt 4096+$headerLength){
+    throw 'core971_session_frame_size_refused'
+  }
+  for($i=0;$i -lt $domain.Length;$i++){
+    if($frameBytes[$i] -ne $domain[$i]){throw 'core971_session_domain_refused'}
+  }
+  $sourceBytes=[byte[]]$frameBytes[$headerLength..($frameBytes.Length-1)]
+  if([Convert]::ToBase64String($sourceBytes) -cne [Convert]::ToBase64String($raw)){
+    throw 'core971_session_payload_not_actual_live_source'
+  }
+  if($env:MEDORIGIN_D2_FICTIONAL_SESSION_KEY -notmatch '^[0-9a-f]{64}$' -or
+     $env:MEDORIGIN_D2_FICTIONAL_SESSION_NONCE -notmatch '^[0-9a-f]{32}$'){
+    throw 'core971_session_key_or_nonce_missing'
+  }
+  # Native Rust performs independent HMAC and nonce verification.
   Add-Type -AssemblyName UIAutomationClient
   Add-Type -AssemblyName UIAutomationTypes
   $info=New-Object System.Diagnostics.ProcessStartInfo
   $info.FileName=$exe
-  $info.Arguments='--synthetic-core-file-batch-receipt-stdin'
+  $info.Arguments='--synthetic-core-file-batch-session-stdin'
   $info.UseShellExecute=$false
   $info.RedirectStandardInput=$true
   $process=New-Object System.Diagnostics.Process
   $process.StartInfo=$info
   if(-not $process.Start()){throw 'native_launch_failed'}
-  $process.StandardInput.BaseStream.Write($raw,0,$raw.Length)
+  $process.StandardInput.BaseStream.Write($frameBytes,0,$frameBytes.Length)
   $process.StandardInput.Close()
   $desktop=[System.Windows.Automation.AutomationElement]::RootElement
   $window=$null
