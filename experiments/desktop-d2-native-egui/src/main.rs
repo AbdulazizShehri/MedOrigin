@@ -12,9 +12,11 @@ use medorigin_desktop_d2_native_egui::MedOriginNativePreview;
 use medorigin_desktop_d2_native_egui::session::{
     self, ENV_SESSION_KEY, ENV_SESSION_NONCE, SESSION_FLAG, SESSION_FOCUSED_FLAG,
 };
+use medorigin_desktop_d2_native_egui::synthetic_bundle::MAX_SYNTHETIC_BUNDLE_BYTES;
 
 const MAX_FICTIONAL_CORE_STDIN: usize = 2048;
 const EXPLICIT_SYNTHETIC_CORE_FLAG: &str = "--synthetic-core-stdin";
+const EXPLICIT_SYNTHETIC_MULTIPATIENT_FLAG: &str = "--synthetic-multipatient-bundle-stdin";
 const EXPLICIT_SYNTHETIC_WORKSPACE_FLAG: &str = "--synthetic-workspace-receipt-stdin";
 const EXPLICIT_SYNTHETIC_READBACK_FLAG: &str = "--synthetic-encrypted-readback-stdin";
 const EXPLICIT_SYNTHETIC_FOCUSED_READBACK_FLAG: &str =
@@ -46,6 +48,7 @@ fn make_app_with_deadline<R: Read + Send + 'static>(
     }
     if args.len() != 1
         || (args[0] != EXPLICIT_SYNTHETIC_CORE_FLAG
+            && args[0] != EXPLICIT_SYNTHETIC_MULTIPATIENT_FLAG
             && args[0] != EXPLICIT_SYNTHETIC_WORKSPACE_FLAG
             && args[0] != EXPLICIT_SYNTHETIC_READBACK_FLAG
             && args[0] != EXPLICIT_SYNTHETIC_FOCUSED_READBACK_FLAG
@@ -57,15 +60,21 @@ fn make_app_with_deadline<R: Read + Send + 'static>(
             "unapproved_d2_native_startup_argument",
         ));
     }
-    // 2049 bytes are sufficient to detect oversized source data, without
-    // reading an unbounded incoming payload or buffering clinical documents.
+    // A distinct 32KiB upper bound is available ONLY for the structurally
+    // allowlisted imaginary-only multi-patient Bundle. The encrypted Core
+    // session keeps its original strict 2048-byte limit.
+    let size_limit = if args[0] == EXPLICIT_SYNTHETIC_MULTIPATIENT_FLAG {
+        MAX_SYNTHETIC_BUNDLE_BYTES
+    } else {
+        MAX_FICTIONAL_CORE_STDIN
+    };
     let (sender, receiver) = mpsc::sync_channel(1);
     std::thread::Builder::new()
         .name("synthetic-core-stdin-once".to_owned())
         .spawn(move || {
             let mut bytes = Vec::with_capacity(512);
             let outcome = reader
-                .take(MAX_FICTIONAL_CORE_STDIN as u64 + 1)
+                .take(size_limit as u64 + 1)
                 .read_to_end(&mut bytes)
                 .map(|_| bytes);
             let _ = sender.send(outcome);
@@ -85,11 +94,21 @@ fn make_app_with_deadline<R: Read + Send + 'static>(
             ));
         }
     };
-    if bytes.is_empty() || bytes.len() > MAX_FICTIONAL_CORE_STDIN {
+    if bytes.is_empty() || bytes.len() > size_limit {
         return Err(io::Error::new(
             io::ErrorKind::InvalidData,
             "unapproved_d2_synthetic_core_stdin_size",
         ));
+    }
+    if args[0] == EXPLICIT_SYNTHETIC_MULTIPATIENT_FLAG {
+        return MedOriginNativePreview::from_one_time_synthetic_bundle_stdin(&bytes).map_err(
+            |_| {
+                io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    "fictional_multi_patient_bundle_unreviewed_or_contains_clinical_fields",
+                )
+            },
+        );
     }
     if args[0] == SESSION_FLAG || args[0] == SESSION_FOCUSED_FLAG {
         // Session key/nonce are generated per GUI launch by the private owner.
@@ -195,6 +214,47 @@ mod tests {
     const ENCRYPTED_READBACK: &[u8] =
         include_bytes!("../fixtures/core/encrypted-readback-projection.json");
     const CORE_NEGATIVE: &[u8] = include_bytes!("../fixtures/core/unknown-fictional-negative.json");
+
+    #[test]
+    fn multipatient_structural_bundle_flag_starts_only_bounded_nonclinical_preview() {
+        const BUNDLE: &[u8] =
+            include_bytes!("../fixtures/core/synthetic-multipatient-fhir-bundle.json");
+        let app = make_app(
+            &[OsString::from(EXPLICIT_SYNTHETIC_MULTIPATIENT_FLAG)],
+            Cursor::new(BUNDLE),
+        )
+        .expect("strict dummy-only structural multipatient Bundle");
+        assert_eq!(app.synthetic_bundle_resource_count(), 8);
+        assert!(!app.has_external_synthetic_encrypted_readback());
+
+        for wrong in [
+            vec![],
+            b"{}".to_vec(),
+            [BUNDLE, b" "].concat(),
+            vec![b'x'; MAX_SYNTHETIC_BUNDLE_BYTES + 1],
+        ] {
+            assert!(
+                make_app(
+                    &[OsString::from(EXPLICIT_SYNTHETIC_MULTIPATIENT_FLAG)],
+                    Cursor::new(wrong)
+                )
+                .is_err()
+            );
+        }
+        for wrong_flag in [EXPLICIT_SYNTHETIC_READBACK_FLAG, SESSION_FOCUSED_FLAG] {
+            assert!(make_app(&[OsString::from(wrong_flag)], Cursor::new(BUNDLE)).is_err());
+        }
+        assert!(
+            make_app(
+                &[
+                    OsString::from(EXPLICIT_SYNTHETIC_MULTIPATIENT_FLAG),
+                    OsString::from("--arbitrary-file")
+                ],
+                Cursor::new(BUNDLE)
+            )
+            .is_err()
+        );
+    }
 
     #[test]
     fn source_verified_focused_startup_opens_product_view_only_for_exact_imaginary_readback() {

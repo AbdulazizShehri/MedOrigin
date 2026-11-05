@@ -117,6 +117,7 @@ fn audited_native_source_files(root: &Path) -> Vec<PathBuf> {
             "lib.rs",
             "main.rs",
             "session.rs",
+            "synthetic_bundle.rs",
             "workspace_receipt.rs"
         ],
         "new, missing or nested native D2 source requires explicit review"
@@ -297,11 +298,12 @@ fn guard_refuses_unreviewed_nested_module_layout() {
         "lib.rs",
         "main.rs",
         "session.rs",
+        "synthetic_bundle.rs",
         "workspace_receipt.rs",
     ] {
         fs::write(root.join(name), "// synthetic, no execution").expect("fixture");
     }
-    assert_eq!(audited_native_source_files(&root).len(), 7);
+    assert_eq!(audited_native_source_files(&root).len(), 8);
     let nested = root.join("hidden");
     fs::create_dir(&nested).expect("create nested fixture");
     fs::write(nested.join("socket.rs"), "// unreviewed nested source").expect("fixture");

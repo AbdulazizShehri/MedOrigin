@@ -316,6 +316,28 @@ jobs:
           & $py -m unittest discover -s experiments/desktop-d2-native-egui/scripts -p test_windows_private_fictional_desktop_entry.py -v
           if ($LASTEXITCODE -ne 0) { throw 'Private fictional Windows one-click launcher source contract tests failed' }
           Write-Output 'PRIVATE_ONE_CLICK_GUI_ENTRY_QA_ONLY_NOT_INSTALLER_PATIENT_DATA_OR_SIGNED_BINARY'
+      - name: Verify multi-patient fictional Bundle generator and 48-resource bound
+        shell: pwsh
+        run: |
+          $py = if ($IsWindows) { 'python' } else { 'python3' }
+          & $py -m unittest discover -s experiments/desktop-d2-native-egui/scripts -p test_synthetic_multipatient_bundle.py -v
+          if ($LASTEXITCODE -ne 0) { throw 'Multi-patient dummy-only FHIR Bundle generator drifted' }
+          Write-Output 'SYNTHETIC_MULTI_PATIENT_16_PATIENT_48_RESOURCE_NO_PHI_SOURCE_PASS'
+      - name: Parse Windows native multi-patient synthetic Bundle UIAutomation source
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $path = 'experiments/desktop-d2-native-egui/tests/windows-synthetic-multipatient-bundle-uia.ps1'
+          $tokens = $null
+          $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile(
+            (Resolve-Path $path).Path, [ref]$tokens, [ref]$errors
+          ) | Out-Null
+          if (@($errors).Count -ne 0) { throw 'Multi-patient Windows native UIA QA syntax invalid' }
+          if (-not (Get-Content -LiteralPath $path -Raw).Contains('WINDOWS_NATIVE_EIGHT_RECORD_TWO_PATIENT_STRUCTURAL_FHIR_BUNDLE_GROUP_GRAPH_UIA_PASS_NONCLINICAL')) {
+            throw 'Multi-patient Windows native UIA source marker missing'
+          }
+          Write-Output 'SYNTHETIC_MULTI_PATIENT_WINDOWS_UIA_SYNTAX_ONLY_NOT_HOSTED_GUI_APPROVAL'
       - name: Verify checks did not alter tracked code or lockfiles
         shell: pwsh
         run: |

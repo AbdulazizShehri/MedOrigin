@@ -15,7 +15,17 @@ class NativeOneShotCoreSourceTests(unittest.TestCase):
         native = (ROOT / "src/main.rs").read_text(encoding="utf-8")
         self.assertIn('EXPLICIT_SYNTHETIC_CORE_FLAG: &str = "--synthetic-core-stdin"', native)
         self.assertIn("fn make_app<R: Read + Send + 'static>", native)
-        self.assertIn(".take(MAX_FICTIONAL_CORE_STDIN as u64 + 1)", native)
+        # A dedicated dummy-Bundle path must NEVER broaden the original Core limit.
+        self.assertIn("const MAX_FICTIONAL_CORE_STDIN: usize = 2048;", native)
+        self.assertIn('EXPLICIT_SYNTHETIC_MULTIPATIENT_FLAG: &str = "--synthetic-multipatient-bundle-stdin"', native)
+        self.assertRegex(
+            native,
+            r"let size_limit = if args\[0\] == EXPLICIT_SYNTHETIC_MULTIPATIENT_FLAG \{\s*"
+            r"MAX_SYNTHETIC_BUNDLE_BYTES\s*\} else \{\s*MAX_FICTIONAL_CORE_STDIN\s*\};",
+        )
+        self.assertIn(".take(size_limit as u64 + 1)", native)
+        self.assertIn("bytes.len() > size_limit", native)
+        self.assertIn("from_one_time_synthetic_bundle_stdin(&bytes)", native)
         self.assertIn("read_to_end(&mut bytes)", native)
         self.assertIn("if args.is_empty()", native)
         self.assertIn("unapproved_d2_synthetic_core_stdin_report", native)
