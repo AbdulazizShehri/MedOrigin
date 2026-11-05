@@ -26,7 +26,8 @@ def desktop(monkeypatch: pytest.MonkeyPatch) -> Any:
 
 def test_public_projection_whitelists_fields(desktop: Any) -> None:
     payload = {
-        "structural_status": "valid",
+        "provenance_status": "not_validated",
+            "validation_exit": 2,
         "malformed_exit": 1,
         "report_sha256": GOOD_HEX,
         "fixture_sha256": OTHER_HEX,
@@ -34,7 +35,7 @@ def test_public_projection_whitelists_fields(desktop: Any) -> None:
     }
     admitted = desktop.public_result(payload)
     assert admitted == {
-        "status": "VALID",
+        "status": "NOT_VALIDATED",
         "report_sha256": GOOD_HEX,
         "fixture_sha256": OTHER_HEX,
     }
@@ -44,33 +45,40 @@ def test_public_projection_whitelists_fields(desktop: Any) -> None:
 @pytest.mark.parametrize(
     "broken",
     [
-        {"structural_status": "invalid"},
-        {"structural_status": "valid", "malformed_exit": 0},
-        {"structural_status": "valid", "malformed_exit": 1, "report_sha256": "xyz"},
-        {"structural_status": "valid", "malformed_exit": 1, "report_sha256": "A" * 64},
+        {"provenance_status": "valid"},
+        {"provenance_status": "not_validated",
+            "validation_exit": 2, "malformed_exit": 0},
+        {"provenance_status": "not_validated",
+            "validation_exit": 2, "malformed_exit": 1, "report_sha256": "xyz"},
+        {"provenance_status": "not_validated",
+            "validation_exit": 2, "malformed_exit": 1, "report_sha256": "A" * 64},
         {
-            "structural_status": "valid",
+            "provenance_status": "not_validated",
+            "validation_exit": 2,
             "malformed_exit": True,
             "report_sha256": GOOD_HEX,
             "fixture_sha256": OTHER_HEX,
         },
         {
-            "structural_status": "valid",
+            "provenance_status": "not_validated",
+            "validation_exit": 2,
             "malformed_exit": 1.0,
             "report_sha256": GOOD_HEX,
             "fixture_sha256": OTHER_HEX,
         },
         {
-            "structural_status": "valid",
+            "provenance_status": "not_validated",
+            "validation_exit": 2,
             "malformed_exit": 1,
-            "valid_exit": True,
+            "validation_exit": True,
             "report_sha256": GOOD_HEX,
             "fixture_sha256": OTHER_HEX,
         },
         {
-            "structural_status": "valid",
+            "provenance_status": "not_validated",
+            "validation_exit": 2,
             "malformed_exit": 1,
-            "valid_exit": 1,
+            "validation_exit": 0,
             "report_sha256": GOOD_HEX,
             "fixture_sha256": OTHER_HEX,
         },
@@ -92,7 +100,8 @@ def test_validation_always_uses_temporary_local_synthetic_data(
         assert directory.name.startswith("medorigin-synthetic-ui-")
         observed.append(directory)
         return {
-            "structural_status": "valid",
+            "provenance_status": "not_validated",
+            "validation_exit": 2,
             "malformed_exit": 1,
             "report_sha256": GOOD_HEX,
             "fixture_sha256": OTHER_HEX,
@@ -102,7 +111,7 @@ def test_validation_always_uses_temporary_local_synthetic_data(
     result = desktop.validate_installed(Path(sys.executable))
     assert result == {
         "fhir": {
-            "status": "VALID",
+            "status": "NOT_VALIDATED",
             "report_sha256": GOOD_HEX,
             "fixture_sha256": OTHER_HEX,
         },
@@ -119,7 +128,8 @@ def test_workspace_status_rejects_extra_patient_like_fields(
         desktop,
         "run_one",
         lambda _cli, _dir, _label: {
-            "structural_status": "valid",
+            "provenance_status": "not_validated",
+            "validation_exit": 2,
             "malformed_exit": 1,
             "report_sha256": GOOD_HEX,
             "fixture_sha256": OTHER_HEX,
