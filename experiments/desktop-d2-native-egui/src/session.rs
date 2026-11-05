@@ -8,6 +8,12 @@ use sha2::{Digest, Sha256};
 pub const SESSION_FLAG: &str = "--synthetic-encrypted-readback-session-stdin";
 // Explicit fictional-only focused view: identical HMAC admission, different initial UI.
 pub const SESSION_FOCUSED_FLAG: &str = "--synthetic-encrypted-readback-session-focused-stdin";
+// A distinct source-scoped Core summary, not interchangeable with the
+// historical 2KiB encrypted-readback frame or unbound receipt transport.
+pub const SESSION_CORE_BATCH_FLAG: &str = "--synthetic-core-file-batch-session-stdin";
+pub const CORE_BATCH_TAG: &[u8] = b"MedOrigin-D2-FICTIONAL-CORE-BATCH-V1\0";
+pub const CORE_BATCH_HEADER_LEN: usize = CORE_BATCH_TAG.len() + 16 + 32;
+pub const CORE_BATCH_FRAME_MAX_BYTES: usize = 4096 + CORE_BATCH_HEADER_LEN;
 pub const ENV_SESSION_KEY: &str = "MEDORIGIN_D2_FICTIONAL_SESSION_KEY";
 pub const ENV_SESSION_NONCE: &str = "MEDORIGIN_D2_FICTIONAL_SESSION_NONCE";
 pub const SESSION_TAG: &[u8] = b"MedOrigin-D2-FICTIONAL-SESSION-V1\0";
@@ -53,18 +59,21 @@ fn hmac_sha256(key: &[u8; 32], message: &[u8]) -> [u8; 32] {
     final_digest.into()
 }
 
-pub fn verify_fictional_frame<'a>(
+fn verify_fictional_frame_domain<'a>(
     raw: &'a [u8],
     nonce: &[u8; 16],
     secret: &[u8; 32],
+    domain: &[u8],
+    frame_limit: usize,
 ) -> Result<&'a [u8], &'static str> {
-    if raw.len() <= HEADER_LEN || raw.len() > 2048 {
+    let header_len = domain.len() + 16 + 32;
+    if raw.len() <= header_len || raw.len() > frame_limit {
         return Err("fictional_session_frame_bounds_refused");
     }
-    if !raw.starts_with(SESSION_TAG) {
+    if !raw.starts_with(domain) {
         return Err("fictional_session_domain_refused");
     }
-    let observed_nonce = &raw[SESSION_TAG.len()..SESSION_TAG.len() + 16];
+    let observed_nonce = &raw[domain.len()..domain.len() + 16];
     // No early success even if a different earlier nonce has a valid MAC.
     let mut nonce_difference = 0u8;
     for (a, b) in observed_nonce.iter().zip(nonce.iter()) {
@@ -73,17 +82,17 @@ pub fn verify_fictional_frame<'a>(
     if nonce_difference != 0 {
         return Err("fictional_session_nonce_stale_or_foreign");
     }
-    let tag_start = SESSION_TAG.len() + 16;
-    let payload = &raw[HEADER_LEN..];
+    let tag_start = domain.len() + 16;
+    let payload = &raw[header_len..];
     let length =
         u32::try_from(payload.len()).map_err(|_| "fictional_session_payload_length_refused")?;
-    let mut authenticated = Vec::with_capacity(SESSION_TAG.len() + 16 + 4 + payload.len());
-    authenticated.extend_from_slice(SESSION_TAG);
+    let mut authenticated = Vec::with_capacity(domain.len() + 16 + 4 + payload.len());
+    authenticated.extend_from_slice(domain);
     authenticated.extend_from_slice(nonce);
     authenticated.extend_from_slice(&length.to_be_bytes());
     authenticated.extend_from_slice(payload);
     let computed = hmac_sha256(secret, &authenticated);
-    let expected = &raw[tag_start..HEADER_LEN];
+    let expected = &raw[tag_start..header_len];
     let mut difference = 0u8;
     for (a, b) in expected.iter().zip(computed.iter()) {
         difference |= a ^ b;
@@ -94,23 +103,97 @@ pub fn verify_fictional_frame<'a>(
     Ok(payload)
 }
 
+pub fn verify_fictional_frame<'a>(
+    raw: &'a [u8],
+    nonce: &[u8; 16],
+    secret: &[u8; 32],
+) -> Result<&'a [u8], &'static str> {
+    verify_fictional_frame_domain(raw, nonce, secret, SESSION_TAG, 2048)
+}
+
+/// Per-process random secret and nonce bind the entire redacted receipt to one
+/// local launch. Not signer identity, process isolation or clinical custody.
+pub fn verify_fictional_core_batch_frame<'a>(
+    raw: &'a [u8],
+    nonce: &[u8; 16],
+    secret: &[u8; 32],
+) -> Result<&'a [u8], &'static str> {
+    verify_fictional_frame_domain(
+        raw,
+        nonce,
+        secret,
+        CORE_BATCH_TAG,
+        CORE_BATCH_FRAME_MAX_BYTES,
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    fn frame(payload: &[u8], nonce: &[u8; 16], key: &[u8; 32]) -> Vec<u8> {
+    fn frame_domain(domain: &[u8], payload: &[u8], nonce: &[u8; 16], key: &[u8; 32]) -> Vec<u8> {
         let mut signed = Vec::new();
-        signed.extend_from_slice(SESSION_TAG);
+        signed.extend_from_slice(domain);
         signed.extend_from_slice(nonce);
         signed.extend_from_slice(&(payload.len() as u32).to_be_bytes());
         signed.extend_from_slice(payload);
         let mac = hmac_sha256(key, &signed);
         let mut out = Vec::new();
-        out.extend_from_slice(SESSION_TAG);
+        out.extend_from_slice(domain);
         out.extend_from_slice(nonce);
         out.extend_from_slice(&mac);
         out.extend_from_slice(payload);
         out
+    }
+
+    fn frame(payload: &[u8], nonce: &[u8; 16], key: &[u8; 32]) -> Vec<u8> {
+        frame_domain(SESSION_TAG, payload, nonce, key)
+    }
+
+    #[test]
+    fn core_batch_frame_is_bound_to_independent_domain_nonce_key_and_raw_source() {
+        let raw = include_bytes!(
+            "../fixtures/core/core963-real-encrypted-fictional-file-batch-redacted.json"
+        );
+        let nonce = [0x11; 16];
+        let key = [0x22; 32];
+        let frame = frame_domain(CORE_BATCH_TAG, raw, &nonce, &key);
+        assert!(frame.len() < CORE_BATCH_FRAME_MAX_BYTES);
+        assert_eq!(
+            verify_fictional_core_batch_frame(&frame, &nonce, &key),
+            Ok(raw.as_slice())
+        );
+        assert!(verify_fictional_core_batch_frame(&frame, &[0x12; 16], &key).is_err());
+        assert!(verify_fictional_core_batch_frame(&frame, &nonce, &[0x23; 32]).is_err());
+        let wrong_domain = frame_domain(SESSION_TAG, raw, &nonce, &key);
+        assert!(verify_fictional_core_batch_frame(&wrong_domain, &nonce, &key).is_err());
+        assert!(verify_fictional_frame(&frame, &nonce, &key).is_err());
+        for index in [
+            0usize,
+            CORE_BATCH_TAG.len(),
+            CORE_BATCH_HEADER_LEN - 1,
+            CORE_BATCH_HEADER_LEN,
+        ] {
+            let mut tampered = frame.clone();
+            tampered[index] ^= 1;
+            assert!(verify_fictional_core_batch_frame(&tampered, &nonce, &key).is_err());
+        }
+        assert!(
+            verify_fictional_core_batch_frame(&frame[..CORE_BATCH_HEADER_LEN], &nonce, &key)
+                .is_err()
+        );
+        assert!(
+            verify_fictional_core_batch_frame(&[frame.clone(), vec![0]].concat(), &nonce, &key)
+                .is_err()
+        );
+        assert!(
+            verify_fictional_core_batch_frame(
+                &vec![0; CORE_BATCH_FRAME_MAX_BYTES + 1],
+                &nonce,
+                &key
+            )
+            .is_err()
+        );
     }
 
     #[test]

@@ -19,6 +19,8 @@ const MAX_FICTIONAL_CORE_STDIN: usize = 2048;
 const EXPLICIT_SYNTHETIC_CORE_FLAG: &str = "--synthetic-core-stdin";
 const EXPLICIT_SYNTHETIC_MULTIPATIENT_FLAG: &str = "--synthetic-multipatient-bundle-stdin";
 const EXPLICIT_CORE_FILE_BATCH_FLAG: &str = "--synthetic-core-file-batch-receipt-stdin";
+// Preferred ephemeral Core-to-GUI QA transport; refuses unbound replay.
+const SESSION_CORE_BATCH_FLAG: &str = session::SESSION_CORE_BATCH_FLAG;
 const EXPLICIT_SYNTHETIC_WORKSPACE_FLAG: &str = "--synthetic-workspace-receipt-stdin";
 const EXPLICIT_SYNTHETIC_READBACK_FLAG: &str = "--synthetic-encrypted-readback-stdin";
 const EXPLICIT_SYNTHETIC_FOCUSED_READBACK_FLAG: &str =
@@ -52,6 +54,7 @@ fn make_app_with_deadline<R: Read + Send + 'static>(
         || (args[0] != EXPLICIT_SYNTHETIC_CORE_FLAG
             && args[0] != EXPLICIT_SYNTHETIC_MULTIPATIENT_FLAG
             && args[0] != EXPLICIT_CORE_FILE_BATCH_FLAG
+            && args[0] != SESSION_CORE_BATCH_FLAG
             && args[0] != EXPLICIT_SYNTHETIC_WORKSPACE_FLAG
             && args[0] != EXPLICIT_SYNTHETIC_READBACK_FLAG
             && args[0] != EXPLICIT_SYNTHETIC_FOCUSED_READBACK_FLAG
@@ -70,6 +73,8 @@ fn make_app_with_deadline<R: Read + Send + 'static>(
         MAX_SYNTHETIC_BUNDLE_BYTES
     } else if args[0] == EXPLICIT_CORE_FILE_BATCH_FLAG {
         FILE_BATCH_RECEIPT_MAX_BYTES
+    } else if args[0] == SESSION_CORE_BATCH_FLAG {
+        session::CORE_BATCH_FRAME_MAX_BYTES
     } else {
         MAX_FICTIONAL_CORE_STDIN
     };
@@ -124,7 +129,10 @@ fn make_app_with_deadline<R: Read + Send + 'static>(
             },
         );
     }
-    if args[0] == SESSION_FLAG || args[0] == SESSION_FOCUSED_FLAG {
+    if args[0] == SESSION_FLAG
+        || args[0] == SESSION_FOCUSED_FLAG
+        || args[0] == SESSION_CORE_BATCH_FLAG
+    {
         // Session key/nonce are generated per GUI launch by the private owner.
         // Never fall back to the legacy unbound static readback when absent.
         // This is NOT an externally authenticated sender or OS secret store.
@@ -149,13 +157,20 @@ fn make_app_with_deadline<R: Read + Send + 'static>(
         let key = session::decode_fixed_hex::<32>(&key_hex).map_err(|_| {
             io::Error::new(io::ErrorKind::InvalidData, "fictional_session_key_invalid")
         })?;
-        let inner = session::verify_fictional_frame(&bytes, &nonce, &key).map_err(|_| {
+        let inner = if args[0] == SESSION_CORE_BATCH_FLAG {
+            session::verify_fictional_core_batch_frame(&bytes, &nonce, &key)
+        } else {
+            session::verify_fictional_frame(&bytes, &nonce, &key)
+        }
+        .map_err(|_| {
             io::Error::new(
                 io::ErrorKind::PermissionDenied,
                 "fictional_session_mac_or_freshness_refused",
             )
         })?;
-        let app = if args[0] == SESSION_FOCUSED_FLAG {
+        let app = if args[0] == SESSION_CORE_BATCH_FLAG {
+            MedOriginNativePreview::from_one_time_core_file_batch_receipt_stdin(inner)
+        } else if args[0] == SESSION_FOCUSED_FLAG {
             MedOriginNativePreview::from_one_time_synthetic_focused_readback_stdin(inner)
         } else {
             MedOriginNativePreview::from_one_time_synthetic_encrypted_readback_stdin(inner)
