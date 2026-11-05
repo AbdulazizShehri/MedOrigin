@@ -24,6 +24,31 @@ class Core963RealFictionalOneCommandTests(unittest.TestCase):
         self.assertNotIn(b"fictional-patient", raw)
         self.assertNotIn(b"imaginary-file-", raw)
 
+    def test_bound_session_hmac_domain_nonce_and_fictional_receipt_bytes(self):
+        import hashlib
+        import hmac
+        raw = RECEIPT.read_bytes()
+        nonce = bytes(range(16))
+        key = bytes(range(32))
+        result = bridge._per_launch_core_frame(raw, nonce, key)
+        tag = b"MedOrigin-D2-FICTIONAL-CORE-BATCH-V1\x00"
+        self.assertEqual(result[:len(tag)], tag)
+        self.assertEqual(result[len(tag):len(tag)+16], nonce)
+        self.assertEqual(result[len(tag)+48:], raw)
+        expected = hmac.new(
+            key, tag + nonce + len(raw).to_bytes(4, "big") + raw, hashlib.sha256
+        ).digest()
+        self.assertEqual(result[len(tag)+16:len(tag)+48], expected)
+        self.assertNotEqual(
+            expected,
+            hmac.new(key, b"MedOrigin-D2-FICTIONAL-SESSION-V1\x00"
+                     + nonce + len(raw).to_bytes(4, "big") + raw, hashlib.sha256).digest(),
+        )
+        for invalid in ((raw, nonce[:-1], key), (raw, nonce, key[:-1]),
+                        (b"", nonce, key), (b"x" * 4097, nonce, key)):
+            with self.assertRaises(ValueError):
+                bridge._per_launch_core_frame(*invalid)
+
     def test_one_final_windows_crlf_is_canonicalized_without_stripping_any_other_bytes(self):
         canonical = RECEIPT.read_bytes()
         self.assertTrue(canonical.endswith(b"\n"))
@@ -60,6 +85,11 @@ class Core963RealFictionalOneCommandTests(unittest.TestCase):
         self.assertIn("--synthetic-only", bridge.CHILD)
         self.assertIn("--ephemeral-demo", bridge.CHILD)
         self.assertIn("D2_RECEIPT_FLAG", source)
+        self.assertIn("D2_SESSION_BATCH_FLAG", source)
+        self.assertIn("signed_frame = _per_launch_core_frame(canonical_receipt, nonce, secret)", source)
+        self.assertIn("gui.stdin.write(signed_frame)", source)
+        self.assertIn("env=child_env", source)
+        self.assertIn('"-SessionFramePath", str(frame)', source)
         self.assertIn("cwd=exe.parent", source)
         self.assertNotIn('parser.add_argument("--files"', source)
         self.assertNotIn('parser.add_argument("--patient"', source)

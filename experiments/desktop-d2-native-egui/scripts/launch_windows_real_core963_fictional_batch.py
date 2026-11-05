@@ -12,7 +12,9 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import hmac
 import json
+import secrets
 import os
 from pathlib import Path
 import re
@@ -23,7 +25,11 @@ import time
 
 CORE963_SHA = "e32141c3e4dd28eb03e47149625a86f0ebb2d386"
 EXE_NAME = "medorigin-desktop-d2-native-egui.exe"
-D2_RECEIPT_FLAG = "--synthetic-core-file-batch-receipt-stdin"
+D2_RECEIPT_FLAG = "--synthetic-core-file-batch-receipt-stdin"  # Legacy unbound QA only.
+D2_SESSION_BATCH_FLAG = "--synthetic-core-file-batch-session-stdin"
+CORE_BATCH_DOMAIN = b"MedOrigin-D2-FICTIONAL-CORE-BATCH-V1\x00"
+ENV_SESSION_KEY = "MEDORIGIN_D2_FICTIONAL_SESSION_KEY"
+ENV_SESSION_NONCE = "MEDORIGIN_D2_FICTIONAL_SESSION_NONCE"
 MAX_RECEIPT = 4096
 FALSE_FIELDS = (
     "source_filenames_included", "patient_identity_included",
@@ -96,6 +102,16 @@ def _canonicalize_windows_stdout(raw: bytes) -> bytes:
     return raw
 
 
+def _per_launch_core_frame(raw: bytes, nonce: bytes, secret: bytes) -> bytes:
+    # No raw key or nonce in the command line, file contents or Core CLI.
+    # Separate HMAC domain from historical 2 KiB readback (no cross-mode replay).
+    if len(nonce) != 16 or len(secret) != 32 or not 0 < len(raw) <= MAX_RECEIPT:
+        raise ValueError("core963_session_framing_bounds_refused")
+    signed = CORE_BATCH_DOMAIN + nonce + len(raw).to_bytes(4, "big") + raw
+    mac = hmac.new(secret, signed, hashlib.sha256).digest()
+    return CORE_BATCH_DOMAIN + nonce + mac + raw
+
+
 def _verified_receipt(raw: bytes) -> dict[str, object]:
     if not isinstance(raw, bytes) or not 0 < len(raw) <= MAX_RECEIPT:
         raise ValueError("core963_output_bounds_refused")
@@ -162,6 +178,16 @@ def launch(source: Path, exe: Path, expected_sha: str, *, qa_auto_close: bool, q
         _verified_receipt(canonical_receipt)
         if _file_sha(exe) != expected_sha:
             raise ValueError("d2_native_gui_changed_during_core_qa")
+        nonce = secrets.token_bytes(16)
+        secret = secrets.token_bytes(32)
+        if len(nonce) != 16 or len(secret) != 32:
+            raise ValueError("core963_per_launch_os_random_refused")
+        signed_frame = _per_launch_core_frame(canonical_receipt, nonce, secret)
+        child_env = {
+            **os.environ,
+            ENV_SESSION_NONCE: nonce.hex(),
+            ENV_SESSION_KEY: secret.hex(),
+        }
         if qa_uia:
             # The LIVE output of this actual Core invocation, never the fixture,
             # is fed to the physical native GUI UIAutomation script.
@@ -172,13 +198,19 @@ def launch(source: Path, exe: Path, expected_sha: str, *, qa_auto_close: bool, q
             if live.exists():
                 raise ValueError("core963_live_source_output_preexisting")
             live.write_bytes(canonical_receipt)
+            frame = work / "source-owned-core963-live-session-frame.bin"
+            if frame.exists():
+                raise ValueError("core963_live_session_frame_preexisting")
+            frame.write_bytes(signed_frame)
             try:
                 outcome = subprocess.run([
                     "powershell.exe", "-NoProfile", "-NonInteractive", "-File", str(uia),
                     "-ExePath", str(exe),
                     "-ExpectedExeSha256", expected_sha,
                     "-LiveReceiptPath", str(live),
-                ], cwd=exe.parent, capture_output=True, timeout=65, check=False)
+                    "-SessionFramePath", str(frame),
+                ], cwd=exe.parent, env=child_env,
+                capture_output=True, timeout=65, check=False)
             except (OSError, subprocess.TimeoutExpired) as exc:
                 raise ValueError("core963_live_native_uia_execution_refused") from exc
             if (outcome.returncode != 0 or
@@ -190,14 +222,14 @@ def launch(source: Path, exe: Path, expected_sha: str, *, qa_auto_close: bool, q
             return
         try:
             gui = subprocess.Popen(
-                [str(exe), D2_RECEIPT_FLAG],
+                [str(exe), D2_SESSION_BATCH_FLAG],
                 # The GUI must outlive disposable Core source files in normal
                 # interactive mode; never keep the temp directory as its CWD.
-                cwd=exe.parent, stdin=subprocess.PIPE,
+                cwd=exe.parent, stdin=subprocess.PIPE, env=child_env,
                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
             )
             assert gui.stdin is not None
-            gui.stdin.write(canonical_receipt)
+            gui.stdin.write(signed_frame)
             gui.stdin.close()
         except (OSError, BrokenPipeError, AssertionError) as exc:
             raise ValueError("core963_d2_native_handoff_refused") from exc
