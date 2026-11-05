@@ -2081,6 +2081,40 @@ impl MedOriginNativePreview {
         Ok(())
     }
 
+    // Walk only the *currently visible* fictional worklist, never an
+    // unrelated patient group or a hidden type facet. Direct worklist
+    // selection resets graph history, just like clicking a record.
+    fn bundle_step_visible(&mut self, forward: bool) -> Result<(), &'static str> {
+        let bundle = self
+            .synthetic_bundle
+            .as_ref()
+            .ok_or("synthetic_bundle_missing")?;
+        let available: Vec<usize> = (0..bundle.resources.len())
+            .filter(|index| self.bundle_visible(*index))
+            .collect();
+        let target = match self.synthetic_bundle_selected {
+            Some(current) => {
+                let Some(position) = available.iter().position(|index| *index == current) else {
+                    self.clear_fictional_output();
+                    return Err("synthetic_bundle_stale_worklist_selection");
+                };
+                if forward {
+                    available.get(position + 1)
+                } else {
+                    position
+                        .checked_sub(1)
+                        .and_then(|index| available.get(index))
+                }
+            }
+            None if forward => available.first(),
+            None => available.last(),
+        };
+        let Some(&target) = target else {
+            return Err("synthetic_bundle_worklist_boundary");
+        };
+        self.bundle_select(target)
+    }
+
     fn bundle_move(&mut self, index: usize) -> Result<(), &'static str> {
         let Some(bundle) = self.synthetic_bundle.as_ref() else {
             return Err("synthetic_bundle_missing");
@@ -2179,6 +2213,7 @@ impl MedOriginNativePreview {
             Patient(Option<usize>),
             Type(&'static str),
             Select(usize),
+            Step(bool),
             Follow(usize),
             Incoming(usize, usize),
             Back,
@@ -2226,6 +2261,16 @@ impl MedOriginNativePreview {
                 "Bundle: {} of {} fictional resources visible",
                 visible, bundle.resources.len()
             ));
+            if visible > 0 {
+                ui.horizontal(|ui| {
+                    if ui.button("Bundle: Previous visible record").clicked() {
+                        next = Some(Action::Step(false));
+                    }
+                    if ui.button("Bundle: Next visible record").clicked() {
+                        next = Some(Action::Step(true));
+                    }
+                });
+            }
             for (index, resource) in bundle.resources.iter().enumerate() {
                 if self.bundle_visible(index)
                     && ui
@@ -2316,6 +2361,9 @@ impl MedOriginNativePreview {
             }
             Some(Action::Select(index)) => {
                 let _ = self.bundle_select(index);
+            }
+            Some(Action::Step(forward)) => {
+                let _ = self.bundle_step_visible(forward);
             }
             Some(Action::Follow(index)) => {
                 let _ = self.bundle_follow_outgoing(index);
@@ -2987,6 +3035,47 @@ mod tests {
         assert_eq!(
             app.bundle_follow_incoming(1, 0),
             Err("synthetic_bundle_history_or_destination_refused")
+        );
+        assert!(app.synthetic_bundle.is_none());
+        assert!(app.synthetic_bundle_history.is_empty());
+    }
+
+    #[test]
+    fn visible_worklist_step_stays_inside_patient_and_type_and_refuses_stale_selection() {
+        let raw = include_bytes!("../fixtures/core/synthetic-multipatient-fhir-bundle.json");
+        let mut app = MedOriginNativePreview::from_one_time_synthetic_bundle_stdin(raw).unwrap();
+        assert_eq!(app.synthetic_bundle_selected, Some(0));
+        assert_eq!(
+            app.bundle_step_visible(false),
+            Err("synthetic_bundle_worklist_boundary")
+        );
+        assert_eq!(app.synthetic_bundle_selected, Some(0));
+        app.bundle_step_visible(true).unwrap();
+        assert_eq!(app.synthetic_bundle_selected, Some(1));
+        assert!(app.synthetic_bundle_history.is_empty());
+
+        app.bundle_set_patient(Some(4)).unwrap();
+        app.bundle_set_type("Observation").unwrap();
+        app.bundle_step_visible(true).unwrap();
+        assert_eq!(app.synthetic_bundle_selected, Some(6));
+        app.bundle_step_visible(true).unwrap();
+        assert_eq!(app.synthetic_bundle_selected, Some(7));
+        assert_eq!(
+            app.bundle_step_visible(true),
+            Err("synthetic_bundle_worklist_boundary")
+        );
+        assert_eq!(app.synthetic_bundle_selected, Some(7));
+        app.bundle_step_visible(false).unwrap();
+        assert_eq!(app.synthetic_bundle_selected, Some(6));
+        assert!(app.synthetic_bundle_history.is_empty());
+        assert!(!app.bundle_visible(2));
+
+        // Simulated stale index from another patient cannot be walked into,
+        // and invalid state is cleared rather than retaining any record.
+        app.synthetic_bundle_selected = Some(2);
+        assert_eq!(
+            app.bundle_step_visible(true),
+            Err("synthetic_bundle_stale_worklist_selection")
         );
         assert!(app.synthetic_bundle.is_none());
         assert!(app.synthetic_bundle_history.is_empty());
