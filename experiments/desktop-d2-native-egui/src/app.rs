@@ -682,6 +682,9 @@ pub struct MedOriginNativePreview {
     focused_workspace_visible: bool,
     synthetic_bundle: Option<SyntheticBundlePreview>,
     synthetic_bundle_selected: Option<usize>,
+    // Ephemeral checklist for source-only fictional records. Never saved to
+    // Core, SQLite, OS storage, clinical audit or any approval workflow.
+    synthetic_bundle_seen: Vec<bool>,
     synthetic_bundle_history: Vec<usize>,
     synthetic_bundle_patient: Option<usize>,
     synthetic_bundle_type: &'static str,
@@ -768,8 +771,10 @@ impl MedOriginNativePreview {
             .resources
             .iter()
             .position(|r| r.resource_type == "Patient");
+        let record_count = bundle.resources.len();
         Ok(Self {
             synthetic_bundle: Some(bundle),
+            synthetic_bundle_seen: vec![false; record_count],
             synthetic_bundle_patient: first_patient,
             synthetic_bundle_selected: first_patient,
             synthetic_bundle_type: "All",
@@ -1232,6 +1237,7 @@ impl MedOriginNativePreview {
         self.focused_workspace_visible = false;
         self.synthetic_bundle = None;
         self.synthetic_bundle_selected = None;
+        self.synthetic_bundle_seen.clear();
         self.synthetic_bundle_history.clear();
         self.synthetic_bundle_patient = None;
         self.synthetic_bundle_type = "";
@@ -1270,6 +1276,7 @@ impl MedOriginNativePreview {
         self.focused_workspace_visible = false;
         self.synthetic_bundle = None;
         self.synthetic_bundle_selected = None;
+        self.synthetic_bundle_seen.clear();
         self.synthetic_bundle_history.clear();
         self.synthetic_bundle_patient = None;
         self.synthetic_bundle_type = "";
@@ -2128,6 +2135,86 @@ impl MedOriginNativePreview {
         self.bundle_select(target)
     }
 
+    /// Mark only the currently displayed member of the structurally admitted
+    /// fake Bundle. This is a per-session "seen" checkbox, NOT a review,
+    /// clinical assessment, approval, consent, or persistent audit event.
+    fn bundle_mark_seen(&mut self) -> Result<(), &'static str> {
+        let Some(bundle) = self.synthetic_bundle.as_ref() else {
+            return Err("synthetic_bundle_missing");
+        };
+        if self.synthetic_bundle_seen.len() != bundle.resources.len()
+            || bundle.resources.len() > crate::synthetic_bundle::MAX_SYNTHETIC_BUNDLE_RESOURCES
+        {
+            self.clear_fictional_output();
+            return Err("synthetic_bundle_seen_source_mismatch");
+        }
+        let Some(index) = self.synthetic_bundle_selected else {
+            return Err("synthetic_bundle_no_current_resource");
+        };
+        if !self.bundle_visible(index) {
+            self.clear_fictional_output();
+            return Err("synthetic_bundle_seen_hidden_or_stale_resource");
+        }
+        self.synthetic_bundle_seen[index] = true;
+        self.synthetic_bundle_notice = Some("Fictional record marked seen in this session only");
+        Ok(())
+    }
+
+    /// Bounded search over only the active patient and type facet. The
+    /// selected resource is not implicitly marked; a clinician-facing
+    /// completion state is intentionally absent.
+    fn bundle_next_unseen(&mut self) -> Result<(), &'static str> {
+        let Some(bundle) = self.synthetic_bundle.as_ref() else {
+            return Err("synthetic_bundle_missing");
+        };
+        if self.synthetic_bundle_seen.len() != bundle.resources.len()
+            || bundle.resources.len() > crate::synthetic_bundle::MAX_SYNTHETIC_BUNDLE_RESOURCES
+        {
+            self.clear_fictional_output();
+            return Err("synthetic_bundle_seen_source_mismatch");
+        }
+        let visible: Vec<usize> = (0..bundle.resources.len())
+            .filter(|index| self.bundle_visible(*index))
+            .collect();
+        if let Some(current) = self.synthetic_bundle_selected
+            && !visible.contains(&current)
+        {
+            self.clear_fictional_output();
+            return Err("synthetic_bundle_seen_stale_selection");
+        }
+        let offset = self
+            .synthetic_bundle_selected
+            .and_then(|current| visible.iter().position(|index| *index == current))
+            .map_or(0, |position| (position + 1) % visible.len());
+        let next = visible
+            .iter()
+            .cycle()
+            .skip(offset)
+            .take(visible.len())
+            .find(|index| !self.synthetic_bundle_seen[**index])
+            .copied();
+        if let Some(index) = next {
+            // Direct selection also clears source relationship breadcrumbs.
+            self.bundle_select(index)
+        } else {
+            self.synthetic_bundle_notice = Some("All visible fictional records seen (demo only)");
+            Err("synthetic_bundle_all_visible_seen")
+        }
+    }
+
+    fn bundle_reset_seen(&mut self) -> Result<(), &'static str> {
+        let Some(bundle) = self.synthetic_bundle.as_ref() else {
+            return Err("synthetic_bundle_missing");
+        };
+        if self.synthetic_bundle_seen.len() != bundle.resources.len() {
+            self.clear_fictional_output();
+            return Err("synthetic_bundle_seen_source_mismatch");
+        }
+        self.synthetic_bundle_seen.fill(false);
+        self.synthetic_bundle_notice = Some("Fictional session visit checklist reset");
+        Ok(())
+    }
+
     fn bundle_move(&mut self, index: usize) -> Result<(), &'static str> {
         let Some(bundle) = self.synthetic_bundle.as_ref() else {
             return Err("synthetic_bundle_missing");
@@ -2221,12 +2308,20 @@ impl MedOriginNativePreview {
         let Some(bundle) = self.synthetic_bundle.clone() else {
             return;
         };
+        if self.synthetic_bundle_seen.len() != bundle.resources.len() {
+            self.clear_fictional_output();
+            ui.label("FAIL CLOSED: fictional visit checklist differs from source");
+            return;
+        }
         enum Action {
             Clear,
             Patient(Option<usize>),
             Type(&'static str),
             Select(usize),
             Step(bool),
+            MarkSeen,
+            NextUnseen,
+            ResetSeen,
             Follow(usize),
             Incoming(usize, usize),
             Back,
@@ -2284,6 +2379,21 @@ impl MedOriginNativePreview {
                     }
                 });
             }
+            let seen_visible = (0..bundle.resources.len())
+                .filter(|index| self.bundle_visible(*index) && self.synthetic_bundle_seen[*index])
+                .count();
+            ui.strong(format!(
+                "Bundle: {seen_visible} of {visible} visible fictional records seen (session only)"
+            ));
+            ui.label("Seen is a temporary demo checklist, NOT a clinical review or approval.");
+            ui.horizontal_wrapped(|ui| {
+                if ui.button("Bundle: Next unseen visible record").clicked() {
+                    next = Some(Action::NextUnseen);
+                }
+                if ui.button("Bundle: Reset seen (session only)").clicked() {
+                    next = Some(Action::ResetSeen);
+                }
+            });
             for (index, resource) in bundle.resources.iter().enumerate() {
                 if self.bundle_visible(index)
                     && ui
@@ -2308,6 +2418,15 @@ impl MedOriginNativePreview {
                     current.resource_type, current.resource_id
                 ));
                 ui.monospace(format!("Verified fictional URN: {}", current.full_url));
+                ui.label(format!(
+                    "Bundle: Selected fictional visit status: {}",
+                    if self.synthetic_bundle_seen[index] { "seen" } else { "not seen" }
+                ));
+                if !self.synthetic_bundle_seen[index]
+                    && ui.button("Bundle: Mark current seen (demo only)").clicked()
+                {
+                    next = Some(Action::MarkSeen);
+                }
                 let incoming = bundle.resources.iter()
                     .flat_map(|resource| resource.links.iter())
                     .filter(|link| link.target == current.full_url)
@@ -2377,6 +2496,15 @@ impl MedOriginNativePreview {
             }
             Some(Action::Step(forward)) => {
                 let _ = self.bundle_step_visible(forward);
+            }
+            Some(Action::MarkSeen) => {
+                let _ = self.bundle_mark_seen();
+            }
+            Some(Action::NextUnseen) => {
+                let _ = self.bundle_next_unseen();
+            }
+            Some(Action::ResetSeen) => {
+                let _ = self.bundle_reset_seen();
             }
             Some(Action::Follow(index)) => {
                 let _ = self.bundle_follow_outgoing(index);
@@ -3119,6 +3247,116 @@ mod tests {
         );
         assert!(app.synthetic_bundle.is_none());
         assert!(app.synthetic_bundle_history.is_empty());
+    }
+
+    #[test]
+    fn fake_bundle_seen_progress_is_session_only_and_patient_facet_scoped() {
+        let raw = include_bytes!("../fixtures/core/synthetic-multipatient-fhir-bundle.json");
+        let mut app = MedOriginNativePreview::from_one_time_synthetic_bundle_stdin(raw).unwrap();
+        assert_eq!(app.synthetic_bundle_seen, vec![false; 8]);
+        app.bundle_mark_seen().unwrap();
+        assert!(app.synthetic_bundle_seen[0]);
+        app.bundle_next_unseen().unwrap();
+        assert_eq!(app.synthetic_bundle_selected, Some(1));
+        assert!(app.synthetic_bundle_history.is_empty());
+        // Navigating does NOT implicitly mark a record.
+        assert!(!app.synthetic_bundle_seen[1]);
+        app.bundle_mark_seen().unwrap();
+        assert_eq!(
+            app.synthetic_bundle_seen
+                .iter()
+                .filter(|done| **done)
+                .count(),
+            2
+        );
+
+        app.bundle_set_patient(Some(4)).unwrap();
+        app.bundle_set_type("Observation").unwrap();
+        assert_eq!(app.synthetic_bundle_selected, None);
+        app.bundle_next_unseen().unwrap();
+        assert_eq!(app.synthetic_bundle_selected, Some(6));
+        assert!(!app.synthetic_bundle_seen[6]);
+        app.bundle_mark_seen().unwrap();
+        app.bundle_next_unseen().unwrap();
+        assert_eq!(app.synthetic_bundle_selected, Some(7));
+        app.bundle_mark_seen().unwrap();
+        assert_eq!(
+            app.bundle_next_unseen(),
+            Err("synthetic_bundle_all_visible_seen")
+        );
+        assert_eq!(app.synthetic_bundle_selected, Some(7));
+        assert_eq!(
+            app.synthetic_bundle_seen
+                .iter()
+                .filter(|done| **done)
+                .count(),
+            4
+        );
+        assert!(!app.synthetic_bundle_seen[2]);
+        assert!(!app.synthetic_bundle_seen[3]);
+
+        // Reset is explicitly global to this one in-memory fictional session.
+        app.bundle_reset_seen().unwrap();
+        assert_eq!(app.synthetic_bundle_seen, vec![false; 8]);
+        app.bundle_next_unseen().unwrap();
+        assert_eq!(app.synthetic_bundle_selected, Some(6));
+        app.bundle_set_patient(Some(0)).unwrap();
+        assert_eq!(app.synthetic_bundle_seen, vec![false; 8]);
+        app.bundle_next_unseen().unwrap();
+        assert_eq!(app.synthetic_bundle_selected, Some(0));
+        app.clear_fictional_output();
+        assert!(app.synthetic_bundle.is_none());
+        assert!(app.synthetic_bundle_seen.is_empty());
+    }
+
+    #[test]
+    fn fake_bundle_seen_stale_source_or_hidden_patient_fail_closed() {
+        let raw = include_bytes!("../fixtures/core/synthetic-multipatient-fhir-bundle.json");
+        let mut app = MedOriginNativePreview::from_one_time_synthetic_bundle_stdin(raw).unwrap();
+        app.synthetic_bundle_seen.pop();
+        assert_eq!(
+            app.bundle_next_unseen(),
+            Err("synthetic_bundle_seen_source_mismatch")
+        );
+        assert_eq!(app.synthetic_bundle_resource_count(), 0);
+        assert!(app.synthetic_bundle_seen.is_empty());
+
+        let mut app = MedOriginNativePreview::from_one_time_synthetic_bundle_stdin(raw).unwrap();
+        app.bundle_set_patient(Some(4)).unwrap();
+        app.synthetic_bundle_selected = Some(2); // belongs to fake patient 1
+        assert_eq!(
+            app.bundle_mark_seen(),
+            Err("synthetic_bundle_seen_hidden_or_stale_resource")
+        );
+        assert_eq!(app.synthetic_bundle_resource_count(), 0);
+        assert!(app.synthetic_bundle_seen.is_empty());
+
+        let mut app = MedOriginNativePreview::from_one_time_synthetic_bundle_stdin(raw).unwrap();
+        app.bundle_set_type("Observation").unwrap();
+        assert_eq!(
+            app.bundle_mark_seen(),
+            Err("synthetic_bundle_no_current_resource")
+        );
+        assert_eq!(app.synthetic_bundle_resource_count(), 8);
+        app.bundle_next_unseen().unwrap();
+        app.bundle_mark_seen().unwrap();
+        // Source reload cannot retain fake completion from a prior session.
+        app.open_embedded_fictional_bundle_demo().unwrap();
+        assert_eq!(app.synthetic_bundle_seen, vec![false; 8]);
+    }
+
+    #[test]
+    fn fake_bundle_seen_navigation_does_not_invent_graph_relationships() {
+        let raw = include_bytes!("../fixtures/core/synthetic-multipatient-fhir-bundle.json");
+        let mut app = MedOriginNativePreview::from_one_time_synthetic_bundle_stdin(raw).unwrap();
+        app.bundle_follow_incoming(1, 0).unwrap();
+        assert_eq!(app.synthetic_bundle_history, vec![0]);
+        app.bundle_mark_seen().unwrap();
+        app.bundle_next_unseen().unwrap();
+        assert_eq!(app.synthetic_bundle_selected, Some(2));
+        assert!(app.synthetic_bundle_history.is_empty());
+        assert!(app.synthetic_bundle_seen[1]);
+        assert!(!app.synthetic_bundle_seen[2]);
     }
 
     #[test]
