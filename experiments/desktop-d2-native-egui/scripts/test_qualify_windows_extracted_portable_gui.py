@@ -233,6 +233,40 @@ class ExtractedPortableWindowsGuiTests(unittest.TestCase):
                 self._call()
         self.assertEqual(list(self.scratch.iterdir()), [])
 
+    def test_reopened_zip_advertises_oversized_member_before_any_extraction(self):
+        original = zipfile.ZipFile.infolist
+
+        def oversized(zip_file):
+            entries = original(zip_file)
+            for item in entries:
+                if item.filename.endswith("/LICENSE"):
+                    item.file_size = 1024 * 1024 + 1
+            return entries
+
+        with TemporaryDirectory(dir=self.scratch) as stage:
+            with (
+                patch.object(zipfile.ZipFile, "infolist", oversized),
+                self.assertRaisesRegex(ValueError, "extraction_member_size_refused"),
+            ):
+                qa._extract_verified_archive(self.archive, Path(stage), self.exe_sha)
+            self.assertEqual(list(Path(stage).iterdir()), [])
+
+    def test_reopened_zip_extraction_stream_cannot_exceed_member_limit(self):
+        with TemporaryDirectory(dir=self.scratch) as stage:
+            original = zipfile.ZipFile.open
+
+            def excessive(zip_file, name, *args, **kwargs):
+                if name.endswith("/LICENSE"):
+                    return io.BytesIO(b"x" * (1024 * 1024 + 1))
+                return original(zip_file, name, *args, **kwargs)
+
+            with (
+                patch.object(zipfile.ZipFile, "open", excessive),
+                self.assertRaisesRegex(ValueError, "extraction_member_limit_exceeded"),
+            ):
+                qa._extract_verified_archive(self.archive, Path(stage), self.exe_sha)
+        self.assertEqual(list(self.scratch.iterdir()), [])
+
     def test_bad_digest_encodings_fail_closed(self):
         for malformed in ("A" * 64, "a" * 63, "a" * 64 + chr(10), "not_sha"):
             with (

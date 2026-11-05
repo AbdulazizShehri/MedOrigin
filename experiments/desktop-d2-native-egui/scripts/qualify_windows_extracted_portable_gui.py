@@ -80,16 +80,35 @@ def _extract_verified_archive(archive: Path, stage: Path, expected_binary: str) 
     with zipfile.ZipFile(archive, "r") as zf:
         members = zf.infolist()
         wanted = [ARCHIVE_ROOT + "/" + name for name in MEMBERS]
-        if sorted(info.filename for info in members) != sorted(wanted):
+        if len(members) != len(wanted) or sorted(info.filename for info in members) != sorted(
+            wanted
+        ):
             raise ValueError("portable_qa_archive_members_not_allowlisted")
+        # The already-verified ZIP is re-opened for extraction. Bound every
+        # member's advertised AND actually decompressed size in case it was
+        # concurrently replaced after verification, before any GUI execution.
+        info_by_name = {info.filename: info for info in members}
+        for name in MEMBERS:
+            source = ARCHIVE_ROOT + "/" + name
+            upper = 120 * 1024 * 1024 if name == EXECUTABLE else 1024 * 1024
+            size = info_by_name[source].file_size
+            if size < 0 or size > upper:
+                raise ValueError("portable_qa_extraction_member_size_refused")
         target_root = stage / ARCHIVE_ROOT
         target_root.mkdir()
         for name in MEMBERS:
             source = ARCHIVE_ROOT + "/" + name
             output = target_root / name
+            upper = 120 * 1024 * 1024 if name == EXECUTABLE else 1024 * 1024
+            written = 0
             with zf.open(source, "r") as stream, output.open("xb") as destination:
-                while chunk := stream.read(1024 * 1024):
+                while chunk := stream.read(min(1024 * 1024, upper - written + 1)):
+                    written += len(chunk)
+                    if written > upper:
+                        raise ValueError("portable_qa_extraction_member_limit_exceeded")
                     destination.write(chunk)
+            if written != info_by_name[source].file_size:
+                raise ValueError("portable_qa_extraction_member_size_changed")
     binary = target_root / EXECUTABLE
     if _sha(binary) != expected_binary:
         raise ValueError("portable_qa_extracted_binary_changed")
