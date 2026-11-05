@@ -4,7 +4,8 @@
 param(
   [Parameter(Mandatory=$true)][string]$ExePath,
   [Parameter(Mandatory=$true)][ValidatePattern('^[a-fA-F0-9]{64}$')][string]$ExpectedSha256,
-  [Parameter(Mandatory=$true)][ValidatePattern('^[a-fA-F0-9]{64}$')][string]$FixtureSha256
+  [Parameter(Mandatory=$true)][ValidatePattern('^[a-fA-F0-9]{64}$')][string]$FixtureSha256,
+  [switch]$EmbeddedDemo
 )
 $ErrorActionPreference='Stop'
 $process=$null
@@ -25,15 +26,17 @@ try {
   Add-Type -AssemblyName UIAutomationTypes
   $info=New-Object System.Diagnostics.ProcessStartInfo
   $info.FileName=$exe
-  $info.Arguments='--synthetic-multipatient-bundle-stdin'
+  $info.Arguments=if($EmbeddedDemo){''}else{'--synthetic-multipatient-bundle-stdin'}
   $info.UseShellExecute=$false
-  $info.RedirectStandardInput=$true
+  $info.RedirectStandardInput= -not [bool]$EmbeddedDemo
   $process=New-Object System.Diagnostics.Process
   $process.StartInfo=$info
   if(-not $process.Start()) {throw 'native_process_start_refused'}
-  $bytes=[IO.File]::ReadAllBytes($fixture)
-  $process.StandardInput.BaseStream.Write($bytes,0,$bytes.Length)
-  $process.StandardInput.Close()
+  if(-not $EmbeddedDemo){
+    $bytes=[IO.File]::ReadAllBytes($fixture)
+    $process.StandardInput.BaseStream.Write($bytes,0,$bytes.Length)
+    $process.StandardInput.Close()
+  }
   $root=[System.Windows.Automation.AutomationElement]::RootElement
   $window=$null
   for($i=0;$i -lt 90;$i++) {
@@ -88,6 +91,10 @@ try {
     }
     throw ('bundle_native_button_missing: '+$wanted)
   }
+  if($EmbeddedDemo){
+    Expect 'Native Rust Experiment'
+    Press 'Open built-in two-patient fictional demo (NO PHI)'
+  }
   Expect 'Fictional Multi-Patient Workspace'
   Expect '8 imaginary source-only records across 2 fictional patients'
   Expect 'Bundle: 4 of 8 fictional resources visible'
@@ -127,7 +134,11 @@ try {
   if(Has 'Bundle record: Observation/fictional-observation-003') {
     throw 'fictional_bundle_record_leaked_after_clear'
   }
-  Write-Output 'WINDOWS_NATIVE_EIGHT_RECORD_TWO_PATIENT_STRUCTURAL_FHIR_BUNDLE_GROUP_GRAPH_UIA_PASS_NONCLINICAL'
+  if($EmbeddedDemo){
+    Write-Output 'WINDOWS_NOARG_ONE_CLICK_EMBEDDED_MULTIPATIENT_UIA_PASS_NONCLINICAL'
+  }else{
+    Write-Output 'WINDOWS_NATIVE_EIGHT_RECORD_TWO_PATIENT_STRUCTURAL_FHIR_BUNDLE_GROUP_GRAPH_UIA_PASS_NONCLINICAL'
+  }
 } catch {
   [Console]::Error.WriteLine('WINDOWS_NATIVE_MULTIPATIENT_STRUCTURAL_BUNDLE_UIA_NO_GO: '+$_.Exception.Message)
   exit 1

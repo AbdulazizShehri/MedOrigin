@@ -777,6 +777,19 @@ impl MedOriginNativePreview {
         })
     }
 
+    /// One-click, compiled, nonclinical demo from the same strict reviewed
+    /// fictional fixture. No stdin/file picker, Core process or new network
+    /// permission. This is opt-in, never implicit on native default startup.
+    fn open_embedded_fictional_bundle_demo(&mut self) -> Result<(), &'static str> {
+        const DEMO: &[u8] =
+            include_bytes!("../fixtures/core/synthetic-multipatient-fhir-bundle.json");
+        let admitted = Self::from_one_time_synthetic_bundle_stdin(DEMO).inspect_err(|_| {
+            self.clear_fictional_output();
+        })?;
+        *self = admitted;
+        Ok(())
+    }
+
     pub fn synthetic_bundle_resource_count(&self) -> usize {
         self.synthetic_bundle
             .as_ref()
@@ -2467,6 +2480,16 @@ impl eframe::App for MedOriginNativePreview {
             if ui.button("Verify synthetic SHA-256").clicked() {
                 let _ = self.hash_selected();
             }
+            if self.encrypted_readback.is_none() {
+                ui.label("Explore the compiled, source-reviewed fictional Bundle without importing any files.");
+                if ui
+                    .button("Open built-in two-patient fictional demo (NO PHI)")
+                    .clicked()
+                {
+                    let _ = self.open_embedded_fictional_bundle_demo();
+                    return;
+                }
+            }
             if let Some(result) = &self.result {
                 // Preserve the original standalone UIA/AX SHA text node. The
                 // FHIR status is a distinct accessible node for screen readers.
@@ -3037,6 +3060,23 @@ mod tests {
             Err("synthetic_bundle_history_or_destination_refused")
         );
         assert!(app.synthetic_bundle.is_none());
+        assert!(app.synthetic_bundle_history.is_empty());
+    }
+
+    #[test]
+    fn no_arg_native_home_opens_compiled_dummy_bundle_only_after_explicit_action() {
+        let mut app = MedOriginNativePreview::default();
+        assert_eq!(app.synthetic_bundle_resource_count(), 0);
+        assert!(app.encrypted_readback.is_none());
+        app.open_embedded_fictional_bundle_demo().unwrap();
+        assert_eq!(app.synthetic_bundle_resource_count(), 8);
+        assert_eq!(app.synthetic_bundle_selected, Some(0));
+        assert_eq!(app.synthetic_bundle_patient, Some(0));
+        assert!(!app.has_external_synthetic_encrypted_readback());
+        app.bundle_step_visible(true).unwrap();
+        assert_eq!(app.synthetic_bundle_selected, Some(1));
+        app.clear_fictional_output();
+        assert_eq!(app.synthetic_bundle_resource_count(), 0);
         assert!(app.synthetic_bundle_history.is_empty());
     }
 
