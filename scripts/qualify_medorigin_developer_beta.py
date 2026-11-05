@@ -147,6 +147,58 @@ def installed_wheel_matches(wheel: Path, python: Path, expected_minor: int) -> i
     return len(expected)
 
 
+def _checked_core_preview_destination(destination: Path) -> Path:
+    """Only a fresh absolute location with a real, existing, non-symlink parent.
+
+    The requested location is never overwritten and the output contains
+    only nonclinical, source-verified, fictional FHIR provenance metadata.
+    """
+    if (
+        not isinstance(destination, Path)
+        or not destination.is_absolute()
+        or ".." in destination.parts
+        or destination.exists()
+        or destination.is_symlink()
+        or not destination.name
+        or not destination.parent.is_dir()
+        or destination.parent.is_symlink()
+        or destination.parent.resolve(strict=True) != destination.parent
+    ):
+        raise QualificationError("core negative-truth preview destination refused")
+    return destination
+
+
+def _promote_core_preview(
+    staged: Path,
+    destination: Path,
+    *,
+    record_sha256: str,
+    preview_sha256: str,
+) -> None:
+    """Promote the two already verified inert artifacts on one filesystem.
+
+    Staging is always inside the destination's parent. This never
+    deletes, merges into, or silently overwrites an existing output.
+    """
+    if (
+        {item.name for item in staged.iterdir()}
+        != {"core-negative-truth.json", "core-negative-truth.html"}
+        or any(item.is_symlink() or not item.is_file() for item in staged.iterdir())
+        or hashlib.sha256(
+            (staged / "core-negative-truth.json").read_bytes()
+        ).hexdigest() != record_sha256
+        or hashlib.sha256(
+            (staged / "core-negative-truth.html").read_bytes()
+        ).hexdigest() != preview_sha256
+    ):
+        raise QualificationError("core negative-truth staged evidence mismatch")
+    _checked_core_preview_destination(destination)
+    try:
+        staged.rename(destination)
+    except OSError as exc:
+        raise QualificationError("core negative-truth evidence promotion refused") from exc
+
+
 def source_qualified_core_negative_truth_preview(
     checkout: Path,
     cli311: Path,
