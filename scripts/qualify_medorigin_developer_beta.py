@@ -431,7 +431,9 @@ def qualify(
             or receipt.get("publication_authorized") is not False
             or receipt.get("clinical_authorized") is not False
         ):
-            raise QualificationError("synthetic Developer Beta receipt falsely claimed qualification")
+            raise QualificationError(
+                "synthetic Developer Beta receipt falsely claimed qualification"
+            )
         preview = (output / "preview.html").read_text(encoding="utf-8")
         if (
             "connect-src 'none'" not in preview
