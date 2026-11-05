@@ -266,6 +266,20 @@ jobs:
             throw 'Real installed Core R4 required-code behavior failed'
           }
 
+          # The opt-in official R4 STRUCTURAL mode requires this exact
+          # jsonschema wheel inside BOTH independently installed Core CLI
+          # interpreters. Install only AFTER the immutable Core Wheel/sdist
+          # and baseline source-bound CLI qualification above; do not
+          # change Core runtime dependencies, production lock or releases.
+          uv pip install --python $python311 'jsonschema==4.25.1'
+          if ($LASTEXITCODE -ne 0) {
+            throw 'Optional official R4 schema dependency install failed on Python 3.11'
+          }
+          uv pip install --python $python312 'jsonschema==4.25.1'
+          if ($LASTEXITCODE -ne 0) {
+            throw 'Optional official R4 schema dependency install failed on Python 3.12'
+          }
+
           # New actual end-user CLI: source-scoped read-only import plan with
           # exact offline HL7 R4 structure and timezone/date readiness,
           # before ANY encrypted store exists. Reuse already-attested real
