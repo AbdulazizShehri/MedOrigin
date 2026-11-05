@@ -114,6 +114,64 @@ def _bundle_preflight_main(argv: list[str]) -> int:
     return 0
 
 
+def _file_batch_readiness_main(argv: list[str]) -> int:
+    """Read-only local import preview; no encrypted store or patient output."""
+    if argv in (["-h"], ["--help"]):
+        print(
+            "usage: medscale fhir file-batch-readiness --synthetic-only "
+            "[--offline-r4-schema OFFICIAL_R4_ZIP] "
+            "FICTIONAL_BUNDLE_1 FICTIONAL_BUNDLE_2 "
+            "[FICTIONAL_BUNDLE_3 ... FICTIONAL_BUNDLE_4]\\n"
+            "Offline dry run for 2-4 invented local Bundles: reviewed source "
+            "relationships, timeline/date readiness and optional source-pinned "
+            "official R4 structure. Reports only per-source day/count summary. "
+            "NO storage, PHI, full FHIR conformance, or clinical approval."
+        )
+        return 0
+    refused = "file readiness refused: explicit_fictional_readonly_batch_required"
+    if not 3 <= len(argv) <= 7 or argv[0] != "--synthetic-only":
+        print(refused, file=sys.stderr)
+        return 2
+    cursor = 1
+    schema: Path | None = None
+    if len(argv) > 2 and argv[1] == "--offline-r4-schema":
+        if (
+            len(argv) < 5
+            or not argv[2]
+            or argv[2].startswith("--")
+        ):
+            print(refused, file=sys.stderr)
+            return 2
+        schema = Path(argv[2])
+        cursor = 3
+    names = argv[cursor:]
+    if not 2 <= len(names) <= 4 or any(
+        not name or name.startswith("--") for name in names
+    ):
+        print(refused, file=sys.stderr)
+        return 2
+    try:
+        sources = [read_fhir_json_document(Path(name)) for name in names]
+    except FhirInputError:
+        print("file readiness refused: fictional_source_input_refused", file=sys.stderr)
+        return 1
+    try:
+        from medscale.fhirkit.workspace_file_readiness import (
+            fictional_file_batch_readiness_json,
+        )
+
+        receipt = fictional_file_batch_readiness_json(
+            sources, synthetic_only=True, offline_r4_schema=schema
+        )
+    except Exception:
+        print("file readiness refused: source_or_timeline_preflight_refused", file=sys.stderr)
+        return 2
+    print(receipt, end="")
+    # A read-only preview, even with official R4 JSON Schema, is NOT
+    # a successful FHIR/clinical conformance assertion.
+    return 2
+
+
 def _fictional_encrypted_file_batch_demo_main(argv: list[str]) -> int:
     """Actual caller-selected invented JSON -> encrypted ephemeral cold reopen.
 
@@ -671,6 +729,8 @@ def main(argv: list[str] | None = None) -> int:
         return _multi_timeline_demo_main(tokens[1:])
     if tokens and tokens[0] == "timeline-demo":
         return _timeline_demo_main(tokens[1:])
+    if tokens and tokens[0] == "file-batch-readiness":
+        return _file_batch_readiness_main(tokens[1:])
     if tokens and tokens[0] == "file-batch-encrypted-demo":
         return _fictional_encrypted_file_batch_demo_main(tokens[1:])
     if tokens and tokens[0] == "batch-bundle-diagnose":
