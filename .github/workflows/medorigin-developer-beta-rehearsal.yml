@@ -14,6 +14,7 @@ on:
       - "examples/synthetic_fhir_developer_beta/**"
       - "tests/test_medorigin_prepublication_rehearsal.py"
       - "tests/test_core_r4_required_status_bindings.py"
+      - "tests/test_core_r4_observation_exclusive_choice.py"
       - "src/medscale/fhirkit/bundle.py"
       - "src/medscale/fhirkit/bundle_diagnostics.py"
       - "scripts/qa_medorigin_installed_r4_status_binding.py"
@@ -172,6 +173,7 @@ jobs:
               --with 'jsonschema==4.25.1' `
               -- python -m pytest -q `
               tests/test_core_r4_required_status_bindings.py `
+              tests/test_core_r4_observation_exclusive_choice.py `
               tests/test_core_synthetic_bundle_preflight.py `
               tests/test_core_multi_patient_reference_consistency.py `
               tests/test_core_bundle_rejection_operationoutcome.py `
