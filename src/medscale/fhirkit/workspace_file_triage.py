@@ -9,7 +9,6 @@ No FHIR profiles/terminology/clinical conformance, EHR, storage or PHI.
 from __future__ import annotations
 
 import json
-from pathlib import Path
 from typing import Any
 
 from medscale.fhirkit.bundle import (
