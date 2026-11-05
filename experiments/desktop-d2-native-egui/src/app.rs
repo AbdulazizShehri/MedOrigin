@@ -883,6 +883,33 @@ impl MedOriginNativePreview {
         self.core_batch_select(target)
     }
 
+    /// Explicit first/last visible source jump. Every jump goes through the
+    /// same source-verified selection gate as ordinary navigation and remains
+    /// purely in-memory; it never marks a clinician review.
+    fn core_batch_jump_visible_boundary(&mut self, last: bool) -> Result<(), &'static str> {
+        let Some(batch) = self.core_file_batch.as_ref() else {
+            return Err("fictional_batch_missing_source");
+        };
+        if self.core_file_batch_inspected.len() != batch.imports.len() {
+            self.clear_fictional_output();
+            return Err("fictional_batch_stale_progress_refused");
+        }
+        let target = if last {
+            (0..batch.imports.len())
+                .rev()
+                .find(|index| self.core_batch_visible(*index))
+        } else {
+            (0..batch.imports.len()).find(|index| self.core_batch_visible(*index))
+        };
+        let Some(target) = target else {
+            self.core_file_batch_selected = None;
+            self.core_file_batch_notice =
+                Some("No visible fictional imports in the current source-only filter");
+            return Err("fictional_batch_no_visible_imports");
+        };
+        self.core_batch_select(target)
+    }
+
     fn core_batch_next_uninspected(&mut self) -> Result<(), &'static str> {
         let Some(batch) = self.core_file_batch.as_ref() else {
             return Err("fictional_batch_missing_source");
@@ -2812,6 +2839,7 @@ impl MedOriginNativePreview {
             Clear,
             Select(usize),
             Step(bool),
+            Boundary(bool),
             NextUninspected,
             ActivityOnly(bool),
             OpenedOnly(bool),
@@ -2859,6 +2887,12 @@ impl MedOriginNativePreview {
                 if ui.button("Core batch: Next visible import").clicked() {
                     action = Some(Action::Step(true));
                 }
+                if ui.button("Core batch: First visible import").clicked() {
+                    action = Some(Action::Boundary(false));
+                }
+                if ui.button("Core batch: Last visible import").clicked() {
+                    action = Some(Action::Boundary(true));
+                }
                 if !self.core_file_batch_opened_only {
                     if ui.button("Core batch: Open next unexplored import").clicked() {
                         action = Some(Action::NextUninspected);
@@ -2867,6 +2901,7 @@ impl MedOriginNativePreview {
                     ui.label("Core batch: Show unopened imports before exploring a new source.");
                 }
             });
+            ui.label("Keyboard in this fictional worklist: Left/Right = previous/next, Home/End = first/last visible import. No patient records.");
             ui.horizontal_wrapped(|ui| {
                 if self.core_file_batch_activity_only {
                     if ui.button("Core batch: Show all imports").clicked() {
@@ -2960,6 +2995,24 @@ impl MedOriginNativePreview {
                 ui.label("Hashes identify reported bytes only; they do not prove the source process or real patients.");
             });
         });
+        if action.is_none()
+            && ui.input(|input| {
+                !input.modifiers.alt
+                    && !input.modifiers.ctrl
+                    && !input.modifiers.shift
+                    && !input.modifiers.command
+            })
+        {
+            if ui.input(|input| input.key_pressed(egui::Key::ArrowLeft)) {
+                action = Some(Action::Step(false));
+            } else if ui.input(|input| input.key_pressed(egui::Key::ArrowRight)) {
+                action = Some(Action::Step(true));
+            } else if ui.input(|input| input.key_pressed(egui::Key::Home)) {
+                action = Some(Action::Boundary(false));
+            } else if ui.input(|input| input.key_pressed(egui::Key::End)) {
+                action = Some(Action::Boundary(true));
+            }
+        }
         match action {
             Some(Action::Clear) => self.clear_fictional_output(),
             Some(Action::Select(index)) => {
@@ -2967,6 +3020,9 @@ impl MedOriginNativePreview {
             }
             Some(Action::Step(forward)) => {
                 let _ = self.core_batch_step(forward);
+            }
+            Some(Action::Boundary(last)) => {
+                let _ = self.core_batch_jump_visible_boundary(last);
             }
             Some(Action::NextUninspected) => {
                 let _ = self.core_batch_next_uninspected();
@@ -3890,6 +3946,81 @@ mod tests {
         );
         assert!(app.core_file_batch.is_none());
         assert!(!app.core_file_batch_opened_only);
+    }
+
+    #[test]
+    fn core_file_batch_boundary_jump_and_filter_have_no_hidden_import_escape() {
+        let mut app = MedOriginNativePreview::from_one_time_core_file_batch_receipt_stdin(
+            CORE_FILE_BATCH_REAL,
+        )
+        .unwrap();
+        assert_eq!(app.core_batch_jump_visible_boundary(true), Ok(()));
+        assert_eq!(app.core_file_batch_selected, Some(1));
+        assert_eq!(app.core_file_batch_inspected, [false, true]);
+        assert_eq!(app.core_batch_jump_visible_boundary(false), Ok(()));
+        assert_eq!(app.core_file_batch_selected, Some(0));
+        assert_eq!(app.core_file_batch_inspected, [true, true]);
+        assert_eq!(app.core_batch_opened_filter(true), Ok(()));
+        assert_eq!(app.core_batch_jump_visible_boundary(true), Ok(()));
+        assert_eq!(app.core_file_batch_selected, Some(1));
+        assert_eq!(app.core_batch_activity_filter(true), Ok(()));
+        assert_eq!(app.core_batch_jump_visible_boundary(false), Ok(()));
+        assert_eq!(app.core_file_batch_selected, Some(0));
+        assert_eq!(app.core_batch_reset_exploration(), Ok(()));
+        assert_eq!(app.core_file_batch_inspected, [false, false]);
+        assert_eq!(app.core_file_batch_selected, None);
+    }
+
+    #[test]
+    fn core_file_batch_boundary_jump_skips_zero_activity_source() {
+        let mut value: serde_json::Value = serde_json::from_slice(CORE_FILE_BATCH_REAL).unwrap();
+        value["imports"][1]["verified_timeline_event_count"] = serde_json::json!(0);
+        value["verified_timeline_event_count"] = serde_json::json!(2);
+        let mut bytes = serde_json::to_vec(&value).unwrap();
+        bytes.push(b'\n');
+        let mut app =
+            MedOriginNativePreview::from_one_time_core_file_batch_receipt_stdin(&bytes).unwrap();
+        assert_eq!(app.core_batch_select(1), Ok(()));
+        assert_eq!(app.core_batch_activity_filter(true), Ok(()));
+        assert!(!app.core_batch_visible(1));
+        assert_eq!(app.core_batch_jump_visible_boundary(true), Ok(()));
+        assert_eq!(app.core_file_batch_selected, Some(0));
+        assert_eq!(app.core_file_batch_inspected, [true, true]);
+        assert_eq!(app.core_batch_opened_filter(true), Ok(()));
+        assert_eq!(app.core_batch_jump_visible_boundary(true), Ok(()));
+        assert_eq!(app.core_file_batch_selected, Some(0));
+        app.clear_fictional_output();
+        assert_eq!(
+            app.core_batch_jump_visible_boundary(false),
+            Err("fictional_batch_missing_source")
+        );
+    }
+
+    #[test]
+    fn core_file_batch_empty_boundary_and_corrupted_progress_refuse() {
+        let mut app = MedOriginNativePreview::from_one_time_core_file_batch_receipt_stdin(
+            CORE_FILE_BATCH_REAL,
+        )
+        .unwrap();
+        assert_eq!(app.core_batch_opened_filter(true), Ok(()));
+        assert_eq!(
+            app.core_batch_jump_visible_boundary(false),
+            Err("fictional_batch_no_visible_imports")
+        );
+        assert_eq!(app.core_file_batch_selected, None);
+        assert_eq!(app.core_batch_opened_filter(false), Ok(()));
+        assert_eq!(app.core_batch_select(0), Ok(()));
+        app.core_file_batch_inspected.pop();
+        assert_eq!(
+            app.core_batch_jump_visible_boundary(true),
+            Err("fictional_batch_stale_progress_refused")
+        );
+        assert!(app.core_file_batch.is_none());
+        assert!(app.core_file_batch_inspected.is_empty());
+        assert_eq!(
+            app.core_batch_jump_visible_boundary(false),
+            Err("fictional_batch_missing_source")
+        );
     }
 
     #[test]

@@ -166,6 +166,13 @@ try {
   Expect 'Core batch exploration: 2 of 2 visible fictional imports opened'
   Press 'Core batch: Previous visible import'
   Expect 'Core batch: Selected import 1'
+  # Product first/last visible jump controls must stay within the real
+  # source-scoped session filter, not hidden fictional imports.
+  Press 'Core batch: Last visible import'
+  Expect 'Core batch: Selected import 2'
+  Press 'Core batch: First visible import'
+  Expect 'Core batch: Selected import 1'
+  Expect 'Keyboard in this fictional worklist: Left/Right'
   Press 'Core batch: Only imports with activity'
   Expect 'Core batch: Show all imports'
   Expect 'Core batch exploration: 2 of 2 visible fictional imports opened'
@@ -184,6 +191,7 @@ try {
   }
   Write-Output 'WINDOWS_REAL_CORE963_TWO_FILES_ENCRYPTED_REOPEN_REDACTED_D2_NATIVE_UIA_PASS_NONCLINICAL'
   Write-Output 'D2_CORE_BATCH_OPENED_ONLY_ACTUAL_WINDOWS_UIA_PASS_NONCLINICAL'
+  Write-Output 'D2_CORE_BATCH_VISIBLE_BOUNDARY_ACTUAL_WINDOWS_UIA_PASS_NONCLINICAL'
 } catch {
   [Console]::Error.WriteLine('WINDOWS_REAL_CORE963_REDACTED_BATCH_UIA_NO_GO: '+$_.Exception.Message)
   exit 1

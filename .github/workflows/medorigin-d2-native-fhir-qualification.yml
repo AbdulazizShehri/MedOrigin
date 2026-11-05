@@ -264,6 +264,8 @@ jobs:
             'Core batch: Open next unexplored import',
             'Core batch: Previous visible import',
             'Core batch: Next visible import',
+            'Core batch: First visible import',
+            'Core batch: Last visible import',
             'Core batch: Only imports with activity',
             'Core batch: Reset session exploration',
             'Core batch: Open import 2',
@@ -271,6 +273,7 @@ jobs:
             'Core batch: Show opened and unopened imports',
             'opened_only_facet_reexposed_unopened_import',
             'D2_CORE_BATCH_OPENED_ONLY_ACTUAL_WINDOWS_UIA_PASS_NONCLINICAL',
+            'D2_CORE_BATCH_VISIBLE_BOUNDARY_ACTUAL_WINDOWS_UIA_PASS_NONCLINICAL',
             'Core batch: Clear redacted receipt',
             'WINDOWS_REAL_CORE963_TWO_FILES_ENCRYPTED_REOPEN_REDACTED_D2_NATIVE_UIA_PASS_NONCLINICAL'
           )) {

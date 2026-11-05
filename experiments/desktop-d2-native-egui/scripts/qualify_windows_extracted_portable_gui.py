@@ -38,7 +38,7 @@ TESTS = (
     (
         "windows-real-core963-file-batch-receipt-uia.ps1",
         "-ExpectedExeSha256",
-        "D2_CORE_BATCH_OPENED_ONLY_ACTUAL_WINDOWS_UIA_PASS_NONCLINICAL",
+        "D2_CORE_BATCH_VISIBLE_BOUNDARY_ACTUAL_WINDOWS_UIA_PASS_NONCLINICAL",
     ),
 )
 MEMBERS = (
