@@ -52,6 +52,12 @@ _FIXED_LOCAL_FAILURES: dict[str, str] = {
     "incomplete_observation_subset": (
         "A synthetic Observation lacks an admitted status or code shape."
     ),
+    "encounter_status_not_in_r4_required_codes": (
+        "A synthetic Encounter status is not a required-binding HL7 FHIR R4 v4.0.1 code."
+    ),
+    "observation_status_not_in_r4_required_codes": (
+        "A synthetic Observation status is not a required-binding HL7 FHIR R4 v4.0.1 code."
+    ),
     "required_local_reference_missing_or_malformed": (
         "A required synthetic local subject or encounter reference is malformed."
     ),
