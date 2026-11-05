@@ -128,9 +128,11 @@ def _verified_receipt(raw: bytes) -> dict[str, object]:
     return source
 
 
-def launch(source: Path, exe: Path, expected_sha: str, *, qa_auto_close: bool) -> None:
+def launch(source: Path, exe: Path, expected_sha: str, *, qa_auto_close: bool, qa_uia: bool = False) -> None:
     if sys.platform != "win32":
         raise ValueError("windows_owner_host_required")
+    if qa_auto_close and qa_uia:
+        raise ValueError("core963_qa_modes_mutually_exclusive")
     if source.is_symlink():
         raise ValueError("core963_source_reparse_root_refused")
     source = source.resolve(strict=True)
@@ -160,6 +162,32 @@ def launch(source: Path, exe: Path, expected_sha: str, *, qa_auto_close: bool) -
         _verified_receipt(canonical_receipt)
         if _file_sha(exe) != expected_sha:
             raise ValueError("d2_native_gui_changed_during_core_qa")
+        if qa_uia:
+            # The LIVE output of this actual Core invocation, never the fixture,
+            # is fed to the physical native GUI UIAutomation script.
+            uia = Path(__file__).resolve().parent.parent / "tests" / "windows-real-core963-file-batch-receipt-uia.ps1"
+            if uia.is_symlink() or not uia.is_file():
+                raise ValueError("core963_native_uia_script_missing")
+            live = work / "source-owned-redacted-core963-live-receipt.json"
+            if live.exists():
+                raise ValueError("core963_live_source_output_preexisting")
+            live.write_bytes(canonical_receipt)
+            try:
+                outcome = subprocess.run([
+                    "powershell.exe", "-NoProfile", "-NonInteractive", "-File", str(uia),
+                    "-ExePath", str(exe),
+                    "-ExpectedExeSha256", expected_sha,
+                    "-LiveReceiptPath", str(live),
+                ], cwd=exe.parent, capture_output=True, timeout=65, check=False)
+            except (OSError, subprocess.TimeoutExpired) as exc:
+                raise ValueError("core963_live_native_uia_execution_refused") from exc
+            if (outcome.returncode != 0 or
+                b"WINDOWS_REAL_CORE963_TWO_FILES_ENCRYPTED_REOPEN_REDACTED_D2_NATIVE_UIA_PASS_NONCLINICAL"
+                not in outcome.stdout):
+                raise ValueError("core963_live_native_gui_uia_refused")
+            print("CORE963_LIVE_ENCRYPTED_TWO_FILE_SOURCE_TO_NATIVE_WINDOWS_UIA_PASS_NONCLINICAL")
+            print("REDACTED_RECEIPT_SHA256=" + hashlib.sha256(canonical_receipt).hexdigest())
+            return
         try:
             gui = subprocess.Popen(
                 [str(exe), D2_RECEIPT_FLAG],
@@ -193,10 +221,11 @@ if __name__ == "__main__":
     parser.add_argument("--native-exe", type=Path, required=True)
     parser.add_argument("--native-sha256", type=str, required=True)
     parser.add_argument("--qa-auto-close", action="store_true")
+    parser.add_argument("--qa-uia", action="store_true")
     try:
         args = parser.parse_args()
         launch(args.core_source, args.native_exe, args.native_sha256,
-               qa_auto_close=args.qa_auto_close)
+               qa_auto_close=args.qa_auto_close, qa_uia=args.qa_uia)
     except (ValueError, OSError) as exc:
         # Deliberately never echo paths, Core stderr, input bytes or exceptions.
         print("CORE963_TO_NATIVE_ONE_COMMAND_NO_GO:" + str(exc), file=sys.stderr)

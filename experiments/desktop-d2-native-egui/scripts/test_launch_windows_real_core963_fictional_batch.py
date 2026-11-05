@@ -65,6 +65,19 @@ class Core963RealFictionalOneCommandTests(unittest.TestCase):
         self.assertNotIn('parser.add_argument("--patient"', source)
         self.assertIn("not a signed installed-core runtime", source.lower())
 
+    def test_live_source_uia_requires_exact_fixture_and_mutually_exclusive_qa_mode(self):
+        harness = (ROOT / "tests/windows-real-core963-file-batch-receipt-uia.ps1").read_text(encoding="utf-8")
+        launcher = Path(bridge.__file__).read_text(encoding="utf-8")
+        self.assertIn("LiveReceiptPath", harness)
+        self.assertIn("live_core_source_receipt_not_canonical", harness)
+        self.assertIn("34beba4dd887ab5e26fb8ceaf91d06f85a6ebaca349359aa0f9ecccb612d2292", harness)
+        self.assertIn("CORE963_LIVE_ENCRYPTED_TWO_FILE_SOURCE_TO_NATIVE_WINDOWS_UIA_PASS_NONCLINICAL", launcher)
+        self.assertIn("live.write_bytes(canonical_receipt)", launcher)
+        self.assertIn("qa_auto_close and qa_uia", launcher)
+        with patch.object(sys, "platform", "win32"):
+            with self.assertRaisesRegex(ValueError, "core963_qa_modes_mutually_exclusive"):
+                bridge.launch(Path("no-core"), Path("wrong.exe"), "0" * 64, qa_auto_close=True, qa_uia=True)
+
     def test_wrong_os_refused_before_python_or_native_process(self):
         with patch.object(sys, "platform", "linux"):
             with self.assertRaisesRegex(ValueError, "windows_owner_host_required"):
