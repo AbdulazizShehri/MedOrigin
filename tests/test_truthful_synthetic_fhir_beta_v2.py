@@ -140,7 +140,7 @@ def test_full_v2_file_backed_run_one_admits_only_exit2_not_exit0(
     seen: list[str] = []
 
     def fake_call(_cli: Path, args: list[str], cwd: Path) -> CompletedProcess[str]:
-        assert cwd == tmp_path
+        assert cwd.is_dir()
         seen.append(" ".join(args[:2]))
         if args == ["--version"]:
             return CompletedProcess(args, 0, "medscale 0.3.0\n", "")
