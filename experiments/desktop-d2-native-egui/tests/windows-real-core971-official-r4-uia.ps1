@@ -105,6 +105,19 @@ try {
   if(@(Names | Where-Object {$_ -like '*fictional-patient-001*' -or $_ -like '*INVENTED_PRIVATE_NAME*'}).Count -gt 0){
     throw 'native_receipt_patient_identity_visible'
   }
+  Expect 'Core batch exploration: 0 of 2 visible fictional imports opened'
+  Expect 'Core batch: No fictional import opened this session'
+  Press 'Core batch: Open next unexplored import'
+  Expect 'Core batch: Selected import 1'
+  Expect 'Core batch: Import 1 R4 structure: source-reported checked, NOT FHIR validated'
+  Press 'Core batch: Next visible import'
+  Expect 'Core batch: Selected import 2'
+  Expect 'Core batch: Import 2 R4 structure: source-reported checked, NOT FHIR validated'
+  Press 'Core batch: Only imports with activity'
+  Expect 'Core batch: Show all imports'
+  Press 'Core batch: Reset session exploration'
+  Expect 'Core batch: No fictional import opened this session'
+  Expect 'Official R4: 2 of 2 invented files structurally assessed (NOT FHIR validated)'
   Press 'Core batch: Clear redacted receipt'
   Expect 'Native Rust Experiment'
   if(@(Names | Where-Object {$_ -like '*Core: 2 independent fictional imports*'}).Count -gt 0){
