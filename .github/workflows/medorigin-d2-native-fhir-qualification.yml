@@ -104,6 +104,14 @@ jobs:
           & $py -m unittest discover -s experiments/desktop-d2-native-egui/scripts -p test_age_synthetic_workspace.py -v
           if ($LASTEXITCODE -ne 0) { throw 'Synthetic workspace consent/permissions/overwrite contract failed' }
           Write-Output 'SYNTHETIC_AGE_WORKSPACE_SOURCE_ONLY_NO_CI_CRYPTO_OR_CLINICAL_APPROVAL'
+      - name: Guarded Core979 cross-patient official R4 HMAC native source contract
+        shell: pwsh
+        run: |
+          $py = if ($IsWindows) { 'python' } else { 'python3' }
+          & $py -m unittest discover -s experiments/desktop-d2-native-egui/scripts -p test_launch_windows_real_core979_guarded_r4_fictional_batch.py -v
+          if ($LASTEXITCODE -ne 0) { throw 'Core979 reference-protected R4 HMAC source contract failed' }
+          Write-Output 'CORE979_REVIEWED_SOURCE_ONLY_R4_HMAC_GUARD_PASS_NOT_LIVE_EXECUTION'
+
       - name: Source-only Core971 genuine official R4 structural-to-native fail-close contract
         shell: pwsh
         run: |
