@@ -4,7 +4,8 @@
 param(
   [Parameter(Mandatory=$true)][string]$ExePath,
   [Parameter(Mandatory=$true)][ValidatePattern('^[0-9a-fA-F]{64}$')][string]$ExpectedExeSha256,
-  [string]$LiveReceiptPath = ''
+  [string]$LiveReceiptPath = '',
+  [string]$SessionFramePath = ''
 )
 $ErrorActionPreference='Stop'
 $process=$null
@@ -38,18 +39,49 @@ try {
     }
     $receipt=$live
   }
+  $bytes=[IO.File]::ReadAllBytes($receipt)
+  $launchBytes=$bytes
+  $flag='--synthetic-core-file-batch-receipt-stdin'
+  if($SessionFramePath){
+    if(-not $LiveReceiptPath){throw 'session_frame_requires_live_source_core_receipt'}
+    $frameItem=Get-Item -LiteralPath $SessionFramePath -ErrorAction Stop
+    if($frameItem.PSIsContainer -or
+       ($frameItem.Attributes -band [IO.FileAttributes]::ReparsePoint)){
+      throw 'unreviewed_core_session_frame_path'
+    }
+    $frameBytes=[IO.File]::ReadAllBytes($frameItem.FullName)
+    $domain=[Text.Encoding]::ASCII.GetBytes("MedOrigin-D2-FICTIONAL-CORE-BATCH-V1" + [char]0)
+    $headerLength=$domain.Length+16+32
+    if($frameBytes.Length -ne $bytes.Length+$headerLength -or
+       $frameBytes.Length -gt 4096+$headerLength){
+      throw 'core963_session_frame_size_refused'
+    }
+    for($i=0;$i -lt $domain.Length;$i++){
+      if($frameBytes[$i] -ne $domain[$i]){throw 'core963_session_domain_refused'}
+    }
+    $payload=[byte[]]$frameBytes[$headerLength..($frameBytes.Length-1)]
+    if([Convert]::ToBase64String($payload) -cne [Convert]::ToBase64String($bytes)){
+      throw 'core963_session_payload_not_actual_live_source'
+    }
+    if($env:MEDORIGIN_D2_FICTIONAL_SESSION_KEY -notmatch '^[0-9a-f]{64}$' -or
+       $env:MEDORIGIN_D2_FICTIONAL_SESSION_NONCE -notmatch '^[0-9a-f]{32}$'){
+      throw 'core963_session_key_or_nonce_missing'
+    }
+    # Receiver independently verifies the secret-bound HMAC.
+    $launchBytes=$frameBytes
+    $flag='--synthetic-core-file-batch-session-stdin'
+  }
   Add-Type -AssemblyName UIAutomationClient
   Add-Type -AssemblyName UIAutomationTypes
   $info=New-Object System.Diagnostics.ProcessStartInfo
   $info.FileName=$exe
-  $info.Arguments='--synthetic-core-file-batch-receipt-stdin'
+  $info.Arguments=$flag
   $info.UseShellExecute=$false
   $info.RedirectStandardInput=$true
   $process=New-Object System.Diagnostics.Process
   $process.StartInfo=$info
   if(-not $process.Start()){throw 'native_launch_failed'}
-  $raw=[IO.File]::ReadAllBytes($receipt)
-  $process.StandardInput.BaseStream.Write($raw,0,$raw.Length)
+  $process.StandardInput.BaseStream.Write($launchBytes,0,$launchBytes.Length)
   $process.StandardInput.Close()
   $desktop=[System.Windows.Automation.AutomationElement]::RootElement
   $window=$null

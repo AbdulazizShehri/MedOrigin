@@ -135,6 +135,12 @@ class Core971OfficialR4NativeTests(unittest.TestCase):
         uia = ROOT / "tests/windows-real-core971-official-r4-uia.ps1"
         self.assertIn("Official R4: 2 of 2", uia.read_text("utf8"))
         self.assertIn("ExpectedReceiptSha256", uia.read_text("utf8"))
+        self.assertIn("SessionFramePath", uia.read_text("utf8"))
+        self.assertIn("--synthetic-core-file-batch-session-stdin", uia.read_text("utf8"))
+        self.assertIn("legacy._per_launch_core_frame(receipt, nonce, secret)", code)
+        self.assertIn("legacy.D2_SESSION_BATCH_FLAG", code)
+        self.assertIn("env=session_env", code)
+        self.assertNotIn("[str(exe), legacy.D2_RECEIPT_FLAG]", code)
         self.assertIn("Core batch: Import 1 R4 structure:", uia.read_text("utf8"))
         self.assertIn("Core batch: Import 2 R4 structure:", uia.read_text("utf8"))
         self.assertIn("Core batch: Reset session exploration", uia.read_text("utf8"))
