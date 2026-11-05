@@ -205,6 +205,8 @@ def source_qualified_core_negative_truth_preview(
     cli312: Path,
     python311: Path,
     python312: Path,
+    *,
+    evidence_destination: Path | None = None,
 ) -> dict[str, Any]:
     """Explicit nonrelease Core lane: actual installed modules, inert truthful UI.
 
@@ -212,6 +214,12 @@ def source_qualified_core_negative_truth_preview(
     and native installed Python byte inventories pass.
     """
     import importlib.util
+
+    checked_destination = (
+        None
+        if evidence_destination is None
+        else _checked_core_preview_destination(evidence_destination)
+    )
 
     def _module(file: Path, label: str) -> Any:
         spec = importlib.util.spec_from_file_location(label, file)
@@ -235,7 +243,10 @@ def source_qualified_core_negative_truth_preview(
             [cli311, cli312],
             interpreters=[python311, python312],
         )
-        with tempfile.TemporaryDirectory(prefix="medorigin-core-negative-preview-") as temp:
+        with tempfile.TemporaryDirectory(
+            prefix="medorigin-core-negative-preview-",
+            dir=checked_destination.parent if checked_destination is not None else None,
+        ) as temp:
             root = Path(temp)
             created = renderer.write_negative_truth_preview(root / "evidence", proof)
             evidence = root / "evidence"
@@ -268,6 +279,13 @@ def source_qualified_core_negative_truth_preview(
                 )
             ):
                 raise QualificationError("unsafe Core negative-truth preview")
+            if checked_destination is not None:
+                _promote_core_preview(
+                    evidence,
+                    checked_destination,
+                    record_sha256=created["record_sha256"],
+                    preview_sha256=created["preview_sha256"],
+                )
     except QualificationError:
         raise
     except Exception as exc:
@@ -281,6 +299,7 @@ def source_qualified_core_negative_truth_preview(
         "installed_python_source_files_verified_per_runtime": None,
         "native_python_module_execution": True,
         "source_qualified_negative_truth_preview": True,
+        "durable_negative_truth_preview_exported": checked_destination is not None,
         "known_report_sha256": proof["known_report_sha256"],
         "unknown_report_sha256": proof["unknown_report_sha256"],
         "record_sha256": created["record_sha256"],
