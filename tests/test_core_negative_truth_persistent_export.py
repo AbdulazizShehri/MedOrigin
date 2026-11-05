@@ -137,6 +137,38 @@ def test_missing_parent_or_relative_output_is_refused_before_any_write(
     assert not (tmp_path / "missing-parent").exists()
 
 
+def test_existing_empty_directory_is_also_refused_without_overwrite(
+    tmp_path: Path,
+) -> None:
+    checkout = _synthetic_checkout(tmp_path)
+    existing = tmp_path / "existing-empty"
+    existing.mkdir()
+    with pytest.raises(qualifier.QualificationError, match="destination refused"):
+        _execute_export(checkout, existing)
+    assert existing.is_dir()
+    assert list(existing.iterdir()) == []
+
+
+def test_target_or_parent_symlink_is_refused_without_following_it(
+    tmp_path: Path,
+) -> None:
+    checkout = _synthetic_checkout(tmp_path)
+    real_parent = tmp_path / "real-parent"
+    real_parent.mkdir()
+    alias = tmp_path / "symlinked-parent"
+    target = tmp_path / "symlinked-target"
+    try:
+        alias.symlink_to(real_parent, target_is_directory=True)
+        target.symlink_to(real_parent / "not-yet-created", target_is_directory=True)
+    except (OSError, NotImplementedError):
+        pytest.skip("symlink creation not available in this test environment")
+    with pytest.raises(qualifier.QualificationError, match="destination refused"):
+        _execute_export(checkout, alias / "new-proof")
+    with pytest.raises(qualifier.QualificationError, match="destination refused"):
+        _execute_export(checkout, target)
+    assert list(real_parent.iterdir()) == []
+
+
 def test_wrong_staged_content_hash_cannot_be_promoted(
     tmp_path: Path,
 ) -> None:
