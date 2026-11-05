@@ -40,15 +40,13 @@ pub fn admit_protected_audit_verification(
     let object = value
         .as_object()
         .ok_or("fictional_protected_audit_not_object")?;
-    if object.len() != FIELDS.len()
-        || !FIELDS.iter().all(|name| object.contains_key(*name))
-    {
+    if object.len() != FIELDS.len() || !FIELDS.iter().all(|name| object.contains_key(*name)) {
         return Err("fictional_protected_audit_unknown_or_missing_field");
     }
     // Equality to serde_json's sorted canonical output rejects duplicate keys,
     // whitespace, CRLF and malicious extra source fields.
-    let mut canonical = serde_json::to_vec(&value)
-        .map_err(|_| "fictional_protected_audit_canonical_refused")?;
+    let mut canonical =
+        serde_json::to_vec(&value).map_err(|_| "fictional_protected_audit_canonical_refused")?;
     canonical.push(b'\n');
     if canonical != raw {
         return Err("fictional_protected_audit_noncanonical");
