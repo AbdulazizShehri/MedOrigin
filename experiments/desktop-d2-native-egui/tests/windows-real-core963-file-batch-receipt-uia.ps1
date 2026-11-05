@@ -144,6 +144,23 @@ try {
   Expect 'Core batch: Selected import 1'
   Expect 'Core batch exploration: 1 of 2 visible fictional imports opened'
   Expect 'Core batch: Selected source resources: 3'
+  # The newly integrated native session-only facet must not expose unopened
+  # fictional imports or mislabel session navigation as clinical review.
+  Press 'Core batch: Only imports opened this session'
+  Expect 'Core batch: Show opened and unopened imports'
+  Expect 'Core batch exploration: 1 of 1 visible fictional imports opened'
+  if(@(Names | Where-Object {
+    $_ -ceq 'Core batch: Open import 2' -or
+    $_ -ceq 'Core batch: Open next unexplored import'
+  }).Count -ne 0){
+    throw 'opened_only_facet_reexposed_unopened_import'
+  }
+  Press 'Core batch: Only imports with activity'
+  Expect 'Core batch: Show all imports'
+  Expect 'Core batch exploration: 1 of 1 visible fictional imports opened'
+  Press 'Core batch: Show all imports'
+  Press 'Core batch: Show opened and unopened imports'
+  Expect 'Core batch exploration: 1 of 2 visible fictional imports opened'
   Press 'Core batch: Next visible import'
   Expect 'Core batch: Selected import 2'
   Expect 'Core batch exploration: 2 of 2 visible fictional imports opened'
@@ -166,6 +183,7 @@ try {
     throw 'native_receipt_not_cleared'
   }
   Write-Output 'WINDOWS_REAL_CORE963_TWO_FILES_ENCRYPTED_REOPEN_REDACTED_D2_NATIVE_UIA_PASS_NONCLINICAL'
+  Write-Output 'D2_CORE_BATCH_OPENED_ONLY_ACTUAL_WINDOWS_UIA_PASS_NONCLINICAL'
 } catch {
   [Console]::Error.WriteLine('WINDOWS_REAL_CORE963_REDACTED_BATCH_UIA_NO_GO: '+$_.Exception.Message)
   exit 1
