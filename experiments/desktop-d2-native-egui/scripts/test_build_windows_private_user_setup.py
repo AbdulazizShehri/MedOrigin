@@ -25,7 +25,7 @@ def fake_pe() -> bytes:
 
 class PrivateWindowsUserSetupTests(unittest.TestCase):
     def setUp(self) -> None:
-        temp = tempfile.TemporaryDirectory(prefix="medorigin-private-user-setup-source-test-")
+        temp = tempfile.TemporaryDirectory(prefix="mo-setup-")
         self.addCleanup(temp.cleanup)
         self.work = Path(temp.name)
         self.source = self.work / "reviewed-source"
