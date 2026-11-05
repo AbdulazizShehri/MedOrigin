@@ -20,8 +20,9 @@ Windows one-command launcher remains hard-pinned to clean exact Core #971 SHA 9c
 ## Qualification
 
 - Source-only Windows new Core971 security tests 7 PASS; existing Core963 launcher tests 7 PASS; Linux Core971 source security tests 7 PASS. Ruff lint and formatting of new Python scripts PASS.
-- Native all-target Rust tests/fmt/Clippy, compiled binary SHA and physical Windows GUI worklist navigation: PENDING exact merged-head qualification.
-- Hosted Windows 2025/Ubuntu 24.04 nonpublishing CI: PENDING exact merged-head qualification.
+- Actual Windows owner local exact feature source SHA 80bc14463be22c68cc8eadc200891e27e534bd3a: offline locked Rust **90 native lib + 15 main + 7 browser/network guard tests = 112/112 PASS**, rustfmt --check, strict Clippy -D warnings and native cargo build PASS. Windows compiled native executable SHA-256 **381f1be7c5d99585e49032bacb17567e1113089df8fef48d50e2fd476d8fd75a**. Zero new Rust browser/network permissions or real patient screens.
+- Genuine official HL7 R4 ZIP SHA 75e5560da3cf503895a44c8ca7af17a83b4cca6c2cb5ba1883d2aec0d1cb5ac6 verified in a task-only location, clean exact Core #971 checkout SHA 9c27397f956303f92aeaf4bc173257c093a53238, isolated Windows Python 3.14.7 pin jsonschema 4.25.1. LIVE separate Core process structural preflight on two invented files BEFORE ephemeral AES-GCM encrypted import, close/reopen, audit and cleanup produced strict redacted receipt SHA **41c04dca118a550f9d21976b9cc5f87a58954c96b125748ecb40729153eba057**. The exit code is intentionally 2, not clinical validation. Real Windows compiled native UIAutomation explicitly navigated first and second source, checked EACH source-reported R4 structural-only status, applied activity facet, reset session and cleared the UI, **EXIT 0** with marker **CORE971_LIVE_OFFICIAL_R4_ENCRYPTED_TWO_FILE_SOURCE_TO_NATIVE_UIA_PASS_NONCLINICAL**.
+- Hosted exact source merge HEAD 80bc1446 Windows 2025/Ubuntu 24.04 nonpublishing CI: observed status during qualification; any later documentation-only commit must receive its OWN exact HEAD hosted CI before a final green claim. Hosted CI does not execute graphical UIAutomation.
 
 ## Open risks and policy
 
