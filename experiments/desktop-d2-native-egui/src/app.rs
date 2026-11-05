@@ -674,6 +674,12 @@ pub struct MedOriginNativePreview {
     core_report_selection: usize,
     core_report: Option<CoreProvenanceReceipt>,
     core_file_batch: Option<FictionalCoreFileBatch>,
+    // Source-scoped, ephemeral *exploration* of Core redacted import summaries.
+    // Never represents patient review, clinical verification or approval.
+    core_file_batch_selected: Option<usize>,
+    core_file_batch_inspected: Vec<bool>,
+    core_file_batch_activity_only: bool,
+    core_file_batch_notice: Option<&'static str>,
     core_report_notice: Option<&'static str>,
     external_core_source_visible: bool,
     encrypted_workspace_receipt: Option<FictionalEncryptedWorkspaceReceipt>,
@@ -768,14 +774,142 @@ impl MedOriginNativePreview {
     /// authenticated source or an approved FHIR R4 validator.
     pub fn from_one_time_core_file_batch_receipt_stdin(raw: &[u8]) -> Result<Self, &'static str> {
         let batch = admit_fictional_core_file_batch(raw)?;
+        let inspected = vec![false; batch.imports.len()];
         Ok(Self {
             core_file_batch: Some(batch),
+            core_file_batch_inspected: inspected,
             ..Default::default()
         })
     }
 
     pub fn core_file_batch_import_count(&self) -> usize {
         self.core_file_batch.as_ref().map_or(0, |b| b.imports.len())
+    }
+
+    /// Only source-projected fictional imports can enter the read-only worklist.
+    fn core_batch_visible(&self, index: usize) -> bool {
+        self.core_file_batch
+            .as_ref()
+            .and_then(|batch| batch.imports.get(index))
+            .is_some_and(|item| {
+                !self.core_file_batch_activity_only || item.timeline_event_count > 0
+            })
+    }
+
+    fn core_batch_select(&mut self, index: usize) -> Result<(), &'static str> {
+        let Some(batch) = self.core_file_batch.as_ref() else {
+            return Err("fictional_batch_missing_source");
+        };
+        if index >= batch.imports.len()
+            || self.core_file_batch_inspected.len() != batch.imports.len()
+        {
+            self.clear_fictional_output();
+            return Err("fictional_batch_stale_source_index_or_progress_refused");
+        }
+        if !self.core_batch_visible(index) {
+            self.core_file_batch_selected = None;
+            self.core_file_batch_notice =
+                Some("Only source imports in the current fictional activity filter can be opened");
+            return Err("fictional_batch_hidden_source_refused");
+        }
+        self.core_file_batch_selected = Some(index);
+        self.core_file_batch_inspected[index] = true;
+        self.core_file_batch_notice = None;
+        Ok(())
+    }
+
+    fn core_batch_step(&mut self, forward: bool) -> Result<(), &'static str> {
+        let Some(batch) = self.core_file_batch.as_ref() else {
+            return Err("fictional_batch_missing_source");
+        };
+        if self.core_file_batch_inspected.len() != batch.imports.len() {
+            self.clear_fictional_output();
+            return Err("fictional_batch_stale_progress_refused");
+        }
+        let visible: Vec<usize> = (0..batch.imports.len())
+            .filter(|index| self.core_batch_visible(*index))
+            .collect();
+        let target = match self.core_file_batch_selected {
+            None => {
+                if forward {
+                    visible.first()
+                } else {
+                    visible.last()
+                }
+            }
+            Some(current) => {
+                let Some(position) = visible.iter().position(|index| *index == current) else {
+                    self.core_file_batch_selected = None;
+                    self.core_file_batch_notice =
+                        Some("Selected import is not visible in the current source-only filter");
+                    return Err("fictional_batch_selected_import_hidden_or_stale");
+                };
+                if forward {
+                    visible.get(position + 1)
+                } else {
+                    position.checked_sub(1).and_then(|index| visible.get(index))
+                }
+            }
+        };
+        let Some(target) = target.copied() else {
+            self.core_file_batch_notice =
+                Some("No more visible fictional imports in this direction");
+            return Err("fictional_batch_navigation_end");
+        };
+        self.core_batch_select(target)
+    }
+
+    fn core_batch_next_uninspected(&mut self) -> Result<(), &'static str> {
+        let Some(batch) = self.core_file_batch.as_ref() else {
+            return Err("fictional_batch_missing_source");
+        };
+        if self.core_file_batch_inspected.len() != batch.imports.len() {
+            self.clear_fictional_output();
+            return Err("fictional_batch_stale_progress_refused");
+        }
+        let target = (0..batch.imports.len()).find(|index| {
+            self.core_batch_visible(*index) && !self.core_file_batch_inspected[*index]
+        });
+        let Some(target) = target else {
+            self.core_file_batch_notice =
+                Some("All visible fictional imports opened this session; NOT clinical review");
+            return Err("fictional_batch_no_uninspected_import");
+        };
+        self.core_batch_select(target)
+    }
+
+    fn core_batch_activity_filter(&mut self, active_only: bool) -> Result<(), &'static str> {
+        let Some(batch) = self.core_file_batch.as_ref() else {
+            return Err("fictional_batch_missing_source");
+        };
+        if self.core_file_batch_inspected.len() != batch.imports.len() {
+            self.clear_fictional_output();
+            return Err("fictional_batch_stale_progress_refused");
+        }
+        self.core_file_batch_activity_only = active_only;
+        if self
+            .core_file_batch_selected
+            .is_some_and(|index| !self.core_batch_visible(index))
+        {
+            self.core_file_batch_selected = None;
+        }
+        self.core_file_batch_notice = None;
+        Ok(())
+    }
+
+    fn core_batch_reset_exploration(&mut self) -> Result<(), &'static str> {
+        let Some(batch) = self.core_file_batch.as_ref() else {
+            return Err("fictional_batch_missing_source");
+        };
+        if self.core_file_batch_inspected.len() != batch.imports.len() {
+            self.clear_fictional_output();
+            return Err("fictional_batch_stale_progress_refused");
+        }
+        self.core_file_batch_inspected.fill(false);
+        self.core_file_batch_selected = None;
+        self.core_file_batch_activity_only = false;
+        self.core_file_batch_notice = None;
+        Ok(())
     }
 
     /// Distinct structural FHIR-shaped multi-patient demo, not the SHA-pinned
@@ -1249,6 +1383,10 @@ impl MedOriginNativePreview {
         self.relationship_notice = None;
         self.core_report = None;
         self.core_file_batch = None;
+        self.core_file_batch_selected = None;
+        self.core_file_batch_inspected.clear();
+        self.core_file_batch_activity_only = false;
+        self.core_file_batch_notice = None;
         self.core_report_notice = None;
         self.external_core_source_visible = false;
         self.encrypted_workspace_receipt = None;
@@ -1289,6 +1427,10 @@ impl MedOriginNativePreview {
         self.relationship_notice = None;
         self.core_report = None;
         self.core_file_batch = None;
+        self.core_file_batch_selected = None;
+        self.core_file_batch_inspected.clear();
+        self.core_file_batch_activity_only = false;
+        self.core_file_batch_notice = None;
         self.core_report_notice = None;
         self.external_core_source_visible = false;
         self.encrypted_workspace_receipt = None;
@@ -2588,7 +2730,15 @@ impl MedOriginNativePreview {
         let Some(batch) = self.core_file_batch.clone() else {
             return;
         };
-        let mut clear = false;
+        enum Action {
+            Clear,
+            Select(usize),
+            Step(bool),
+            NextUninspected,
+            ActivityOnly(bool),
+            Reset,
+        }
+        let mut action = None;
         egui::ScrollArea::vertical().show(ui, |ui| {
             ui.heading("MedOrigin - Core encrypted fictional file batch");
             ui.strong("REDACTED RECEIPT ONLY - no patient chart, imported clinical record or PHI.");
@@ -2601,33 +2751,123 @@ impl MedOriginNativePreview {
             ui.label("Every import has one separately scoped imaginary patient. No cross-import identity joining.");
             ui.label("No FHIR R4 conformance, release approval, clinical storage, production key custody or real patient use.");
             if ui.button("Core batch: Clear redacted receipt").clicked() {
-                clear = true;
+                action = Some(Action::Clear);
             }
             ui.separator();
-            ui.strong("Source-scoped fictional encrypted import summaries");
-            for source in &batch.imports {
-                ui.group(|ui| {
-                    ui.strong(format!(
-                        "Core batch: Import {} - {} source resources, {} verified timeline events",
-                        source.ordinal, source.resource_count, source.timeline_event_count
-                    ));
-                    ui.collapsing(
-                        format!("Core batch: Audit anchors for import {}", source.ordinal),
-                        |ui| {
-                            ui.monospace(format!("Source SHA-256: {}", source.source_sha256));
-                            ui.monospace(format!("Import audit SHA-256: {}", source.audit_sha256));
-                        },
-                    );
-                });
+            let visible = (0..batch.imports.len())
+                .filter(|index| self.core_batch_visible(*index)).count();
+            let inspected = (0..batch.imports.len())
+                .filter(|index| self.core_batch_visible(*index)
+                    && self.core_file_batch_inspected.get(*index) == Some(&true))
+                .count();
+            ui.strong(format!(
+                "Core batch exploration: {} of {} visible fictional imports opened (session only, NOT clinical review)",
+                inspected, visible
+            ));
+            ui.horizontal_wrapped(|ui| {
+                if ui.button("Core batch: Previous visible import").clicked() {
+                    action = Some(Action::Step(false));
+                }
+                if ui.button("Core batch: Next visible import").clicked() {
+                    action = Some(Action::Step(true));
+                }
+                if ui.button("Core batch: Open next unexplored import").clicked() {
+                    action = Some(Action::NextUninspected);
+                }
+            });
+            ui.horizontal_wrapped(|ui| {
+                if self.core_file_batch_activity_only {
+                    if ui.button("Core batch: Show all imports").clicked() {
+                        action = Some(Action::ActivityOnly(false));
+                    }
+                } else if ui.button("Core batch: Only imports with activity").clicked() {
+                    action = Some(Action::ActivityOnly(true));
+                }
+                if ui.button("Core batch: Reset session exploration").clicked() {
+                    action = Some(Action::Reset);
+                }
+            });
+            if let Some(message) = self.core_file_batch_notice {
+                ui.label(message);
             }
+            ui.separator();
+            ui.columns(2, |columns| {
+                columns[0].strong("Source-scoped fictional encrypted import summaries");
+                for (index, source) in batch.imports.iter().enumerate() {
+                    if !self.core_batch_visible(index) {
+                        continue;
+                    }
+                    columns[0].group(|ui| {
+                        ui.strong(format!(
+                            "Core batch: Import {} - {} source resources, {} verified timeline events",
+                            source.ordinal, source.resource_count, source.timeline_event_count
+                        ));
+                        ui.label(if self.core_file_batch_selected == Some(index) {
+                            "Selected import (imaginary source only)"
+                        } else if self.core_file_batch_inspected.get(index) == Some(&true) {
+                            "Opened this session (NOT clinical review)"
+                        } else {
+                            "Not opened this session"
+                        });
+                        if ui.button(format!("Core batch: Open import {}", source.ordinal)).clicked() {
+                            action = Some(Action::Select(index));
+                        }
+                    });
+                }
+                columns[1].strong("Fictional source details (read-only)");
+                if let Some(index) = self.core_file_batch_selected {
+                    if self.core_batch_visible(index)
+                        && self.core_file_batch_inspected.get(index) == Some(&true)
+                    {
+                        if let Some(source) = batch.imports.get(index) {
+                            columns[1].heading(format!("Core batch: Selected import {}", source.ordinal));
+                            columns[1].label(format!("Core batch: Selected source resources: {}", source.resource_count));
+                            columns[1].label(format!(
+                                "Core batch: Selected fictional timeline events: {}",
+                                source.timeline_event_count
+                            ));
+                            columns[1].label("Source-scoped summary only. No clinical values, patient name or encounter identity.");
+                            columns[1].collapsing(
+                                format!("Core batch: Audit anchors for import {}", source.ordinal),
+                                |ui| {
+                                    ui.monospace(format!("Source SHA-256: {}", source.source_sha256));
+                                    ui.monospace(format!("Import audit SHA-256: {}", source.audit_sha256));
+                                    ui.label("Reported hashes, NOT sender attestation or signed medical review.");
+                                },
+                            );
+                        }
+                    } else {
+                        columns[1].label("Selected fictional source is hidden; open a visible import.");
+                    }
+                } else {
+                    columns[1].label("Core batch: No fictional import opened this session");
+                }
+            });
+            ui.separator();
             ui.collapsing("Core batch: Report fingerprint (not attestation)", |ui| {
                 ui.monospace(format!("Canonical receipt SHA-256: {}", batch.receipt_sha256));
                 ui.monospace(format!("Last import audit SHA-256: {}", batch.audit_head_sha256));
                 ui.label("Hashes identify reported bytes only; they do not prove the source process or real patients.");
             });
         });
-        if clear {
-            self.clear_fictional_output();
+        match action {
+            Some(Action::Clear) => self.clear_fictional_output(),
+            Some(Action::Select(index)) => {
+                let _ = self.core_batch_select(index);
+            }
+            Some(Action::Step(forward)) => {
+                let _ = self.core_batch_step(forward);
+            }
+            Some(Action::NextUninspected) => {
+                let _ = self.core_batch_next_uninspected();
+            }
+            Some(Action::ActivityOnly(only)) => {
+                let _ = self.core_batch_activity_filter(only);
+            }
+            Some(Action::Reset) => {
+                let _ = self.core_batch_reset_exploration();
+            }
+            None => {}
         }
     }
 }
@@ -3289,6 +3529,169 @@ impl eframe::App for MedOriginNativePreview {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    const CORE_FILE_BATCH_REAL: &[u8] = include_bytes!(
+        "../fixtures/core/core963-real-encrypted-fictional-file-batch-redacted.json"
+    );
+
+    #[test]
+    fn source_run_core_file_batch_has_real_import_worklist_and_session_only_progress() {
+        let mut app = MedOriginNativePreview::from_one_time_core_file_batch_receipt_stdin(
+            CORE_FILE_BATCH_REAL,
+        )
+        .expect("exact actual encrypted source-run Core receipt");
+        assert_eq!(app.core_file_batch_import_count(), 2);
+        assert_eq!(app.core_file_batch_selected, None);
+        assert_eq!(app.core_file_batch_inspected, [false, false]);
+        assert_eq!(app.core_batch_step(true), Ok(()));
+        assert_eq!(app.core_file_batch_selected, Some(0));
+        assert_eq!(app.core_file_batch_inspected, [true, false]);
+        assert_eq!(app.core_batch_next_uninspected(), Ok(()));
+        assert_eq!(app.core_file_batch_selected, Some(1));
+        assert_eq!(app.core_file_batch_inspected, [true, true]);
+        assert_eq!(
+            app.core_batch_next_uninspected(),
+            Err("fictional_batch_no_uninspected_import")
+        );
+        assert!(app.core_file_batch.is_some());
+        assert_eq!(
+            app.core_batch_step(true),
+            Err("fictional_batch_navigation_end")
+        );
+        assert_eq!(app.core_file_batch_selected, Some(1));
+        assert_eq!(app.core_batch_step(false), Ok(()));
+        assert_eq!(app.core_file_batch_selected, Some(0));
+        assert_eq!(app.core_batch_reset_exploration(), Ok(()));
+        assert_eq!(app.core_file_batch_selected, None);
+        assert_eq!(app.core_file_batch_inspected, [false, false]);
+        assert_eq!(app.core_file_batch.as_ref().unwrap().resource_count, 6);
+        app.clear_fictional_output();
+        assert_eq!(app.core_file_batch_import_count(), 0);
+        assert_eq!(app.core_file_batch_selected, None);
+        assert!(app.core_file_batch_inspected.is_empty());
+        assert_eq!(
+            app.core_batch_step(true),
+            Err("fictional_batch_missing_source")
+        );
+    }
+
+    #[test]
+    fn core_file_batch_activity_only_filter_refuses_zero_activity_and_hidden_selection() {
+        // Change only invented counts to simulate a patient-only second import.
+        // The independently source-projected app never receives patient fields.
+        let mut value: serde_json::Value = serde_json::from_slice(CORE_FILE_BATCH_REAL).unwrap();
+        value["imports"][1]["verified_timeline_event_count"] = serde_json::json!(0);
+        value["verified_timeline_event_count"] = serde_json::json!(2);
+        let mut bytes = serde_json::to_vec(&value).unwrap();
+        bytes.push(b'\n');
+        let mut app =
+            MedOriginNativePreview::from_one_time_core_file_batch_receipt_stdin(&bytes).unwrap();
+        assert_eq!(app.core_batch_select(1), Ok(()));
+        assert_eq!(app.core_file_batch_selected, Some(1));
+        assert_eq!(app.core_batch_activity_filter(true), Ok(()));
+        assert_eq!(app.core_file_batch_selected, None);
+        assert!(app.core_batch_visible(0));
+        assert!(!app.core_batch_visible(1));
+        assert_eq!(
+            app.core_batch_select(1),
+            Err("fictional_batch_hidden_source_refused")
+        );
+        assert_eq!(app.core_file_batch_selected, None);
+        assert_eq!(app.core_batch_next_uninspected(), Ok(()));
+        assert_eq!(app.core_file_batch_selected, Some(0));
+        assert_eq!(
+            app.core_batch_step(true),
+            Err("fictional_batch_navigation_end")
+        );
+        assert!(app.core_file_batch.is_some());
+        assert_eq!(app.core_batch_activity_filter(false), Ok(()));
+        assert!(app.core_batch_visible(1));
+        assert_eq!(app.core_batch_step(true), Ok(()));
+        assert_eq!(app.core_file_batch_selected, Some(1));
+    }
+
+    #[test]
+    fn core_file_batch_stale_index_and_corrupted_session_bookkeeping_fail_closed() {
+        let mut app = MedOriginNativePreview::from_one_time_core_file_batch_receipt_stdin(
+            CORE_FILE_BATCH_REAL,
+        )
+        .unwrap();
+        assert_eq!(
+            app.core_batch_select(usize::MAX),
+            Err("fictional_batch_stale_source_index_or_progress_refused")
+        );
+        assert!(app.core_file_batch.is_none());
+        assert!(app.core_file_batch_inspected.is_empty());
+        let mut app = MedOriginNativePreview::from_one_time_core_file_batch_receipt_stdin(
+            CORE_FILE_BATCH_REAL,
+        )
+        .unwrap();
+        app.core_file_batch_inspected.pop();
+        assert_eq!(
+            app.core_batch_next_uninspected(),
+            Err("fictional_batch_stale_progress_refused")
+        );
+        assert!(app.core_file_batch.is_none());
+        let mut app = MedOriginNativePreview::from_one_time_core_file_batch_receipt_stdin(
+            CORE_FILE_BATCH_REAL,
+        )
+        .unwrap();
+        app.core_file_batch_selected = Some(usize::MAX);
+        assert_eq!(
+            app.core_batch_step(true),
+            Err("fictional_batch_selected_import_hidden_or_stale")
+        );
+        assert_eq!(app.core_file_batch_selected, None);
+        assert!(app.core_file_batch.is_some());
+        app.hash_selected().unwrap();
+        assert!(
+            app.core_file_batch.is_none(),
+            "switching to other fixture must clear batch"
+        );
+    }
+
+    #[test]
+    fn core_file_batch_four_source_capacity_navigates_without_cross_source_identity() {
+        // Synthetic in-test extension of the real redacted receipt; never
+        // authenticates a Core run, patient identity or clinical review.
+        let mut value: serde_json::Value = serde_json::from_slice(CORE_FILE_BATCH_REAL).unwrap();
+        for i in 2..4usize {
+            let mut source = value["imports"][0].clone();
+            source["import_ordinal"] = serde_json::json!(i + 1);
+            source["source_content_sha256"] = serde_json::json!(format!("{:064x}", 1024 + i));
+            source["import_audit_event_digest"] = serde_json::json!(format!("{:064x}", 2048 + i));
+            value["imports"].as_array_mut().unwrap().push(source);
+        }
+        value["import_count"] = serde_json::json!(4);
+        value["resource_count"] = serde_json::json!(12);
+        value["verified_timeline_event_count"] = serde_json::json!(8);
+        value["verified_audit_events"] = serde_json::json!(4);
+        value["current_audit_head_digest"] =
+            value["imports"][3]["import_audit_event_digest"].clone();
+        let mut bytes = serde_json::to_vec(&value).unwrap();
+        bytes.push(b'\n');
+        let mut app =
+            MedOriginNativePreview::from_one_time_core_file_batch_receipt_stdin(&bytes).unwrap();
+        assert_eq!(app.core_file_batch_import_count(), 4);
+        for index in 0..4 {
+            assert_eq!(app.core_batch_next_uninspected(), Ok(()));
+            assert_eq!(app.core_file_batch_selected, Some(index));
+            assert!(app.core_file_batch_inspected[index]);
+            assert_eq!(
+                app.core_file_batch.as_ref().unwrap().imports[index].ordinal,
+                index + 1
+            );
+        }
+        assert_eq!(app.core_file_batch_inspected, [true; 4]);
+        assert_eq!(
+            app.core_batch_step(true),
+            Err("fictional_batch_navigation_end")
+        );
+        assert_eq!(app.core_batch_step(false), Ok(()));
+        assert_eq!(app.core_file_batch_selected, Some(2));
+        assert_eq!(app.core_batch_reset_exploration(), Ok(()));
+        assert_eq!(app.core_file_batch_inspected, [false; 4]);
+    }
 
     #[test]
     fn bounded_multi_patient_navigation_refuses_step_twenty_five_and_clears_source() {
