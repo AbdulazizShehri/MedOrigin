@@ -172,6 +172,13 @@ jobs:
           & $py -m unittest discover -s experiments/desktop-d2-native-egui/scripts -p test_qualify_installed_synthetic_core.py -v
           if ($LASTEXITCODE -ne 0) { throw 'Installed Core wheel provenance/record negative guards failed' }
           Write-Output 'INSTALLED_WHEEL_CORE_SOURCE_ONLY_NO_CI_INSTALL_OR_OS_SANDBOX_CLAIM'
+      - name: Verify source-only one-command fictional Core963 to native GUI launcher guards
+        shell: pwsh
+        run: |
+          $py = if ($IsWindows) { 'python' } else { 'python3' }
+          & $py -m unittest discover -s experiments/desktop-d2-native-egui/scripts -p test_launch_windows_real_core963_fictional_batch.py -v
+          if ($LASTEXITCODE -ne 0) { throw 'Fictional Core963 one-command source guard failed' }
+          Write-Output 'CORE963_ONE_COMMAND_LAUNCHER_SOURCE_GUARDS_PASS_NO_HOSTED_GUI_OR_CORE_PROOF'
       - name: Source-only strict native GUI one-shot installed Core stdin contract
         shell: pwsh
         run: |
