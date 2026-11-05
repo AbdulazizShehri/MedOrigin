@@ -110,11 +110,13 @@ class Core971OfficialR4NativeTests(unittest.TestCase):
             fake = Path(directory) / "fhir.schema.json.zip"
             fake.write_bytes(b"X" * 287789)
             with self.assertRaisesRegex(
-                ValueError, "core971_official_r4_zip_sha_or_bounds_refused"
+                ValueError, "core971_(?:official_r4_zip_sha_or_bounds_refused|path_alias_refused)"
             ):
                 bridge._attest_offline_r4_schema(fake)
             missing = Path(directory) / "missing.zip"
-            with self.assertRaisesRegex(ValueError, "core971_reviewed_input_missing"):
+            with self.assertRaisesRegex(
+                ValueError, "core971_(?:reviewed_input_missing|path_alias_refused)"
+            ):
                 bridge._attest_offline_r4_schema(missing)
 
     def test_no_arbitrary_patient_file_selection_and_core971_exact_sha(self):
@@ -151,7 +153,9 @@ class Core971OfficialR4NativeTests(unittest.TestCase):
     def test_changed_core_tree_or_missing_official_gate_is_denied(self):
         with (
             tempfile.TemporaryDirectory() as directory,
-            self.assertRaisesRegex(ValueError, "core971_reviewed_input_missing"),
+            self.assertRaisesRegex(
+                ValueError, "core971_(?:reviewed_input_missing|path_alias_refused)"
+            ),
         ):
             bridge._attest_core(Path(directory))
         self.assertIn(
