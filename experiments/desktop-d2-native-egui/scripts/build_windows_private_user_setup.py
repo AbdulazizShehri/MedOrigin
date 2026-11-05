@@ -62,8 +62,10 @@ def _real_path(path: Path, *, directory: bool) -> Path:
 
 def _safe_sed_path(path: Path) -> str:
     spelling = str(path)
-    if len(spelling) > 230 or not SAFE_DRIVE_PATH.fullmatch(spelling):
-        raise ValueError("unreviewed_iexpress_sed_windows_path")
+    if len(spelling) > 230:
+        raise ValueError("unreviewed_iexpress_sed_windows_path:length_refused")
+    if not SAFE_DRIVE_PATH.fullmatch(spelling):
+        raise ValueError("unreviewed_iexpress_sed_windows_path:characters_refused")
     return spelling
 
 
