@@ -80,7 +80,7 @@ def run_one(cli: Path, directory: Path, label: str) -> dict[str, Any]:
     if len(reports) != 1 or reports[0].is_symlink():
         raise ValueError("exactly one synthetic report is required")
     stored = reports[0].read_bytes()
-    if len(stored) > 64_000 or validated.stdout.encode("utf-8") != stored + b"\\n":
+    if len(stored) > 64_000 or validated.stdout.encode("utf-8") != stored + b"\n":
         raise ValueError("installed Core stdout does not match stored report")
     report = json.loads(stored, object_pairs_hook=unique_json_object)
     expected_input = json.loads(GOOD.read_text(encoding="utf-8"))
