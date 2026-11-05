@@ -324,8 +324,13 @@ def qualify(
     python312: Path,
     *,
     core_negative_truth_preview: bool = False,
+    evidence_destination: Path | None = None,
 ) -> dict[str, Any]:
     """Verify exact source, package, two installs and real synthetic FHIR E2E."""
+    if evidence_destination is not None and core_negative_truth_preview is not True:
+        raise QualificationError("durable evidence requires explicit Core negative-truth preview")
+    if evidence_destination is not None:
+        _checked_core_preview_destination(evidence_destination)
     for path in (checkout, wheel, sdist):
         if not path.exists():
             raise QualificationError("checkout or candidate artifact missing")
@@ -370,7 +375,12 @@ def qualify(
         raise QualificationError("installed Core CLI absent")
     if core_negative_truth_preview is True:
         core_result = source_qualified_core_negative_truth_preview(
-            checkout, cli311, cli312, python311, python312
+            checkout,
+            cli311,
+            cli312,
+            python311,
+            python312,
+            evidence_destination=evidence_destination,
         )
         core_result["source_git_commit"] = source_sha
         core_result["wheel_sha256"] = sha
@@ -436,7 +446,19 @@ def main(argv: list[str] | None = None) -> int:
         help="Explicit separate Core-only proof+static HTML path. "
         "NEVER qualifies old full Beta, release or FHIR conformance.",
     )
+    parser.add_argument(
+        "--evidence-dir",
+        type=Path,
+        help=(
+            "New absolute directory for retained, source-verified Core "
+            "NOT VALIDATED JSON and inert HTML. Requires "
+            "--core-negative-truth-preview; never overwrites."
+        ),
+    )
     args = parser.parse_args(argv)
+    if args.evidence_dir is not None and not args.core_negative_truth_preview:
+        print("MEDORIGIN_PREPUBLICATION_REHEARSAL_BLOCKED: Core preview required", file=sys.stderr)
+        return 2
     try:
         if args.core_negative_truth_preview:
             result = qualify(
@@ -446,6 +468,7 @@ def main(argv: list[str] | None = None) -> int:
                 args.python311.absolute(),
                 args.python312.absolute(),
                 core_negative_truth_preview=True,
+                evidence_destination=args.evidence_dir,
             )
         else:
             result = qualify(
