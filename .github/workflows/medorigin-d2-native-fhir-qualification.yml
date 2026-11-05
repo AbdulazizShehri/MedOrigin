@@ -120,6 +120,36 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Core971 R4 source-gate-to-native contract failed' }
           Write-Output 'CORE971_R4_STRUCTURAL_NATIVE_BRIDGE_SOURCE_ONLY_NO_CORE_OR_GUI_EXECUTED'
 
+      - name: Core981 protected fictional audit to native read-only HMAC source contract
+        shell: pwsh
+        run: |
+          $py = if ($IsWindows) { 'python' } else { 'python3' }
+          & $py -m unittest discover -s experiments/desktop-d2-native-egui/scripts -p test_launch_windows_protected_audit_readonly.py -v
+          if ($LASTEXITCODE -ne 0) { throw 'Core981 protected fictional audit read-only native contract refused' }
+          Write-Output 'CORE981_PROTECTED_AUDIT_SOURCE_ONLY_NO_OS_CREDENTIAL_OR_GUI_CLAIM'
+
+      - name: Parse Windows protected fictional audit UIAutomation source (not execution)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $path = 'experiments/desktop-d2-native-egui/tests/windows-protected-audit-readonly-uia.ps1'
+          $tokens = $null
+          $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile(
+            (Resolve-Path $path).Path, [ref]$tokens, [ref]$errors
+          ) | Out-Null
+          if (@($errors).Count -ne 0) { throw 'Core981 Windows protected audit UIA source syntax refused' }
+          $source = Get-Content -LiteralPath $path -Raw
+          foreach ($required in @(
+            'Protected audit: 1 independently anchored fictional event verified',
+            'Protected audit: Clear verification result',
+            'WINDOWS_REAL_CORE981_PROTECTED_AUDIT_STATUS_UIA_PASS_NONCLINICAL',
+            '--synthetic-protected-audit-session-stdin'
+          )) {
+            if (-not $source.Contains($required)) { throw 'Core981 Windows protected audit UIA control missing' }
+          }
+          Write-Output 'CORE981_PROTECTED_AUDIT_UIA_SOURCE_GUARDS_PASS_NO_HOSTED_GUI_EXECUTION'
+
       - name: Windows-only parse real Core971 official R4 UIA source (not execution)
         if: runner.os == 'Windows'
         shell: pwsh
