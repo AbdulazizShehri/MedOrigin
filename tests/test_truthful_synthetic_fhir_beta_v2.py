@@ -152,7 +152,11 @@ def test_full_v2_file_backed_run_one_admits_only_exit2_not_exit0(
             file = store / "fixed-fictional" / "report.json"
             file.parent.mkdir(parents=True)
             file.write_text(payload, encoding="utf-8", newline="\n")
-            return CompletedProcess(args, 2, payload+"\n", "")
+            # Real installed Core emits an untrusted report-path notice
+            # on stderr even when it correctly returns NOT VALIDATED/exit2.
+            return CompletedProcess(
+                args, 2, payload+"\n", "report stored at: PRIVATE_PATH_NOT_EVIDENCE"
+            )
         if "--summary-only" in args:
             if str(reproduce.BAD) in args:
                 return CompletedProcess(args, 1, "", "fixed refusal")
