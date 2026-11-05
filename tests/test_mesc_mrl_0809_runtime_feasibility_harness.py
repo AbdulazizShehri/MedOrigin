@@ -277,12 +277,14 @@ def test_runtime_feasibility_extra_binds_processor_dependencies() -> None:
         "accelerate==1.14.0",
         "bitsandbytes==0.50.2",
         "huggingface-hub==1.23.0",
-        "pillow==12.3.0",
+        "pillow==13.0.0",
         "torch==2.13.0",
         "torchvision==0.28.0",
         "transformers==5.16.1",
         "xgrammar==0.2.7",
     ]
+    # Historical MRL-0809 evidence is frozen at Pillow 12.3.0.
+    # Current optional-extra Pillow 13.0.0 is NOT that prior execution identity.
     assert HARNESS.EXPECTED_PACKAGES == {
         "accelerate": "1.14.0",
         "bitsandbytes": "0.50.2",
