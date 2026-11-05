@@ -159,6 +159,17 @@ def inspect_synthetic_bundle(payload: dict[str, Any]) -> dict[str, object]:
         identities.add(identity)
         resources.append((kind, fhir_id, resource))
 
+    # Bind each Encounter's local Patient subject to its fullUrl before
+    # scanning Observations. The caller's entries may be in ANY order.
+    # Merely confirming that Observation.encounter resolves to *some*
+    # Encounter is insufficient: a multi-patient Bundle could otherwise
+    # silently associate another Patient's Encounter with an Observation.
+    encounter_patients: dict[str, str] = {
+        entry["fullUrl"]: _ref(entry["resource"], "subject")
+        for entry in entries
+        if entry["resource"]["resourceType"] == "Encounter"
+    }
+
     # All local identities are known before checking forward references.
     checked_references = 0
     for kind, _, resource in resources:
@@ -175,6 +186,8 @@ def inspect_synthetic_bundle(payload: dict[str, Any]) -> dict[str, object]:
                 raise BundlePreflightError("unresolved_local_encounter_reference")
             if urls[encounter] != "Encounter":
                 raise BundlePreflightError("local_reference_target_type_mismatch")
+            if encounter_patients[encounter] != patient:
+                raise BundlePreflightError("observation_encounter_patient_mismatch")
             checked_references += 1
 
     counts = Counter(kind for kind, _, _ in resources)

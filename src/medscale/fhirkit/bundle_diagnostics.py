@@ -67,6 +67,9 @@ _FIXED_LOCAL_FAILURES: dict[str, str] = {
     "local_reference_target_type_mismatch": (
         "A synthetic local reference resolves to the wrong admitted resource type."
     ),
+    "observation_encounter_patient_mismatch": (
+        "A synthetic Observation and its linked Encounter refer to different local Patients."
+    ),
     "duplicate_bundle_resource_identity": (
         "Two entries have the same FHIR resource type and local resource id."
     ),
