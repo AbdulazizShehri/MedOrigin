@@ -124,6 +124,8 @@ def _fictional_encrypted_file_batch_demo_main(argv: list[str]) -> int:
         print(
             "usage: medscale fhir file-batch-encrypted-demo "
             "--synthetic-only --ephemeral-demo "
+            "[--from-day YYYY-MM-DD] [--through-day YYYY-MM-DD] "
+            "[--event-type Encounter|Observation] "
             "FICTIONAL_BUNDLE_1 FICTIONAL_BUNDLE_2 "
             "[FICTIONAL_BUNDLE_3 ... FICTIONAL_BUNDLE_4]\\n"
             "Imports invented source files into a temporary AES-GCM Workspace, "
@@ -132,20 +134,39 @@ def _fictional_encrypted_file_batch_demo_main(argv: list[str]) -> int:
             "NO permanent import, PHI, FHIR R4/clinical validation or release."
         )
         return 0
-    if (
-        not 4 <= len(argv) <= 6
-        or argv[0:2] != ["--synthetic-only", "--ephemeral-demo"]
-        or any(not name or name.startswith("--") for name in argv[2:])
-    ):
-        print(
-            "file batch demo refused: exact_fictional_ephemeral_file_flags_required",
-            file=sys.stderr,
-        )
+    refused = "file batch demo refused: exact_fictional_ephemeral_file_flags_required"
+    if len(argv) < 4 or argv[0:2] != ["--synthetic-only", "--ephemeral-demo"]:
+        print(refused, file=sys.stderr)
+        return 2
+    # Admit optional bounded filters only BEFORE positional fictional files.
+    # No argparse error can disclose caller-supplied filenames or values.
+    filter_names = {
+        "--from-day": "from_day_utc",
+        "--through-day": "through_day_utc",
+        "--event-type": "resource_type",
+    }
+    filters: dict[str, str] = {}
+    cursor = 2
+    while cursor < len(argv) and argv[cursor] in filter_names:
+        name = filter_names[argv[cursor]]
+        if (
+            name in filters
+            or cursor + 1 >= len(argv)
+            or not argv[cursor + 1]
+            or argv[cursor + 1].startswith("--")
+        ):
+            print(refused, file=sys.stderr)
+            return 2
+        filters[name] = argv[cursor + 1]
+        cursor += 2
+    paths = argv[cursor:]
+    if not 2 <= len(paths) <= 4 or any(not p or p.startswith("--") for p in paths):
+        print(refused, file=sys.stderr)
         return 2
     try:
         from medscale.fhirkit.workspace_file_batch_demo import fictional_file_batch_receipt_json
 
-        sources = [read_fhir_json_document(Path(name)) for name in argv[2:]]
+        sources = [read_fhir_json_document(Path(name)) for name in paths]
     except FhirInputError:
         print("file batch demo refused: source_file_refused", file=sys.stderr)
         return 1
@@ -154,7 +175,7 @@ def _fictional_encrypted_file_batch_demo_main(argv: list[str]) -> int:
         return 2
     try:
         output = fictional_file_batch_receipt_json(
-            sources, synthetic_only=True, ephemeral_demo=True
+            sources, synthetic_only=True, ephemeral_demo=True, **filters
         )
     except Exception:
         print(

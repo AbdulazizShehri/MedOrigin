@@ -103,6 +103,9 @@ def run_fictional_file_batch_encrypted_demo(
     *,
     synthetic_only: bool = False,
     ephemeral_demo: bool = False,
+    from_day_utc: str | None = None,
+    through_day_utc: str | None = None,
+    resource_type: str | None = None,
 ) -> dict[str, object]:
     """Commit provided fictional Bundles; independently verify cold-reopened data.
 
@@ -112,6 +115,28 @@ def run_fictional_file_batch_encrypted_demo(
     """
     if synthetic_only is not True or ephemeral_demo is not True:
         raise SyntheticFileImportDemoError("fictional_import_explicit_demo_flags_required")
+
+    # Reject bad dates/type BEFORE allocating an encrypted store. Even if a
+    # zero-match filter is selected, ALL original imports will be decrypted
+    # and source/audit-verified by the existing independent timeline facade.
+    from medscale.fhirkit.workspace_multi_timeline import (
+        SyntheticMultiImportTimelineError,
+        _checked_day,
+    )
+
+    try:
+        start = _checked_day(from_day_utc)
+        end = _checked_day(through_day_utc)
+        if start is not None and end is not None and start > end:
+            raise SyntheticMultiImportTimelineError("multi_timeline_filter_range_refused")
+        if resource_type is not None and (
+            type(resource_type) is not str or resource_type not in ("Encounter", "Observation")
+        ):
+            raise SyntheticMultiImportTimelineError("multi_timeline_filter_type_refused")
+    except SyntheticMultiImportTimelineError as exc:
+        raise SyntheticFileImportDemoError("fictional_import_filter_refused") from exc
+
+    filter_requested = start is not None or end is not None or resource_type is not None
     snapshots, preflights = _freeze_and_preflight(payloads)
 
     try:
@@ -120,8 +145,12 @@ def run_fictional_file_batch_encrypted_demo(
         from medscale_workspace.storage import WorkspaceStore
 
         from medscale.fhirkit.workspace_catalog import list_synthetic_bundle_imports
+        from medscale.fhirkit.workspace_file_batch_filter import (
+            build_source_checked_fictional_filtered_view,
+        )
         from medscale.fhirkit.workspace_ingest import ingest_synthetic_bundle_atomic
         from medscale.fhirkit.workspace_multi_timeline import (
+            list_filtered_verified_synthetic_import_timelines,
             list_verified_synthetic_import_timelines,
         )
     except ImportError as exc:
@@ -276,6 +305,34 @@ def run_fictional_file_batch_encrypted_demo(
                     x["resource_count"] for x in safe
                 ):
                     raise SyntheticFileImportDemoError("fictional_import_reopen_totals_refused")
+
+                # This is a SECOND independent encrypted source readback,
+                # including imports the requested filter would hide. Cross-
+                # check every returned event against the original verified
+                # full timeline and rebuild only approved scalar fields.
+                filtered_review: dict[str, object] | None = None
+                if filter_requested:
+                    filtered = list_filtered_verified_synthetic_import_timelines(
+                        store=reopened,
+                        test_key_provider=provider,
+                        actor_id=_ACTOR,
+                        expected_current_audit_head_digest=final_head,
+                        synthetic_only=True,
+                        allow_in_memory_listing=True,
+                        allow_in_memory_timeline=True,
+                        from_day_utc=start,
+                        through_day_utc=end,
+                        resource_type=resource_type,
+                    )
+                    filtered_review = build_source_checked_fictional_filtered_view(
+                        timeline,
+                        filtered,
+                        imported,
+                        audit_head=final_head,
+                        from_day_utc=start,
+                        through_day_utc=end,
+                        resource_type=resource_type,
+                    )
                 result = {
                     "schema": "medorigin-core-fictional-file-encrypted-batch-reopen/v1",
                     "status": "FICTIONAL_FILE_BATCH_ENCRYPTED_REOPEN_VERIFIED",
@@ -297,6 +354,8 @@ def run_fictional_file_batch_encrypted_demo(
                     "clinical_use_authorized": False,
                     "release_authorized": False,
                 }
+                if filtered_review is not None:
+                    result["filtered_review"] = filtered_review
         except SyntheticFileImportDemoError:
             raise
         except Exception as exc:
@@ -319,6 +378,9 @@ def fictional_file_batch_receipt_json(
     *,
     synthetic_only: bool = False,
     ephemeral_demo: bool = False,
+    from_day_utc: str | None = None,
+    through_day_utc: str | None = None,
+    resource_type: str | None = None,
 ) -> str:
     return (
         json.dumps(
@@ -326,6 +388,9 @@ def fictional_file_batch_receipt_json(
                 payloads,
                 synthetic_only=synthetic_only,
                 ephemeral_demo=ephemeral_demo,
+                from_day_utc=from_day_utc,
+                through_day_utc=through_day_utc,
+                resource_type=resource_type,
             ),
             sort_keys=True,
             separators=(",", ":"),
