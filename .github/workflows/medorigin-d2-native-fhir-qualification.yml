@@ -274,6 +274,11 @@ jobs:
             'opened_only_facet_reexposed_unopened_import',
             'D2_CORE_BATCH_OPENED_ONLY_ACTUAL_WINDOWS_UIA_PASS_NONCLINICAL',
             'D2_CORE_BATCH_VISIBLE_BOUNDARY_ACTUAL_WINDOWS_UIA_PASS_NONCLINICAL',
+            'Core batch: Compare with import 2',
+            'Core batch: Comparing import 1 with import 2',
+            'source_comparison_not_cleared',
+            'hidden_import_comparison_exposed_after_opened_filter',
+            'D2_CORE_BATCH_REDACTED_SIDE_BY_SIDE_ACTUAL_WINDOWS_UIA_PASS_NONCLINICAL',
             'Core batch: Clear redacted receipt',
             'WINDOWS_REAL_CORE963_TWO_FILES_ENCRYPTED_REOPEN_REDACTED_D2_NATIVE_UIA_PASS_NONCLINICAL'
           )) {

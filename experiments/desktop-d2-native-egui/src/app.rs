@@ -680,6 +680,9 @@ pub struct MedOriginNativePreview {
     // Source-scoped, ephemeral *exploration* of Core redacted import summaries.
     // Never represents patient review, clinical verification or approval.
     core_file_batch_selected: Option<usize>,
+    // In-memory read-only comparison of two distinct visible source summaries.
+    // Never a clinical or across-patient comparison.
+    core_file_batch_compare_with: Option<usize>,
     core_file_batch_inspected: Vec<bool>,
     core_file_batch_activity_only: bool,
     core_file_batch_opened_only: bool,
@@ -832,10 +835,12 @@ impl MedOriginNativePreview {
         }
         if !self.core_batch_visible(index) {
             self.core_file_batch_selected = None;
+            self.core_file_batch_compare_with = None;
             self.core_file_batch_notice =
                 Some("Only source imports in the current fictional activity filter can be opened");
             return Err("fictional_batch_hidden_source_refused");
         }
+        self.core_file_batch_compare_with = None;
         self.core_file_batch_selected = Some(index);
         self.core_file_batch_inspected[index] = true;
         self.core_file_batch_notice = None;
@@ -864,6 +869,7 @@ impl MedOriginNativePreview {
             Some(current) => {
                 let Some(position) = visible.iter().position(|index| *index == current) else {
                     self.core_file_batch_selected = None;
+                    self.core_file_batch_compare_with = None;
                     self.core_file_batch_notice =
                         Some("Selected import is not visible in the current source-only filter");
                     return Err("fictional_batch_selected_import_hidden_or_stale");
@@ -903,11 +909,58 @@ impl MedOriginNativePreview {
         };
         let Some(target) = target else {
             self.core_file_batch_selected = None;
+            self.core_file_batch_compare_with = None;
             self.core_file_batch_notice =
                 Some("No visible fictional imports in the current source-only filter");
             return Err("fictional_batch_no_visible_imports");
         };
         self.core_batch_select(target)
+    }
+
+    /// Compare only redacted summary counts from two different, currently
+    /// visible fictional imports in the same admitted source batch. The
+    /// comparison is session-only and NEVER joins patient identities.
+    fn core_batch_compare_visible(&mut self, other_index: usize) -> Result<(), &'static str> {
+        let Some(batch) = self.core_file_batch.as_ref() else {
+            return Err("fictional_batch_missing_source");
+        };
+        let Some(selected) = self.core_file_batch_selected else {
+            self.core_file_batch_compare_with = None;
+            return Err("fictional_batch_compare_requires_selected_source");
+        };
+        if self.core_file_batch_inspected.len() != batch.imports.len()
+            || selected >= batch.imports.len()
+            || other_index >= batch.imports.len()
+            || self.core_file_batch_inspected.get(selected) != Some(&true)
+        {
+            self.clear_fictional_output();
+            return Err("fictional_batch_compare_stale_source_refused");
+        }
+        if selected == other_index {
+            self.core_file_batch_compare_with = None;
+            return Err("fictional_batch_compare_same_import_refused");
+        }
+        if !self.core_batch_visible(selected) || !self.core_batch_visible(other_index) {
+            self.core_file_batch_compare_with = None;
+            return Err("fictional_batch_compare_hidden_source_refused");
+        }
+        self.core_file_batch_compare_with = Some(other_index);
+        self.core_file_batch_notice = None;
+        Ok(())
+    }
+
+    /// Drop any stale or hidden comparison at rendering time. The projection
+    /// never reads resource payloads or merges patient graphs.
+    fn core_batch_comparison_indices(&self) -> Option<(usize, usize)> {
+        let batch = self.core_file_batch.as_ref()?;
+        let selected = self.core_file_batch_selected?;
+        let other = self.core_file_batch_compare_with?;
+        (selected != other
+            && self.core_file_batch_inspected.len() == batch.imports.len()
+            && self.core_file_batch_inspected.get(selected) == Some(&true)
+            && self.core_batch_visible(selected)
+            && self.core_batch_visible(other))
+        .then_some((selected, other))
     }
 
     fn core_batch_next_uninspected(&mut self) -> Result<(), &'static str> {
@@ -938,6 +991,7 @@ impl MedOriginNativePreview {
             return Err("fictional_batch_stale_progress_refused");
         }
         self.core_file_batch_activity_only = active_only;
+        self.core_file_batch_compare_with = None;
         if self
             .core_file_batch_selected
             .is_some_and(|index| !self.core_batch_visible(index))
@@ -959,6 +1013,7 @@ impl MedOriginNativePreview {
             return Err("fictional_batch_stale_progress_refused");
         }
         self.core_file_batch_opened_only = opened_only;
+        self.core_file_batch_compare_with = None;
         if self
             .core_file_batch_selected
             .is_some_and(|index| !self.core_batch_visible(index))
@@ -979,6 +1034,7 @@ impl MedOriginNativePreview {
         }
         self.core_file_batch_inspected.fill(false);
         self.core_file_batch_selected = None;
+        self.core_file_batch_compare_with = None;
         self.core_file_batch_activity_only = false;
         self.core_file_batch_opened_only = false;
         self.core_file_batch_notice = None;
@@ -1458,6 +1514,7 @@ impl MedOriginNativePreview {
         self.core_file_batch = None;
         self.protected_audit = None;
         self.core_file_batch_selected = None;
+        self.core_file_batch_compare_with = None;
         self.core_file_batch_inspected.clear();
         self.core_file_batch_activity_only = false;
         self.core_file_batch_opened_only = false;
@@ -1504,6 +1561,7 @@ impl MedOriginNativePreview {
         self.core_file_batch = None;
         self.protected_audit = None;
         self.core_file_batch_selected = None;
+        self.core_file_batch_compare_with = None;
         self.core_file_batch_inspected.clear();
         self.core_file_batch_activity_only = false;
         self.core_file_batch_opened_only = false;
@@ -2840,6 +2898,8 @@ impl MedOriginNativePreview {
             Select(usize),
             Step(bool),
             Boundary(bool),
+            Compare(usize),
+            ClearCompare,
             NextUninspected,
             ActivityOnly(bool),
             OpenedOnly(bool),
@@ -2946,6 +3006,11 @@ impl MedOriginNativePreview {
                         if ui.button(format!("Core batch: Open import {}", source.ordinal)).clicked() {
                             action = Some(Action::Select(index));
                         }
+                        if self.core_file_batch_selected.is_some_and(|selected| {
+                            selected != index && self.core_batch_visible(selected)
+                        }) && ui.button(format!("Core batch: Compare with import {}", source.ordinal)).clicked() {
+                            action = Some(Action::Compare(index));
+                        }
                     });
                 }
                 columns[1].strong("Fictional source details (read-only)");
@@ -2987,6 +3052,32 @@ impl MedOriginNativePreview {
                 } else {
                     columns[1].label("Core batch: No fictional import opened this session");
                 }
+                if let Some((left_index, right_index)) = self.core_batch_comparison_indices() {
+                    let left = &batch.imports[left_index];
+                    let right = &batch.imports[right_index];
+                    columns[1].group(|ui| {
+                        ui.strong(format!(
+                            "Core batch: Comparing import {} with import {}",
+                            left.ordinal, right.ordinal
+                        ));
+                        ui.label(format!(
+                            "Core batch: Resource totals: {} versus {}; difference {:+}",
+                            left.resource_count,
+                            right.resource_count,
+                            right.resource_count as i64 - left.resource_count as i64
+                        ));
+                        ui.label(format!(
+                            "Core batch: Event totals: {} versus {}; difference {:+}",
+                            left.timeline_event_count,
+                            right.timeline_event_count,
+                            right.timeline_event_count as i64 - left.timeline_event_count as i64
+                        ));
+                        ui.label("Source-scoped reported counts only. No patient identities are joined, no FHIR values compared, and no clinical inference or approval.");
+                        if ui.button("Core batch: Clear source comparison").clicked() {
+                            action = Some(Action::ClearCompare);
+                        }
+                    });
+                }
             });
             ui.separator();
             ui.collapsing("Core batch: Report fingerprint (not attestation)", |ui| {
@@ -3023,6 +3114,12 @@ impl MedOriginNativePreview {
             }
             Some(Action::Boundary(last)) => {
                 let _ = self.core_batch_jump_visible_boundary(last);
+            }
+            Some(Action::Compare(index)) => {
+                let _ = self.core_batch_compare_visible(index);
+            }
+            Some(Action::ClearCompare) => {
+                self.core_file_batch_compare_with = None;
             }
             Some(Action::NextUninspected) => {
                 let _ = self.core_batch_next_uninspected();
@@ -4021,6 +4118,115 @@ mod tests {
             app.core_batch_jump_visible_boundary(false),
             Err("fictional_batch_missing_source")
         );
+    }
+
+    #[test]
+    fn core_batch_comparison_is_source_scoped_and_does_not_mark_other_opened() {
+        let mut app = MedOriginNativePreview::from_one_time_core_file_batch_receipt_stdin(
+            CORE_FILE_BATCH_REAL,
+        )
+        .unwrap();
+        assert_eq!(
+            app.core_batch_compare_visible(1),
+            Err("fictional_batch_compare_requires_selected_source")
+        );
+        assert_eq!(app.core_file_batch_compare_with, None);
+        assert_eq!(app.core_batch_select(0), Ok(()));
+        assert_eq!(app.core_batch_compare_visible(1), Ok(()));
+        assert_eq!(app.core_batch_comparison_indices(), Some((0, 1)));
+        assert_eq!(app.core_file_batch_inspected, [true, false]);
+        assert_eq!(
+            app.core_batch_compare_visible(0),
+            Err("fictional_batch_compare_same_import_refused")
+        );
+        assert_eq!(app.core_batch_comparison_indices(), None);
+        assert_eq!(app.core_batch_compare_visible(1), Ok(()));
+        assert_eq!(app.core_batch_select(1), Ok(()));
+        assert_eq!(app.core_batch_comparison_indices(), None);
+        assert_eq!(app.core_file_batch_inspected, [true, true]);
+        assert_eq!(app.core_batch_compare_visible(0), Ok(()));
+        assert_eq!(app.core_batch_comparison_indices(), Some((1, 0)));
+        assert_eq!(app.core_batch_reset_exploration(), Ok(()));
+        assert_eq!(app.core_file_batch_compare_with, None);
+        assert_eq!(app.core_batch_comparison_indices(), None);
+        app.clear_fictional_output();
+        assert_eq!(app.core_file_batch_compare_with, None);
+        assert_eq!(
+            app.core_batch_compare_visible(0),
+            Err("fictional_batch_missing_source")
+        );
+    }
+
+    #[test]
+    fn core_batch_comparison_never_survives_filters_or_uses_hidden_imports() {
+        let mut value: serde_json::Value = serde_json::from_slice(CORE_FILE_BATCH_REAL).unwrap();
+        value["imports"][1]["verified_timeline_event_count"] = serde_json::json!(0);
+        value["verified_timeline_event_count"] = serde_json::json!(2);
+        let mut bytes = serde_json::to_vec(&value).unwrap();
+        bytes.push(b'\n');
+        let mut app =
+            MedOriginNativePreview::from_one_time_core_file_batch_receipt_stdin(&bytes).unwrap();
+        assert_eq!(app.core_batch_select(0), Ok(()));
+        assert_eq!(app.core_batch_compare_visible(1), Ok(()));
+        assert_eq!(app.core_batch_activity_filter(true), Ok(()));
+        assert_eq!(app.core_batch_comparison_indices(), None);
+        assert_eq!(app.core_file_batch_compare_with, None);
+        assert_eq!(
+            app.core_batch_compare_visible(1),
+            Err("fictional_batch_compare_hidden_source_refused")
+        );
+        assert_eq!(app.core_batch_activity_filter(false), Ok(()));
+        assert_eq!(app.core_batch_compare_visible(1), Ok(()));
+        assert_eq!(app.core_batch_opened_filter(true), Ok(()));
+        assert_eq!(app.core_batch_comparison_indices(), None);
+        assert_eq!(
+            app.core_batch_compare_visible(1),
+            Err("fictional_batch_compare_hidden_source_refused")
+        );
+        assert_eq!(app.core_file_batch_inspected, [true, false]);
+        assert_eq!(app.core_batch_opened_filter(false), Ok(()));
+        assert_eq!(app.core_batch_compare_visible(1), Ok(()));
+        assert_eq!(app.core_batch_step(true), Ok(()));
+        assert_eq!(app.core_batch_comparison_indices(), None);
+    }
+
+    #[test]
+    fn core_batch_comparison_invalid_progress_and_indices_fail_closed() {
+        let mut app = MedOriginNativePreview::from_one_time_core_file_batch_receipt_stdin(
+            CORE_FILE_BATCH_REAL,
+        )
+        .unwrap();
+        assert_eq!(app.core_batch_select(0), Ok(()));
+        assert_eq!(
+            app.core_batch_compare_visible(usize::MAX),
+            Err("fictional_batch_compare_stale_source_refused")
+        );
+        assert!(app.core_file_batch.is_none());
+        assert_eq!(app.core_file_batch_compare_with, None);
+        let mut app = MedOriginNativePreview::from_one_time_core_file_batch_receipt_stdin(
+            CORE_FILE_BATCH_REAL,
+        )
+        .unwrap();
+        assert_eq!(app.core_batch_select(0), Ok(()));
+        app.core_file_batch_inspected.pop();
+        assert_eq!(
+            app.core_batch_compare_visible(1),
+            Err("fictional_batch_compare_stale_source_refused")
+        );
+        assert!(app.core_file_batch.is_none());
+        let mut app = MedOriginNativePreview::from_one_time_core_file_batch_receipt_stdin(
+            CORE_FILE_BATCH_REAL,
+        )
+        .unwrap();
+        assert_eq!(app.core_batch_select(0), Ok(()));
+        assert_eq!(app.core_batch_compare_visible(1), Ok(()));
+        app.core_file_batch_inspected[0] = false;
+        assert_eq!(app.core_batch_comparison_indices(), None);
+        assert_eq!(
+            app.core_batch_compare_visible(1),
+            Err("fictional_batch_compare_stale_source_refused")
+        );
+        assert!(app.core_file_batch.is_none());
     }
 
     #[test]

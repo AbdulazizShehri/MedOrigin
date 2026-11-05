@@ -144,11 +144,30 @@ try {
   Expect 'Core batch: Selected import 1'
   Expect 'Core batch exploration: 1 of 2 visible fictional imports opened'
   Expect 'Core batch: Selected source resources: 3'
+  # User-visible redacted side-by-side counts, without opening import 2.
+  Press 'Core batch: Compare with import 2'
+  Expect 'Core batch: Comparing import 1 with import 2'
+  Expect 'Core batch: Resource totals: 3 versus 3; difference +0'
+  Expect 'Core batch: Event totals: 2 versus 2; difference +0'
+  Press 'Core batch: Clear source comparison'
+  Start-Sleep -Milliseconds 230
+  if(@(Names | Where-Object {$_ -like '*Core batch: Comparing import 1 with import 2*'}).Count -ne 0){
+    throw 'source_comparison_not_cleared'
+  }
+  Press 'Core batch: Compare with import 2'
+  Expect 'Core batch: Comparing import 1 with import 2'
   # The newly integrated native session-only facet must not expose unopened
   # fictional imports or mislabel session navigation as clinical review.
   Press 'Core batch: Only imports opened this session'
   Expect 'Core batch: Show opened and unopened imports'
   Expect 'Core batch exploration: 1 of 1 visible fictional imports opened'
+  Start-Sleep -Milliseconds 230
+  if(@(Names | Where-Object {
+    $_ -like '*Core batch: Comparing import 1 with import 2*' -or
+    $_ -ceq 'Core batch: Compare with import 2'
+  }).Count -ne 0){
+    throw 'hidden_import_comparison_exposed_after_opened_filter'
+  }
   if(@(Names | Where-Object {
     $_ -ceq 'Core batch: Open import 2' -or
     $_ -ceq 'Core batch: Open next unexplored import'
@@ -192,6 +211,7 @@ try {
   Write-Output 'WINDOWS_REAL_CORE963_TWO_FILES_ENCRYPTED_REOPEN_REDACTED_D2_NATIVE_UIA_PASS_NONCLINICAL'
   Write-Output 'D2_CORE_BATCH_OPENED_ONLY_ACTUAL_WINDOWS_UIA_PASS_NONCLINICAL'
   Write-Output 'D2_CORE_BATCH_VISIBLE_BOUNDARY_ACTUAL_WINDOWS_UIA_PASS_NONCLINICAL'
+  Write-Output 'D2_CORE_BATCH_REDACTED_SIDE_BY_SIDE_ACTUAL_WINDOWS_UIA_PASS_NONCLINICAL'
 } catch {
   [Console]::Error.WriteLine('WINDOWS_REAL_CORE963_REDACTED_BATCH_UIA_NO_GO: '+$_.Exception.Message)
   exit 1
