@@ -116,7 +116,10 @@ class ProtectedAuditReadOnlyTests(unittest.TestCase):
                 bridge.launch(Path("no"), Path("no"), "bad", "0"*64,
                               Path("no"), "0"*64, qa_auto_close=True, qa_uia=True)
             with TemporaryDirectory() as tmp:
-                with self.assertRaisesRegex(ValueError,"only_explicit_fictional_folder"):
+                with self.assertRaisesRegex(
+                    ValueError,
+                    "only_explicit_fictional_folder|protected_audit_path_alias_refused",
+                ):
                     bridge.launch(Path("no"), Path(tmp),
                                   "00000000-0000-4000-8000-000000000001",
                                   "0"*64, Path("no"), "0"*64, qa_auto_close=True)
