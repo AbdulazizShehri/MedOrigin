@@ -16,8 +16,10 @@ Crucially the Core #977 Windows Credential Manager persistent key adapter is **n
 
 - Physical owner Windows source Core #979 two-person positive and cross-person negative with reverse ordering: PASS.
 - New Core979 pure Python contracts: 7/7 PASS Windows; existing legacy Core971 contracts: 7/7 PASS Windows; new Core979: 7/7 PASS Linux; Ruff lint and format PASS.
-- Physical Windows actual Core979 official R4 encrypted source/cold reopen, session HMAC to compiled GUI UIAutomation: PENDING exact revised source/run qualification.
-- Rust offline all-target tests, Clippy, fmt/build; GitHub hosted exact-head Windows/Ubuntu CI: PENDING qualification.
+- Physical Windows owner actual clean Core979 source SHA 440cee21494a62c458106631931f3610c05d1ea8 and genuine offline HL7 FHIR R4 v4.0.1 ZIP SHA 75e5560da3cf503895a44c8ca7af17a83b4cca6c2cb5ba1883d2aec0d1cb5ac6; isolated jsonschema 4.25.1. Real two-fictional-file structural preflight BEFORE ephemeral AES-GCM encrypted Workspace import, physical close/reopen, audit/readback and cleanup: PASS intentional nonclinical exit 2 with 0 stderr, canonical redacted receipt 1,837 bytes SHA256 41c04dca118a550f9d21976b9cc5f87a58954c96b125748ecb40729153eba057.
+- Full native owner Windows offline locked Rust tests **91 lib + 15 CLI + 7 browser/network = 113/113 PASS**. Cargo fmt --check, strict clippy -D warnings, cargo build PASS. Actual Windows executable SHA256 a3c2bf608be83bf523300b77002541ef3a49f550803a78d7d03e89ed43ecf11f.
+- ACTUAL compiled Windows GUI UIAutomation with live Core979 official R4/HMAC-bound session and source-scoped worklist, navigation/facet/reset/Clear: **PASS exit 0** (source script reuses older Core971 UIA marker, but explicit guarded Core979 opt-in source SHA and cross-person preflight are newly enforced). Real HMAC-bound normal GUI auto-close: **PASS exit 0**; 6 independent actual malicious-frame native subprocess denial tests (**unbound, tampered, stale nonce, wrong domain, missing secret, oversize**) **6/6 PASS** and no forbidden GUI admitted. New guarded Core979 wrapper marker GUARDED_CORE979_CROSS_PATIENT_PROBE_AND_R4_HMAC_WORKLIST_PASS_NONCLINICAL verified.
+- Hosted exact-head native Windows 2025 / Ubuntu 24.04 CI and evidence validation: **PENDING independent GitHub completion after this evidence-only documentation update**; do not claim production qualification from it.
 
 ## Release restrictions
 
