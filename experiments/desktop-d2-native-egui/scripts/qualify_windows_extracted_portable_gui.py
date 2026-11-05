@@ -58,6 +58,14 @@ def _sha(path: Path) -> str:
     return h.hexdigest()
 
 
+def _is_windows_reparse(path: Path) -> bool:
+    # FILE_ATTRIBUTE_REPARSE_POINT is 0x0400; use lstat attributes because
+    # Path.is_junction() is absent on otherwise-supported Python 3.11.
+    # If Windows cannot expose the attribute, refuse instead of guessing.
+    attrs = getattr(path.lstat(), "st_file_attributes", None)
+    return attrs is None or bool(attrs & 0x0400)
+
+
 def _regular_exact(path: Path, *, directory: bool) -> Path:
     # Windows runner temp directories may have OS-canonical names that differ
     # from Path.absolute(), even for real files. Reject actual filesystem
@@ -65,7 +73,11 @@ def _regular_exact(path: Path, *, directory: bool) -> Path:
     if not path.exists():
         raise ValueError("portable_qa_missing_or_reparse_path")
     for ancestor in (path, *path.parents):
-        if ancestor.is_symlink() or (hasattr(ancestor, "is_junction") and ancestor.is_junction()):
+        if (
+            ancestor.is_symlink()
+            or (hasattr(ancestor, "is_junction") and ancestor.is_junction())
+            or (sys.platform == "win32" and _is_windows_reparse(ancestor))
+        ):
             raise ValueError("portable_qa_missing_or_reparse_path")
     if directory and not path.is_dir():
         raise ValueError("portable_qa_expected_directory")

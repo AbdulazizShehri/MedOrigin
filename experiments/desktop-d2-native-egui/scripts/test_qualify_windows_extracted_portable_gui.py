@@ -11,6 +11,7 @@ import zipfile
 from contextlib import redirect_stdout
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import package_preview as package
@@ -232,6 +233,30 @@ class ExtractedPortableWindowsGuiTests(unittest.TestCase):
             ):
                 self._call()
         self.assertEqual(list(self.scratch.iterdir()), [])
+
+    def test_python311_windows_reparse_attribute_is_fail_closed_without_junction_api(self):
+        with patch.object(
+            Path,
+            "lstat",
+            autospec=True,
+            return_value=SimpleNamespace(st_file_attributes=0x0400),
+        ):
+            self.assertTrue(qa._is_windows_reparse(self.archive))
+        with patch.object(
+            Path,
+            "lstat",
+            autospec=True,
+            return_value=SimpleNamespace(st_file_attributes=0),
+        ):
+            self.assertFalse(qa._is_windows_reparse(self.archive))
+        with patch.object(Path, "lstat", autospec=True, return_value=SimpleNamespace()):
+            self.assertTrue(qa._is_windows_reparse(self.archive))
+        with (
+            patch.object(qa.sys, "platform", "win32"),
+            patch.object(qa, "_is_windows_reparse", side_effect=lambda p: p == self.archive.parent),
+            self.assertRaisesRegex(ValueError, "missing_or_reparse_path"),
+        ):
+            qa._regular_exact(self.archive, directory=False)
 
     def test_reopened_zip_advertises_oversized_member_before_any_extraction(self):
         original = zipfile.ZipFile.infolist
