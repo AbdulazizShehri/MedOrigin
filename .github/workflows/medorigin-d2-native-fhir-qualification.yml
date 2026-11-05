@@ -196,6 +196,31 @@ jobs:
           & $py -m unittest discover -s experiments/desktop-d2-native-egui/scripts -p test_qualify_installed_synthetic_core.py -v
           if ($LASTEXITCODE -ne 0) { throw 'Installed Core wheel provenance/record negative guards failed' }
           Write-Output 'INSTALLED_WHEEL_CORE_SOURCE_ONLY_NO_CI_INSTALL_OR_OS_SANDBOX_CLAIM'
+      - name: Parse actual Core963 read-only native import worklist UIAutomation contract
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $path = 'experiments/desktop-d2-native-egui/tests/windows-real-core963-file-batch-receipt-uia.ps1'
+          $tokens = $null
+          $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile(
+            (Resolve-Path $path).Path, [ref]$tokens, [ref]$errors
+          ) | Out-Null
+          if (@($errors).Count -ne 0) { throw 'Native Core963 worklist UIA PowerShell source syntax refused' }
+          $scriptText = Get-Content -LiteralPath $path -Raw
+          foreach ($required in @(
+            'Core batch: Open next unexplored import',
+            'Core batch: Previous visible import',
+            'Core batch: Next visible import',
+            'Core batch: Only imports with activity',
+            'Core batch: Reset session exploration',
+            'Core batch: Open import 2',
+            'Core batch: Clear redacted receipt',
+            'WINDOWS_REAL_CORE963_TWO_FILES_ENCRYPTED_REOPEN_REDACTED_D2_NATIVE_UIA_PASS_NONCLINICAL'
+          )) {
+            if (-not $scriptText.Contains($required)) { throw 'Native Core963 worklist UIA acceptance control missing' }
+          }
+          Write-Output 'NATIVE_CORE963_WORKLIST_UIA_SOURCE_CONTRACT_PASS_NO_HOSTED_GUI_EXECUTION'
       - name: Verify source-only one-command fictional Core963 to native GUI launcher guards
         shell: pwsh
         run: |
