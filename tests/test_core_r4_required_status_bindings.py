@@ -9,7 +9,6 @@ https://hl7.org/fhir/R4/valueset-observation-status.html
 
 from __future__ import annotations
 
-import copy
 import json
 from pathlib import Path
 
