@@ -10,10 +10,8 @@ FHIR R4 conformance, a production patient-data gateway or release approval.
 from __future__ import annotations
 
 import argparse
-import copy
 import json
 import subprocess
-import sys
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Any
@@ -222,13 +220,6 @@ def main(argv: list[str] | None = None) -> int:
                 )
             cases += 1
         for label, cli in enumerate(clis):
-            _assert_negative(
-                _run(
-                    cli, root, _fictional_bundle(), f"no-flag-{label}",
-                    synthetic_flag=False,
-                ),
-                "synthetic_only_attestation_required",
-            ) if False else None
             # Missing caller synthetic assertion has a separately specified
             # refusal prefix, not a resource-validation error.
             denied = _run(
