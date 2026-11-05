@@ -168,10 +168,10 @@ def test_real_public_cli_rejects_conflicting_value_before_schema_or_storage(
     source.write_text(json.dumps(bundle), encoding="utf-8")
     assert public_cli(["fhir", "bundle-preflight", str(source), "--synthetic-only"]) == 2
     out = capsys.readouterr()
-    assert out.stdout == ""
-    assert out.stderr.strip() == "bundle preflight refused: " + _FAILURE
-    assert _SECRET not in out.stderr + out.stdout
-    assert str(source) not in out.stderr + out.stdout
+    assert out.out == ""
+    assert out.err.strip() == "bundle preflight refused: " + _FAILURE
+    assert _SECRET not in out.err + out.out
+    assert str(source) not in out.err + out.out
 
     # Unlike a structurally passed source, this invalid choice cannot reach
     # optional official schema loading, even if no official ZIP exists.
@@ -181,9 +181,9 @@ def test_real_public_cli_rejects_conflicting_value_before_schema_or_storage(
         str(source),
     ]) == 2
     outcome = capsys.readouterr()
-    assert outcome.stderr == ""
-    assert json.loads(outcome.stdout)["resourceType"] == "OperationOutcome"
-    assert _SECRET not in outcome.stdout + outcome.stderr
+    assert outcome.err == ""
+    assert json.loads(outcome.out)["resourceType"] == "OperationOutcome"
+    assert _SECRET not in outcome.out + outcome.err
     assert list(tmp_path.iterdir()) == [source]
 
 
