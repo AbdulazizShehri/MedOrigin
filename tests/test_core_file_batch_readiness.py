@@ -186,7 +186,10 @@ def test_cli_missing_consent_or_bad_source_returns_no_partial_json(
             "fhir", "file-batch-readiness", "--synthetic-only",
             "--offline-r4-schema", "--unexpected", *(str(p) for p in sources),
         ],
-        ["fhir", "file-batch-readiness", "--synthetic-only", "--insecure", *(str(p) for p in sources)],
+        [
+            "fhir", "file-batch-readiness", "--synthetic-only", "--insecure",
+            *(str(p) for p in sources),
+        ],
     ]
     for argv in wrong:
         assert public_cli(argv) == 2
