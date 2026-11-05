@@ -117,6 +117,7 @@ fn audited_native_source_files(root: &Path) -> Vec<PathBuf> {
             "encrypted_readback.rs",
             "lib.rs",
             "main.rs",
+            "protected_audit.rs",
             "session.rs",
             "synthetic_bundle.rs",
             "workspace_receipt.rs"
@@ -299,13 +300,14 @@ fn guard_refuses_unreviewed_nested_module_layout() {
         "encrypted_readback.rs",
         "lib.rs",
         "main.rs",
+        "protected_audit.rs",
         "session.rs",
         "synthetic_bundle.rs",
         "workspace_receipt.rs",
     ] {
         fs::write(root.join(name), "// synthetic, no execution").expect("fixture");
     }
-    assert_eq!(audited_native_source_files(&root).len(), 9);
+    assert_eq!(audited_native_source_files(&root).len(), 10);
     let nested = root.join("hidden");
     fs::create_dir(&nested).expect("create nested fixture");
     fs::write(nested.join("socket.rs"), "// unreviewed nested source").expect("fixture");
