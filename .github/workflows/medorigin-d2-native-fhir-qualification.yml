@@ -104,6 +104,30 @@ jobs:
           & $py -m unittest discover -s experiments/desktop-d2-native-egui/scripts -p test_age_synthetic_workspace.py -v
           if ($LASTEXITCODE -ne 0) { throw 'Synthetic workspace consent/permissions/overwrite contract failed' }
           Write-Output 'SYNTHETIC_AGE_WORKSPACE_SOURCE_ONLY_NO_CI_CRYPTO_OR_CLINICAL_APPROVAL'
+      - name: Source-only Core971 genuine official R4 structural-to-native fail-close contract
+        shell: pwsh
+        run: |
+          $py = if ($IsWindows) { 'python' } else { 'python3' }
+          & $py -m unittest discover -s experiments/desktop-d2-native-egui/scripts -p test_launch_windows_real_core971_official_r4_fictional_batch.py -v
+          if ($LASTEXITCODE -ne 0) { throw 'Core971 R4 source-gate-to-native contract failed' }
+          Write-Output 'CORE971_R4_STRUCTURAL_NATIVE_BRIDGE_SOURCE_ONLY_NO_CORE_OR_GUI_EXECUTED'
+
+      - name: Windows-only parse real Core971 official R4 UIA source (not execution)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $path = 'experiments/desktop-d2-native-egui/tests/windows-real-core971-official-r4-uia.ps1'
+          $tokens = $null
+          $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile(
+            (Resolve-Path $path).Path, [ref]$tokens, [ref]$errors
+          ) | Out-Null
+          if (@($errors).Count -ne 0) { throw 'Core971 R4 real Windows GUI UIA script syntax error' }
+          $text = Get-Content -LiteralPath $path -Raw
+          if (-not $text.Contains('WINDOWS_CORE971_OFFICIAL_R4_STRUCTURAL_REDACTED_NATIVE_UIA_PASS_NONCLINICAL')) {
+            throw 'Core971 R4 native UIA acceptance marker missing'
+          }
+          Write-Output 'CORE971_OFFICIAL_R4_WINDOWS_UIA_SOURCE_ONLY_NOT_ACTUAL_EXECUTION'
       - name: Source-only official FHIR R4 JSON schema provenance and negative gate tests
         shell: pwsh
         run: |

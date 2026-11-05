@@ -29,6 +29,20 @@ const TOP_FIELDS: &[&str] = &[
     "release_authorized",
     "ephemeral_store_removed",
 ];
+const R4_GATE_FIELDS: &[&str] = &[
+    "schema",
+    "status",
+    "official_r4_archive_sha256",
+    "source_count",
+    "structural_not_validated_count",
+    "structural_invalid_count",
+    "fhir_r4_conformance_validated",
+    "terminology_profiles_invariants_verified",
+    "clinical_use_authorized",
+    "publication_authorized",
+];
+const OFFICIAL_R4_SHA: &str = "75e5560da3cf503895a44c8ca7af17a83b4cca6c2cb5ba1883d2aec0d1cb5ac6";
+const R4_FIELD: &str = "official_r4_structural_gate";
 const IMPORT_FIELDS: &[&str] = &[
     "import_ordinal",
     "source_content_sha256",
@@ -53,6 +67,8 @@ pub struct FictionalCoreFileBatch {
     pub audit_head_sha256: String,
     pub resource_count: usize,
     pub timeline_event_count: usize,
+    // Reported source-only structural preflight, NOT full FHIR validation or clinical approval.
+    pub official_r4_structure_checked: bool,
     pub imports: Vec<FictionalCoreFileImport>,
 }
 
@@ -82,7 +98,17 @@ pub fn admit_fictional_core_file_batch(raw: &[u8]) -> Result<FictionalCoreFileBa
     }
     let source: Value =
         serde_json::from_slice(raw).map_err(|_| "fictional_file_batch_receipt_json_refused")?;
-    if !keys_match(&source, TOP_FIELDS) {
+    let official_gate = source.get(R4_FIELD);
+    let top_ok = if official_gate.is_some() {
+        source.as_object().is_some_and(|obj| {
+            obj.len() == TOP_FIELDS.len() + 1
+                && TOP_FIELDS.iter().all(|field| obj.contains_key(*field))
+                && obj.contains_key(R4_FIELD)
+        })
+    } else {
+        keys_match(&source, TOP_FIELDS)
+    };
+    if !top_ok {
         return Err("fictional_file_batch_receipt_extra_or_missing_fields");
     }
     // serde_json canonical rendering gives sorted unique keys. Raw equality
@@ -127,6 +153,28 @@ pub fn admit_fictional_core_file_batch(raw: &[u8]) -> Result<FictionalCoreFileBa
         || count(&source["verified_audit_events"], 2, 4) != Some(import_count)
     {
         return Err("fictional_file_batch_receipt_audit_count_refused");
+    }
+    // The signed/official R4 ZIP is NOT delivered through the native receipt.
+    // All claims here are untrusted source-reported metadata; strict negative
+    // flags prevent a structural-only check from becoming clinical "valid".
+    if let Some(gate) = official_gate
+        && (!keys_match(gate, R4_GATE_FIELDS)
+            || gate["schema"] != "medorigin-core-fictional-file-official-r4-structural-gate/v1"
+            || gate["status"] != "OFFICIAL_R4_JSON_SCHEMA_STRUCTURE_ONLY_NOT_VALIDATED"
+            || gate["official_r4_archive_sha256"] != OFFICIAL_R4_SHA
+            || count(&gate["source_count"], 2, 4) != Some(import_count)
+            || count(&gate["structural_not_validated_count"], 2, 4) != Some(import_count)
+            || count(&gate["structural_invalid_count"], 0, 0) != Some(0)
+            || [
+                "fhir_r4_conformance_validated",
+                "terminology_profiles_invariants_verified",
+                "clinical_use_authorized",
+                "publication_authorized",
+            ]
+            .iter()
+            .any(|field| gate[*field] != false))
+    {
+        return Err("fictional_file_batch_official_r4_gate_claim_refused");
     }
     let final_head = lowercase_sha(&source["current_audit_head_digest"])
         .ok_or("fictional_file_batch_receipt_head_refused")?;
@@ -183,6 +231,7 @@ pub fn admit_fictional_core_file_batch(raw: &[u8]) -> Result<FictionalCoreFileBa
         audit_head_sha256: final_head.to_owned(),
         resource_count: total,
         timeline_event_count: events,
+        official_r4_structure_checked: official_gate.is_some(),
         imports: recovered,
     })
 }
@@ -323,6 +372,69 @@ mod tests {
         );
         assert!(admit_fictional_core_file_batch(duplicate.as_bytes()).is_err());
     }
+    #[test]
+    fn optional_official_r4_structural_status_is_bounded_and_not_validated() {
+        let legacy = bytes(&sample(2));
+        assert!(
+            !admit_fictional_core_file_batch(&legacy)
+                .unwrap()
+                .official_r4_structure_checked
+        );
+        let mut upgraded = sample(2);
+        upgraded[R4_FIELD] = json!({
+            "schema": "medorigin-core-fictional-file-official-r4-structural-gate/v1",
+            "status": "OFFICIAL_R4_JSON_SCHEMA_STRUCTURE_ONLY_NOT_VALIDATED",
+            "official_r4_archive_sha256": OFFICIAL_R4_SHA,
+            "source_count": 2,
+            "structural_not_validated_count": 2,
+            "structural_invalid_count": 0,
+            "fhir_r4_conformance_validated": false,
+            "terminology_profiles_invariants_verified": false,
+            "clinical_use_authorized": false,
+            "publication_authorized": false
+        });
+        let admitted = admit_fictional_core_file_batch(&bytes(&upgraded)).unwrap();
+        assert!(admitted.official_r4_structure_checked);
+        assert_eq!(admitted.imports.len(), 2);
+        for (key, bad) in [
+            ("schema", json!("bogus")),
+            ("status", json!("VALIDATED")),
+            ("official_r4_archive_sha256", json!("0".repeat(64))),
+            ("source_count", json!(1)),
+            ("structural_not_validated_count", json!(1)),
+            ("structural_invalid_count", json!(1)),
+            ("fhir_r4_conformance_validated", json!(true)),
+            ("terminology_profiles_invariants_verified", json!(true)),
+            ("clinical_use_authorized", json!(true)),
+            ("publication_authorized", json!(true)),
+        ] {
+            let mut v = upgraded.clone();
+            v[R4_FIELD][key] = bad;
+            assert!(
+                admit_fictional_core_file_batch(&bytes(&v)).is_err(),
+                "{key}"
+            );
+        }
+        for (key, bad) in [
+            ("source_count", json!(true)),
+            ("structural_invalid_count", json!(false)),
+            ("publication_authorized", json!(null)),
+        ] {
+            let mut v = upgraded.clone();
+            v[R4_FIELD][key] = bad;
+            assert!(
+                admit_fictional_core_file_batch(&bytes(&v)).is_err(),
+                "{key}"
+            );
+        }
+        let mut v = upgraded.clone();
+        v[R4_FIELD]["patient_id"] = json!("fictional-patient");
+        assert!(admit_fictional_core_file_batch(&bytes(&v)).is_err());
+        v = upgraded;
+        v["patient_name"] = json!("Never permit PHI");
+        assert!(admit_fictional_core_file_batch(&bytes(&v)).is_err());
+    }
+
     #[test]
     fn refuses_corrupt_provenance_counts_cross_import_mixups_and_oversize() {
         for field in [

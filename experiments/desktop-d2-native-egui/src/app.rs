@@ -2600,6 +2600,15 @@ impl MedOriginNativePreview {
             ));
             ui.label("Every import has one separately scoped imaginary patient. No cross-import identity joining.");
             ui.label("No FHIR R4 conformance, release approval, clinical storage, production key custody or real patient use.");
+            if batch.official_r4_structure_checked {
+                ui.strong(format!(
+                    "Official R4: {} of {} invented files structurally assessed (NOT FHIR validated)",
+                    batch.imports.len(), batch.imports.len()
+                ));
+                ui.label("Offline official HL7 R4 v4.0.1 JSON Schema structure-only preflight was reported BEFORE the ephemeral encrypted import. No profiles, terminology or clinical approval.");
+            } else {
+                ui.label("Official R4: no source-reported structural preflight in this legacy receipt.");
+            }
             if ui.button("Core batch: Clear redacted receipt").clicked() {
                 clear = true;
             }
