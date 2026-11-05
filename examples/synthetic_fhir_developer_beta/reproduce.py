@@ -74,7 +74,11 @@ def run_one(cli: Path, directory: Path, label: str) -> dict[str, Any]:
         ["fhir", "validate", str(GOOD), "--created-at", TIMESTAMP, "--output-dir", str(output)],
         directory,
     )
-    if validated.returncode != 2 or validated.stderr:
+    # Current Core intentionally prints a local report location on stderr.
+    # Do not echo it, depend on its value, or treat it as evidence of
+    # validation. The independently read report/stdout/exit contract below
+    # is the only trusted success path.
+    if validated.returncode != 2 or len(validated.stderr) > 64_000:
         raise ValueError("Core FHIR must explicitly refuse unperformed validation")
     reports = list(output.rglob("report.json"))
     if len(reports) != 1 or reports[0].is_symlink():
