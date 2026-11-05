@@ -113,6 +113,44 @@ class Core963RealFictionalOneCommandTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "windows_owner_host_required"):
                 bridge.launch(Path("not-a-core"), Path("no-gui.exe"), "0" * 64, qa_auto_close=True)
 
+    def test_only_both_qualified_clean_core_source_commits_may_run(self):
+        self.assertEqual(
+            bridge.QUALIFIED_CORE_COMMITS,
+            {
+                "e32141c3e4dd28eb03e47149625a86f0ebb2d386",
+                "a583713451b24d05e13730c8159b9fe8f6cf223b",
+            },
+        )
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            for rel in (
+                "src/medscale/fhirkit/workspace_file_batch_demo.py",
+                "src/medscale/fhirkit/workspace_demo.py",
+                "apps/workspace/src/medscale_workspace/storage.py",
+            ):
+                path = root / rel
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_bytes(b"# source-only fake path")
+            for qualified in sorted(bridge.QUALIFIED_CORE_COMMITS):
+                with patch.object(
+                    bridge.subprocess, "run",
+                    side_effect=[
+                        bridge.subprocess.CompletedProcess([], 0, stdout=(qualified+"\n").encode()),
+                        bridge.subprocess.CompletedProcess([], 0, stdout=b""),
+                    ],
+                ):
+                    bridge._core_source_attested(root)
+            for sha, dirty in (("0"*40, b""), (bridge.CORE973_SHA, b" M source.py")):
+                with patch.object(
+                    bridge.subprocess, "run",
+                    side_effect=[
+                        bridge.subprocess.CompletedProcess([], 0, stdout=(sha+"\n").encode()),
+                        bridge.subprocess.CompletedProcess([], 0, stdout=dirty),
+                    ],
+                ):
+                    with self.assertRaisesRegex(ValueError, "core963_source_head_or_tree_refused"):
+                        bridge._core_source_attested(root)
+
     def test_source_root_without_exact_reviewed_tree_cannot_launch(self):
         with tempfile.TemporaryDirectory() as temporary:
             with self.assertRaisesRegex(ValueError, "core963_source_files_refused"):

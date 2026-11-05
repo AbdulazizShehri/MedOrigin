@@ -24,6 +24,10 @@ from tempfile import TemporaryDirectory
 import time
 
 CORE963_SHA = "e32141c3e4dd28eb03e47149625a86f0ebb2d386"
+# Real source-run qualification on owner Windows 11 also passed the exact
+# stricter Core #973 multi-patient reference preflight milestone.
+CORE973_SHA = "a583713451b24d05e13730c8159b9fe8f6cf223b"
+QUALIFIED_CORE_COMMITS = frozenset({CORE963_SHA, CORE973_SHA})
 EXE_NAME = "medorigin-desktop-d2-native-egui.exe"
 D2_RECEIPT_FLAG = "--synthetic-core-file-batch-receipt-stdin"  # Legacy unbound QA only.
 D2_SESSION_BATCH_FLAG = "--synthetic-core-file-batch-session-stdin"
@@ -88,7 +92,7 @@ def _core_source_attested(source: Path) -> None:
     except (OSError, subprocess.TimeoutExpired) as exc:
         raise ValueError("core963_source_git_attestation_unavailable") from exc
     if (head.returncode or dirty.returncode or
-        head.stdout.strip().decode("ascii", errors="replace") != CORE963_SHA or
+        head.stdout.strip().decode("ascii", errors="replace") not in QUALIFIED_CORE_COMMITS or
         dirty.stdout.strip()):
         raise ValueError("core963_source_head_or_tree_refused")
 
