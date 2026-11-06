@@ -181,7 +181,10 @@ def _hosted_windows_tcl_bootstrap_failure(error: Exception) -> bool:
     return (
         os.name == "nt"
         and os.environ.get("GITHUB_ACTIONS") == "true"
-        and "Can't find a usable init.tcl" in str(error)
+        and any(
+            marker in str(error)
+            for marker in ("Can't find a usable init.tcl", "Can't find a usable tk.tcl")
+        )
     )
 
 
@@ -190,13 +193,19 @@ def test_hosted_tcl_deferral_is_exact_and_never_hides_other_gui_errors(
 ) -> None:
     import tkinter as tk
 
-    known = tk.TclError("Can't find a usable init.tcl in the following directories")
+    known_init = tk.TclError("Can't find a usable init.tcl in the following directories")
+    known_tk = tk.TclError(
+        "Can't find a usable tk.tcl in the following directories: "
+        "tk8.6/ttk/sizegrip.tcl: no such file or directory"
+    )
     other = tk.TclError("unexpected native GUI render failure")
     monkeypatch.setenv("GITHUB_ACTIONS", "true")
-    assert _hosted_windows_tcl_bootstrap_failure(known) is (os.name == "nt")
+    assert _hosted_windows_tcl_bootstrap_failure(known_init) is (os.name == "nt")
+    assert _hosted_windows_tcl_bootstrap_failure(known_tk) is (os.name == "nt")
     assert _hosted_windows_tcl_bootstrap_failure(other) is False
     monkeypatch.delenv("GITHUB_ACTIONS")
-    assert _hosted_windows_tcl_bootstrap_failure(known) is False
+    assert _hosted_windows_tcl_bootstrap_failure(known_init) is False
+    assert _hosted_windows_tcl_bootstrap_failure(known_tk) is False
 
 
 def test_all_native_pages_can_scroll_to_their_end_at_minimum_window_size(
