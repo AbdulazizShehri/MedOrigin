@@ -52,6 +52,15 @@ _FIXED_LOCAL_FAILURES: dict[str, str] = {
     "incomplete_observation_subset": (
         "A synthetic Observation lacks an admitted status or code shape."
     ),
+    "encounter_status_not_in_r4_required_codes": (
+        "A synthetic Encounter status is not a required-binding HL7 FHIR R4 v4.0.1 code."
+    ),
+    "observation_status_not_in_r4_required_codes": (
+        "A synthetic Observation status is not a required-binding HL7 FHIR R4 v4.0.1 code."
+    ),
+    "observation_multiple_r4_choice_values_refused": (
+        "A synthetic Observation has more than one admitted FHIR R4 value[x] choice."
+    ),
     "required_local_reference_missing_or_malformed": (
         "A required synthetic local subject or encounter reference is malformed."
     ),
@@ -66,6 +75,9 @@ _FIXED_LOCAL_FAILURES: dict[str, str] = {
     ),
     "local_reference_target_type_mismatch": (
         "A synthetic local reference resolves to the wrong admitted resource type."
+    ),
+    "observation_encounter_patient_mismatch": (
+        "A synthetic Observation and its linked Encounter refer to different local Patients."
     ),
     "duplicate_bundle_resource_identity": (
         "Two entries have the same FHIR resource type and local resource id."
