@@ -114,6 +114,105 @@ def _bundle_preflight_main(argv: list[str]) -> int:
     return 0
 
 
+def _file_batch_triage_main(argv: list[str]) -> int:
+    """Read-only, per-file fictional relationship and timeline diagnostics."""
+    if argv in (["-h"], ["--help"]):
+        print(
+            "usage: medscale fhir file-batch-triage --synthetic-only "
+            "FICTIONAL_BUNDLE_1 FICTIONAL_BUNDLE_2 "
+            "[FICTIONAL_BUNDLE_3 ... FICTIONAL_BUNDLE_4]\\n"
+            "Return a fixed, source-ordinal explanation of invalid invented "
+            "FHIR relationships, dates or Encounter periods before import. "
+            "NO database, PHI, full FHIR validation or clinical authorization."
+        )
+        return 0
+    refused = "file triage refused: explicit_fictional_readonly_batch_required"
+    if (
+        not 3 <= len(argv) <= 5
+        or argv[0] != "--synthetic-only"
+        or any(not name or name.startswith("--") for name in argv[1:])
+    ):
+        print(refused, file=sys.stderr)
+        return 2
+    try:
+        sources = [read_fhir_json_document(Path(name)) for name in argv[1:]]
+    except FhirInputError:
+        # In particular, never echo invalid filenames or JSON parse errors.
+        # An unparseable/unmarked source cannot get per-file diagnostics.
+        print("file triage refused: fictional_source_input_refused", file=sys.stderr)
+        return 1
+    try:
+        from medscale.fhirkit.workspace_file_triage import (
+            fictional_file_batch_triage_json,
+        )
+
+        receipt = fictional_file_batch_triage_json(sources, synthetic_only=True)
+    except Exception:
+        print("file triage refused: unqualified_batch_or_marker", file=sys.stderr)
+        return 2
+    print(receipt, end="")
+    # Even all-sources-ready synthetic triage is not FHIR R4 conformance.
+    return 2
+
+
+def _file_batch_readiness_main(argv: list[str]) -> int:
+    """Read-only local import preview; no encrypted store or patient output."""
+    if argv in (["-h"], ["--help"]):
+        print(
+            "usage: medscale fhir file-batch-readiness --synthetic-only "
+            "[--offline-r4-schema OFFICIAL_R4_ZIP] "
+            "FICTIONAL_BUNDLE_1 FICTIONAL_BUNDLE_2 "
+            "[FICTIONAL_BUNDLE_3 ... FICTIONAL_BUNDLE_4]\n"
+            "Offline dry run for 2-4 invented local Bundles: reviewed source "
+            "relationships, timeline/date readiness and optional source-pinned "
+            "official R4 structure. Reports only per-source day/count summary. "
+            "NO storage, PHI, full FHIR conformance, or clinical approval."
+        )
+        return 0
+    refused = "file readiness refused: explicit_fictional_readonly_batch_required"
+    if not 3 <= len(argv) <= 7 or argv[0] != "--synthetic-only":
+        print(refused, file=sys.stderr)
+        return 2
+    cursor = 1
+    schema: Path | None = None
+    if len(argv) > 2 and argv[1] == "--offline-r4-schema":
+        if (
+            len(argv) < 5
+            or not argv[2]
+            or argv[2].startswith("--")
+        ):
+            print(refused, file=sys.stderr)
+            return 2
+        schema = Path(argv[2])
+        cursor = 3
+    names = argv[cursor:]
+    if not 2 <= len(names) <= 4 or any(
+        not name or name.startswith("--") for name in names
+    ):
+        print(refused, file=sys.stderr)
+        return 2
+    try:
+        sources = [read_fhir_json_document(Path(name)) for name in names]
+    except FhirInputError:
+        print("file readiness refused: fictional_source_input_refused", file=sys.stderr)
+        return 1
+    try:
+        from medscale.fhirkit.workspace_file_readiness import (
+            fictional_file_batch_readiness_json,
+        )
+
+        receipt = fictional_file_batch_readiness_json(
+            sources, synthetic_only=True, offline_r4_schema=schema
+        )
+    except Exception:
+        print("file readiness refused: source_or_timeline_preflight_refused", file=sys.stderr)
+        return 2
+    print(receipt, end="")
+    # A read-only preview, even with official R4 JSON Schema, is NOT
+    # a successful FHIR/clinical conformance assertion.
+    return 2
+
+
 def _fictional_encrypted_file_batch_demo_main(argv: list[str]) -> int:
     """Actual caller-selected invented JSON -> encrypted ephemeral cold reopen.
 
@@ -124,6 +223,9 @@ def _fictional_encrypted_file_batch_demo_main(argv: list[str]) -> int:
         print(
             "usage: medscale fhir file-batch-encrypted-demo "
             "--synthetic-only --ephemeral-demo "
+            "[--from-day YYYY-MM-DD] [--through-day YYYY-MM-DD] "
+            "[--event-type Encounter|Observation] "
+            "[--offline-r4-schema OFFICIAL_FHIR_R4_ZIP] "
             "FICTIONAL_BUNDLE_1 FICTIONAL_BUNDLE_2 "
             "[FICTIONAL_BUNDLE_3 ... FICTIONAL_BUNDLE_4]\\n"
             "Imports invented source files into a temporary AES-GCM Workspace, "
@@ -132,20 +234,40 @@ def _fictional_encrypted_file_batch_demo_main(argv: list[str]) -> int:
             "NO permanent import, PHI, FHIR R4/clinical validation or release."
         )
         return 0
-    if (
-        not 4 <= len(argv) <= 6
-        or argv[0:2] != ["--synthetic-only", "--ephemeral-demo"]
-        or any(not name or name.startswith("--") for name in argv[2:])
-    ):
-        print(
-            "file batch demo refused: exact_fictional_ephemeral_file_flags_required",
-            file=sys.stderr,
-        )
+    refused = "file batch demo refused: exact_fictional_ephemeral_file_flags_required"
+    if len(argv) < 4 or argv[0:2] != ["--synthetic-only", "--ephemeral-demo"]:
+        print(refused, file=sys.stderr)
+        return 2
+    # Admit optional bounded filters only BEFORE positional fictional files.
+    # No argparse error can disclose caller-supplied filenames or values.
+    filter_names = {
+        "--from-day": "from_day_utc",
+        "--through-day": "through_day_utc",
+        "--event-type": "resource_type",
+        "--offline-r4-schema": "offline_r4_schema",
+    }
+    filters: dict[str, str] = {}
+    cursor = 2
+    while cursor < len(argv) and argv[cursor] in filter_names:
+        name = filter_names[argv[cursor]]
+        if (
+            name in filters
+            or cursor + 1 >= len(argv)
+            or not argv[cursor + 1]
+            or argv[cursor + 1].startswith("--")
+        ):
+            print(refused, file=sys.stderr)
+            return 2
+        filters[name] = argv[cursor + 1]
+        cursor += 2
+    paths = argv[cursor:]
+    if not 2 <= len(paths) <= 4 or any(not p or p.startswith("--") for p in paths):
+        print(refused, file=sys.stderr)
         return 2
     try:
         from medscale.fhirkit.workspace_file_batch_demo import fictional_file_batch_receipt_json
 
-        sources = [read_fhir_json_document(Path(name)) for name in argv[2:]]
+        sources = [read_fhir_json_document(Path(name)) for name in paths]
     except FhirInputError:
         print("file batch demo refused: source_file_refused", file=sys.stderr)
         return 1
@@ -153,8 +275,13 @@ def _fictional_encrypted_file_batch_demo_main(argv: list[str]) -> int:
         print("file batch demo refused: source_reader_unavailable", file=sys.stderr)
         return 2
     try:
+        official_zip = filters.pop("offline_r4_schema", None)
         output = fictional_file_batch_receipt_json(
-            sources, synthetic_only=True, ephemeral_demo=True
+            sources,
+            synthetic_only=True,
+            ephemeral_demo=True,
+            offline_r4_schema=Path(official_zip) if official_zip is not None else None,
+            **filters,
         )
     except Exception:
         print(
@@ -556,14 +683,97 @@ def _filtered_multi_timeline_demo_main(argv: list[str]) -> int:
     return 0
 
 
+def _windows_protected_audit_preview_main(argv: list[str]) -> int:
+    """Real owner Windows protected-key synthetic audit-only lifecycle CLI.
+
+    No user JSON/document inputs. Strict positional flags, fixed diagnostic
+    strings; neither absolute paths, UUID values nor OS exceptions are echoed.
+    """
+    if argv in (["-h"], ["--help"]):
+        print(
+            "usage: medscale fhir windows-audit-preview "
+            "create|verify|forget --synthetic-only --developer-preview "
+            "--store-root EXISTING_MEDORIGIN_FICTIONAL_WORKSPACE_PREVIEW_DIRECTORY "
+            "--workspace-id UUIDV4 "
+            "[--expected-head LOWERCASE_SHA256] "
+            "[--acknowledge-irreversible-key-loss]\\n"
+            "Windows Credential Manager-backed encrypted audit-only "
+            "fictional developer preview. create prints an independent "
+            "audit head; verify and forget REQUIRE that head. "
+            "forget irrevocably deletes the preview key but preserves "
+            "the now-unreadable encrypted store. No patient records, "
+            "FHIR import, clinical permission or production key custody."
+        )
+        return 0
+    refusal = "windows audit preview refused: exact_fictional_protected_flags_required"
+    if (
+        len(argv) < 7
+        or argv[0] not in ("create", "verify", "forget")
+        or argv[1:5]
+        != [
+            "--synthetic-only",
+            "--developer-preview",
+            "--store-root",
+            argv[4],
+        ]
+        or argv[5] != "--workspace-id"
+    ):
+        print(refusal, file=sys.stderr)
+        return 2
+    action = argv[0]
+    wanted = {"create": 7, "verify": 9, "forget": 10}[action]
+    if len(argv) != wanted or not argv[4] or not argv[6]:
+        print(refusal, file=sys.stderr)
+        return 2
+    if action != "create" and (argv[7] != "--expected-head" or not argv[8]):
+        print(refusal, file=sys.stderr)
+        return 2
+    if action == "forget" and argv[9] != "--acknowledge-irreversible-key-loss":
+        print(refusal, file=sys.stderr)
+        return 2
+    try:
+        from uuid import UUID
+
+        from medscale.fhirkit.windows_protected_audit_preview import (
+            run_windows_audit_preview,
+        )
+
+        wid = UUID(argv[6])
+        if wid.version != 4 or str(wid) != argv[6]:
+            raise ValueError("noncanonical UUIDv4")
+        result = run_windows_audit_preview(
+            action,
+            Path(argv[4]),
+            wid,
+            argv[8] if action != "create" else None,
+            synthetic_only=True,
+            developer_preview=True,
+            irreversible_delete_acknowledged=action == "forget",
+        )
+    except Exception:
+        print(
+            "windows audit preview refused: encrypted_fictional_protected_workspace_unavailable",
+            file=sys.stderr,
+        )
+        return 2
+    print(json.dumps(result, sort_keys=True, separators=(",", ":"), ensure_ascii=True))
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     tokens = list(sys.argv[1:] if argv is None else argv)
+    if tokens and tokens[0] == "windows-audit-preview":
+        return _windows_protected_audit_preview_main(tokens[1:])
     if tokens and tokens[0] == "filtered-multi-timeline-demo":
         return _filtered_multi_timeline_demo_main(tokens[1:])
     if tokens and tokens[0] == "multi-timeline-demo":
         return _multi_timeline_demo_main(tokens[1:])
     if tokens and tokens[0] == "timeline-demo":
         return _timeline_demo_main(tokens[1:])
+    if tokens and tokens[0] == "file-batch-triage":
+        return _file_batch_triage_main(tokens[1:])
+    if tokens and tokens[0] == "file-batch-readiness":
+        return _file_batch_readiness_main(tokens[1:])
     if tokens and tokens[0] == "file-batch-encrypted-demo":
         return _fictional_encrypted_file_batch_demo_main(tokens[1:])
     if tokens and tokens[0] == "batch-bundle-diagnose":

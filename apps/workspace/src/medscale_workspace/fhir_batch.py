@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-import re
 
 from medscale_workspace import fhir_r4 as fhir_mod
 from medscale_workspace.audit import (
@@ -34,7 +33,15 @@ from medscale_workspace.provenance import (
 from medscale_workspace.storage import ObjectWrite, WorkspaceStore
 
 _MAXIMUM_BATCH_ENTRIES = 16
-_SHA256_PATTERN = re.compile(r"[0-9a-f]{64}\Z")
+
+
+def _is_lower_sha256(value: object) -> bool:
+    """Match exactly 64 ASCII lowercase hexadecimal characters, without regex imports."""
+    return (
+        isinstance(value, str)
+        and len(value) == 64
+        and all("0" <= char <= "9" or "a" <= char <= "f" for char in value)
+    )
 
 
 class SyntheticFhirBatchError(ValueError):
@@ -73,9 +80,7 @@ def commit_synthetic_fhir_batch_atomic(
         raise SyntheticFhirBatchError("workspace_test_key_provider_mismatch")
     if not isinstance(resources, tuple) or not 1 <= len(resources) <= _MAXIMUM_BATCH_ENTRIES:
         raise SyntheticFhirBatchError("atomic_test_batch_out_of_range")
-    if not isinstance(source_content_sha256, str) or not _SHA256_PATTERN.fullmatch(
-        source_content_sha256
-    ):
+    if not isinstance(source_content_sha256, str) or not _is_lower_sha256(source_content_sha256):
         raise SyntheticFhirBatchError("invalid_synthetic_source_digest")
 
     try:

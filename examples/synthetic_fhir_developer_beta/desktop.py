@@ -35,19 +35,20 @@ HEX256 = re.compile(r"[0-9a-f]{64}\Z")
 def public_result(run: dict[str, Any]) -> dict[str, str]:
     """Whitelist the non-PHI information allowed in the desktop preview."""
     if (
-        run.get("structural_status") != "valid"
+        run.get("provenance_status") != "not_validated"
         or type(run.get("malformed_exit")) is not int
         or run["malformed_exit"] != 1
-        or ("valid_exit" in run and (type(run["valid_exit"]) is not int or run["valid_exit"] != 0))
+        or type(run.get("validation_exit")) is not int
+        or run["validation_exit"] != 2
     ):
-        raise ValueError("synthetic validator or negative control did not pass")
+        raise ValueError("synthetic Core provenance or negative control was not admitted")
     report = run.get("report_sha256")
     fixture = run.get("fixture_sha256")
     if not isinstance(report, str) or not HEX256.fullmatch(report):
         raise ValueError("invalid report digest")
     if not isinstance(fixture, str) or not HEX256.fullmatch(fixture):
         raise ValueError("invalid synthetic fixture digest")
-    return {"status": "VALID", "report_sha256": report, "fixture_sha256": fixture}
+    return {"status": "NOT_VALIDATED", "report_sha256": report, "fixture_sha256": fixture}
 
 
 def validate_installed(cli: Path, workspace_python: Path | None = None) -> dict[str, Any]:
@@ -86,7 +87,7 @@ class Desktop:
         root.minsize(850, 610)
         root.configure(bg=BACKGROUND)
         self.status = tk.StringVar(value="READY - SYNTHETIC ONLY")
-        self.result_line = tk.StringVar(value="No synthetic validation has been run.")
+        self.result_line = tk.StringVar(value="No local FHIR provenance check has been run.")
         self.report_hash = tk.StringVar(value="Not generated")
         self.fixture_hash = tk.StringVar(value="Not generated")
         self.case_status = tk.StringVar(
@@ -237,7 +238,7 @@ class Desktop:
         self._subtitle(
             page,
             "Local developer toolkit",
-            "Validate synthetic FHIR, offline.",
+            "Inspect local FHIR provenance, offline.",
             "A native interactive preview of installed Python tools. "
             "Uses bundled fictional data only; no patient file selection or cloud service.",
         )
@@ -250,7 +251,8 @@ class Desktop:
         )
         self._label(
             p,
-            "Validate the bundled synthetic StructureDefinition and inspect SHA-256 evidence.",
+            "Reproduce local report provenance for the fictional FHIR fixture. "
+            "This does not validate FHIR R4.",
             11,
             MUTED,
             bg=SURFACE,
@@ -268,7 +270,7 @@ class Desktop:
             font=("Segoe UI", 13),
             anchor="w",
         ).pack(anchor="w", padx=25, pady=(0, 23))
-        self._button(page, "Run synthetic FHIR validation >", self._begin_from_overview).pack(
+        self._button(page, "Run local provenance check >", self._begin_from_overview).pack(
             anchor="w", pady=(27, 0)
         )
 
@@ -307,7 +309,7 @@ class Desktop:
         if self.workspace_python is None:
             self.case_button.configure(state="disabled")
         self.case_button.pack(side="left")
-        self._button(controls, "Run FHIR validation", self._begin_from_overview, fill=False).pack(
+        self._button(controls, "Check FHIR provenance", self._begin_from_overview, fill=False).pack(
             side="left", padx=(12, 0)
         )
         self._label(
@@ -322,14 +324,14 @@ class Desktop:
     def _make_validation(self, page: tk.Frame) -> None:
         self._subtitle(
             page,
-            "Interactive validation",
-            "Run the installed FHIR checker.",
+            "Local report provenance",
+            "Reproduce the installed Core report, not FHIR validation.",
             "Runs only the bundled synthetic JSON fixture. Local temporary report "
-            "files are deleted automatically after validation.",
+            "files are deleted automatically after the local check.",
         )
         line = tk.Frame(page, bg=BACKGROUND)
         line.pack(fill="x", pady=(28, 0))
-        self.run_button = self._button(line, "Validate synthetic fixture", self._begin)
+        self.run_button = self._button(line, "Check fictional report provenance", self._begin)
         self.run_button.pack(side="left")
         tk.Label(
             line,
@@ -394,7 +396,7 @@ class Desktop:
             ("HISTORICAL DATA", "v0.2.0 stored datasets are incompatible; no automatic migration."),
             (
                 "NO CLINICAL CLAIMS",
-                "A valid structural report does not certify HL7 conformance or clinical safety.",
+                "No actual HL7 FHIR validator is run; the result must remain NOT VALIDATED.",
             ),
             (
                 "UNPUBLISHED",
@@ -499,7 +501,7 @@ class Desktop:
             self.events.put(("success", outcome))
         except Exception:
             # Refuse to render unsanitized subprocess or file content.
-            self.events.put(("error", "Validation could not be verified; no report admitted."))
+            self.events.put(("error", "Local Core provenance could not be verified."))
 
     def _drain(self) -> None:
         try:
@@ -522,8 +524,11 @@ class Desktop:
                 if kind == "success":
                     self.last_result = result
                     safe = result["fhir"]
-                    self.status.set("PASSED - SYNTHETIC")
-                    self.result_line.set("Local FHIR structural validation passed")
+                    self.status.set("NOT VALIDATED - PROVENANCE VERIFIED")
+                    self.result_line.set(
+                        "Local source provenance reproduced. "
+                        "FHIR R4 validation was not performed."
+                    )
                     self.report_hash.set(safe["report_sha256"])
                     self.fixture_hash.set(safe["fixture_sha256"])
                     if result["workspace"] is not None:
