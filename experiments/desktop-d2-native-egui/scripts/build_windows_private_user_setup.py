@@ -32,7 +32,7 @@ FILES = (
     "UPSTREAM-NOTICE.md",
 )
 SHA = re.compile(r"[0-9a-f]{64}")
-SAFE_DRIVE_PATH = re.compile(r"[A-Za-z]:\\[A-Za-z0-9 _.\\-]+")
+SAFE_DRIVE_PATH = re.compile(r"[A-Za-z]:\\[A-Za-z0-9 _.~\\-]+")
 INSTALLER_SCRIPT = "Install-MedOrigin-Private.ps1"
 INSTALLER_COMMAND = "Install-MedOrigin-Private.cmd"
 MAX_BINARY = 120 * 1024 * 1024
