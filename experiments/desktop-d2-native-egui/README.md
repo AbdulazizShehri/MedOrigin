@@ -12,13 +12,139 @@ D1 source candidate, the Python Research Core or the Workspace.
   intentionally present in this source. Dependency auditing is still required.
 - Native application compilation is distinct from proving zero network egress:
   an OS-scoped packet-level observation is still required on each platform.
-- The UI does not persist state or read from an arbitrary path.
+- The UI does not persist state. In the new opt-in drag/drop demo it reads only
+  the file explicitly dropped by the user, under a strict fictional-only JSON
+  allowlist; this is NOT a general patient file opener. Explicitly selected
+  paths may still be OS-mounted drives, so packet-level isolation remains NO-GO.
 - `eframe`'s `accesskit` feature is enabled explicitly (default features are
   disabled). Before enabling it, Windows UI Automation exposed **0** descendants
   of the native window; after enabling it, Windows exposed **10** accessible
   controls/text nodes, including the four synthetic fixture selectors and
   the verification button. This added Rust/Windows accessibility dependencies
   to the locked dependency graph; their licenses and advisories require review.
+
+## Drag-and-drop local synthetic Bundle demo (private, NONCLINICAL)
+
+A user can now launch the native egui program normally, then drag **one**
+canonical FHIR-shaped **fictional-only** JSON file into the window. For an
+admitted example use
+`fixtures/core/synthetic-multipatient-fhir-bundle.json` from this reviewed
+source checkout. The existing multi-patient fictional chart opens with a
+visible "Opened local synthetic-only JSON" indicator. The demo can be cleared
+with its existing fictional records Clear control or Escape.
+
+The file is read locally with a 32,768-byte upper bound and only after an
+explicit drop. Non-JSON files, multiple dropped files, symlinks/reparse paths,
+noncanonical bytes, real-world patient names, observations/values, extraneous
+fields, nonfictional resource IDs, malformed references or cross-patient
+relationships fail closed. Rejected names, paths, or source bytes are not
+shown in the UI or logged. Existing protected Core session modes cannot be
+replaced by a dropped file; clear them first. The app does not save, export,
+watch a directory, create an account, use a model or call an application
+network API. It does not qualify PHI processing or network isolation. A
+Windows mapped drive is not independently ruled out by an ordinary drive
+letter, so operators must use a reviewed local fixture drive for offline QA.
+
+This is useful end-user interaction work in the **experimental** native
+Desktop only; it is neither an EHR file importer nor a clinical validator.
+The native Windows drag-and-drop event was physically exercised in a
+reviewed private QA session on source commit `7e5282d96b1caf4f85cda3d4997b10f290871f31`,
+compiled EXE SHA-256
+`9f79f06ad0fcbb7401e5a4fc72be8e026963f08b3c16adc14b058247866f7654`:
+Windows OLE reported `DRAG_EFFECT_Copy`, and AccessKit/UIAutomation detected
+`Bundle: Opened local synthetic-only JSON (no PHI, session-only)`, exit 0.
+See `tests/windows-native-local-fictional-ole-drop-uia.ps1` for the exact
+Windows-only opt-in procedure; it uses only the source-controlled fictional
+fixture and temporarily controls mouse movement. A forged fixture digest was
+rejected before launch (exit 2). This does not prove any patient-data admission,
+operating-system network isolation or a qualified clinical product.
+
+Rust tests additionally cover canonical fictional input, invalid/oversize/
+noncanonical inputs, guarded paths and protected-session denial. The entire
+Windows installer lifecycle was exercised separately on an isolated mock
+LOCALAPPDATA/APPDATA profile; no real user installation or release was made.
+
+## Keyboard-accessible local JSON opening (private, NONCLINICAL)
+
+As an alternative to dragging a file, launch the native Windows app normally.
+On the initial screen, use **Ctrl+O** to focus **Local fictional JSON file
+path**, paste a local file path copied from Windows Explorer (including its
+optional surrounding quotation marks), then select **Open local fictional JSON
+(NO PHI)** or press Enter. The same strict bounded fictional-only source
+admission path is used as for drag/drop. The path is removed from the
+in-memory input immediately after the attempt and never written to a
+recent-files list, logger or cache; this is not secure memory erasure. Invalid
+paths, control/bidirectional formatting characters, overlong entries and
+unapproved file contents are refused. Existing protected Core sessions
+cannot be silently replaced by a typed file path.
+
+The source-controlled opt-in Windows UIAutomation test
+`tests/windows-native-typed-fictional-path-uia.ps1` uses a hash-verified
+source fixture, types it through the native UI accessibility layer, verifies
+the imaginary patient worklist, clears the source and checks the local path
+has been cleared. It never uses the user's clipboard or files outside
+the source checkout. Host CI only syntax-checks this script; actual Windows
+GUI acceptance must be run separately on the owner machine.
+
+This does NOT provide a production file-picker, EHR import, patient privacy
+approval, signed distribution, authenticated Core or clinical-use permission.
+
+## Source-scoped fictional worklist search (private, NONCLINICAL)
+
+In the fictional FHIR Bundle view, use **Ctrl+F** to focus the native **Bundle:
+Find fictional type or resource ID (NO PHI)** field. Search accepts only
+bounded ASCII fictional-type or fictional-ID prefixes such as `observation`,
+`fictional-observation-016` or
+`Observation/fictional-observation-016`. It does **not** search real names,
+clinical notes, free text or arbitrary patient identifiers, and rejected text
+is never logged. The search is restricted to the currently selected fictional
+patient group and resource-type facet. Switching groups/types cannot expose
+hidden rows; invalid search input is refused without replacing the admitted
+fictional source. When search hides a prior record selection, navigation
+history is cleared. Following a source-verified reference clears search to
+avoid treating a hidden target as visible. Select **Bundle: Clear fictional
+search** to restore the full in-memory source worklist. All query state is
+discarded when fictional records are cleared or the source changes.
+
+The owner-only `tests/windows-synthetic-multipatient-bundle-uia.ps1 -Stress48
+-Search48` exercises the real Windows keyboard and UIAutomation controls
+with the **48-record, 16-imaginary-patient** source-reviewed fixture. It verifies
+a single matching Observation, composes the Patient and All resource-type
+facets, resets to all 48 records and clears without preserving search.
+Rust tests additionally check typed search prefix bounds, rejected personal
+names, cross-patient query isolation, stale selection and graph-navigation
+clears. Hosted GitHub CI does not run an interactive desktop.
+
+This is **not clinical search**, patient identification, ePHI processing,
+medication reconciliation, or a signed release.
+
+## Native MedOrigin identity and visible local Core trust state (private)
+
+The Windows/macOS/Linux Rust/egui shell now uses locally rendered dark
+visuals, a warm circular MedOrigin/Minaret-family monogram and a persistent
+accessible app header, without shipping fonts, downloading assets, loading a
+browser or creating a background worker. The header has a **Clear local
+session** control (also reachable by keyboard) and explicitly shows
+**Fictional demo · no clinical use** at all times.
+
+The **Core status** line reports only the actual current native view state:
+**No connected production Core** without a source; **Local fictional FHIR
+Bundle (read-only)** when a bounded source was admitted; or source-specific
+**fictional** Core/audit/encrypted-test readback labels on those preexisting
+paths. This line does **not** attest process or clinician identity, prove
+encrypted custody, upgrade a source, or imply an operational EHR connection.
+Clearing the current source returns the header to **No connected production
+Core** and clears local nonclinical session state. The existing keyboard
+import, OLE drag/drop, FHIR navigation and redacted Core UI behavior remain
+unchanged.
+
+The existing `tests/windows-synthetic-multipatient-bundle-uia.ps1` now
+verifies the real on-screen native status before and after opening a
+fictional Bundle and after the header's accessible Clear action, in
+addition to the older source/patient graph walkthrough. A Rust regression
+verifies source classification and reset. These do not replace a
+professional visual-accessibility evaluation, packet-level egress audit or
+clinical privacy/security review.
 
 ## Browser/network dependency regression guard
 
