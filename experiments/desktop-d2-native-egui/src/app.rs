@@ -3200,9 +3200,8 @@ impl eframe::App for MedOriginNativePreview {
         if !dropped.is_empty() {
             let paths: Vec<std::path::PathBuf> = dropped
                 .iter()
-                .filter_map(|file| {
-                    (!file.path().as_os_str().is_empty()).then(|| file.path().to_path_buf())
-                })
+                .filter(|file| !file.path().as_os_str().is_empty())
+                .map(|file| file.path().to_path_buf())
                 .collect();
             if paths.len() == dropped.len() {
                 let _ = self.import_dropped_fictional_bundle(&paths);
