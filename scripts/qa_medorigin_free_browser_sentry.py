@@ -103,7 +103,12 @@ def _browser_checks(html: Path, edge: Path, known_sha: str, unknown_sha: str) ->
                             "label": adversarial_label,
                             "report_sha256": "</code><script>window.__medorigin_xss=2</script>",
                             "fixture_sha256": '<iframe src="https://example.invalid/">',
-                            "structural_status": "valid",
+                            # Pure renderer receives intentionally
+                            # hostile text with a valid v2 *control* shape.
+                            # The authoritative admit_receipt() still rejects
+                            # these malicious digests at its trust boundary.
+                            "provenance_status": "not_validated",
+                            "validation_exit": 2,
                             "malformed_exit": 1,
                         }
                     ]
