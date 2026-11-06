@@ -65,8 +65,10 @@ def run_smoke(cli: Path, *, timeout_seconds: float = 40.0) -> None:
         root.update()
         if app.working:
             raise TimeoutError("installed synthetic FHIR validation timed out")
-        if app.status.get() != "PASSED - SYNTHETIC":
-            raise AssertionError("installed synthetic Core CLI did not validate")
+        if app.status.get() != "NOT VALIDATED - PROVENANCE VERIFIED":
+            raise AssertionError("installed Core must report provenance, not FHIR validation")
+        if "not performed" not in app.result_line.get():
+            raise AssertionError("native UI failed to state clinical validation was not performed")
         if app.last_result is None or app.last_result["workspace"] is not None:
             raise AssertionError("unexpected result or Workspace payload")
         for digest in (app.report_hash.get(), app.fixture_hash.get()):
@@ -87,6 +89,12 @@ def run_smoke(cli: Path, *, timeout_seconds: float = 40.0) -> None:
                     raise AssertionError("export must preserve publication hold")
                 if payload.get("clinical_use_authorized") is not False:
                     raise AssertionError("export must preserve clinical hold")
+                if payload.get("schema") != "medorigin-synthetic-desktop-evidence/v2":
+                    raise AssertionError("native evidence did not migrate to truthful v2")
+                if payload.get("fhir_conformance_validated") is not False:
+                    raise AssertionError("native evidence falsely claimed FHIR conformance")
+                if payload.get("fhir", {}).get("status") != "NOT_VALIDATED":
+                    raise AssertionError("native evidence falsely reported a valid FHIR result")
                 if payload["fhir"]["report_sha256"] != app.report_hash.get():
                     raise AssertionError("export did not match displayed digest")
                 app.export_button.invoke()
