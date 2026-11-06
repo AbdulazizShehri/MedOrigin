@@ -6,12 +6,14 @@ param(
   [Parameter(Mandatory=$true)][ValidatePattern('^[a-fA-F0-9]{64}$')][string]$ExpectedSha256,
   [Parameter(Mandatory=$true)][ValidatePattern('^[a-fA-F0-9]{64}$')][string]$FixtureSha256,
   [switch]$EmbeddedDemo,
-  [switch]$Stress48
+  [switch]$Stress48,
+  [switch]$Search48
 )
 $ErrorActionPreference='Stop'
 $process=$null
 try {
   if($EmbeddedDemo -and $Stress48){throw 'incompatible_native_test_modes'}
+  if($Search48 -and -not $Stress48){throw 'search48_requires_stress48_source'}
   $exe=(Resolve-Path -LiteralPath $ExePath -ErrorAction Stop).Path
   if((Split-Path -Leaf $exe) -cne 'medorigin-desktop-d2-native-egui.exe' -or
      (Get-FileHash -LiteralPath $exe -Algorithm SHA256).Hash -ine $ExpectedSha256) {
@@ -119,6 +121,34 @@ try {
     Expect 'Bundle record: Observation/fictional-observation-001'
     Press 'Bundle: Reset session exploration'
     Expect 'Bundle exploration: 0 of 16 visible fictional records opened'
+    if($Search48){
+      Add-Type -AssemblyName System.Windows.Forms
+      if([Threading.Thread]::CurrentThread.GetApartmentState() -ne 'STA'){
+        throw 'search48_real_keyboard_requires_sta'
+      }
+      $edits=@(Nodes|Where-Object{
+        try{$_.Current.ControlType.ProgrammaticName -eq 'ControlType.Edit' -and
+          $_.Current.IsEnabled}catch{$false}
+      })
+      if($edits.Count -ne 1){throw 'native_fictional_worklist_search_field_not_unique'}
+      $edits[0].SetFocus()
+      Start-Sleep -Milliseconds 150
+      [System.Windows.Forms.SendKeys]::SendWait('^a')
+      [System.Windows.Forms.SendKeys]::SendWait('fictional-observation-016')
+      Expect 'Bundle: 1 of 48 fictional resources visible'
+      Press 'Bundle: Open next unexplored visible record'
+      Expect 'Bundle record: Observation/fictional-observation-016'
+      Press 'Bundle: Type Patient'
+      Expect 'Bundle: 0 of 48 fictional resources visible'
+      if(Has 'Bundle: Open Observation/fictional-observation-016'){
+        throw 'type_facet_leaked_observation_search_result'
+      }
+      Press 'Bundle: Type All'
+      Expect 'Bundle: 1 of 48 fictional resources visible'
+      Press 'Bundle: Clear fictional search'
+      Expect 'Bundle: 48 of 48 fictional resources visible'
+      Write-Output 'WINDOWS_REAL_48_RECORD_SOURCE_SCOPED_SEARCH_AND_FACET_UIA_PASS_NONCLINICAL'
+    }
     Press 'Bundle: Clear fictional records'
     Expect 'Native Rust Experiment'
     Write-Output 'WINDOWS_REAL_48_RECORD_16_PATIENT_GROUP_SWITCH_UIA_PASS_NONCLINICAL'

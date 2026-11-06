@@ -89,6 +89,35 @@ GUI acceptance must be run separately on the owner machine.
 This does NOT provide a production file-picker, EHR import, patient privacy
 approval, signed distribution, authenticated Core or clinical-use permission.
 
+## Source-scoped fictional worklist search (private, NONCLINICAL)
+
+In the fictional FHIR Bundle view, use **Ctrl+F** to focus the native **Bundle:
+Find fictional type or resource ID (NO PHI)** field. Search accepts only
+bounded ASCII fictional-type or fictional-ID prefixes such as `observation`,
+`fictional-observation-016` or
+`Observation/fictional-observation-016`. It does **not** search real names,
+clinical notes, free text or arbitrary patient identifiers, and rejected text
+is never logged. The search is restricted to the currently selected fictional
+patient group and resource-type facet. Switching groups/types cannot expose
+hidden rows; invalid search input is refused without replacing the admitted
+fictional source. When search hides a prior record selection, navigation
+history is cleared. Following a source-verified reference clears search to
+avoid treating a hidden target as visible. Select **Bundle: Clear fictional
+search** to restore the full in-memory source worklist. All query state is
+discarded when fictional records are cleared or the source changes.
+
+The owner-only `tests/windows-synthetic-multipatient-bundle-uia.ps1 -Stress48
+-Search48` exercises the real Windows keyboard and UIAutomation controls
+with the **48-record, 16-imaginary-patient** source-reviewed fixture. It verifies
+a single matching Observation, composes the Patient and All resource-type
+facets, resets to all 48 records and clears without preserving search.
+Rust tests additionally check typed search prefix bounds, rejected personal
+names, cross-patient query isolation, stale selection and graph-navigation
+clears. Hosted GitHub CI does not run an interactive desktop.
+
+This is **not clinical search**, patient identification, ePHI processing,
+medication reconciliation, or a signed release.
+
 ## Browser/network dependency regression guard
 
 `tests/browser_free_boundary.rs` runs automatically with `cargo test
