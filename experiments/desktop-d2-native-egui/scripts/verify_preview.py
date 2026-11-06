@@ -1,17 +1,24 @@
 #!/usr/bin/env python3
 """Verify the exact nonclinical native D2 archive member contract, not release safety."""
+
 from __future__ import annotations
 
 import argparse
 import json
-from pathlib import Path
 import stat
 import sys
 import tarfile
 import zipfile
+from pathlib import Path
 
 from package_preview import (
-    APP, BINARY, commit_of, digest, files_for, inspect_native_header, selected_target,
+    APP,
+    BINARY,
+    commit_of,
+    digest,
+    files_for,
+    inspect_native_header,
+    selected_target,
 )
 
 MIB = 1024 * 1024
@@ -48,8 +55,7 @@ def verify_archive(path: Path, repo: Path, target: str | None = None) -> dict:
     extension = ".tar.gz" if system == "linux" else ".zip"
     commit = commit_of(repo)
     expected_filename = (
-        "MedOrigin-Synthetic-D2-" + system + "-" + architecture +
-        "-" + commit[:8] + extension
+        "MedOrigin-Synthetic-D2-" + system + "-" + architecture + "-" + commit[:8] + extension
     )
     if path.name != expected_filename:
         raise ValueError("unexpected_archive_filename_or_source_commit")
@@ -57,8 +63,11 @@ def verify_archive(path: Path, repo: Path, target: str | None = None) -> dict:
     binary_path, manifest_path, root = _expected_paths(system)
     resource = root + ("/Resources" if system == "macos" else "")
     expected_names = {
-        binary_path, manifest_path, resource + "/README-SYNTHETIC.txt",
-        resource + "/LICENSE", resource + "/UPSTREAM-NOTICE.md",
+        binary_path,
+        manifest_path,
+        resource + "/README-SYNTHETIC.txt",
+        resource + "/LICENSE",
+        resource + "/UPSTREAM-NOTICE.md",
     }
     if system == "macos":
         expected_names.update((root + "/Info.plist", root + "/PkgInfo"))
@@ -85,10 +94,13 @@ def verify_archive(path: Path, repo: Path, target: str | None = None) -> dict:
     else:
         with zipfile.ZipFile(path) as archive:
             members = archive.infolist()
-            if len(members) != len(expected_names) or {m.filename for m in members} != expected_names:
+            if (
+                len(members) != len(expected_names)
+                or {m.filename for m in members} != expected_names
+            ):
                 raise ValueError("unexpected_or_duplicate_archive_members")
             for member in members:
-                mode = (member.external_attr >> 16)
+                mode = member.external_attr >> 16
                 if (mode & 0o170000) != stat.S_IFREG or member.is_dir():
                     raise ValueError("archive_must_contain_only_regular_files")
                 if member.flag_bits & 0x1:
@@ -115,8 +127,12 @@ def verify_archive(path: Path, repo: Path, target: str | None = None) -> dict:
     if not isinstance(manifest, dict):
         raise ValueError("manifest_must_be_object")
     for flag in (
-        "release_authorized", "clinical_use_authorized", "patient_data_supported",
-        "zero_egress_qualified", "signed_or_notarized", "production_installer",
+        "release_authorized",
+        "clinical_use_authorized",
+        "patient_data_supported",
+        "zero_egress_qualified",
+        "signed_or_notarized",
+        "production_installer",
     ):
         if manifest.get(flag) is not False:
             raise ValueError("unsafe_manifest_claim:" + flag)
@@ -128,33 +144,59 @@ def verify_archive(path: Path, repo: Path, target: str | None = None) -> dict:
     # Compare all files, names, byte content and mode with the exact packaging
     # contract at the selected source commit (not merely suffixes or SHA claims).
     expected = files_for(
-        binary, system, architecture, commit,
+        binary,
+        system,
+        architecture,
+        commit,
         (repo / "LICENSE").read_bytes(),
         (repo / "experiments" / "desktop-d2-native-egui" / "UPSTREAM-NOTICE.md").read_bytes(),
     )
     if payload != expected:
         raise ValueError("noncanonical_archive_content_or_permissions")
 
-    print(json.dumps({
-        "status": "SYNTHETIC_ARCHIVE_SOURCE_CONTRACT_VERIFIED_NOT_RELEASED",
-        "archive": str(path), "archive_sha256": digest(path.read_bytes()),
-        "binary_sha256": digest(binary), "system": system,
-        "architecture": architecture, "source_commit": commit,
-    }, sort_keys=True, indent=2))
+    print(
+        json.dumps(
+            {
+                "status": "SYNTHETIC_ARCHIVE_SOURCE_CONTRACT_VERIFIED_NOT_RELEASED",
+                "archive": str(path),
+                "archive_sha256": digest(path.read_bytes()),
+                "binary_sha256": digest(binary),
+                "system": system,
+                "architecture": architecture,
+                "source_commit": commit,
+            },
+            sort_keys=True,
+            indent=2,
+        )
+    )
     return manifest
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--archive", required=True, type=Path)
-    parser.add_argument("--target", choices=(
-        "linux-x86_64", "linux-arm64", "windows-x86_64", "windows-arm64",
-        "macos-arm64", "macos-x86_64",
-    ))
+    parser.add_argument(
+        "--target",
+        choices=(
+            "linux-x86_64",
+            "linux-arm64",
+            "windows-x86_64",
+            "windows-arm64",
+            "macos-arm64",
+            "macos-x86_64",
+        ),
+    )
     args = parser.parse_args()
     try:
         verify_archive(args.archive, Path(__file__).resolve().parents[3], args.target)
-    except (OSError, ValueError, KeyError, json.JSONDecodeError,
-            tarfile.TarError, zipfile.BadZipFile, EOFError) as error:
+    except (
+        OSError,
+        ValueError,
+        KeyError,
+        json.JSONDecodeError,
+        tarfile.TarError,
+        zipfile.BadZipFile,
+        EOFError,
+    ) as error:
         print("PREVIEW_INTEGRITY_REFUSED: " + str(error), file=sys.stderr)
         sys.exit(2)

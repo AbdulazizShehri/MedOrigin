@@ -5,14 +5,15 @@ This is REAL R4 structural JSON-Schema testing, but NOT clinical validation,
 terminology/profile/invariant conformance, PHI permission, or release approval.
 Never accepts a caller-provided FHIR record; no network operations.
 """
+
 from __future__ import annotations
 
 import argparse
 import hashlib
 import json
-from pathlib import Path
 import sys
 import zipfile
+from pathlib import Path
 
 R4_ZIP_SHA256 = "75e5560da3cf503895a44c8ca7af17a83b4cca6c2cb5ba1883d2aec0d1cb5ac6"
 R4_SCHEMA_FILE = "fhir.schema.json"
@@ -28,19 +29,24 @@ MAX_SCHEMA_BYTES = 4_000_000
 POSITIVE_PATIENT = {"resourceType": "Patient", "id": "synthetic", "active": True}
 NEGATIVES = {
     "patient_invalid_active_type": {
-        "resourceType": "Patient", "id": "synthetic", "active": "true",
+        "resourceType": "Patient",
+        "id": "synthetic",
+        "active": "true",
     },
     "unknown_fictional_resource": {
-        "resourceType": "UnknownFictionalResource", "id": "fictional-negative-control",
+        "resourceType": "UnknownFictionalResource",
+        "id": "fictional-negative-control",
     },
     "observation_missing_required_fields": {
-        "resourceType": "Observation", "id": "synthetic",
+        "resourceType": "Observation",
+        "id": "synthetic",
     },
 }
 # The official R4 JSON Schema ACCEPTS this incomplete resource. That is a
 # critical, observed coverage limit, not a valid FHIR conformance result.
 SCHEMA_BLIND_SPOT = {
-    "resourceType": "StructureDefinition", "id": "medorigin-synthetic-demo",
+    "resourceType": "StructureDefinition",
+    "id": "medorigin-synthetic-demo",
 }
 SUCCESS = "HL7_R4_OFFLINE_JSON_SCHEMA_STRUCTURAL_CONTROLS_PASS_NOT_CLINICAL_VALIDATION"
 
@@ -79,8 +85,9 @@ def load_source_pinned_r4_schema(archive: Path) -> dict:
 
 def validate_fictional_structural_cases(schema: dict) -> dict:
     try:
-        from jsonschema import Draft6Validator
         from importlib.metadata import version
+
+        from jsonschema import Draft6Validator
     except ImportError as exc:
         raise ValueError("jsonschema_library_missing_no_validation_qualified") from exc
     if version("jsonschema") != JSONSCHEMA_VERSION:

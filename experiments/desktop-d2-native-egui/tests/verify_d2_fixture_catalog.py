@@ -4,15 +4,20 @@
 Independent of Rust hash code. This checks source bytes and catalog identity,
 NOT native execution, clinical data, network isolation, or release eligibility.
 """
+
 import hashlib
 import json
-from pathlib import Path
 import re
 import sys
+from pathlib import Path
 
 BUNDLE_NAMES = (
-    "bundle-valid", "bundle-bad-reference", "bundle-duplicate",
-    "bundle-wrong-type", "bundle-linked", "bundle-dangling",
+    "bundle-valid",
+    "bundle-bad-reference",
+    "bundle-duplicate",
+    "bundle-wrong-type",
+    "bundle-linked",
+    "bundle-dangling",
 )
 EXPECTED_STATUS = {
     "patient-minimal": "FHIR_ENVELOPE_OK",
@@ -29,11 +34,17 @@ EXPECTED_STATUS = {
     "bundle-dangling": "INVALID_REFERENCE",
 }
 PREVIEW_BOUNDARY_NAMES = (
-    "patient-invalid-utf8", "patient-over-limit", "patient-exact-limit",
+    "patient-invalid-utf8",
+    "patient-over-limit",
+    "patient-exact-limit",
 )
-PREVIEW_EXCLUDED = frozenset((
-    "patient-invalid-utf8", "patient-over-limit", "patient-exact-limit",
-))
+PREVIEW_EXCLUDED = frozenset(
+    (
+        "patient-invalid-utf8",
+        "patient-over-limit",
+        "patient-exact-limit",
+    )
+)
 
 
 def require(ok: bool, why: str) -> None:
@@ -50,14 +61,16 @@ def fixed_literal(source: str, name: str) -> bytes:
 
 def catalog(source: str) -> dict[str, tuple[int, str, str]]:
     m = re.search(
-        r'pub const FIXTURES: \[FixtureSpec; 12\] = \[(.*?)^\];',
-        source, re.MULTILINE | re.DOTALL,
+        r"pub const FIXTURES: \[FixtureSpec; 12\] = \[(.*?)^\];",
+        source,
+        re.MULTILINE | re.DOTALL,
     )
     require(m is not None, "MISSING_12_FIXTURE_CATALOG")
     pattern = re.compile(
         r'FixtureSpec\s*\{\s*id:\s*"([^"]+)",\s*'
         r'bytes:\s*(\d+),\s*sha256:\s*"([0-9a-f]{64})",\s*'
-        r'status:\s*"([^"]+)",\s*\}', re.DOTALL,
+        r'status:\s*"([^"]+)",\s*\}',
+        re.DOTALL,
     )
     entries = list(pattern.finditer(m.group(1)))
     result: dict[str, tuple[int, str, str]] = {}
@@ -65,12 +78,13 @@ def catalog(source: str) -> dict[str, tuple[int, str, str]]:
         name, length, digest, status = entry.groups()
         require(name not in result, f"DUPLICATE_FIXTURE_{name}")
         result[name] = (int(length), digest, status)
-    require(len(entries) == 12 and set(result) == set(EXPECTED_STATUS),
-            "INCOMPLETE_OR_UNREVIEWED_FIXTURE_SET")
+    require(
+        len(entries) == 12 and set(result) == set(EXPECTED_STATUS),
+        "INCOMPLETE_OR_UNREVIEWED_FIXTURE_SET",
+    )
     # Fixture indices are a native keyboard and UIA selection contract.
     # Hash-correct entries reordered into different indices are not safe.
-    require(tuple(result) == tuple(EXPECTED_STATUS),
-            "CHANGED_FICTIONAL_FIXTURE_ORDER")
+    require(tuple(result) == tuple(EXPECTED_STATUS), "CHANGED_FICTIONAL_FIXTURE_ORDER")
     return result
 
 
@@ -85,8 +99,10 @@ def check_one(name: str, raw: bytes, claimed: tuple[int, str, str]) -> None:
             parsed = json.loads(raw.decode("utf-8"))
         except (UnicodeError, ValueError) as exc:
             raise ValueError(f"INVALID_FICTIONAL_PREVIEW_{name}") from exc
-        require(isinstance(parsed, dict) and "resourceType" in parsed,
-                f"MISSING_FICTIONAL_RESOURCE_TYPE_{name}")
+        require(
+            isinstance(parsed, dict) and "resourceType" in parsed,
+            f"MISSING_FICTIONAL_RESOURCE_TYPE_{name}",
+        )
 
 
 def verify(experiments_root: Path) -> dict:
@@ -112,58 +128,67 @@ def verify(experiments_root: Path) -> dict:
         **{name: name.upper().replace("-", "_") for name in BUNDLE_NAMES},
     }
     try:
-        hash_dispatch = source.split(
-            "let (identity, required_bytes) = match fixture_id {", 1
-        )[1].split("\n    };", 1)[0]
-        byte_dispatch = source.split("let bytes = match identity {", 1)[1].split(
-            "\n    };", 1
-        )[0]
+        hash_dispatch = source.split("let (identity, required_bytes) = match fixture_id {", 1)[
+            1
+        ].split("\n    };", 1)[0]
+        byte_dispatch = source.split("let bytes = match identity {", 1)[1].split("\n    };", 1)[0]
         preview_dispatch = source.split("pub fn fictional_json_preview_v1(", 1)[1].split(
             "const MAX_VISIBLE_FICTIONAL_JSON_BYTES", 1
         )[0]
     except IndexError as exc:
         raise ValueError("CHANGED_D0_DISPATCH_LAYOUT") from exc
     for name, const in names_to_const.items():
-        require(hash_dispatch.count(f'"{name}" => ("{name}", {const}.len()),') == 1,
-                f"CHANGED_D0_HASH_DISPATCH_{name}")
-        require(byte_dispatch.count(f'"{name}" => {const}.to_vec(),') == 1,
-                f"CHANGED_D0_BYTE_DISPATCH_{name}")
-        require(preview_dispatch.count(f'"{name}" => ("{name}", {const}),') == 1,
-                f"CHANGED_D0_PREVIEW_DISPATCH_{name}")
+        require(
+            hash_dispatch.count(f'"{name}" => ("{name}", {const}.len()),') == 1,
+            f"CHANGED_D0_HASH_DISPATCH_{name}",
+        )
+        require(
+            byte_dispatch.count(f'"{name}" => {const}.to_vec(),') == 1,
+            f"CHANGED_D0_BYTE_DISPATCH_{name}",
+        )
+        require(
+            preview_dispatch.count(f'"{name}" => ("{name}", {const}),') == 1,
+            f"CHANGED_D0_PREVIEW_DISPATCH_{name}",
+        )
     # These three negative/boundary vectors are constructed inside D0
     # instead of residing in include_bytes! files. Do not audit assumed
     # bytes without verifying D0 still constructs *those same bytes*.
-    require(source.count("const FHIR_RESOURCE_LIMIT_BYTES: usize = 32_768;") == 1,
-            "CHANGED_D0_RESOURCE_LIMIT")
+    require(
+        source.count("const FHIR_RESOURCE_LIMIT_BYTES: usize = 32_768;") == 1,
+        "CHANGED_D0_RESOURCE_LIMIT",
+    )
     boundary_size_arms = (
         '"patient-invalid-utf8" => ("patient-invalid-utf8", 1),',
         '"patient-over-limit" => ("patient-over-limit", FHIR_RESOURCE_LIMIT_BYTES + 1),',
         '"patient-exact-limit" => ("patient-exact-limit", FHIR_RESOURCE_LIMIT_BYTES),',
     )
-    for name, arm in zip(PREVIEW_BOUNDARY_NAMES, boundary_size_arms):
+    for name, arm in zip(PREVIEW_BOUNDARY_NAMES, boundary_size_arms, strict=True):
         require(hash_dispatch.count(arm) == 1, f"CHANGED_D0_BOUNDARY_SIZE_{name}")
     boundary_byte_arms = {
         "patient-invalid-utf8": '"patient-invalid-utf8" => vec![0xff],',
-        "patient-over-limit": '''"patient-over-limit" => vec![b' '; required_bytes],''',
+        "patient-over-limit": """"patient-over-limit" => vec![b' '; required_bytes],""",
     }
     for name, arm in boundary_byte_arms.items():
         require(byte_dispatch.count(arm) == 1, f"CHANGED_D0_BOUNDARY_BYTES_{name}")
     exact_limit = re.findall(
         r'"patient-exact-limit"\s*=>\s*\{(.*?)\}',
-        byte_dispatch, re.DOTALL,
+        byte_dispatch,
+        re.DOTALL,
     )
-    require(len(exact_limit) == 1 and re.sub(r"\s+", " ", exact_limit[0]).strip()
-            == "let mut padded = PATIENT.to_vec(); "
-               "padded.resize(required_bytes, b' '); padded",
-            "CHANGED_D0_BOUNDARY_BYTES_patient-exact-limit")
+    require(
+        len(exact_limit) == 1
+        and re.sub(r"\s+", " ", exact_limit[0]).strip()
+        == "let mut padded = PATIENT.to_vec(); padded.resize(required_bytes, b' '); padded",
+        "CHANGED_D0_BOUNDARY_BYTES_patient-exact-limit",
+    )
     for name in BUNDLE_NAMES:
         const = name.upper().replace("-", "_")
-        declaration = (f'const {const}: &[u8] = '
-                       f'include_bytes!("../fixtures/{name}.json");')
+        declaration = f'const {const}: &[u8] = include_bytes!("../fixtures/{name}.json");'
         require(source.count(declaration) == 1, f"CHANGED_BUNDLE_INCLUDE_{name}")
         file = d0 / "fixtures" / f"{name}.json"
-        require(file.is_file() and not file.is_symlink(),
-                f"MISSING_OR_LINKED_FICTIONAL_FIXTURE_{name}")
+        require(
+            file.is_file() and not file.is_symlink(), f"MISSING_OR_LINKED_FICTIONAL_FIXTURE_{name}"
+        )
         vectors[name] = file.read_bytes()
     for name, claimed in records.items():
         check_one(name, vectors[name], claimed)

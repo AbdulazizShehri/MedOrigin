@@ -5,18 +5,19 @@ No release, code signing, patient data, security sandbox, VoiceOver speech, or
 packet/egress claims. Extract only verified canonical files to a private temp
 directory, run only the exact embedded executable, and perform real AX actions.
 """
+
 from __future__ import annotations
 
 import argparse
 import os
-from pathlib import Path, PurePosixPath
 import platform
 import stat
 import subprocess
 import sys
-from tempfile import TemporaryDirectory
 import time
 import zipfile
+from pathlib import Path, PurePosixPath
+from tempfile import TemporaryDirectory
 
 from package_preview import APP, BINARY, digest, files_for
 from verify_preview import verify_archive
@@ -54,7 +55,7 @@ def extract_verified_macos(archive: Path, dest: Path, repo: Path) -> tuple[Path,
             entry = PurePosixPath(info.filename)
             if entry.is_absolute() or ".." in entry.parts or entry.parts[0] != BUNDLE:
                 raise ValueError("unsafe_macos_bundle_member")
-            mode = (info.external_attr >> 16)
+            mode = info.external_attr >> 16
             if (mode & 0o170000) != stat.S_IFREG:
                 raise ValueError("nonregular_bundle_member")
             limit = MAX_MEMBER if info.filename == BINARY_MEMBER else 1024 * 1024
@@ -77,7 +78,10 @@ def extract_verified_macos(archive: Path, dest: Path, repo: Path) -> tuple[Path,
     # A mutable ZIP could change between admission and extraction. Reconstruct
     # the exact canonical seven files from the *extracted* binary and source.
     canonical = files_for(
-        native_bytes, "macos", "arm64", manifest["source_commit"],
+        native_bytes,
+        "macos",
+        "arm64",
+        manifest["source_commit"],
         (repo / "LICENSE").read_bytes(),
         (repo / "experiments/desktop-d2-native-egui/UPSTREAM-NOTICE.md").read_bytes(),
     )
@@ -96,8 +100,10 @@ def run_checked(command: list[str], seconds: int = 90) -> None:
         print(result.stdout.strip(), flush=True)
     if result.returncode:
         raise ValueError(
-            "accessibility_qualification_refused:" + str(result.returncode) + ":" +
-            result.stderr[-1800:]
+            "accessibility_qualification_refused:"
+            + str(result.returncode)
+            + ":"
+            + result.stderr[-1800:]
         )
 
 
@@ -108,14 +114,17 @@ def qualify(archive: Path, repo: Path = ROOT) -> None:
         raise ValueError("source_controlled_ax_tests_missing")
     with TemporaryDirectory(prefix="medorigin-d2-archive-gui-") as temp:
         dest = Path(temp)
-        os.chmod(dest, 0o700)
+        dest.chmod(0o700)
         binary, source_sha = extract_verified_macos(archive, dest, repo)
         app = dest / BUNDLE
         proc: subprocess.Popen[bytes] | None = None
         try:
             proc = subprocess.Popen(
-                [str(binary)], cwd=app, stdin=subprocess.DEVNULL,
-                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                [str(binary)],
+                cwd=app,
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
                 close_fds=True,
             )
             time.sleep(1.5)

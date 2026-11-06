@@ -7,16 +7,17 @@ The synthetic parent MUST be created suspended and assigned to the job
 BEFORE its very first instruction executes, then spawn a fictional child.
 Closing the private job handle MUST terminate both.
 """
+
 from __future__ import annotations
 
 import ctypes
-from ctypes import wintypes
 import os
-from pathlib import Path
 import subprocess
 import sys
 import tempfile
 import time
+from ctypes import wintypes
+from pathlib import Path
 
 CREATE_SUSPENDED = 0x00000004
 CREATE_NO_WINDOW = 0x08000000
@@ -61,7 +62,7 @@ class STARTUPINFOW(ctypes.Structure):
     ]
 
 
-class PROCESS_INFORMATION(ctypes.Structure):
+class ProcessInformation(ctypes.Structure):
     _fields_ = [
         ("hProcess", wintypes.HANDLE),
         ("hThread", wintypes.HANDLE),
@@ -70,7 +71,11 @@ class PROCESS_INFORMATION(ctypes.Structure):
     ]
 
 
-class JOBOBJECT_BASIC_LIMIT_INFORMATION(ctypes.Structure):
+# Preserve the source-reviewed Win32 ABI public spelling for importers.
+PROCESS_INFORMATION = ProcessInformation
+
+
+class JobObjectBasicLimitInformation(ctypes.Structure):
     _fields_ = [
         ("PerProcessUserTimeLimit", ctypes.c_longlong),
         ("PerJobUserTimeLimit", ctypes.c_longlong),
@@ -84,7 +89,10 @@ class JOBOBJECT_BASIC_LIMIT_INFORMATION(ctypes.Structure):
     ]
 
 
-class IO_COUNTERS(ctypes.Structure):
+JOBOBJECT_BASIC_LIMIT_INFORMATION = JobObjectBasicLimitInformation
+
+
+class IoCounters(ctypes.Structure):
     _fields_ = [
         ("ReadOperationCount", ctypes.c_ulonglong),
         ("WriteOperationCount", ctypes.c_ulonglong),
@@ -95,7 +103,10 @@ class IO_COUNTERS(ctypes.Structure):
     ]
 
 
-class JOBOBJECT_EXTENDED_LIMIT_INFORMATION_STRUCT(ctypes.Structure):
+IO_COUNTERS = IoCounters
+
+
+class JobObjectExtendedLimitInformationStruct(ctypes.Structure):
     _fields_ = [
         ("BasicLimitInformation", JOBOBJECT_BASIC_LIMIT_INFORMATION),
         ("IoInfo", IO_COUNTERS),
@@ -106,6 +117,9 @@ class JOBOBJECT_EXTENDED_LIMIT_INFORMATION_STRUCT(ctypes.Structure):
     ]
 
 
+JOBOBJECT_EXTENDED_LIMIT_INFORMATION_STRUCT = JobObjectExtendedLimitInformationStruct
+
+
 def _win32():
     if sys.platform != "win32":
         raise ValueError("windows_host_required_no_macos_linux_approval")
@@ -113,20 +127,28 @@ def _win32():
     api.CreateJobObjectW.argtypes = [ctypes.c_void_p, wintypes.LPCWSTR]
     api.CreateJobObjectW.restype = wintypes.HANDLE
     api.SetInformationJobObject.argtypes = [
-        wintypes.HANDLE, ctypes.c_int, ctypes.c_void_p, wintypes.DWORD
+        wintypes.HANDLE,
+        ctypes.c_int,
+        ctypes.c_void_p,
+        wintypes.DWORD,
     ]
     api.SetInformationJobObject.restype = wintypes.BOOL
     api.CreateProcessW.argtypes = [
-        wintypes.LPCWSTR, wintypes.LPWSTR, ctypes.c_void_p, ctypes.c_void_p,
-        wintypes.BOOL, wintypes.DWORD, ctypes.c_void_p, wintypes.LPCWSTR,
-        ctypes.POINTER(STARTUPINFOW), ctypes.POINTER(PROCESS_INFORMATION),
+        wintypes.LPCWSTR,
+        wintypes.LPWSTR,
+        ctypes.c_void_p,
+        ctypes.c_void_p,
+        wintypes.BOOL,
+        wintypes.DWORD,
+        ctypes.c_void_p,
+        wintypes.LPCWSTR,
+        ctypes.POINTER(STARTUPINFOW),
+        ctypes.POINTER(PROCESS_INFORMATION),
     ]
     api.CreateProcessW.restype = wintypes.BOOL
     api.AssignProcessToJobObject.argtypes = [wintypes.HANDLE, wintypes.HANDLE]
     api.AssignProcessToJobObject.restype = wintypes.BOOL
-    api.IsProcessInJob.argtypes = [
-        wintypes.HANDLE, wintypes.HANDLE, ctypes.POINTER(wintypes.BOOL)
-    ]
+    api.IsProcessInJob.argtypes = [wintypes.HANDLE, wintypes.HANDLE, ctypes.POINTER(wintypes.BOOL)]
     api.IsProcessInJob.restype = wintypes.BOOL
     api.ResumeThread.argtypes = [wintypes.HANDLE]
     api.ResumeThread.restype = wintypes.DWORD
@@ -158,7 +180,6 @@ def qualify() -> None:
     job = None
     parent = PROCESS_INFORMATION()
     child_handle = None
-    closed_job = False
     with tempfile.TemporaryDirectory(prefix="medorigin-d2-synthetic-job-") as tmp:
         marker = Path(tmp) / "fictional-pids-only.txt"
         startup = STARTUPINFOW()
@@ -170,22 +191,31 @@ def qualify() -> None:
             _require(job, "create_private_job")
             _require(
                 api.SetInformationJobObject(
-                    job, JOBOBJECT_EXTENDED_LIMIT_INFORMATION,
-                    ctypes.byref(limit), ctypes.sizeof(limit)
+                    job,
+                    JOBOBJECT_EXTENDED_LIMIT_INFORMATION,
+                    ctypes.byref(limit),
+                    ctypes.sizeof(limit),
                 ),
                 "set_kill_on_job_handle_close",
             )
             # No arbitrary command. Fixed Python with -I/-S/-B and only
             # two synthetic 60-second sleepers for lifecycle verification.
-            cmd = subprocess.list2cmdline([
-                sys.executable, "-I", "-S", "-B", "-c", PARENT_CODE, str(marker)
-            ])
+            cmd = subprocess.list2cmdline(
+                [sys.executable, "-I", "-S", "-B", "-c", PARENT_CODE, str(marker)]
+            )
             cmdline = ctypes.create_unicode_buffer(cmd)
             _require(
                 api.CreateProcessW(
-                    str(Path(sys.executable).resolve()), cmdline, None, None,
-                    False, CREATE_SUSPENDED | CREATE_NO_WINDOW,
-                    None, tmp, ctypes.byref(startup), ctypes.byref(parent)
+                    str(Path(sys.executable).resolve()),
+                    cmdline,
+                    None,
+                    None,
+                    False,
+                    CREATE_SUSPENDED | CREATE_NO_WINDOW,
+                    None,
+                    tmp,
+                    ctypes.byref(startup),
+                    ctypes.byref(parent),
                 ),
                 "create_suspended_fictional_worker",
             )
@@ -195,8 +225,7 @@ def qualify() -> None:
             )
             included = wintypes.BOOL(False)
             _require(
-                api.IsProcessInJob(parent.hProcess, job, ctypes.byref(included))
-                and included.value,
+                api.IsProcessInJob(parent.hProcess, job, ctypes.byref(included)) and included.value,
                 "suspended_parent_job_membership",
             )
             if api.ResumeThread(parent.hThread) != 1:
@@ -222,17 +251,20 @@ def qualify() -> None:
                 and child_in_job.value,
                 "spawned_child_missing_job_membership",
             )
-            if (api.WaitForSingleObject(parent.hProcess, 0) != WAIT_TIMEOUT or
-                    api.WaitForSingleObject(child_handle, 0) != WAIT_TIMEOUT):
+            if (
+                api.WaitForSingleObject(parent.hProcess, 0) != WAIT_TIMEOUT
+                or api.WaitForSingleObject(child_handle, 0) != WAIT_TIMEOUT
+            ):
                 raise ValueError("synthetic_parent_or_child_exited_before_job_close")
             # This is the tested policy: last private job handle close MUST
             # terminate *both* parent and child without querying parent PID
             # to chase/check descendants manually.
             _require(api.CloseHandle(job), "close_private_job_with_children")
             job = None
-            closed_job = True
-            if (api.WaitForSingleObject(parent.hProcess, 5000) != WAIT_OBJECT_0 or
-                    api.WaitForSingleObject(child_handle, 5000) != WAIT_OBJECT_0):
+            if (
+                api.WaitForSingleObject(parent.hProcess, 5000) != WAIT_OBJECT_0
+                or api.WaitForSingleObject(child_handle, 5000) != WAIT_OBJECT_0
+            ):
                 raise ValueError("job_handle_close_failed_to_terminate_descendants")
             print("WINDOWS_D2_JOB_PARENT_WAS_CREATED_SUSPENDED_ASSIGNED_BEFORE_RESUME")
             print("WINDOWS_D2_JOB_CHILD_INHERITED_SAME_JOB_AND_WAS_ALIVE_BEFORE_CLOSE")

@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """Offline unit tests for actual resolved Cargo metadata risk scanner."""
+
 import importlib.util
-from pathlib import Path
 import unittest
+from pathlib import Path
 
 SOURCE = Path(__file__).with_name("verify_linux_accesskit_maintenance.py")
 SPEC = importlib.util.spec_from_file_location("medorigin_accesskit_maintenance", SOURCE)
@@ -97,9 +98,7 @@ class TestTransitiveMaintenanceGate(unittest.TestCase):
 
     def test_missing_reachable_resolved_node_refuses(self):
         data = fixture(zbus_version="6.0.0", legacy=False)
-        data["resolve"]["nodes"] = [
-            n for n in data["resolve"]["nodes"] if n["id"] != "u"
-        ]
+        data["resolve"]["nodes"] = [n for n in data["resolve"]["nodes"] if n["id"] != "u"]
         packet = SCANNER.evaluate(data)
         self.assertEqual(packet["decision"], "NO_GO_INVALID_CARGO_METADATA")
         self.assertEqual(packet["reason"], "REACHABLE_DEPENDENCY_NODE_MISSING")
