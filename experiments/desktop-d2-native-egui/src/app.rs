@@ -3312,6 +3312,82 @@ impl MedOriginNativePreview {
     }
 }
 
+impl MedOriginNativePreview {
+    /// Render truthful session provenance, not a fictional Core connection
+    /// as an authorized EHR or clinical data session.
+    fn local_source_status(&self) -> &'static str {
+        if self.protected_audit.is_some() {
+            "Protected fictional audit receipt (read-only)"
+        } else if self.core_file_batch.is_some() {
+            "Source-verified fictional Core batch (read-only)"
+        } else if self.synthetic_bundle.is_some() {
+            "Local fictional FHIR Bundle (read-only)"
+        } else if self.encrypted_readback.is_some() {
+            "Fictional encrypted Core readback (not clinical)"
+        } else if self.encrypted_workspace_receipt.is_some() {
+            "Fictional encrypted Workspace receipt"
+        } else if self.core_report.is_some() {
+            "Fictional Core source summary (read-only)"
+        } else {
+            "No connected production Core"
+        }
+    }
+
+    /// Consistent native product chrome without browser, remote fonts,
+    /// external assets, telemetry, patient files or sidecar processes.
+    fn medorigin_chrome(&mut self, ctx: &egui::Context) {
+        let status = self.local_source_status();
+        let mut clear = false;
+        egui::TopBottomPanel::top("medorigin-native-product-header").show(ctx, |ui| {
+            ui.horizontal(|ui| {
+                let (mark, _) =
+                    ui.allocate_exact_size(egui::vec2(42.0, 42.0), egui::Sense::hover());
+                let center = mark.center();
+                let painter = ui.painter();
+                painter.circle_filled(center, 19.0, egui::Color32::from_rgb(236, 112, 69));
+                // The accepted Minaret-family identity: warm circular
+                // MedOrigin mark with three dark internal pillars.
+                for (dx, length) in [(-9.0, 17.0), (0.0, 23.0), (9.0, 17.0)] {
+                    painter.rect_filled(
+                        egui::Rect::from_center_size(
+                            egui::pos2(center.x + dx, center.y),
+                            egui::vec2(5.5, length),
+                        ),
+                        2.0,
+                        egui::Color32::from_rgb(17, 19, 22),
+                    );
+                }
+                ui.vertical(|ui| {
+                    ui.label(egui::RichText::new("MedOrigin").size(21.0).strong());
+                    ui.label(
+                        egui::RichText::new("Local workspace · private by design")
+                            .size(12.0)
+                            .color(egui::Color32::from_rgb(171, 175, 181)),
+                    );
+                });
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    if ui.button("Clear local session").clicked() {
+                        clear = true;
+                    }
+                    ui.label(
+                        egui::RichText::new("Fictional demo · no clinical use")
+                            .size(12.0)
+                            .color(egui::Color32::from_rgb(244, 163, 112)),
+                    );
+                });
+            });
+            ui.label(
+                egui::RichText::new(format!("Core status: {status}"))
+                    .size(12.0)
+                    .color(egui::Color32::from_rgb(179, 184, 191)),
+            );
+        });
+        if clear {
+            self.clear_fictional_output();
+        }
+    }
+}
+
 impl eframe::App for MedOriginNativePreview {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         let dropped = ui.input(|input| input.raw.dropped_files.clone());
@@ -3330,6 +3406,7 @@ impl eframe::App for MedOriginNativePreview {
         if ui.input(|input| input.key_pressed(egui::Key::Escape)) {
             self.clear_fictional_output();
         }
+        self.medorigin_chrome(ui.ctx());
         if self.protected_audit.is_some() {
             egui::CentralPanel::default().show(ui, |ui| self.protected_audit_ui(ui));
             return;
@@ -4013,6 +4090,32 @@ impl eframe::App for MedOriginNativePreview {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn native_header_exposes_truthful_core_source_and_resets_with_session() {
+        let mut app = MedOriginNativePreview::default();
+        assert_eq!(app.local_source_status(), "No connected production Core");
+
+        let raw = include_bytes!("../fixtures/core/synthetic-multipatient-fhir-bundle.json");
+        app = MedOriginNativePreview::from_one_time_synthetic_bundle_stdin(raw).unwrap();
+        assert_eq!(
+            app.local_source_status(),
+            "Local fictional FHIR Bundle (read-only)"
+        );
+        app.clear_fictional_output();
+        assert_eq!(app.local_source_status(), "No connected production Core");
+
+        let raw = include_bytes!(
+            "../fixtures/core/core963-real-encrypted-fictional-file-batch-redacted.json"
+        );
+        app = MedOriginNativePreview::from_one_time_core_file_batch_receipt_stdin(raw).unwrap();
+        assert_eq!(
+            app.local_source_status(),
+            "Source-verified fictional Core batch (read-only)"
+        );
+        app.clear_fictional_output();
+        assert_eq!(app.local_source_status(), "No connected production Core");
+    }
 
     #[test]
     fn typed_local_fictional_bundle_path_accepts_explorer_quoted_file_without_retaining_path() {
