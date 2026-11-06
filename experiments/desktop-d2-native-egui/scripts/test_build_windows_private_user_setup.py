@@ -340,6 +340,32 @@ class PrivateWindowsUserSetupTests(unittest.TestCase):
         self.assertNotEqual(action(installed / setup.INSTALLER_SCRIPT, "Verify").returncode, 0)
         link.write_bytes(original_link)
         self.assertEqual(action(installed / setup.INSTALLER_SCRIPT, "Verify").returncode, 0)
+
+        # Also reject a syntactically valid .lnk redirected to a different
+        # existing file. A corrupt .lnk test alone cannot prove this invariant.
+        def retarget(destination: Path):
+            command = (
+                "$link=(New-Object -ComObject WScript.Shell).CreateShortcut('"
+                + str(link)
+                + "');$link.TargetPath='"
+                + str(destination)
+                + "';$link.Save()"
+            )
+            return subprocess.run(
+                ["powershell.exe", "-NoProfile", "-NonInteractive", "-Command", command],
+                env=env,
+                capture_output=True,
+                text=True,
+                timeout=15,
+            )
+
+        redirect = retarget(sentinel)
+        self.assertEqual(redirect.returncode, 0, redirect.stdout + redirect.stderr)
+        self.assertNotEqual(action(installed / setup.INSTALLER_SCRIPT, "Verify").returncode, 0)
+        restore = retarget(installed / "medorigin-desktop-d2-native-egui.exe")
+        self.assertEqual(restore.returncode, 0, restore.stdout + restore.stderr)
+        self.assertEqual(action(installed / setup.INSTALLER_SCRIPT, "Verify").returncode, 0)
+
         tampered = installed / "README-SYNTHETIC.txt"
         before = tampered.read_bytes()
         tampered.write_bytes(before + b"tamper")

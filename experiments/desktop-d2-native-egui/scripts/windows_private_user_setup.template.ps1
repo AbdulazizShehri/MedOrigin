@@ -104,7 +104,11 @@ function Confirm-Shortcut([string]$path, [string]$target, [string]$arguments) {
     # not untrusted arbitrary textual names, and still pin exact arguments.
     $observed=$link.TargetPath
     Require-ExistingUnredirected $observed $false
-    if ([IO.Path]::GetFullPath($observed) -ine [IO.Path]::GetFullPath($target)) {
+    # GetFullPath alone does not expand an 8.3 filesystem alias. Get-Item
+    # returns the canonical long path after the ancestor/reparse checks above.
+    $observedFile=(Get-Item -LiteralPath $observed -Force).FullName
+    $targetFile=(Get-Item -LiteralPath $target -Force).FullName
+    if ($observedFile -ine $targetFile) {
         throw 'existing_shortcut_target_refused'
     }
     if ($link.Arguments -cne $arguments) {
