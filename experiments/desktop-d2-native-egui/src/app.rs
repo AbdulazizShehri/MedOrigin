@@ -8,6 +8,7 @@ use crate::core_provenance::{
 use crate::encrypted_readback::{
     FictionalEncryptedReadback, admit_exact_encrypted_readback_projection,
 };
+use crate::local_bundle_import::read_dropped_fictional_bundle;
 use crate::protected_audit::{FictionalProtectedAudit, admit_protected_audit_verification};
 use crate::synthetic_bundle::{SyntheticBundlePreview, admit_bounded_synthetic_fhir_bundle};
 use crate::workspace_receipt::{
@@ -696,12 +697,19 @@ pub struct MedOriginNativePreview {
     // controls. UI-only mode: never changes Core data, keys, privileges or IO.
     focused_workspace_visible: bool,
     synthetic_bundle: Option<SyntheticBundlePreview>,
+    local_bundle_dragged_source: bool,
+    local_bundle_drop_notice: Option<&'static str>,
+    // Typed path is ephemeral user input, not a recently-opened-file list.
+    // It is cleared immediately after either attempt and is never persisted.
+    local_bundle_path_entry: String,
     synthetic_bundle_selected: Option<usize>,
     synthetic_bundle_history: Vec<usize>,
     // Ephemeral exploration state; opened != clinician-reviewed or approved.
     synthetic_bundle_visited: Vec<bool>,
     synthetic_bundle_patient: Option<usize>,
     synthetic_bundle_type: &'static str,
+    // Session-only search of admitted fictional resource type/ID, never PHI.
+    synthetic_bundle_query: String,
     synthetic_bundle_notice: Option<&'static str>,
     encrypted_readback_selected: Option<usize>,
     encrypted_readback_history: Vec<usize>,
@@ -1046,6 +1054,10 @@ impl MedOriginNativePreview {
     /// canonical JSON and complete patient-reference graph; NO PHI fields.
     pub fn from_one_time_synthetic_bundle_stdin(raw: &[u8]) -> Result<Self, &'static str> {
         let bundle = admit_bounded_synthetic_fhir_bundle(raw)?;
+        Ok(Self::from_admitted_fictional_bundle(bundle))
+    }
+
+    fn from_admitted_fictional_bundle(bundle: SyntheticBundlePreview) -> Self {
         let first_patient = bundle
             .resources
             .iter()
@@ -1054,14 +1066,82 @@ impl MedOriginNativePreview {
         if let Some(index) = first_patient {
             visited[index] = true;
         }
-        Ok(Self {
+        Self {
             synthetic_bundle: Some(bundle),
             synthetic_bundle_visited: visited,
             synthetic_bundle_patient: first_patient,
             synthetic_bundle_selected: first_patient,
             synthetic_bundle_type: "All",
             ..Default::default()
-        })
+        }
+    }
+
+    /// Explicit native drag and drop, strictly fictional-only. Does not load
+    /// a patient file, save data, authenticate a Core sender, or call a model.
+    pub fn import_dropped_fictional_bundle(
+        &mut self,
+        paths: &[std::path::PathBuf],
+    ) -> Result<(), &'static str> {
+        if self.protected_audit.is_some()
+            || self.core_file_batch.is_some()
+            || self.encrypted_workspace_receipt.is_some()
+            || self.encrypted_readback.is_some()
+            || self.core_report.is_some()
+        {
+            self.local_bundle_drop_notice =
+                Some("Drop refused: clear the existing protected fictional source first.");
+            return Err("local_drop_protected_source_refused");
+        }
+        if paths.len() != 1 {
+            self.clear_fictional_output();
+            self.local_bundle_drop_notice =
+                Some("Drop refused: choose exactly one synthetic-only FHIR Bundle JSON.");
+            return Err("local_drop_one_json_required");
+        }
+        match read_dropped_fictional_bundle(&paths[0]) {
+            Ok(bundle) => {
+                *self = Self::from_admitted_fictional_bundle(bundle);
+                self.local_bundle_dragged_source = true;
+                self.local_bundle_drop_notice =
+                    Some("Local synthetic-only FHIR Bundle admitted read-only. No patient data.");
+                Ok(())
+            }
+            Err(_) => {
+                self.clear_fictional_output();
+                self.local_bundle_drop_notice =
+                    Some("Local file refused: non-fictional FHIR data are prohibited.");
+                Err("local_drop_nonfictional_or_unreviewed_refused")
+            }
+        }
+    }
+
+    /// Paste a path copied from File Explorer, or enter one explicitly.
+    /// Exactly the same strict, local, synthetic-only admission as OLE drop.
+    /// No path, filename, bytes, or error echo is retained or logged.
+    fn import_typed_fictional_bundle(&mut self) -> Result<(), &'static str> {
+        let input = std::mem::take(&mut self.local_bundle_path_entry);
+        let candidate = input.trim();
+        let candidate =
+            if candidate.len() >= 2 && candidate.starts_with('"') && candidate.ends_with('"') {
+                &candidate[1..candidate.len() - 1]
+            } else {
+                candidate
+            };
+        if candidate.is_empty()
+            || candidate.len() > 1024
+            || candidate.contains('"')
+            || candidate.chars().any(|ch| {
+                ch.is_control() || matches!(ch, '\u{202a}'..='\u{202e}' | '\u{2066}'..='\u{2069}')
+            })
+        {
+            // The one-file source guard also denies replacement of protected
+            // Core or encrypted readback sessions. Reuse it on invalid input.
+            let _ = self.import_dropped_fictional_bundle(&[]);
+            self.local_bundle_drop_notice =
+                Some("Open refused: paste exactly one local synthetic-only JSON file path.");
+            return Err("local_typed_path_invalid_refused");
+        }
+        self.import_dropped_fictional_bundle(&[std::path::PathBuf::from(candidate)])
     }
 
     /// One-click, compiled, nonclinical demo from the same strict reviewed
@@ -1526,11 +1606,15 @@ impl MedOriginNativePreview {
         self.encrypted_readback_source_external = false;
         self.focused_workspace_visible = false;
         self.synthetic_bundle = None;
+        self.local_bundle_dragged_source = false;
+        self.local_bundle_drop_notice = None;
+        self.local_bundle_path_entry.clear();
         self.synthetic_bundle_selected = None;
         self.synthetic_bundle_history.clear();
         self.synthetic_bundle_visited.clear();
         self.synthetic_bundle_patient = None;
         self.synthetic_bundle_type = "";
+        self.synthetic_bundle_query.clear();
         self.synthetic_bundle_notice = None;
         self.encrypted_readback_selected = None;
         self.encrypted_readback_history.clear();
@@ -1573,11 +1657,15 @@ impl MedOriginNativePreview {
         self.encrypted_readback_source_external = false;
         self.focused_workspace_visible = false;
         self.synthetic_bundle = None;
+        self.local_bundle_dragged_source = false;
+        self.local_bundle_drop_notice = None;
+        self.local_bundle_path_entry.clear();
         self.synthetic_bundle_selected = None;
         self.synthetic_bundle_history.clear();
         self.synthetic_bundle_visited.clear();
         self.synthetic_bundle_patient = None;
         self.synthetic_bundle_type = "";
+        self.synthetic_bundle_query.clear();
         self.synthetic_bundle_notice = None;
         self.encrypted_readback_selected = None;
         self.encrypted_readback_history.clear();
@@ -2354,6 +2442,14 @@ impl MedOriginNativePreview {
             && self
                 .synthetic_bundle_patient
                 .is_none_or(|patient| bundle.owner_patient(index) == Some(patient))
+            && (self.synthetic_bundle_query.is_empty()
+                || resource
+                    .resource_id
+                    .to_ascii_lowercase()
+                    .contains(&self.synthetic_bundle_query)
+                || format!("{}/{}", resource.resource_type, resource.resource_id)
+                    .to_ascii_lowercase()
+                    .contains(&self.synthetic_bundle_query))
     }
 
     fn bundle_select(&mut self, index: usize) -> Result<(), &'static str> {
@@ -2444,6 +2540,44 @@ impl MedOriginNativePreview {
         self.synthetic_bundle_type = kind;
         self.synthetic_bundle_selected = None;
         self.synthetic_bundle_history.clear();
+        self.synthetic_bundle_notice = None;
+        Ok(())
+    }
+
+    /// Search only the source-reviewed fictional type/ID, never notes, names
+    /// or arbitrary patient text. Search is in-memory and cleared with source.
+    fn bundle_set_search_query(&mut self, input: &str) -> Result<(), &'static str> {
+        if self.synthetic_bundle.is_none() {
+            return Err("synthetic_bundle_search_without_source");
+        }
+        let query = input.trim().to_ascii_lowercase();
+        const PREFIXES: [&str; 4] = [
+            "fictional-",
+            "patient/fictional-",
+            "encounter/fictional-",
+            "observation/fictional-",
+        ];
+        if query.len() > 64
+            || !query
+                .bytes()
+                .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-' || byte == b'/')
+            || (!query.is_empty()
+                && !PREFIXES
+                    .iter()
+                    .any(|prefix| prefix.starts_with(&query) || query.starts_with(prefix)))
+        {
+            self.synthetic_bundle_notice =
+                Some("Bundle: Search refused; use only fictional resource type or ID (NO PHI).");
+            return Err("synthetic_bundle_search_query_refused");
+        }
+        self.synthetic_bundle_query = query;
+        if self
+            .synthetic_bundle_selected
+            .is_some_and(|index| !self.bundle_visible(index))
+        {
+            self.synthetic_bundle_selected = None;
+            self.synthetic_bundle_history.clear();
+        }
         self.synthetic_bundle_notice = None;
         Ok(())
     }
@@ -2540,6 +2674,7 @@ impl MedOriginNativePreview {
         self.synthetic_bundle_history.push(current);
         self.synthetic_bundle_patient = destination;
         self.synthetic_bundle_type = "All";
+        self.synthetic_bundle_query.clear();
         self.synthetic_bundle_selected = Some(index);
         if self.synthetic_bundle_visited.len() != bundle.resources.len() {
             self.clear_fictional_output();
@@ -2602,6 +2737,7 @@ impl MedOriginNativePreview {
                 self.synthetic_bundle_selected = Some(previous);
                 self.synthetic_bundle_patient = Some(owner);
                 self.synthetic_bundle_type = "All";
+                self.synthetic_bundle_query.clear();
                 Ok(())
             }
             None => {
@@ -2625,6 +2761,7 @@ impl MedOriginNativePreview {
             Patient(Option<usize>),
             PatientStep(bool),
             Type(&'static str),
+            Search(String),
             Select(usize),
             Step(bool),
             NextUnexplored,
@@ -2642,6 +2779,12 @@ impl MedOriginNativePreview {
                 bundle.resources.len(), bundle.patient_count
             ));
             ui.label("Read-only FHIR-shaped Bundle. No encrypted Core connection or authenticated sender.");
+            if self.local_bundle_dragged_source {
+                ui.strong("Bundle: Opened local synthetic-only JSON (no PHI, session-only)");
+            }
+            if let Some(notice) = self.local_bundle_drop_notice {
+                ui.label(notice);
+            }
             if ui.button("Bundle: Clear fictional records").clicked() {
                 next = Some(Action::Clear);
             }
@@ -2691,6 +2834,34 @@ impl MedOriginNativePreview {
                     });
                 });
             }
+            ui.strong("Fictional resource worklist");
+            ui.horizontal_wrapped(|ui| {
+                ui.label("Bundle: Find fictional type or resource ID (NO PHI):");
+                let mut query = self.synthetic_bundle_query.clone();
+                let response = ui.add(
+                    egui::TextEdit::singleline(&mut query)
+                        .hint_text("fictional-observation-016")
+                        .char_limit(64)
+                        .desired_width(265.0),
+                );
+                if ui.input(|input| input.modifiers.command && input.key_pressed(egui::Key::F)) {
+                    response.request_focus();
+                }
+                if response.changed() {
+                    next = Some(Action::Search(query));
+                }
+                if ui.button("Bundle: Clear fictional search").clicked() {
+                    next = Some(Action::Search(String::new()));
+                }
+            });
+            ui.label(format!(
+                "Bundle: Active fictional search: {}",
+                if self.synthetic_bundle_query.is_empty() {
+                    "All fictional resource IDs"
+                } else {
+                    self.synthetic_bundle_query.as_str()
+                }
+            ));
             ui.strong("Resource types");
             ui.horizontal_wrapped(|ui| {
                 for kind in ["All", "Patient", "Encounter", "Observation"] {
@@ -2833,6 +3004,9 @@ impl MedOriginNativePreview {
             }
             Some(Action::Type(kind)) => {
                 let _ = self.bundle_set_type(kind);
+            }
+            Some(Action::Search(query)) => {
+                let _ = self.bundle_set_search_query(&query);
             }
             Some(Action::Select(index)) => {
                 let _ = self.bundle_select(index);
@@ -3138,11 +3312,101 @@ impl MedOriginNativePreview {
     }
 }
 
+impl MedOriginNativePreview {
+    /// Render truthful session provenance, not a fictional Core connection
+    /// as an authorized EHR or clinical data session.
+    fn local_source_status(&self) -> &'static str {
+        if self.protected_audit.is_some() {
+            "Protected fictional audit receipt (read-only)"
+        } else if self.core_file_batch.is_some() {
+            "Source-verified fictional Core batch (read-only)"
+        } else if self.synthetic_bundle.is_some() {
+            "Local fictional FHIR Bundle (read-only)"
+        } else if self.encrypted_readback.is_some() {
+            "Fictional encrypted Core readback (not clinical)"
+        } else if self.encrypted_workspace_receipt.is_some() {
+            "Fictional encrypted Workspace receipt"
+        } else if self.core_report.is_some() {
+            "Fictional Core source summary (read-only)"
+        } else {
+            "No connected production Core"
+        }
+    }
+
+    /// Consistent native product chrome without browser, remote fonts,
+    /// external assets, telemetry, patient files or sidecar processes.
+    fn medorigin_chrome(&mut self, ui: &mut egui::Ui) {
+        let status = self.local_source_status();
+        let mut clear = false;
+        egui::Panel::top("medorigin-native-product-header").show(ui, |ui| {
+            ui.horizontal(|ui| {
+                let (mark, _) =
+                    ui.allocate_exact_size(egui::vec2(42.0, 42.0), egui::Sense::hover());
+                let center = mark.center();
+                let painter = ui.painter();
+                painter.circle_filled(center, 19.0, egui::Color32::from_rgb(236, 112, 69));
+                // The accepted Minaret-family identity: warm circular
+                // MedOrigin mark with three dark internal pillars.
+                for (dx, length) in [(-9.0, 17.0), (0.0, 23.0), (9.0, 17.0)] {
+                    painter.rect_filled(
+                        egui::Rect::from_center_size(
+                            egui::pos2(center.x + dx, center.y),
+                            egui::vec2(5.5, length),
+                        ),
+                        2.0,
+                        egui::Color32::from_rgb(17, 19, 22),
+                    );
+                }
+                ui.vertical(|ui| {
+                    ui.label(egui::RichText::new("MedOrigin").size(21.0).strong());
+                    ui.label(
+                        egui::RichText::new("Local workspace · private by design")
+                            .size(12.0)
+                            .color(egui::Color32::from_rgb(171, 175, 181)),
+                    );
+                });
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    if ui.button("Clear local session").clicked() {
+                        clear = true;
+                    }
+                    ui.label(
+                        egui::RichText::new("Fictional demo · no clinical use")
+                            .size(12.0)
+                            .color(egui::Color32::from_rgb(244, 163, 112)),
+                    );
+                });
+            });
+            ui.label(
+                egui::RichText::new(format!("Core status: {status}"))
+                    .size(12.0)
+                    .color(egui::Color32::from_rgb(179, 184, 191)),
+            );
+        });
+        if clear {
+            self.clear_fictional_output();
+        }
+    }
+}
+
 impl eframe::App for MedOriginNativePreview {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
+        let dropped = ui.input(|input| input.raw.dropped_files.clone());
+        if !dropped.is_empty() {
+            let paths: Vec<std::path::PathBuf> = dropped
+                .iter()
+                .filter(|file| !file.path().as_os_str().is_empty())
+                .map(|file| file.path().to_path_buf())
+                .collect();
+            if paths.len() == dropped.len() {
+                let _ = self.import_dropped_fictional_bundle(&paths);
+            } else {
+                let _ = self.import_dropped_fictional_bundle(&[]);
+            }
+        }
         if ui.input(|input| input.key_pressed(egui::Key::Escape)) {
             self.clear_fictional_output();
         }
+        self.medorigin_chrome(ui);
         if self.protected_audit.is_some() {
             egui::CentralPanel::default().show(ui, |ui| self.protected_audit_ui(ui));
             return;
@@ -3162,7 +3426,7 @@ impl eframe::App for MedOriginNativePreview {
         egui::CentralPanel::default().show(ui, |ui| {
             ui.heading("MedOrigin — Native Rust Experiment");
             ui.strong("Synthetic developer preview only · No EHR · No clinical use");
-            ui.label("No browser engine, IPC server, Python worker, filesystem input or model is used in this proof of concept.");
+            ui.label("No browser engine, IPC server, Python worker or model. Only user-dropped, bounded synthetic JSON files may be read locally.");
             // This top-level native home is directly usable without scrolling
             // through historical developer fixtures. It exposes no PHI and
             // cannot create a patient, write to SQLite, or launch Core.
@@ -3224,6 +3488,33 @@ impl eframe::App for MedOriginNativePreview {
             ui.separator();
             // Keep all four original controls visible in the same order.
             // This retains the testable AX/UIA keyboard contract from D2.
+            ui.label("Open a local imaginary FHIR Bundle by dragging one canonical synthetic-only .json file into this window (no patient records).");
+            ui.label("Alternatively, copy a fictional JSON file path from Windows Explorer, paste it below, then choose Open. Ctrl+O focuses the field.");
+            let mut open_typed_source = false;
+            ui.horizontal_wrapped(|ui| {
+                ui.label("Local fictional JSON file path:");
+                let editor = ui.add(
+                    egui::TextEdit::singleline(&mut self.local_bundle_path_entry)
+                        .hint_text("Paste a local synthetic-only .json path")
+                        .char_limit(512)
+                        .desired_width(360.0),
+                );
+                if ui.input(|input| input.modifiers.command && input.key_pressed(egui::Key::O)) {
+                    editor.request_focus();
+                }
+                if editor.lost_focus() && ui.input(|input| input.key_pressed(egui::Key::Enter)) {
+                    open_typed_source = true;
+                }
+                if ui.button("Open local fictional JSON (NO PHI)").clicked() {
+                    open_typed_source = true;
+                }
+            });
+            if open_typed_source {
+                let _ = self.import_typed_fictional_bundle();
+            }
+            if let Some(notice) = self.local_bundle_drop_notice {
+                ui.label(notice);
+            }
             ui.label("Choose one of four fictional, in-memory fixtures:");
             for (index, fixture) in FIXTURES[..PRIMARY_FIXTURE_COUNT].iter().enumerate() {
                 if ui.selectable_label(self.selected == index, format!("{} ({} bytes)", fixture.id, fixture.bytes)).clicked() {
@@ -3799,6 +4090,246 @@ impl eframe::App for MedOriginNativePreview {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn native_header_exposes_truthful_core_source_and_resets_with_session() {
+        let mut app = MedOriginNativePreview::default();
+        assert_eq!(app.local_source_status(), "No connected production Core");
+
+        let raw = include_bytes!("../fixtures/core/synthetic-multipatient-fhir-bundle.json");
+        app = MedOriginNativePreview::from_one_time_synthetic_bundle_stdin(raw).unwrap();
+        assert_eq!(
+            app.local_source_status(),
+            "Local fictional FHIR Bundle (read-only)"
+        );
+        app.clear_fictional_output();
+        assert_eq!(app.local_source_status(), "No connected production Core");
+
+        let raw = include_bytes!(
+            "../fixtures/core/core963-real-encrypted-fictional-file-batch-redacted.json"
+        );
+        app = MedOriginNativePreview::from_one_time_core_file_batch_receipt_stdin(raw).unwrap();
+        assert_eq!(
+            app.local_source_status(),
+            "Source-verified fictional Core batch (read-only)"
+        );
+        app.clear_fictional_output();
+        assert_eq!(app.local_source_status(), "No connected production Core");
+    }
+
+    #[test]
+    fn typed_local_fictional_bundle_path_accepts_explorer_quoted_file_without_retaining_path() {
+        let raw = include_bytes!("../fixtures/core/synthetic-multipatient-fhir-bundle.json");
+        let file = std::env::temp_dir().join(format!(
+            "medorigin-native-typed-open-{:?}.json",
+            std::thread::current().id()
+        ));
+        std::fs::write(&file, raw).unwrap();
+        let mut app = MedOriginNativePreview {
+            local_bundle_path_entry: format!("\"{}\"", file.display()),
+            ..Default::default()
+        };
+        let result = app.import_typed_fictional_bundle();
+        std::fs::remove_file(&file).unwrap();
+        assert_eq!(result, Ok(()));
+        assert!(app.local_bundle_dragged_source);
+        assert_eq!(app.synthetic_bundle_resource_count(), 8);
+        assert!(app.local_bundle_path_entry.is_empty());
+        app.clear_fictional_output();
+        assert_eq!(app.synthetic_bundle_resource_count(), 0);
+        assert!(app.local_bundle_path_entry.is_empty());
+    }
+
+    #[test]
+    fn typed_local_fictional_bundle_path_rejects_control_text_and_non_fictional_data() {
+        let mut app = MedOriginNativePreview::default();
+        for malformed in [
+            "".to_owned(),
+            " ".to_owned(),
+            "\n".to_owned(),
+            "C:\\fake\u{202e}file.json".to_owned(),
+            "a".repeat(1025),
+        ] {
+            app.local_bundle_path_entry = malformed;
+            assert_eq!(
+                app.import_typed_fictional_bundle(),
+                Err("local_typed_path_invalid_refused")
+            );
+            assert!(app.local_bundle_path_entry.is_empty());
+            assert_eq!(app.synthetic_bundle_resource_count(), 0);
+            assert!(app.local_bundle_drop_notice.is_some());
+        }
+    }
+
+    #[test]
+    fn typed_local_fictional_bundle_path_refuses_to_replace_protected_core() {
+        let raw = include_bytes!(
+            "../fixtures/core/core963-real-encrypted-fictional-file-batch-redacted.json"
+        );
+        let mut app =
+            MedOriginNativePreview::from_one_time_core_file_batch_receipt_stdin(raw).unwrap();
+        app.local_bundle_path_entry = "\"C:\\any-synthetic-file.json\"".to_owned();
+        assert_eq!(
+            app.import_typed_fictional_bundle(),
+            Err("local_drop_protected_source_refused")
+        );
+        assert_eq!(app.core_file_batch_import_count(), 2);
+        assert!(app.local_bundle_path_entry.is_empty());
+    }
+
+    #[test]
+    fn fictional_source_worklist_search_composes_with_patient_and_type_at_48_records() {
+        let raw = include_bytes!("../fixtures/core/synthetic-multipatient-fhir-bundle-48.json");
+        let mut app = MedOriginNativePreview::from_one_time_synthetic_bundle_stdin(raw).unwrap();
+        assert_eq!(app.synthetic_bundle_resource_count(), 48);
+        app.bundle_set_patient(None).unwrap();
+        app.bundle_set_search_query("fictional-observation-016")
+            .unwrap();
+        assert_eq!(
+            (0..48).filter(|index| app.bundle_visible(*index)).count(),
+            1
+        );
+        app.bundle_set_type("Observation").unwrap();
+        assert_eq!(
+            (0..48).filter(|index| app.bundle_visible(*index)).count(),
+            1
+        );
+        app.bundle_set_patient(Some(0)).unwrap();
+        assert_eq!(
+            (0..48).filter(|index| app.bundle_visible(*index)).count(),
+            0,
+            "a search result for another fictional patient must not leak"
+        );
+        app.bundle_set_patient(None).unwrap();
+        assert_eq!(
+            (0..48).filter(|index| app.bundle_visible(*index)).count(),
+            1
+        );
+        app.bundle_step_visible(true).unwrap();
+        let selected = app.synthetic_bundle_selected.expect("visible search hit");
+        assert_eq!(
+            app.synthetic_bundle.as_ref().unwrap().resources[selected].resource_id,
+            "fictional-observation-016"
+        );
+        assert_eq!(
+            app.bundle_step_visible(true),
+            Err("synthetic_bundle_worklist_boundary")
+        );
+        app.bundle_set_search_query("fictional-patient-001")
+            .unwrap();
+        assert!(app.synthetic_bundle_selected.is_none());
+        assert!(app.synthetic_bundle_history.is_empty());
+        assert_eq!(
+            (0..48).filter(|index| app.bundle_visible(*index)).count(),
+            1,
+            "patient-group switching reset the type facet to All"
+        );
+        app.bundle_set_type("Observation").unwrap();
+        assert_eq!(
+            (0..48).filter(|index| app.bundle_visible(*index)).count(),
+            0,
+            "explicit Observation facet must exclude a matching Patient"
+        );
+        app.bundle_set_type("All").unwrap();
+        assert_eq!(
+            (0..48).filter(|index| app.bundle_visible(*index)).count(),
+            1
+        );
+        app.bundle_set_search_query("").unwrap();
+        assert_eq!(
+            (0..48).filter(|index| app.bundle_visible(*index)).count(),
+            48
+        );
+        app.clear_fictional_output();
+        assert!(app.synthetic_bundle_query.is_empty());
+        assert_eq!(app.synthetic_bundle_resource_count(), 0);
+    }
+
+    #[test]
+    fn fictional_search_rejects_nonfictional_names_and_does_not_change_source() {
+        let raw = include_bytes!("../fixtures/core/synthetic-multipatient-fhir-bundle.json");
+        let mut app = MedOriginNativePreview::from_one_time_synthetic_bundle_stdin(raw).unwrap();
+        app.bundle_set_search_query("fictional").unwrap();
+        let previous = app.synthetic_bundle_query.clone();
+        for rejected in [
+            "John Smith",
+            "alice",
+            "real-patient-001",
+            "patient/name",
+            "a".repeat(65).as_str(),
+        ] {
+            assert_eq!(
+                app.bundle_set_search_query(rejected),
+                Err("synthetic_bundle_search_query_refused")
+            );
+            assert_eq!(app.synthetic_bundle_query, previous);
+            assert_eq!(app.synthetic_bundle_resource_count(), 8);
+        }
+        for partial in [
+            "f",
+            "fictional",
+            "fictional-",
+            "ficTional-Observation-004",
+            "observation",
+            "observation/fictional-observation-004",
+        ] {
+            assert_eq!(app.bundle_set_search_query(partial), Ok(()));
+            assert!(app.synthetic_bundle_notice.is_none());
+        }
+        let mut empty = MedOriginNativePreview::default();
+        assert_eq!(
+            empty.bundle_set_search_query("fictional"),
+            Err("synthetic_bundle_search_without_source")
+        );
+    }
+
+    #[test]
+    fn local_user_drop_admits_only_the_one_canonical_fictional_bundle() {
+        let raw = include_bytes!("../fixtures/core/synthetic-multipatient-fhir-bundle.json");
+        let file = std::env::temp_dir().join(format!(
+            "medorigin-native-drop-{:?}.json",
+            std::thread::current().id()
+        ));
+        std::fs::write(&file, raw).unwrap();
+        let mut app = MedOriginNativePreview::default();
+        let accepted = app.import_dropped_fictional_bundle(std::slice::from_ref(&file));
+        std::fs::remove_file(&file).unwrap();
+        assert_eq!(accepted, Ok(()));
+        assert!(app.local_bundle_dragged_source);
+        assert!(app.synthetic_bundle_resource_count() >= 3);
+        assert_eq!(
+            app.local_bundle_drop_notice,
+            Some("Local synthetic-only FHIR Bundle admitted read-only. No patient data.")
+        );
+        app.clear_fictional_output();
+        assert_eq!(app.synthetic_bundle_resource_count(), 0);
+        assert!(!app.local_bundle_dragged_source);
+        assert!(app.local_bundle_drop_notice.is_none());
+    }
+
+    #[test]
+    fn local_drop_rejects_multiple_files_and_protected_active_core_without_leak() {
+        let mut app = MedOriginNativePreview::default();
+        assert_eq!(
+            app.import_dropped_fictional_bundle(&[]),
+            Err("local_drop_one_json_required")
+        );
+        assert_eq!(app.synthetic_bundle_resource_count(), 0);
+        assert!(app.local_bundle_drop_notice.is_some());
+
+        let raw: &[u8] = include_bytes!(
+            "../fixtures/core/core963-real-encrypted-fictional-file-batch-redacted.json"
+        );
+        let mut core =
+            MedOriginNativePreview::from_one_time_core_file_batch_receipt_stdin(raw).unwrap();
+        assert_eq!(
+            core.import_dropped_fictional_bundle(&[]),
+            Err("local_drop_protected_source_refused")
+        );
+        assert_eq!(core.core_file_batch_import_count(), 2);
+        assert_eq!(core.synthetic_bundle_resource_count(), 0);
+        assert!(core.local_bundle_drop_notice.is_some());
+    }
 
     #[test]
     fn protected_audit_result_opens_only_verified_readonly_status_and_clear() {
