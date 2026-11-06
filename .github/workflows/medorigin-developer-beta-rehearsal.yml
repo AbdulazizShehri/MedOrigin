@@ -76,7 +76,7 @@ jobs:
           uv python install '3.11' '3.12'
           if ($LASTEXITCODE -ne 0) { throw 'Python installation failed' }
 
-          $pythonBuild = (& uv python find '3.12').Trim()
+          $pythonBuild = (& uv python find --managed-python '3.12').Trim()
           if ($LASTEXITCODE -ne 0) { throw 'Cannot find build interpreter' }
           $scratch = Join-Path $env:RUNNER_TEMP 'medorigin-beta-rehearsal'
           if (Test-Path $scratch) { throw 'Refuse to overwrite an existing rehearsal' }
@@ -104,9 +104,9 @@ jobs:
 
           $venv311 = Join-Path $scratch 'py311'
           $venv312 = Join-Path $scratch 'py312'
-          uv venv --python '3.11' $venv311
+          uv venv --managed-python --python '3.11' $venv311
           if ($LASTEXITCODE -ne 0) { throw 'Python 3.11 venv failed' }
-          uv venv --python '3.12' $venv312
+          uv venv --managed-python --python '3.12' $venv312
           if ($LASTEXITCODE -ne 0) { throw 'Python 3.12 venv failed' }
 
           $suffix = if ($IsWindows) { 'Scripts/python.exe' } else { 'bin/python' }
