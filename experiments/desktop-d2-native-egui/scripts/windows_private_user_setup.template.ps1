@@ -5,6 +5,8 @@ param([ValidateSet('Install','Verify','Uninstall')][string]$Action='Install')
 Set-StrictMode -Version Latest
 $ErrorActionPreference='Stop'
 $expectedCommit='__EXPECTED_COMMIT__'
+$expectedArchiveSha256='__EXPECTED_ARCHIVE_SHA256__'
+$archiveName='MedOrigin-Reviewed-Archive.zip'
 $expected=@{
 __EXPECTED_HASHES__
 }
@@ -43,12 +45,10 @@ function Confirm-Payload([string]$folder, [bool]$installed) {
     $expectedNames=@($expected.Keys)
     if ($installed) { $expectedNames+=@($scriptName) }
     $files=@(Get-ChildItem -LiteralPath $folder -Force)
-    if ($installed) {
-        if (@($files | Where-Object { $_.PSIsContainer -or ($expectedNames -cnotcontains $_.Name) }).Count -ne 0) {
-            throw 'installed_payload_contains_unreviewed_files'
-        }
-        if ($files.Count -ne $expectedNames.Count) { throw 'installed_payload_incomplete' }
+    if (@($files | Where-Object { $_.PSIsContainer -or ($expectedNames -cnotcontains $_.Name) }).Count -ne 0) {
+        throw 'payload_contains_unreviewed_files'
     }
+    if ($files.Count -ne $expectedNames.Count) { throw 'payload_incomplete' }
     foreach ($entry in $expected.GetEnumerator()) {
         $file=Join-Path $folder $entry.Key
         Require-ExistingUnredirected $file $false
@@ -101,14 +101,28 @@ try {
         if ((Test-Path -LiteralPath $shortcut) -or (Test-Path -LiteralPath $uninstallShortcut)) {
             throw 'existing_shortcut_not_overwritten'
         }
-        Confirm-Payload $PSScriptRoot $false
+        # Only a source-hash-pinned ZIP, our static .cmd bootstrap and the
+        # generated source-verified .ps1 can be present in IExpress extraction.
+        Require-ExistingUnredirected $PSScriptRoot $true
+        $archive=Join-Path $PSScriptRoot $archiveName
+        Require-ExistingUnredirected $archive $false
         Require-ExistingUnredirected (Join-Path $PSScriptRoot $scriptName) $false
+        $sourceNames=@($archiveName,$scriptName,'Install-MedOrigin-Private.cmd')
+        $actualNames=@(Get-ChildItem -LiteralPath $PSScriptRoot -Force)
+        if ($actualNames.Count -ne $sourceNames.Count -or
+            @($actualNames | Where-Object {
+                $_.PSIsContainer -or ($sourceNames -cnotcontains $_.Name)
+            }).Count -ne 0) { throw 'iexpress_source_contains_unreviewed_files' }
+        if ((Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash.ToLowerInvariant() -cne
+            $expectedArchiveSha256) { throw 'reviewed_archive_sha256_refused' }
         if (-not (Test-Path -LiteralPath $appParent)) {
             New-Item -ItemType Directory -Path $appParent -ErrorAction Stop | Out-Null
         }
         Require-ExistingUnredirected $appParent $true
         $stage=Join-Path $appParent ('PendingPrivatePreview-'+[Guid]::NewGuid().ToString('N'))
+        $expand=Join-Path $appParent ('PendingPrivateExtract-'+[Guid]::NewGuid().ToString('N'))
         New-Item -ItemType Directory -Path $stage -ErrorAction Stop | Out-Null
+        New-Item -ItemType Directory -Path $expand -ErrorAction Stop | Out-Null
         $committed=$false
         $ownShortcut=$false
         $ownUninstallerShortcut=$false
@@ -116,8 +130,17 @@ try {
         $pendingShortcut=Join-Path $programs ('MedOrigin-Private-pending-'+$nonce+'.lnk')
         $pendingUninstall=Join-Path $programs ('MedOrigin-Private-uninstall-pending-'+$nonce+'.lnk')
         try {
+            # Archive SHA checked before extraction; strict five-file canonical
+            # source is checked again before copying any payload to staging.
+            Expand-Archive -LiteralPath $archive -DestinationPath $expand -ErrorAction Stop
+            $expanded=Join-Path $expand 'MedOrigin-Synthetic-Preview'
+            Require-ExistingUnredirected $expanded $true
+            if (@(Get-ChildItem -LiteralPath $expand -Force).Count -ne 1) {
+                throw 'reviewed_archive_extra_root_refused'
+            }
+            Confirm-Payload $expanded $false
             foreach ($entry in $expected.GetEnumerator()) {
-                Copy-Item -LiteralPath (Join-Path $PSScriptRoot $entry.Key) -Destination (Join-Path $stage $entry.Key) -ErrorAction Stop
+                Copy-Item -LiteralPath (Join-Path $expanded $entry.Key) -Destination (Join-Path $stage $entry.Key) -ErrorAction Stop
             }
             Copy-Item -LiteralPath (Join-Path $PSScriptRoot $scriptName) -Destination (Join-Path $stage $scriptName) -ErrorAction Stop
             Confirm-Payload $stage $true
@@ -170,6 +193,7 @@ try {
                 Remove-Item -LiteralPath $pendingUninstall -Force
             }
             if (Test-Path -LiteralPath $stage) { Remove-Item -LiteralPath $stage -Recurse -Force }
+            if (Test-Path -LiteralPath $expand) { Remove-Item -LiteralPath $expand -Recurse -Force }
         }
         Write-Output 'MEDORIGIN_PRIVATE_WINDOWS_USER_INSTALL_PASS_SYNTHETIC_NOT_RELEASED'
     } elseif ($Action -eq 'Verify') {

@@ -84,14 +84,14 @@ class PrivateWindowsUserSetupTests(unittest.TestCase):
         with (
             patch.object(setup, "_real_path"),
             patch.object(job_contract, "_win32", return_value=api),
-        ):
-            with self.assertRaisesRegex(
+            self.assertRaisesRegex(
                 ValueError, "windows_iexpress_builder_timed_out_subtree_terminated"
-            ):
-                setup._run_iexpress(
-                    self.work / "fictional-only-test.sed",
-                    self.work / "fictional-only-test.exe",
-                )
+            ),
+        ):
+            setup._run_iexpress(
+                self.work / "fictional-only-test.sed",
+                self.work / "fictional-only-test.exe",
+            )
         self.assertEqual(api.WaitForSingleObject.call_args.args[1], 240_000)
         api.CloseHandle.assert_called_once_with(owned_job)
         api.TerminateProcess.assert_not_called()
@@ -105,7 +105,7 @@ class PrivateWindowsUserSetupTests(unittest.TestCase):
             self.assertEqual(
                 names,
                 {
-                    *setup.FILES,
+                    setup.REVIEWED_ARCHIVE,
                     setup.INSTALLER_SCRIPT,
                     setup.INSTALLER_COMMAND,
                     "private.sed",
@@ -114,8 +114,17 @@ class PrivateWindowsUserSetupTests(unittest.TestCase):
             compiled = (stage / setup.INSTALLER_SCRIPT).read_text(encoding="utf-8")
             self.assertIn(self.commit, compiled)
             self.assertIn(self.binary_sha, compiled)
+            self.assertIn(self.archive_sha, compiled)
+            self.assertEqual(
+                setup.digest((stage / setup.REVIEWED_ARCHIVE).read_bytes()),
+                self.archive_sha,
+            )
             for name in setup.FILES:
-                self.assertIn(setup.digest((stage / name).read_bytes()), compiled)
+                self.assertIn(
+                    setup.digest(setup._read_exact_zip_members(self.archive)[name]), compiled
+                )
+                self.assertFalse((stage / name).exists(), "do not recompress native EXE")
+            self.assertNotIn("__EXPECTED_ARCHIVE_SHA256__", compiled)
             self.assertNotIn("__EXPECTED_HASHES__", compiled)
             self.assertNotIn("__EXPECTED_COMMIT__", compiled)
             self.assertIn("Start Menu", compiled)
@@ -133,7 +142,7 @@ class PrivateWindowsUserSetupTests(unittest.TestCase):
         with patch.object(setup, "_run_iexpress", side_effect=fake_iexpress):
             setup_file = self._build()
         self.assertTrue(setup_file.is_file())
-        self.assertEqual(observed["filecount"], 8)
+        self.assertEqual(observed["filecount"], 4)
         self.assertEqual(
             setup.inspect_native_header(setup_file.read_bytes()), ("windows", "x86_64")
         )
@@ -205,11 +214,13 @@ class PrivateWindowsUserSetupTests(unittest.TestCase):
     def test_render_refuses_incomplete_or_forged_template(self):
         files = dict.fromkeys(setup.FILES, b"synthetic")
         with self.assertRaisesRegex(ValueError, "setup_template_identity_missing"):
-            setup.render_script("no source placeholder", self.commit, files)
+            setup.render_script("no source placeholder", self.commit, files, self.archive_sha)
         with self.assertRaisesRegex(ValueError, "setup_source_or_member_set_refused"):
-            setup.render_script(self.template, "bad", files)
+            setup.render_script(self.template, "bad", files, self.archive_sha)
         with self.assertRaisesRegex(ValueError, "setup_source_or_member_set_refused"):
-            setup.render_script(self.template, self.commit, {"one": b"unapproved"})
+            setup.render_script(
+                self.template, self.commit, {"one": b"unapproved"}, self.archive_sha
+            )
 
     def test_real_rendered_ps_script_parses_on_windows(self):
         import subprocess
@@ -218,7 +229,7 @@ class PrivateWindowsUserSetupTests(unittest.TestCase):
         if sys.platform != "win32":
             self.skipTest("Windows PowerShell parser only")
         files = {key: hashlib.sha256(key.encode()).digest() for key in setup.FILES}
-        rendered = setup.render_script(self.template, self.commit, files)
+        rendered = setup.render_script(self.template, self.commit, files, self.archive_sha)
         source = self.work / "rendered-install.ps1"
         source.write_text(rendered, encoding="utf-8")
         checker = (
@@ -234,6 +245,90 @@ class PrivateWindowsUserSetupTests(unittest.TestCase):
             timeout=15,
         )
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+    @unittest.skipUnless(__import__("sys").platform == "win32", "Windows-only private profile")
+    def test_real_windows_installer_expands_pinned_archive_into_isolated_profile(self):
+        """Exercise generated PowerShell, not fake IExpress or the user's profile."""
+        import os
+        import subprocess
+
+        # No default user directories or real binaries. The installer must
+        # use only this disposable, synthetic unit-test profile.
+        extraction = self.work / "private-extraction"
+        extraction.mkdir()
+        (extraction / setup.REVIEWED_ARCHIVE).write_bytes(self.archive.read_bytes())
+        (extraction / setup.INSTALLER_COMMAND).write_text(
+            "@echo off\r\nexit /b 2\r\n", encoding="ascii"
+        )  # Never execute the bootstrap in this source test.
+        compiled = setup.render_script(
+            self.template,
+            self.commit,
+            setup._read_exact_zip_members(self.archive),
+            self.archive_sha,
+        )
+        script = extraction / setup.INSTALLER_SCRIPT
+        script.write_text(compiled, encoding="utf-8")
+        local = self.work / "private-profile" / "AppData" / "Local"
+        roam = self.work / "private-profile" / "AppData" / "Roaming"
+        programs = roam / "Microsoft" / "Windows" / "Start Menu" / "Programs"
+        for path in (local, programs):
+            path.mkdir(parents=True)
+        sentinel = local / "not-an-app-owned-file.txt"
+        sentinel.write_text("must survive", encoding="ascii")
+        env = {**os.environ, "LOCALAPPDATA": str(local), "APPDATA": str(roam)}
+        ps = [
+            "powershell.exe",
+            "-NoProfile",
+            "-NonInteractive",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+        ]
+
+        def action(source: Path, verb: str):
+            return subprocess.run(
+                [*ps, str(source), "-Action", verb],
+                env=env,
+                capture_output=True,
+                text=True,
+                timeout=55,
+            )
+
+        # A modified ZIP is refused BEFORE writing an install directory.
+        archive = extraction / setup.REVIEWED_ARCHIVE
+        original = archive.read_bytes()
+        archive.write_bytes(original + b"tamper")
+        reject = action(script, "Install")
+        self.assertNotEqual(reject.returncode, 0)
+        self.assertFalse((local / "MedOrigin-D2-Private-Developer-QA").exists())
+        archive.write_bytes(original)
+
+        installed = local / "MedOrigin-D2-Private-Developer-QA" / "InstalledPreview"
+        install = action(script, "Install")
+        self.assertEqual(install.returncode, 0, install.stdout + install.stderr)
+        self.assertTrue(installed.is_dir())
+        self.assertEqual(
+            {item.name for item in installed.iterdir()},
+            {*setup.FILES, setup.INSTALLER_SCRIPT},
+        )
+        for name, original_data in setup._read_exact_zip_members(self.archive).items():
+            self.assertEqual((installed / name).read_bytes(), original_data)
+        verify = action(installed / setup.INSTALLER_SCRIPT, "Verify")
+        self.assertEqual(verify.returncode, 0, verify.stdout + verify.stderr)
+        self.assertTrue(any(programs.glob("MedOrigin Synthetic Preview.lnk")))
+        self.assertTrue(any(programs.glob("Uninstall MedOrigin Synthetic Preview.lnk")))
+        tampered = installed / "README-SYNTHETIC.txt"
+        before = tampered.read_bytes()
+        tampered.write_bytes(before + b"tamper")
+        refused = action(installed / setup.INSTALLER_SCRIPT, "Verify")
+        self.assertNotEqual(refused.returncode, 0)
+        tampered.write_bytes(before)
+        self.assertEqual(action(installed / setup.INSTALLER_SCRIPT, "Verify").returncode, 0)
+        remove = action(installed / setup.INSTALLER_SCRIPT, "Uninstall")
+        self.assertEqual(remove.returncode, 0, remove.stdout + remove.stderr)
+        self.assertFalse(installed.exists())
+        self.assertFalse(list(programs.glob("*MedOrigin Synthetic Preview.lnk")))
+        self.assertEqual(sentinel.read_text(encoding="ascii"), "must survive")
 
 
 if __name__ == "__main__":
