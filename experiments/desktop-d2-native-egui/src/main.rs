@@ -21,6 +21,7 @@ const EXPLICIT_SYNTHETIC_MULTIPATIENT_FLAG: &str = "--synthetic-multipatient-bun
 const EXPLICIT_CORE_FILE_BATCH_FLAG: &str = "--synthetic-core-file-batch-receipt-stdin";
 // Preferred ephemeral Core-to-GUI QA transport; refuses unbound replay.
 const SESSION_CORE_BATCH_FLAG: &str = session::SESSION_CORE_BATCH_FLAG;
+const SESSION_PROTECTED_AUDIT_FLAG: &str = session::SESSION_PROTECTED_AUDIT_FLAG;
 const EXPLICIT_SYNTHETIC_WORKSPACE_FLAG: &str = "--synthetic-workspace-receipt-stdin";
 const EXPLICIT_SYNTHETIC_READBACK_FLAG: &str = "--synthetic-encrypted-readback-stdin";
 const EXPLICIT_SYNTHETIC_FOCUSED_READBACK_FLAG: &str =
@@ -55,6 +56,7 @@ fn make_app_with_deadline<R: Read + Send + 'static>(
             && args[0] != EXPLICIT_SYNTHETIC_MULTIPATIENT_FLAG
             && args[0] != EXPLICIT_CORE_FILE_BATCH_FLAG
             && args[0] != SESSION_CORE_BATCH_FLAG
+            && args[0] != SESSION_PROTECTED_AUDIT_FLAG
             && args[0] != EXPLICIT_SYNTHETIC_WORKSPACE_FLAG
             && args[0] != EXPLICIT_SYNTHETIC_READBACK_FLAG
             && args[0] != EXPLICIT_SYNTHETIC_FOCUSED_READBACK_FLAG
@@ -75,6 +77,8 @@ fn make_app_with_deadline<R: Read + Send + 'static>(
         FILE_BATCH_RECEIPT_MAX_BYTES
     } else if args[0] == SESSION_CORE_BATCH_FLAG {
         session::CORE_BATCH_FRAME_MAX_BYTES
+    } else if args[0] == SESSION_PROTECTED_AUDIT_FLAG {
+        session::PROTECTED_AUDIT_MAX_FRAME
     } else {
         MAX_FICTIONAL_CORE_STDIN
     };
@@ -132,6 +136,7 @@ fn make_app_with_deadline<R: Read + Send + 'static>(
     if args[0] == SESSION_FLAG
         || args[0] == SESSION_FOCUSED_FLAG
         || args[0] == SESSION_CORE_BATCH_FLAG
+        || args[0] == SESSION_PROTECTED_AUDIT_FLAG
     {
         // Session key/nonce are generated per GUI launch by the private owner.
         // Never fall back to the legacy unbound static readback when absent.
@@ -157,7 +162,9 @@ fn make_app_with_deadline<R: Read + Send + 'static>(
         let key = session::decode_fixed_hex::<32>(&key_hex).map_err(|_| {
             io::Error::new(io::ErrorKind::InvalidData, "fictional_session_key_invalid")
         })?;
-        let inner = if args[0] == SESSION_CORE_BATCH_FLAG {
+        let inner = if args[0] == SESSION_PROTECTED_AUDIT_FLAG {
+            session::verify_fictional_protected_audit_frame(&bytes, &nonce, &key)
+        } else if args[0] == SESSION_CORE_BATCH_FLAG {
             session::verify_fictional_core_batch_frame(&bytes, &nonce, &key)
         } else {
             session::verify_fictional_frame(&bytes, &nonce, &key)
@@ -168,7 +175,9 @@ fn make_app_with_deadline<R: Read + Send + 'static>(
                 "fictional_session_mac_or_freshness_refused",
             )
         })?;
-        let app = if args[0] == SESSION_CORE_BATCH_FLAG {
+        let app = if args[0] == SESSION_PROTECTED_AUDIT_FLAG {
+            MedOriginNativePreview::from_one_time_protected_audit_verification_stdin(inner)
+        } else if args[0] == SESSION_CORE_BATCH_FLAG {
             MedOriginNativePreview::from_one_time_core_file_batch_receipt_stdin(inner)
         } else if args[0] == SESSION_FOCUSED_FLAG {
             MedOriginNativePreview::from_one_time_synthetic_focused_readback_stdin(inner)
@@ -226,9 +235,32 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         ..Default::default()
     };
     eframe::run_native(
-        "MedOrigin Native Rust — Synthetic Experiment (NO RELEASE)",
+        "MedOrigin Native Rust — Private Local Workspace (Nonclinical Preview)",
         options,
-        Box::new(move |_cc| Ok(Box::new(app))),
+        Box::new(move |cc| {
+            // Theme is strictly local presentation: no OS theme calls,
+            // telemetry, font download, WebView or Core process launch.
+            cc.egui_ctx.set_theme(eframe::egui::Theme::Dark);
+            let mut style = (*cc.egui_ctx.style_of(eframe::egui::Theme::Dark)).clone();
+            style.visuals = eframe::egui::Visuals::dark();
+            style.visuals.panel_fill = eframe::egui::Color32::from_rgb(16, 18, 23);
+            style.visuals.window_fill = eframe::egui::Color32::from_rgb(20, 23, 29);
+            style.visuals.extreme_bg_color = eframe::egui::Color32::from_rgb(25, 29, 36);
+            style.visuals.widgets.inactive.bg_fill = eframe::egui::Color32::from_rgb(35, 39, 46);
+            style.visuals.widgets.hovered.bg_fill = eframe::egui::Color32::from_rgb(54, 55, 62);
+            style.visuals.widgets.active.bg_fill = eframe::egui::Color32::from_rgb(68, 53, 47);
+            style.visuals.selection.bg_fill = eframe::egui::Color32::from_rgb(133, 71, 49);
+            style.visuals.override_text_color =
+                Some(eframe::egui::Color32::from_rgb(232, 232, 233));
+            style.spacing.item_spacing = eframe::egui::vec2(9.0, 9.0);
+            style.spacing.button_padding = eframe::egui::vec2(12.0, 8.0);
+            style.text_styles.insert(
+                eframe::egui::TextStyle::Heading,
+                eframe::egui::FontId::proportional(24.0),
+            );
+            cc.egui_ctx.set_style_of(eframe::egui::Theme::Dark, style);
+            Ok(Box::new(app))
+        }),
     )?;
     Ok(())
 }

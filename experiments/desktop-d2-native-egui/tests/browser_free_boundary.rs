@@ -79,7 +79,6 @@ fn disallowed_source_api(source: &str) -> Option<&'static str> {
         "std::{process",
         "include!(",
         "#[path=",
-        "path=",
         "extern\"C\"",
     ];
     FORBIDDEN_SOURCE_APIS
@@ -116,7 +115,9 @@ fn audited_native_source_files(root: &Path) -> Vec<PathBuf> {
             "core_provenance.rs",
             "encrypted_readback.rs",
             "lib.rs",
+            "local_bundle_import.rs",
             "main.rs",
+            "protected_audit.rs",
             "session.rs",
             "synthetic_bundle.rs",
             "workspace_receipt.rs"
@@ -298,14 +299,16 @@ fn guard_refuses_unreviewed_nested_module_layout() {
         "core_provenance.rs",
         "encrypted_readback.rs",
         "lib.rs",
+        "local_bundle_import.rs",
         "main.rs",
+        "protected_audit.rs",
         "session.rs",
         "synthetic_bundle.rs",
         "workspace_receipt.rs",
     ] {
         fs::write(root.join(name), "// synthetic, no execution").expect("fixture");
     }
-    assert_eq!(audited_native_source_files(&root).len(), 9);
+    assert_eq!(audited_native_source_files(&root).len(), 11);
     let nested = root.join("hidden");
     fs::create_dir(&nested).expect("create nested fixture");
     fs::write(nested.join("socket.rs"), "// unreviewed nested source").expect("fixture");

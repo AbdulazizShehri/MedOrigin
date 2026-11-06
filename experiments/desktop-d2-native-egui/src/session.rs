@@ -11,6 +11,11 @@ pub const SESSION_FOCUSED_FLAG: &str = "--synthetic-encrypted-readback-session-f
 // A distinct source-scoped Core summary, not interchangeable with the
 // historical 2KiB encrypted-readback frame or unbound receipt transport.
 pub const SESSION_CORE_BATCH_FLAG: &str = "--synthetic-core-file-batch-session-stdin";
+// Separate HMAC for one owner Windows protected fictional audit VERIFY result.
+pub const SESSION_PROTECTED_AUDIT_FLAG: &str = "--synthetic-protected-audit-session-stdin";
+pub const PROTECTED_AUDIT_TAG: &[u8] = b"MedOrigin-D2-FICTIONAL-PROTECTED-AUDIT-V1\0";
+pub const PROTECTED_AUDIT_MAX_FRAME: usize =
+    crate::protected_audit::MAX_AUDIT_RECEIPT_BYTES + PROTECTED_AUDIT_TAG.len() + 16 + 32;
 pub const CORE_BATCH_TAG: &[u8] = b"MedOrigin-D2-FICTIONAL-CORE-BATCH-V1\0";
 pub const CORE_BATCH_HEADER_LEN: usize = CORE_BATCH_TAG.len() + 16 + 32;
 pub const CORE_BATCH_FRAME_MAX_BYTES: usize = 4096 + CORE_BATCH_HEADER_LEN;
@@ -127,6 +132,22 @@ pub fn verify_fictional_core_batch_frame<'a>(
     )
 }
 
+/// Per-launch fictional protected audit verify only. No process signing,
+/// patient-data or clinical user authentication claim.
+pub fn verify_fictional_protected_audit_frame<'a>(
+    raw: &'a [u8],
+    nonce: &[u8; 16],
+    secret: &[u8; 32],
+) -> Result<&'a [u8], &'static str> {
+    verify_fictional_frame_domain(
+        raw,
+        nonce,
+        secret,
+        PROTECTED_AUDIT_TAG,
+        PROTECTED_AUDIT_MAX_FRAME,
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -148,6 +169,41 @@ mod tests {
 
     fn frame(payload: &[u8], nonce: &[u8; 16], key: &[u8; 32]) -> Vec<u8> {
         frame_domain(SESSION_TAG, payload, nonce, key)
+    }
+
+    #[test]
+    fn protected_audit_frame_is_distinct_from_batch_and_general_sessions() {
+        let nonce = [0x19; 16];
+        let secret = [0x39; 32];
+        let payload = b"fictional-read-only-audit";
+        let frame = frame_domain(PROTECTED_AUDIT_TAG, payload, &nonce, &secret);
+        assert_eq!(
+            verify_fictional_protected_audit_frame(&frame, &nonce, &secret),
+            Ok(payload.as_slice())
+        );
+        assert!(verify_fictional_core_batch_frame(&frame, &nonce, &secret).is_err());
+        assert!(verify_fictional_frame(&frame, &nonce, &secret).is_err());
+        assert!(verify_fictional_protected_audit_frame(&frame, &[0x1a; 16], &secret).is_err());
+        assert!(verify_fictional_protected_audit_frame(&frame, &nonce, &[0x3a; 32]).is_err());
+        for i in [
+            0,
+            PROTECTED_AUDIT_TAG.len(),
+            PROTECTED_AUDIT_TAG.len() + 16,
+            PROTECTED_AUDIT_TAG.len() + 48,
+        ] {
+            let mut altered = frame.clone();
+            altered[i] ^= 1;
+            assert!(verify_fictional_protected_audit_frame(&altered, &nonce, &secret).is_err());
+        }
+        assert!(verify_fictional_protected_audit_frame(payload, &nonce, &secret).is_err());
+        assert!(
+            verify_fictional_protected_audit_frame(
+                &vec![b'x'; PROTECTED_AUDIT_MAX_FRAME + 1],
+                &nonce,
+                &secret
+            )
+            .is_err()
+        );
     }
 
     #[test]
