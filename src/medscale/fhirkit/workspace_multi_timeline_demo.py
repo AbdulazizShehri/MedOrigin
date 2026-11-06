@@ -43,15 +43,34 @@ def _second_fictional_timeline_bundle() -> dict[str, object]:
     return source
 
 
-def run_fictional_multiimport_timeline_demo() -> dict[str, object]:
+def run_fictional_multiimport_timeline_demo(
+    *,
+    from_day_utc: str | None = None,
+    through_day_utc: str | None = None,
+    resource_type: str | None = None,
+) -> dict[str, object]:
     from medscale_workspace.audit import AuditEventType, AuditTrail
     from medscale_workspace.keyprovider import InMemoryTestKeyProvider, new_root_secret
     from medscale_workspace.storage import WorkspaceStore
 
     from medscale.fhirkit.workspace_ingest import ingest_synthetic_bundle_atomic
     from medscale.fhirkit.workspace_multi_timeline import (
+        SyntheticMultiImportTimelineError,
+        _checked_day,
+        list_filtered_verified_synthetic_import_timelines,
         list_verified_synthetic_import_timelines,
     )
+
+    # Reject bad view input before allocating an encrypted fictional store.
+    start = _checked_day(from_day_utc)
+    end = _checked_day(through_day_utc)
+    if start is not None and end is not None and start > end:
+        raise SyntheticMultiImportTimelineError("multi_timeline_filter_range_refused")
+    if resource_type is not None and (
+        type(resource_type) is not str or resource_type not in ("Encounter", "Observation")
+    ):
+        raise SyntheticMultiImportTimelineError("multi_timeline_filter_type_refused")
+    filtered = None
 
     first_bundle = _fictional_bundle()
     first_bundle["entry"][0]["resource"]["effectiveDateTime"] = "2026-11-02T22:10:00-05:00"
@@ -125,8 +144,38 @@ def run_fictional_multiimport_timeline_demo() -> dict[str, object]:
                 or timeline["cross_import_patient_identity_join_performed"] is not False
             ):
                 raise ValueError("fictional_multi_timeline_source_contract_refused")
+            if start is not None or end is not None or resource_type is not None:
+                filtered = list_filtered_verified_synthetic_import_timelines(
+                    store=store,
+                    test_key_provider=provider,
+                    actor_id=_ACTOR,
+                    expected_current_audit_head_digest=str(second["audit_head_digest"]),
+                    synthetic_only=True,
+                    allow_in_memory_listing=True,
+                    allow_in_memory_timeline=True,
+                    from_day_utc=start,
+                    through_day_utc=end,
+                    resource_type=resource_type,
+                )
+                if (
+                    filtered["import_count"] != 2
+                    or filtered["source_total_event_count"] != 4
+                    or filtered["source_total_event_count"]
+                    != filtered["visible_total_event_count"] + filtered["hidden_total_event_count"]
+                    or filtered["cross_import_patient_identity_join_performed"] is not False
+                ):
+                    raise ValueError("fictional_multi_timeline_filter_contract_refused")
     if Path(directory).exists():
         raise ValueError("fictional_multi_timeline_cleanup_refused")
+    if filtered is not None:
+        return {
+            **filtered,
+            "schema": "medorigin-core-fake-encrypted-filtered-multiimport-timeline-demo/v1",
+            "status": "SYNTHETIC_VERIFIED_FILTERED_MULTIIMPORT_TIMELINES_PASS",
+            "verified_audit_events": 3,
+            "closed_and_reopened": True,
+            "ephemeral_store_removed": True,
+        }
     return {
         "schema": "medorigin-core-fake-encrypted-multiimport-timeline-demo/v1",
         "status": "SYNTHETIC_VERIFIED_MULTIPLE_IMPORT_TIMELINES_PASS",
@@ -145,9 +194,18 @@ def run_fictional_multiimport_timeline_demo() -> dict[str, object]:
     }
 
 
-def receipt_json() -> str:
+def receipt_json(
+    *,
+    from_day_utc: str | None = None,
+    through_day_utc: str | None = None,
+    resource_type: str | None = None,
+) -> str:
     return json.dumps(
-        run_fictional_multiimport_timeline_demo(),
+        run_fictional_multiimport_timeline_demo(
+            from_day_utc=from_day_utc,
+            through_day_utc=through_day_utc,
+            resource_type=resource_type,
+        ),
         sort_keys=True,
         separators=(",", ":"),
         ensure_ascii=True,
