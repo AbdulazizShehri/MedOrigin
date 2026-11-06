@@ -59,16 +59,6 @@ jobs:
         with:
           enable-cache: false
 
-      # uv-managed Windows CPython occasionally lacks readable Tcl/Tk script
-      # assets. Use the independently SHA-pinned full hosted interpreter ONLY
-      # for source-only GUI unit tests. Wheel builds and the two installed-Core
-      # Python environments below remain exact uv-managed Python 3.11/3.12.
-      - name: Prepare full Windows Python 3.12 for real Tk GUI source tests
-        if: runner.os == 'Windows'
-        uses: actions/setup-python@e797f83bcb11b83ae66e0230d6156d7c80228e7c # v6.0.0
-        with:
-          python-version: '3.12'
-
       - name: Build from committed source, verify and execute two clean installs
         shell: pwsh
         run: |
@@ -76,7 +66,7 @@ jobs:
           uv python install '3.11' '3.12'
           if ($LASTEXITCODE -ne 0) { throw 'Python installation failed' }
 
-          $pythonBuild = (& uv python find --managed-python '3.12').Trim()
+          $pythonBuild = (& uv python find '3.12').Trim()
           if ($LASTEXITCODE -ne 0) { throw 'Cannot find build interpreter' }
           $scratch = Join-Path $env:RUNNER_TEMP 'medorigin-beta-rehearsal'
           if (Test-Path $scratch) { throw 'Refuse to overwrite an existing rehearsal' }
@@ -104,9 +94,9 @@ jobs:
 
           $venv311 = Join-Path $scratch 'py311'
           $venv312 = Join-Path $scratch 'py312'
-          uv venv --managed-python --python '3.11' $venv311
+          uv venv --python '3.11' $venv311
           if ($LASTEXITCODE -ne 0) { throw 'Python 3.11 venv failed' }
-          uv venv --managed-python --python '3.12' $venv312
+          uv venv --python '3.12' $venv312
           if ($LASTEXITCODE -ne 0) { throw 'Python 3.12 venv failed' }
 
           $suffix = if ($IsWindows) { 'Scripts/python.exe' } else { 'bin/python' }
@@ -124,19 +114,6 @@ jobs:
           # The source-only unit environment intentionally has no installed
           # application Wheel. Make the checkout packages importable for only
           # this unit step, then scrub PYTHONPATH before source-bound CLI E2E.
-          $unitPython = $pythonBuild
-          if ($IsWindows) {
-            # Keep the ordinary uv-managed Python for exact Wheel provenance;
-            # full hosted Python runs ONLY the Tk source unit tests.
-            $unitPython = (& python -c 'import sys; print(sys.executable)').Trim()
-            if ($LASTEXITCODE -ne 0 -or !(Test-Path -LiteralPath $unitPython -PathType Leaf)) {
-              throw 'Windows Tk unit interpreter path unavailable'
-            }
-            & $unitPython -c 'import sys, tkinter as tk; assert sys.version_info[:2] == (3, 12); root = tk.Tk(); root.withdraw(); root.update_idletasks(); root.destroy()'
-            if ($LASTEXITCODE -ne 0) {
-              throw 'Full Windows CPython 3.12 has no usable Tcl/Tk; do not claim GUI unit acceptance'
-            }
-          }
           $oldPythonPath = $env:PYTHONPATH
           $sourceTestPaths = @(
             (Join-Path (Get-Location).Path 'src'),
@@ -145,7 +122,7 @@ jobs:
           )
           $env:PYTHONPATH = $sourceTestPaths -join [System.IO.Path]::PathSeparator
           try {
-            uv run --no-project --python $unitPython --with 'pytest==8.4.2' `
+            uv run --no-project --python $pythonBuild --with 'pytest==8.4.2' `
               -- python -m pytest -q `
               tests/test_truthful_synthetic_fhir_beta_v2.py `
               tests/test_synthetic_fhir_native_desktop_demo.py `
