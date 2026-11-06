@@ -1,0 +1,33 @@
+name: Python known-patched dependency floors (offline)
+
+on:
+  push:
+    branches:
+      - feat/medorigin-security-uv-patched-dependencies-20261105
+  pull_request:
+    paths:
+      - pyproject.toml
+      - uv.lock
+      - scripts/verify_python_lock_security_floor.py
+      - tests/test_security_lock_floor.py
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  patched-lock-floor:
+    name: Offline known-fix advisory regression guard
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+      - name: Validate minimum Python and offline lock constraints
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -B -c "import sys,tomllib; assert sys.version_info >= (3,11)"
+          python3 -B scripts/verify_python_lock_security_floor.py

@@ -1,4 +1,5 @@
 """Offline evidence validator contract tests: all decisions remain non-releasing."""
+
 import json
 import subprocess
 import sys
@@ -17,7 +18,11 @@ def packet():
         "clinical_data_used": False,
         "independent_review": True,
         "gates": {
-            f"NET-{i:02}": {"status": "PASS", "evidence": ["test-only-log.json"], "reviewer": "Independent reviewer"}
+            f"NET-{i:02}": {
+                "status": "PASS",
+                "evidence": ["test-only-log.json"],
+                "reviewer": "Independent reviewer",
+            }
             for i in range(1, 10)
         },
     }
@@ -73,8 +78,14 @@ class TestOfflineEvidence(unittest.TestCase):
             path = Path(directory) / "packet.json"
             path.write_text(json.dumps(packet()), encoding="utf-8")
             result = subprocess.run(
-                [sys.executable, str(Path(__file__).with_name("verify_offline_evidence.py")), str(path)],
-                capture_output=True, text=True, check=False,
+                [
+                    sys.executable,
+                    str(Path(__file__).with_name("verify_offline_evidence.py")),
+                    str(path),
+                ],
+                capture_output=True,
+                text=True,
+                check=False,
             )
             self.assertEqual(result.returncode, 3)
             output = json.loads(result.stdout)
@@ -87,8 +98,14 @@ class TestOfflineEvidence(unittest.TestCase):
             path = Path(directory) / "packet.json"
             path.write_text("{bad", encoding="utf-8")
             result = subprocess.run(
-                [sys.executable, str(Path(__file__).with_name("verify_offline_evidence.py")), str(path)],
-                capture_output=True, text=True, check=False,
+                [
+                    sys.executable,
+                    str(Path(__file__).with_name("verify_offline_evidence.py")),
+                    str(path),
+                ],
+                capture_output=True,
+                text=True,
+                check=False,
             )
             self.assertEqual(result.returncode, 2)
             self.assertEqual(json.loads(result.stdout)["decision"], "NO_GO")

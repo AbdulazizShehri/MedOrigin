@@ -1,13 +1,17 @@
 """Pure Python negative controls for fixture-catalog integrity; no Rust needed."""
+
 import hashlib
 import unittest
+
 from verify_d2_fixture_catalog import (
-    EXPECTED_STATUS, catalog, check_one, fixed_literal,
+    EXPECTED_STATUS,
+    catalog,
+    check_one,
+    fixed_literal,
 )
 
 PATIENT = b'{"resourceType":"Patient","id":"synthetic","active":true}'
-GOOD = (len(PATIENT), hashlib.sha256(PATIENT).hexdigest(),
-        EXPECTED_STATUS["patient-minimal"])
+GOOD = (len(PATIENT), hashlib.sha256(PATIENT).hexdigest(), EXPECTED_STATUS["patient-minimal"])
 
 
 class TestSourceCatalogFailClosed(unittest.TestCase):
@@ -45,10 +49,14 @@ class TestSourceCatalogFailClosed(unittest.TestCase):
             fixed_literal(source + source, "PATIENT")
 
     def test_catalog_rejects_unreviewed_entries(self):
-        source = 'pub const FIXTURES: [FixtureSpec; 12] = [\n' + (
-            'FixtureSpec { id: "patient-minimal", bytes: 57, '
-            'sha256: "' + GOOD[1] + '", status: "FHIR_ENVELOPE_OK" },\n'
-        ) + '];\n'
+        source = (
+            "pub const FIXTURES: [FixtureSpec; 12] = [\n"
+            + (
+                'FixtureSpec { id: "patient-minimal", bytes: 57, '
+                'sha256: "' + GOOD[1] + '", status: "FHIR_ENVELOPE_OK" },\n'
+            )
+            + "];\n"
+        )
         with self.assertRaisesRegex(ValueError, "INCOMPLETE_OR_UNREVIEWED"):
             catalog(source)
 

@@ -5,6 +5,7 @@ outside the GUI under independent OS confinement. NO patient input/paths,
 file export, network or production key. This source is QA-only, not an
 approved supervisor or clinical worker.
 """
+
 from __future__ import annotations
 
 import json
@@ -22,8 +23,7 @@ _EXPECTED_IDS = (
     "fictional-encounter-001",
 )
 _EXPECTED_FULL_URLS = tuple(
-    f"urn:uuid:00000000-0000-4000-8000-00000000000{idx}"
-    for idx in (1, 2, 3)
+    f"urn:uuid:00000000-0000-4000-8000-00000000000{idx}" for idx in (1, 2, 3)
 )
 _EXPECTED_LINKS = (
     (("subject", _EXPECTED_FULL_URLS[1]), ("encounter", _EXPECTED_FULL_URLS[2])),
@@ -33,12 +33,13 @@ _EXPECTED_LINKS = (
 
 
 def exact_synthetic_encrypted_readback_projection() -> bytes:
-    from medscale.fhirkit.workspace_demo import _fictional_bundle
-    from medscale.fhirkit.workspace_ingest import ingest_synthetic_bundle_atomic
-    from medscale.fhirkit.workspace_readback import read_synthetic_bundle_in_memory
     from medscale_workspace.audit import AuditTrail
     from medscale_workspace.keyprovider import InMemoryTestKeyProvider, new_root_secret
     from medscale_workspace.storage import WorkspaceStore
+
+    from medscale.fhirkit.workspace_demo import _fictional_bundle
+    from medscale.fhirkit.workspace_ingest import ingest_synthetic_bundle_atomic
+    from medscale.fhirkit.workspace_readback import read_synthetic_bundle_in_memory
 
     fictional = _fictional_bundle()
     provider = InMemoryTestKeyProvider(new_root_secret())
@@ -59,9 +60,12 @@ def exact_synthetic_encrypted_readback_projection() -> bytes:
             )
             if store.object_count() != 8:
                 raise ValueError("synthetic_core_encrypted_resource_store_count_refused")
-            if AuditTrail(store).verify(
-                expected_head_event_digest=source_receipt["audit_head_digest"]
-            ).events_verified != 1:
+            if (
+                AuditTrail(store)
+                .verify(expected_head_event_digest=source_receipt["audit_head_digest"])
+                .events_verified
+                != 1
+            ):
                 raise ValueError("synthetic_core_encrypted_audit_invalid")
 
         with WorkspaceStore.open(
@@ -70,9 +74,12 @@ def exact_synthetic_encrypted_readback_projection() -> bytes:
             key_provider=provider,
             application_version="0.1.0.dev1",
         ) as reopened:
-            if AuditTrail(reopened).verify(
-                expected_head_event_digest=source_receipt["audit_head_digest"]
-            ).events_verified != 1:
+            if (
+                AuditTrail(reopened)
+                .verify(expected_head_event_digest=source_receipt["audit_head_digest"])
+                .events_verified
+                != 1
+            ):
                 raise ValueError("synthetic_core_audit_anchor_refused")
             readback = read_synthetic_bundle_in_memory(
                 reopened,
@@ -86,8 +93,7 @@ def exact_synthetic_encrypted_readback_projection() -> bytes:
             if (
                 readback["bundle"] != fictional
                 or readback["resource_count"] != 3
-                or readback["source_content_sha256"]
-                != source_receipt["source_content_sha256"]
+                or readback["source_content_sha256"] != source_receipt["source_content_sha256"]
                 or readback["clinical_use_authorized"] is not False
                 or readback["release_authorized"] is not False
             ):
@@ -119,10 +125,7 @@ def exact_synthetic_encrypted_readback_projection() -> bytes:
                         "resource_type": resource["resourceType"],
                         "id": resource["id"],
                         "full_url": entry["fullUrl"],
-                        "links": [
-                            {"field": field, "target": target}
-                            for field, target in links
-                        ],
+                        "links": [{"field": field, "target": target} for field, target in links],
                     }
                 )
             summary = {
@@ -160,5 +163,5 @@ if __name__ == "__main__":
         payload = exact_synthetic_encrypted_readback_projection()
     except Exception:
         sys.stderr.write("SYNTHETIC_CORE_READBACK_PROJECTION_NO_GO:encrypted_source_refused\n")
-        raise SystemExit(2)
+        raise SystemExit(2) from None
     sys.stdout.buffer.write(payload)

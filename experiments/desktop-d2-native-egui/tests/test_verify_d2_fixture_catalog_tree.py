@@ -1,8 +1,10 @@
 """Temporary synthetic D0/D2 trees prove the full source-audit wiring."""
+
 import hashlib
+import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
-import unittest
+
 from verify_d2_fixture_catalog import BUNDLE_NAMES, EXPECTED_STATUS, verify
 
 
@@ -30,48 +32,47 @@ def synthesize(root: Path) -> tuple[Path, Path]:
         "observation-minimal": samples["OBSERVATION"].encode(),
         "observation-bad-subject": samples["OBSERVATION_BAD_SUBJECT"].encode(),
     }
-    d0_source = "".join(f'const {name}: &[u8] = br#"{text}"#;\n'
-                        for name, text in samples.items())
+    d0_source = "".join(f'const {name}: &[u8] = br#"{text}"#;\n' for name, text in samples.items())
     for name in BUNDLE_NAMES:
         raw = ('{"resourceType":"Bundle","id":"' + name + '"}').encode()
         (d0 / "fixtures" / f"{name}.json").write_bytes(raw)
         vectors[name] = raw
-        d0_source += (f'const {dispatch[name]}: &[u8] = '
-                      f'include_bytes!("../fixtures/{name}.json");\n')
-    d0_source += 'const FHIR_RESOURCE_LIMIT_BYTES: usize = 32_768;\n'
-    d0_source += 'pub fn fictional_json_preview_v1(abc: &str) {\n'
-    d0_source += "".join(f'"{name}" => ("{name}", {var}),\n'
-                         for name, var in dispatch.items())
-    d0_source += 'const MAX_VISIBLE_FICTIONAL_JSON_BYTES: usize = 2048;\n'
-    d0_source += 'let (identity, required_bytes) = match fixture_id {\n'
-    d0_source += "".join(f'"{name}" => ("{name}", {var}.len()),\n'
-                         for name, var in dispatch.items())
+        d0_source += f'const {dispatch[name]}: &[u8] = include_bytes!("../fixtures/{name}.json");\n'
+    d0_source += "const FHIR_RESOURCE_LIMIT_BYTES: usize = 32_768;\n"
+    d0_source += "pub fn fictional_json_preview_v1(abc: &str) {\n"
+    d0_source += "".join(f'"{name}" => ("{name}", {var}),\n' for name, var in dispatch.items())
+    d0_source += "const MAX_VISIBLE_FICTIONAL_JSON_BYTES: usize = 2048;\n"
+    d0_source += "let (identity, required_bytes) = match fixture_id {\n"
+    d0_source += "".join(
+        f'"{name}" => ("{name}", {var}.len()),\n' for name, var in dispatch.items()
+    )
     d0_source += (
         '"patient-invalid-utf8" => ("patient-invalid-utf8", 1),\n'
         '"patient-over-limit" => ("patient-over-limit", FHIR_RESOURCE_LIMIT_BYTES + 1),\n'
         '"patient-exact-limit" => ("patient-exact-limit", FHIR_RESOURCE_LIMIT_BYTES),\n'
-        '    };\nlet bytes = match identity {\n'
+        "    };\nlet bytes = match identity {\n"
     )
-    d0_source += "".join(f'"{name}" => {var}.to_vec(),\n'
-                         for name, var in dispatch.items())
+    d0_source += "".join(f'"{name}" => {var}.to_vec(),\n' for name, var in dispatch.items())
     d0_source += (
         '"patient-invalid-utf8" => vec![0xff],\n'
-        '''"patient-over-limit" => vec![b' '; required_bytes],\n'''
+        """"patient-over-limit" => vec![b' '; required_bytes],\n"""
         '"patient-exact-limit" => {\n'
-        '    let mut padded = PATIENT.to_vec();\n'
+        "    let mut padded = PATIENT.to_vec();\n"
         """    padded.resize(required_bytes, b' ');\n"""
-        '    padded\n'
-        '},\n'
-        '    };\n'
+        "    padded\n"
+        "},\n"
+        "    };\n"
     )
     (d0 / "src" / "lib.rs").write_text(d0_source, encoding="utf-8")
-    d2_source = 'pub const FIXTURES: [FixtureSpec; 12] = [\n'
+    d2_source = "pub const FIXTURES: [FixtureSpec; 12] = [\n"
     for name, status in EXPECTED_STATUS.items():
         raw = vectors[name]
-        d2_source += (f'FixtureSpec {{ id: "{name}", bytes: {len(raw)}, '
-                      f'sha256: "{hashlib.sha256(raw).hexdigest()}", '
-                      f'status: "{status}", }},\n')
-    (d2 / "src" / "app.rs").write_text(d2_source + '];\n', encoding="utf-8")
+        d2_source += (
+            f'FixtureSpec {{ id: "{name}", bytes: {len(raw)}, '
+            f'sha256: "{hashlib.sha256(raw).hexdigest()}", '
+            f'status: "{status}", }},\n'
+        )
+    (d2 / "src" / "app.rs").write_text(d2_source + "];\n", encoding="utf-8")
     return d0, d2
 
 
@@ -97,10 +98,13 @@ class TestFullSourceTree(unittest.TestCase):
     def test_swapped_d0_byte_dispatch_refused(self):
         file = self.d0 / "src" / "lib.rs"
         source = file.read_text(encoding="utf-8")
-        file.write_text(source.replace(
-            '"observation-minimal" => OBSERVATION.to_vec(),',
-            '"observation-minimal" => PATIENT.to_vec(),',
-        ), encoding="utf-8")
+        file.write_text(
+            source.replace(
+                '"observation-minimal" => OBSERVATION.to_vec(),',
+                '"observation-minimal" => PATIENT.to_vec(),',
+            ),
+            encoding="utf-8",
+        )
         with self.assertRaisesRegex(ValueError, "CHANGED_D0_BYTE_DISPATCH_observation-minimal"):
             verify(self.root)
 
@@ -113,10 +117,8 @@ class TestFullSourceTree(unittest.TestCase):
     def test_reordered_hash_correct_fixtures_refused(self):
         path = self.d2 / "src" / "app.rs"
         lines = path.read_text(encoding="utf-8").splitlines(keepends=True)
-        first = next(i for i, line in enumerate(lines)
-                     if 'id: "patient-minimal"' in line)
-        second = next(i for i, line in enumerate(lines)
-                      if 'id: "patient-invalid-utf8"' in line)
+        first = next(i for i, line in enumerate(lines) if 'id: "patient-minimal"' in line)
+        second = next(i for i, line in enumerate(lines) if 'id: "patient-invalid-utf8"' in line)
         self.assertNotEqual(first, second)
         lines[first], lines[second] = lines[second], lines[first]
         path.write_text("".join(lines), encoding="utf-8")
@@ -124,8 +126,10 @@ class TestFullSourceTree(unittest.TestCase):
             verify(self.root)
 
     def test_changed_resource_limit_refused(self):
-        self._mutate_source("const FHIR_RESOURCE_LIMIT_BYTES: usize = 32_768;",
-                            "const FHIR_RESOURCE_LIMIT_BYTES: usize = 31_000;")
+        self._mutate_source(
+            "const FHIR_RESOURCE_LIMIT_BYTES: usize = 32_768;",
+            "const FHIR_RESOURCE_LIMIT_BYTES: usize = 31_000;",
+        )
         with self.assertRaisesRegex(ValueError, "CHANGED_D0_RESOURCE_LIMIT"):
             verify(self.root)
 
@@ -138,23 +142,26 @@ class TestFullSourceTree(unittest.TestCase):
             verify(self.root)
 
     def test_changed_invalid_utf8_constructor_refused(self):
-        self._mutate_source('"patient-invalid-utf8" => vec![0xff],',
-                            '"patient-invalid-utf8" => vec![0xfe],')
+        self._mutate_source(
+            '"patient-invalid-utf8" => vec![0xff],', '"patient-invalid-utf8" => vec![0xfe],'
+        )
         with self.assertRaisesRegex(ValueError, "CHANGED_D0_BOUNDARY_BYTES_patient-invalid-utf8"):
             verify(self.root)
 
     def test_changed_over_limit_filler_refused(self):
-        self._mutate_source(""" "patient-over-limit" => vec![b' '; required_bytes],""".strip(),
-                            """ "patient-over-limit" => vec![b'x'; required_bytes],""".strip())
+        self._mutate_source(
+            """ "patient-over-limit" => vec![b' '; required_bytes],""".strip(),
+            """ "patient-over-limit" => vec![b'x'; required_bytes],""".strip(),
+        )
         with self.assertRaisesRegex(ValueError, "CHANGED_D0_BOUNDARY_BYTES_patient-over-limit"):
             verify(self.root)
 
     def test_changed_exact_limit_padding_refused(self):
-        self._mutate_source("padded.resize(required_bytes, b' ');",
-                            "padded.resize(required_bytes, b'0');")
+        self._mutate_source(
+            "padded.resize(required_bytes, b' ');", "padded.resize(required_bytes, b'0');"
+        )
         with self.assertRaisesRegex(ValueError, "CHANGED_D0_BOUNDARY_BYTES_patient-exact-limit"):
             verify(self.root)
-
 
 
 if __name__ == "__main__":

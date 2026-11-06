@@ -3,14 +3,15 @@
 The tests use a synthetic two-package filesystem and fake git output; they
 are safe for hosted Windows/Ubuntu without fetching packages or using PHI.
 """
+
 from __future__ import annotations
 
+import unittest
+import zipfile
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from types import SimpleNamespace
 from unittest.mock import patch
-import unittest
-import zipfile
 
 import attest_installed_encrypted_core_readback as qa
 
@@ -40,13 +41,15 @@ class AttestedInstalledCoreTests(unittest.TestCase):
             path = module + "/reviewed.py"
             with zipfile.ZipFile(self.wheels / wheel_name, "w") as archive:
                 archive.writestr(path, source.read_bytes())
-            specifications.append((
-                module,
-                section,
-                wheel_name,
-                qa.sha256((self.wheels / wheel_name).read_bytes()),
-                1,
-            ))
+            specifications.append(
+                (
+                    module,
+                    section,
+                    wheel_name,
+                    qa.sha256((self.wheels / wheel_name).read_bytes()),
+                    1,
+                )
+            )
             self.sources[section] = section + "/reviewed.py"
         self.expected_site = {"medscale", "medscale_workspace"}
         self.patches = [
@@ -119,48 +122,62 @@ class AttestedInstalledCoreTests(unittest.TestCase):
         specs = list(qa.EXPECTED_WHEELS)
         original = specs[0]
         specs[0] = (
-            original[0], original[1], original[2],
-            qa.sha256(wheel.read_bytes()), original[4],
+            original[0],
+            original[1],
+            original[2],
+            qa.sha256(wheel.read_bytes()),
+            original[4],
         )
-        with patch.object(qa, "EXPECTED_WHEELS", tuple(specs)):
-            with self.assertRaisesRegex(ValueError, "wheel_does_not_match"):
-                self.verified()
+        with (
+            patch.object(qa, "EXPECTED_WHEELS", tuple(specs)),
+            self.assertRaisesRegex(ValueError, "wheel_does_not_match"),
+        ):
+            self.verified()
 
     def test_explicit_empty_or_partial_wheel_pinset_never_falls_back_to_default(self):
         with self.assertRaisesRegex(ValueError, "two_exact_approved_wheel_packages_required"):
             qa.attest_installed(self.core, self.wheels, self.site, approved_wheels=())
         with self.assertRaisesRegex(ValueError, "two_exact_approved_wheel_packages_required"):
             qa.attest_installed(
-                self.core, self.wheels, self.site,
+                self.core,
+                self.wheels,
+                self.site,
                 approved_wheels=(qa.EXPECTED_WHEELS[0],),
             )
 
     def test_installed_readback_runner_requires_mac_sandbox_and_explicit_site(self):
-        import qualify_mac_installed_encrypted_readback_gui as runner
         from unittest.mock import patch as patched
+
+        import qualify_mac_installed_encrypted_readback_gui as runner
+
         source = Path(runner.__file__).read_text()
         self.assertIn("attest_installed(core, wheels, site)", source)
         self.assertEqual(source.count("attest_installed(core, wheels, site)"), 2)
         self.assertIn("prove_restrictive_mac_policy(profile, work, python)", source)
-        self.assertIn('run_sandboxed(', source)
+        self.assertIn("run_sandboxed(", source)
         self.assertIn("proc.terminate()", source)
         self.assertIn("proc.kill()", source)
         self.assertIn("result.stdout != fixture.read_bytes()", source)
         self.assertIn("--synthetic-encrypted-readback-stdin", source)
         self.assertNotIn("shell=True", source)
         self.assertNotIn("requests.", source)
-        with patched.object(runner.sys, "platform", "linux"):
-            with self.assertRaisesRegex(ValueError, "genuine_mac_apple_silicon"):
-                runner.qualify(None)
+        with (
+            patched.object(runner.sys, "platform", "linux"),
+            self.assertRaisesRegex(ValueError, "genuine_mac_apple_silicon"),
+        ):
+            runner.qualify(None)
 
     def test_dirty_git_checkout_refused_even_when_files_match(self):
         def dirty_run(args, **kwargs):
             if args[3] == "status":
                 return SimpleNamespace(stdout=b" M src/medscale/reviewed.py\n")
             return self.git_run(args, **kwargs)
-        with patch.object(qa.subprocess, "run", side_effect=dirty_run):
-            with self.assertRaisesRegex(ValueError, "git_checkout_modified"):
-                self.verified()
+
+        with (
+            patch.object(qa.subprocess, "run", side_effect=dirty_run),
+            self.assertRaisesRegex(ValueError, "git_checkout_modified"),
+        ):
+            self.verified()
 
 
 if __name__ == "__main__":

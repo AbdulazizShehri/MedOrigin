@@ -5,6 +5,7 @@ Run ONLY under linux-private-netns-smoke.sh. It refuses to attempt any socket
 operation unless the host and guest namespaces differ, the guest has exactly
 one DOWN loopback interface, and both IPv4/IPv6 route tables are empty.
 """
+
 import argparse
 import errno
 import hashlib
@@ -18,16 +19,23 @@ import time
 from pathlib import Path
 
 DENIED_ERRNOS = {
-    errno.ENETUNREACH, errno.EHOSTUNREACH, errno.ENETDOWN,
-    errno.EADDRNOTAVAIL, errno.EAFNOSUPPORT,
+    errno.ENETUNREACH,
+    errno.EHOSTUNREACH,
+    errno.ENETDOWN,
+    errno.EADDRNOTAVAIL,
+    errno.EAFNOSUPPORT,
 }
 WINDOW_TITLE = "MedOrigin Native Rust"
 
 
 def run(argv, timeout=10):
     proc = subprocess.run(
-        argv, check=False, text=True, capture_output=True,
-        timeout=timeout, errors="replace",
+        argv,
+        check=False,
+        text=True,
+        capture_output=True,
+        timeout=timeout,
+        errors="replace",
     )
     if proc.returncode != 0:
         raise RuntimeError("OS_PROBE_COMMAND_FAILED")
@@ -35,7 +43,7 @@ def run(argv, timeout=10):
 
 
 def network_preconditions(host_netns):
-    current = os.readlink("/proc/self/ns/net")
+    current = str(Path("/proc/self/ns/net").readlink())
     if not re.fullmatch(r"net:\[\d+\]", host_netns):
         raise RuntimeError("MISSING_PINNED_HOST_NAMESPACE")
     if current == host_netns:
@@ -86,7 +94,7 @@ def negative_controls():
                     connection.sendto(b"synthetic-no-phi", destination)
         except OSError as error:
             if error.errno not in DENIED_ERRNOS:
-                raise RuntimeError(f"UNEXPECTED_SOCKET_RESULT:{label}:{error.errno}")
+                raise RuntimeError(f"UNEXPECTED_SOCKET_RESULT:{label}:{error.errno}") from None
             observed.append({"probe": label, "denied_errno": error.errno})
         else:
             raise RuntimeError(f"UNEXPECTED_SOCKET_SUCCESS:{label}")
@@ -140,9 +148,12 @@ def main():
         env["WINIT_UNIX_BACKEND"] = "x11"
         env["XDG_SESSION_TYPE"] = "x11"
         app = subprocess.Popen(
-            [str(binary)], cwd=str(binary.parent), env=env,
+            [str(binary)],
+            cwd=str(binary.parent),
+            env=env,
             stdin=subprocess.DEVNULL,
-            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
         )
         window_found = False
         deadline = time.monotonic() + 9
