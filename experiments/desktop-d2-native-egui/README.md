@@ -118,6 +118,34 @@ clears. Hosted GitHub CI does not run an interactive desktop.
 This is **not clinical search**, patient identification, ePHI processing,
 medication reconciliation, or a signed release.
 
+## Native MedOrigin identity and visible local Core trust state (private)
+
+The Windows/macOS/Linux Rust/egui shell now uses locally rendered dark
+visuals, a warm circular MedOrigin/Minaret-family monogram and a persistent
+accessible app header, without shipping fonts, downloading assets, loading a
+browser or creating a background worker. The header has a **Clear local
+session** control (also reachable by keyboard) and explicitly shows
+**Fictional demo · no clinical use** at all times.
+
+The **Core status** line reports only the actual current native view state:
+**No connected production Core** without a source; **Local fictional FHIR
+Bundle (read-only)** when a bounded source was admitted; or source-specific
+**fictional** Core/audit/encrypted-test readback labels on those preexisting
+paths. This line does **not** attest process or clinician identity, prove
+encrypted custody, upgrade a source, or imply an operational EHR connection.
+Clearing the current source returns the header to **No connected production
+Core** and clears local nonclinical session state. The existing keyboard
+import, OLE drag/drop, FHIR navigation and redacted Core UI behavior remain
+unchanged.
+
+The existing `tests/windows-synthetic-multipatient-bundle-uia.ps1` now
+verifies the real on-screen native status before and after opening a
+fictional Bundle and after the header's accessible Clear action, in
+addition to the older source/patient graph walkthrough. A Rust regression
+verifies source classification and reset. These do not replace a
+professional visual-accessibility evaluation, packet-level egress audit or
+clinical privacy/security review.
+
 ## Browser/network dependency regression guard
 
 `tests/browser_free_boundary.rs` runs automatically with `cargo test

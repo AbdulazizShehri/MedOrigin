@@ -96,10 +96,14 @@ try {
     }
     throw ('bundle_native_button_missing: '+$wanted)
   }
+  Expect 'MedOrigin'
+  Expect 'Fictional demo'
   if($EmbeddedDemo){
+    Expect 'Core status: No connected production Core'
     Expect 'Native Rust Experiment'
     Press 'Open built-in two-patient fictional demo (NO PHI)'
   }
+  Expect 'Core status: Local fictional FHIR Bundle (read-only)'
   Expect 'Fictional Multi-Patient Workspace'
   if($Stress48){
     Expect '48 imaginary source-only records across 16 fictional patients'
@@ -209,7 +213,13 @@ try {
   Expect 'Bundle: 8 of 8 fictional resources visible'
   Press 'Bundle: Type Patient'
   Expect 'Bundle: 2 of 8 fictional resources visible'
-  Press 'Bundle: Clear fictional records'
+  if($EmbeddedDemo){
+    Press 'Clear local session'
+    Write-Output 'WINDOWS_BRANDED_HEADER_SESSION_CLEAR_ACCESSIBLE_BUTTON_PASS_NONCLINICAL'
+  }else{
+    Press 'Bundle: Clear fictional records'
+  }
+  Expect 'Core status: No connected production Core'
   Expect 'Native Rust Experiment'
   if(Has 'Bundle record: Observation/fictional-observation-003') {
     throw 'fictional_bundle_record_leaked_after_clear'
