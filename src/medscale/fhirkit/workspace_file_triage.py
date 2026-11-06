@@ -88,14 +88,15 @@ def _ready(
     events: list[dict[str, object]],
     undated: int,
 ) -> dict[str, object]:
-    days = [event["day_utc"] for event in events if event.get("date_available") is True]
+    days: list[str] = []
+    for event in events:
+        if event.get("date_available") is True:
+            day = event.get("day_utc")
+            if type(day) is not str or len(day) != 10:
+                raise SyntheticFileBatchTriageError("fictional_triage_event_contract_refused")
+            days.append(day)
     dated = len(events) - undated
-    if (
-        type(undated) is not int
-        or dated < 0
-        or len(days) != dated
-        or any(type(day) is not str or len(day) != 10 for day in days)
-    ):
+    if type(undated) is not int or dated < 0 or len(days) != dated:
         raise SyntheticFileBatchTriageError("fictional_triage_event_contract_refused")
     dates = sorted(days)
     return {
@@ -241,7 +242,7 @@ def triage_fictional_file_batch(
                 )
             )
             continue
-        if result.get("resource_counts", {}).get("Patient") != 1:
+        if actual_counts["Patient"] != 1:
             source_reports.append(
                 _failed(
                     ordinal,
@@ -307,16 +308,18 @@ def triage_fictional_file_batch(
             "first_day_utc",
             "last_day_utc",
         )
+        baseline_sources = baseline.get("sources")
         if (
             baseline.get("source_count") != len(source_reports)
-            or type(baseline.get("sources")) is not list
-            or len(baseline["sources"]) != len(source_reports)
-            or any(
-                any(own.get(key) != other.get(key) for key in fields)
-                for own, other in zip(source_reports, baseline["sources"], strict=True)
-            )
+            or type(baseline_sources) is not list
+            or len(baseline_sources) != len(source_reports)
         ):
             raise SyntheticFileBatchTriageError("fictional_triage_readiness_reconciliation_refused")
+        for own, other in zip(source_reports, baseline_sources, strict=True):
+            if type(other) is not dict or any(own.get(key) != other.get(key) for key in fields):
+                raise SyntheticFileBatchTriageError(
+                    "fictional_triage_readiness_reconciliation_refused"
+                )
     return {
         "schema": "medorigin-core-fictional-prestorage-file-triage/v1",
         "status": "SYNTHETIC_FILE_TRIAGE_ONLY_NOT_VALIDATED",

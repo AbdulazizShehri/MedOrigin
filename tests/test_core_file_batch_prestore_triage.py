@@ -4,12 +4,14 @@ from __future__ import annotations
 
 import copy
 import json
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any
+from typing import Any, NoReturn
 
 import pytest
 
 from medscale.cli import main as public_cli
+from medscale.fhirkit.bundle import inspect_synthetic_bundle
 from medscale.fhirkit.workspace_demo import _fictional_bundle
 from medscale.fhirkit.workspace_file_readiness import (
     SyntheticFileBatchReadinessError,
@@ -23,19 +25,20 @@ from medscale.fhirkit.workspace_file_triage import (
 from medscale.fhirkit.workspace_multi_timeline_demo import (
     _second_fictional_timeline_bundle,
 )
+from medscale.fhirkit.workspace_timeline import _events
 
 _SECRET = "SENSITIVE_FICTIONAL_PATIENT_TEXT_MUST_NEVER_ESCAPE"
 
 
-def _two() -> list[dict]:
-    first = _fictional_bundle()
-    second = _second_fictional_timeline_bundle()
+def _two() -> list[dict[str, Any]]:
+    first: dict[str, Any] = _fictional_bundle()
+    second: dict[str, Any] = _second_fictional_timeline_bundle()
     for item in (first, second):
         item["entry"][1]["resource"]["name"][0]["text"] = _SECRET
     return [first, second]
 
 
-def _files(tmp_path: Path, payloads: list[dict]) -> list[Path]:
+def _files(tmp_path: Path, payloads: list[dict[str, Any]]) -> list[Path]:
     output: list[Path] = []
     for i, item in enumerate(payloads, 1):
         file = tmp_path / f"{_SECRET}-file-{i}.json"
@@ -54,7 +57,12 @@ def test_all_ready_reconciles_same_source_day_counts_as_original_readiness() -> 
     assert triage["source_ready_count"] == 2
     assert triage["source_blocked_count"] == 0
     assert triage["all_sources_locally_ready"] is True
-    for actual, expected in zip(triage["sources"], readiness["sources"], strict=True):
+    triage_sources = triage["sources"]
+    readiness_sources = readiness["sources"]
+    assert isinstance(triage_sources, list)
+    assert isinstance(readiness_sources, list)
+    for actual, expected in zip(triage_sources, readiness_sources, strict=True):
+        assert isinstance(actual, dict) and isinstance(expected, dict)
         assert actual["status"] == "ready_for_synthetic_readiness_only"
         assert actual["reason_code"] is None
         assert actual["reason_text"] is None
@@ -65,8 +73,8 @@ def test_all_ready_reconciles_same_source_day_counts_as_original_readiness() -> 
         assert actual["undated_event_count"] == expected["undated_event_count"]
         assert actual["first_day_utc"] == expected["first_day_utc"]
         assert actual["last_day_utc"] == expected["last_day_utc"]
-    assert [i["first_day_utc"] for i in triage["sources"]] == [None, "2026-11-04"]
-    assert [i["last_day_utc"] for i in triage["sources"]] == [None, "2026-11-05"]
+    assert [i["first_day_utc"] for i in triage_sources] == [None, "2026-11-04"]
+    assert [i["last_day_utc"] for i in triage_sources] == [None, "2026-11-05"]
     for field in (
         "source_filenames_included",
         "patient_identity_included",
@@ -142,7 +150,7 @@ def test_all_ready_reconciles_same_source_day_counts_as_original_readiness() -> 
     ],
 )
 def test_per_source_actionable_fixed_error_after_shared_import_gate_refuses(
-    mutate, stage: str, reason: str
+    mutate: Callable[[dict[str, Any]], None], stage: str, reason: str
 ) -> None:
     sources = _two()
     mutate(sources[1])
@@ -150,8 +158,10 @@ def test_per_source_actionable_fixed_error_after_shared_import_gate_refuses(
     assert actual["source_ready_count"] == 1
     assert actual["source_blocked_count"] == 1
     assert actual["all_sources_locally_ready"] is False
-    assert actual["sources"][0]["status"] == "ready_for_synthetic_readiness_only"
-    rejected = actual["sources"][1]
+    reports = actual["sources"]
+    assert isinstance(reports, list)
+    assert reports[0]["status"] == "ready_for_synthetic_readiness_only"
+    rejected = reports[1]
     assert rejected["source_ordinal"] == 2
     assert rejected["status"] == "blocked"
     assert rejected["stage"] == stage
@@ -175,9 +185,11 @@ def test_original_duplicate_source_has_ordinal_diagnostic_not_false_admission() 
     triage = triage_fictional_file_batch(sources, synthetic_only=True)
     assert triage["source_ready_count"] == 1
     assert triage["source_blocked_count"] == 1
-    assert triage["sources"][1]["source_content_sha256"] is None
-    assert triage["sources"][1]["stage"] == "source_identity"
-    assert triage["sources"][1]["reason_code"] == ("fictional_import_duplicate_source_refused")
+    reports = triage["sources"]
+    assert isinstance(reports, list)
+    assert reports[1]["source_content_sha256"] is None
+    assert reports[1]["stage"] == "source_identity"
+    assert reports[1]["reason_code"] == ("fictional_import_duplicate_source_refused")
     assert triage["all_sources_locally_ready"] is False
 
 
@@ -190,7 +202,7 @@ def test_partial_batch_refuses_inconsistent_positive_preflight_without_leak(
 
     sources = _two()
     sources[1]["entry"][0]["resource"]["status"] = "FINAL"
-    original = triage_module.inspect_synthetic_bundle
+    original = inspect_synthetic_bundle
     inspected = 0
 
     def inconsistent_preflight(source: dict[str, Any]) -> Any:
@@ -224,7 +236,7 @@ def test_partial_batch_refuses_inconsistent_positive_timeline_without_leak(
 
     sources = _two()
     sources[0]["entry"][0]["resource"]["status"] = "FINAL"
-    original = triage_module._events
+    original = _events
 
     def inconsistent_events(source: dict[str, Any], patient: str | None) -> Any:
         events, patient_count, undated = original(source, patient)
@@ -251,9 +263,11 @@ def test_one_patient_per_file_and_empty_event_source() -> None:
     ]
     triage = triage_fictional_file_batch(sources, synthetic_only=True)
     assert triage["source_blocked_count"] == 0
-    assert triage["sources"][1]["timeline_event_count"] == 0
-    assert triage["sources"][1]["first_day_utc"] is None
-    assert triage["sources"][1]["undated_event_count"] == 0
+    reports = triage["sources"]
+    assert isinstance(reports, list)
+    assert reports[1]["timeline_event_count"] == 0
+    assert reports[1]["first_day_utc"] is None
+    assert reports[1]["undated_event_count"] == 0
 
 
 def test_real_cli_triage_returns_useful_second_file_reason_without_paths(
@@ -283,7 +297,7 @@ def test_real_cli_triage_returns_useful_second_file_reason_without_paths(
 def test_triage_never_attempts_workspace_allocation(monkeypatch: pytest.MonkeyPatch) -> None:
     import medscale.fhirkit.workspace_file_batch_demo as importer
 
-    def forbidden_workspace(*_args, **_kwargs):
+    def forbidden_workspace(*_args: Any, **_kwargs: Any) -> NoReturn:
         raise AssertionError("triage must never create encrypted Workspace")
 
     monkeypatch.setattr(importer, "TemporaryDirectory", forbidden_workspace)
