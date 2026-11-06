@@ -79,6 +79,27 @@ timeline error, relationship error, unmarked full refusal and no
 source/path/identity echoes. The existing Windows/Ubuntu GitHub Actions
 matrix must pass on the exact PR head before qualifying this feature.
 
+## Partial-batch positive-result hardening
+
+When any sibling fictional source is blocked, the all-green readiness
+reconciliation intentionally cannot run. Before claiming another source
+`ready_for_synthetic_readiness_only`, the triage now independently
+reconciles the positive preflight's complete Patient/Encounter/Observation
+counts with its frozen JSON entries. It also requires exactly one timeline
+event for each Encounter/Observation, a typed event list, one Patient and
+bounded nonnegative dated/undated counts. A missing/malformed positive
+preflight or timeline result is refused with a fixed, redacted code and
+**no partial ready/blocked JSON** rather than silently displaying an
+unreliable positive source.
+
+Six injected contract-drift cases cover wrong resource count, missing
+resource counts, a non-object preflight, a missing event, invalid
+undated count and non-list timeline events. They deliberately combine
+one unqualified source with another apparently ready fictional source.
+No patient data, application storage or clinical validation is used.
+These assertions add fail-closed guarantees but do not make the triage
+a full FHIR R4 or clinical intake verifier.
+
 ## Release hold
 
 The new local developer triage is NOT production clinical intake.

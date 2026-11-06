@@ -63,9 +63,7 @@ class SyntheticFileBatchTriageError(ValueError):
     """No untrusted text, patient identity, source path, or JSON in refusals."""
 
 
-def _failed(
-    ordinal: int, stage: str, code: str, text: str
-) -> dict[str, object]:
+def _failed(ordinal: int, stage: str, code: str, text: str) -> dict[str, object]:
     """Use only fixed allowlisted literals; do not include source hash on failure."""
     return {
         "source_ordinal": ordinal,
@@ -84,14 +82,13 @@ def _failed(
 
 
 def _ready(
-    ordinal: int, digest: str, count: int, events: list[dict[str, object]],
+    ordinal: int,
+    digest: str,
+    count: int,
+    events: list[dict[str, object]],
     undated: int,
 ) -> dict[str, object]:
-    days = [
-        event["day_utc"]
-        for event in events
-        if event.get("date_available") is True
-    ]
+    days = [event["day_utc"] for event in events if event.get("date_available") is True]
     dated = len(events) - undated
     if (
         type(undated) is not int
@@ -176,7 +173,8 @@ def triage_fictional_file_batch(
         if digest in seen:
             source_reports.append(
                 _failed(
-                    ordinal, "source_identity",
+                    ordinal,
+                    "source_identity",
                     "fictional_import_duplicate_source_refused",
                     _FIXED_SOURCE_DESCRIPTIONS["fictional_import_duplicate_source_refused"],
                 )
@@ -195,6 +193,26 @@ def triage_fictional_file_batch(
                 _failed(ordinal, "local_relationship", reason, _FIXED_LOCAL_FAILURES[reason])
             )
             continue
+        # A positive-looking preflight result is not itself an admission.
+        # If one sibling source is blocked, the all-ready reconciliation below
+        # does not run, so every other source must independently retain exact
+        # resource counts even if the preflight implementation drifts.
+        if type(result) is not dict:
+            raise SyntheticFileBatchTriageError(
+                "fictional_triage_positive_relationship_contract_refused"
+            )
+        actual_counts = {"Patient": 0, "Encounter": 0, "Observation": 0}
+        for entry in snapshot["entry"]:
+            if type(entry) is not dict or type(entry.get("resource")) is not dict:
+                raise SyntheticFileBatchTriageError(
+                    "fictional_triage_positive_relationship_contract_refused"
+                )
+            kind = entry["resource"].get("resourceType")
+            if type(kind) is not str or kind not in actual_counts:
+                raise SyntheticFileBatchTriageError(
+                    "fictional_triage_positive_relationship_contract_refused"
+                )
+            actual_counts[kind] += 1
         count = result.get("resource_count")
         if (
             result.get("schema") != "medorigin-synthetic-fhir-bundle-preflight/v1"
@@ -202,6 +220,8 @@ def triage_fictional_file_batch(
             or result.get("data_class") != "SYNTHETIC_ASSERTED_NOT_VERIFIED"
             or result.get("source_content_sha256") != digest
             or type(count) is not int
+            or count != len(snapshot["entry"])
+            or result.get("resource_counts") != actual_counts
             or result.get("payload_content_included") is not False
             or result.get("input_persisted") is not False
             or result.get("network_access_performed") is not False
@@ -214,22 +234,20 @@ def triage_fictional_file_batch(
         if count > 16:
             source_reports.append(
                 _failed(
-                    ordinal, "source_limits",
+                    ordinal,
+                    "source_limits",
                     "fictional_import_source_resource_count_refused",
-                    _FIXED_SOURCE_DESCRIPTIONS[
-                        "fictional_import_source_resource_count_refused"
-                    ],
+                    _FIXED_SOURCE_DESCRIPTIONS["fictional_import_source_resource_count_refused"],
                 )
             )
             continue
         if result.get("resource_counts", {}).get("Patient") != 1:
             source_reports.append(
                 _failed(
-                    ordinal, "source_limits",
+                    ordinal,
+                    "source_limits",
                     "fictional_import_one_patient_per_source_required",
-                    _FIXED_SOURCE_DESCRIPTIONS[
-                        "fictional_import_one_patient_per_source_required"
-                    ],
+                    _FIXED_SOURCE_DESCRIPTIONS["fictional_import_one_patient_per_source_required"],
                 )
             )
             continue
@@ -245,7 +263,20 @@ def triage_fictional_file_batch(
                 _failed(ordinal, "timeline", reason, _TIMELINE_DESCRIPTIONS[reason])
             )
             continue
-        if patient_count != 1 or len(events) > count:
+        # The original import's readiness contract expects one event per
+        # Encounter/Observation. A partially blocked batch must not label
+        # another source ready when a positive timeline projection drops data.
+        expected_events = actual_counts["Encounter"] + actual_counts["Observation"]
+        if (
+            type(events) is not list
+            or any(type(event) is not dict for event in events)
+            or type(patient_count) is not int
+            or patient_count != 1
+            or type(undated) is not int
+            or undated < 0
+            or undated > len(events)
+            or len(events) != expected_events
+        ):
             raise SyntheticFileBatchTriageError(
                 "fictional_triage_positive_timeline_contract_refused"
             )
@@ -261,17 +292,20 @@ def triage_fictional_file_batch(
         )
 
         try:
-            baseline = assess_fictional_file_batch_readiness(
-                snapshots, synthetic_only=True
-            )
+            baseline = assess_fictional_file_batch_readiness(snapshots, synthetic_only=True)
         except Exception as exc:
             raise SyntheticFileBatchTriageError(
                 "fictional_triage_readiness_reconciliation_refused"
             ) from exc
         fields = (
-            "source_ordinal", "source_content_sha256", "resource_count",
-            "timeline_event_count", "dated_event_count",
-            "undated_event_count", "first_day_utc", "last_day_utc",
+            "source_ordinal",
+            "source_content_sha256",
+            "resource_count",
+            "timeline_event_count",
+            "dated_event_count",
+            "undated_event_count",
+            "first_day_utc",
+            "last_day_utc",
         )
         if (
             baseline.get("source_count") != len(source_reports)
@@ -279,14 +313,10 @@ def triage_fictional_file_batch(
             or len(baseline["sources"]) != len(source_reports)
             or any(
                 any(own.get(key) != other.get(key) for key in fields)
-                for own, other in zip(
-                    source_reports, baseline["sources"], strict=True
-                )
+                for own, other in zip(source_reports, baseline["sources"], strict=True)
             )
         ):
-            raise SyntheticFileBatchTriageError(
-                "fictional_triage_readiness_reconciliation_refused"
-            )
+            raise SyntheticFileBatchTriageError("fictional_triage_readiness_reconciliation_refused")
     return {
         "schema": "medorigin-core-fictional-prestorage-file-triage/v1",
         "status": "SYNTHETIC_FILE_TRIAGE_ONLY_NOT_VALIDATED",
@@ -316,10 +346,13 @@ def fictional_file_batch_triage_json(
     synthetic_only: bool = False,
 ) -> str:
     """Deterministic JSON; per-source diagnostics are intentionally finite."""
-    return json.dumps(
-        triage_fictional_file_batch(payloads, synthetic_only=synthetic_only),
-        sort_keys=True,
-        separators=(",", ":"),
-        ensure_ascii=True,
-        allow_nan=False,
-    ) + "\n"
+    return (
+        json.dumps(
+            triage_fictional_file_batch(payloads, synthetic_only=synthetic_only),
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=True,
+            allow_nan=False,
+        )
+        + "\n"
+    )
