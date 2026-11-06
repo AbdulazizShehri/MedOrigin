@@ -138,7 +138,14 @@ try {
   [Console]::Error.WriteLine('MEDORIGIN_TYPED_LOCAL_FILE_UIA_NO_GO:'+ $_.Exception.Message)
   exit 2
 }finally{
-  if($native -and -not $native.HasExited){
-    Stop-Process -Id $native.Id -Force -ErrorAction SilentlyContinue
+  if($native){
+    if(-not $native.HasExited){
+      Stop-Process -Id $native.Id -Force -ErrorAction SilentlyContinue
+    }
+    # A test process may remain present briefly after Stop-Process.
+    # The installer lifecycle requires it to be fully terminated before removal.
+    if(-not $native.WaitForExit(15000)){
+      throw 'typed_path_native_test_process_cleanup_timed_out'
+    }
   }
 }

@@ -170,7 +170,14 @@ public static class MedOriginPrivateOleDrag {
   [Console]::Error.WriteLine('MEDORIGIN_PHYSICAL_WINDOWS_OLE_DRAG_QA_NO_GO: '+$_.Exception.Message)
   exit 2
 } finally {
-  if($native -and -not $native.HasExited){
-    Stop-Process -Id $native.Id -Force -ErrorAction SilentlyContinue
+  if($native){
+    if(-not $native.HasExited){
+      Stop-Process -Id $native.Id -Force -ErrorAction SilentlyContinue
+    }
+    # Termination is asynchronous: the installer must never be asked to
+    # uninstall while this QA-owned native executable is still exiting.
+    if(-not $native.WaitForExit(15000)){
+      throw 'native_test_process_cleanup_timed_out'
+    }
   }
 }
