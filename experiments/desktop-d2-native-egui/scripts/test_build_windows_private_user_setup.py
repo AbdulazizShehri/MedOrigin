@@ -7,7 +7,7 @@ import struct
 import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import build_windows_private_user_setup as setup
 import package_preview as package
@@ -69,6 +69,32 @@ class PrivateWindowsUserSetupTests(unittest.TestCase):
             kw.get("archive_sha256", self.archive_sha),
             kw.get("native_sha256", self.binary_sha),
         )
+
+    def test_iexpress_timeout_closes_only_its_owned_builder_job(self):
+        import qualify_windows_job_subtree as job_contract
+
+        api = Mock()
+        owned_job = 0x1234
+        api.CreateJobObjectW.return_value = owned_job
+        api.SetInformationJobObject.return_value = True
+        api.CreateProcessW.return_value = True
+        api.AssignProcessToJobObject.return_value = True
+        api.ResumeThread.return_value = 1
+        api.WaitForSingleObject.return_value = job_contract.WAIT_TIMEOUT
+        with (
+            patch.object(setup, "_real_path"),
+            patch.object(job_contract, "_win32", return_value=api),
+        ):
+            with self.assertRaisesRegex(
+                ValueError, "windows_iexpress_builder_timed_out_subtree_terminated"
+            ):
+                setup._run_iexpress(
+                    self.work / "fictional-only-test.sed",
+                    self.work / "fictional-only-test.exe",
+                )
+        self.assertEqual(api.WaitForSingleObject.call_args.args[1], 240_000)
+        api.CloseHandle.assert_called_once_with(owned_job)
+        api.TerminateProcess.assert_not_called()
 
     def test_canonical_source_to_private_iexpress_bundle_has_exact_pins(self):
         observed = {}

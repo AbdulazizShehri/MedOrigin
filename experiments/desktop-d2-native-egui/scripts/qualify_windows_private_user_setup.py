@@ -193,6 +193,33 @@ def qualify(
             raise ValueError("installer_qa_ole_drop_mutated_installed_binary")
         print("PRIVATE_OWNER_WINDOWS_INSTALLED_NATIVE_OLE_DRAG_DROP_PASS")
 
+        # Verify the same imaginary fixture can be opened using real keyboard
+        # events on the INSTALLED app; this is distinct from source-only Rust
+        # tests and from the physical drag-and-drop journey above.
+        typed_script = scripts / "windows-native-typed-fictional-path-uia.ps1"
+        if not typed_script.is_file() or typed_script.is_symlink():
+            raise ValueError("installer_qa_reviewed_typed_path_source_refused")
+        typed = runner(
+            [
+                "powershell.exe", "-NoProfile", "-STA", "-NonInteractive",
+                "-ExecutionPolicy", "Bypass", "-File", str(typed_script),
+                "-ExePath", str(native),
+                "-ExpectedExeSha256", expected_binary_sha,
+                "-ExpectedFixtureSha256", fixture_sha,
+            ],
+            env=profile_env,
+            capture_output=True,
+            text=True,
+            timeout=100,
+            check=False,
+        )
+        typed_marker = "OWNER_WINDOWS_NATIVE_TYPED_SYNTHETIC_FILE_PATH_UIA_PASS_NONCLINICAL"
+        if typed.returncode != 0 or typed_marker not in typed.stdout.splitlines():
+            raise ValueError("installer_qa_installed_native_keyboard_file_open_failed")
+        if sha(native) != expected_binary_sha:
+            raise ValueError("installer_qa_keyboard_file_open_mutated_installed_binary")
+        print("PRIVATE_OWNER_WINDOWS_INSTALLED_NATIVE_KEYBOARD_FILE_OPEN_PASS")
+
     # Prove a pinned non-executable payload bit flip is refused. Do not
     # rewrite a recently executed Windows PE: the OS/AV may still hold it.
     tamper_file = installed / "README-SYNTHETIC.txt"

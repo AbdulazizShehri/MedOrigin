@@ -136,36 +136,111 @@ def render_sed(stage: Path, target: Path) -> str:
 
 
 def _run_iexpress(sed: Path, target: Path) -> None:
+    """Build under a kill-on-close Windows Job; never orphan makecab.exe."""
+    import ctypes
+    from ctypes import wintypes
+
+    from qualify_windows_job_subtree import (
+        CREATE_NO_WINDOW,
+        CREATE_SUSPENDED,
+        JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE,
+        JOBOBJECT_EXTENDED_LIMIT_INFORMATION,
+        JOBOBJECT_EXTENDED_LIMIT_INFORMATION_STRUCT,
+        PROCESS_INFORMATION,
+        STARTUPINFOW,
+        WAIT_OBJECT_0,
+        WAIT_TIMEOUT,
+        _require,
+        _win32,
+    )
+
     executable = Path(os.environ.get("WINDIR", "C:\\Windows")) / "System32" / "iexpress.exe"
     _real_path(executable, directory=False)
-    result = subprocess.run(
-        [str(executable), "/N", "/Q", str(sed)],
-        capture_output=True,
-        text=True,
-        timeout=90,
-        check=False,
-    )
-    if result.returncode != 0:
-        raise ValueError("windows_iexpress_builder_failed")
-    # IExpress can exit before its cabinet-building child finishes writing.
-    # Require a stable full-sized executable over several polls.
-    stable = 0
-    prior = -1
-    for _ in range(150):
-        size = target.stat().st_size if target.exists() else 0
-        if size >= 175_000 and size == prior:
-            stable += 1
-        else:
-            stable = 0
-        if stable >= 12:
-            with target.open("rb") as f:
-                header = f.read(4096)
-            if inspect_native_header(header) != ("windows", "x86_64"):
-                raise ValueError("iexpress_output_not_windows_x64_executable")
-            return
-        prior = size
-        time.sleep(0.2)
-    raise ValueError("windows_iexpress_builder_output_not_stable")
+    api = _win32()
+    api.GetExitCodeProcess.argtypes = [wintypes.HANDLE, ctypes.POINTER(wintypes.DWORD)]
+    api.GetExitCodeProcess.restype = wintypes.BOOL
+    startup = STARTUPINFOW()
+    startup.cb = ctypes.sizeof(startup)
+    parent = PROCESS_INFORMATION()
+    job = None
+    limit = JOBOBJECT_EXTENDED_LIMIT_INFORMATION_STRUCT()
+    limit.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE
+    try:
+        job = api.CreateJobObjectW(None, None)
+        _require(job, "create_private_iexpress_job")
+        _require(
+            api.SetInformationJobObject(
+                job,
+                JOBOBJECT_EXTENDED_LIMIT_INFORMATION,
+                ctypes.byref(limit),
+                ctypes.sizeof(limit),
+            ),
+            "set_iexpress_subtree_kill_on_close",
+        )
+        command = ctypes.create_unicode_buffer(
+            subprocess.list2cmdline([str(executable), "/N", "/Q", str(sed)])
+        )
+        _require(
+            api.CreateProcessW(
+                str(executable),
+                command,
+                None,
+                None,
+                False,
+                CREATE_SUSPENDED | CREATE_NO_WINDOW,
+                None,
+                str(sed.parent),
+                ctypes.byref(startup),
+                ctypes.byref(parent),
+            ),
+            "create_suspended_iexpress",
+        )
+        _require(
+            api.AssignProcessToJobObject(job, parent.hProcess),
+            "attach_iexpress_to_private_job",
+        )
+        if api.ResumeThread(parent.hThread) != 1:
+            raise ValueError("iexpress_parent_resume_refused")
+        result = api.WaitForSingleObject(parent.hProcess, 240_000)
+        if result == WAIT_TIMEOUT:
+            raise ValueError("windows_iexpress_builder_timed_out_subtree_terminated")
+        if result != WAIT_OBJECT_0:
+            raise ValueError("windows_iexpress_builder_wait_failed")
+        exit_code = wintypes.DWORD()
+        _require(
+            api.GetExitCodeProcess(parent.hProcess, ctypes.byref(exit_code)),
+            "read_iexpress_exit_code",
+        )
+        if exit_code.value != 0:
+            raise ValueError("windows_iexpress_builder_failed")
+
+        # IExpress can exit before its cabinet child finishes writing.
+        # The Job stays open throughout the stability checks, so any child
+        # is terminated even when an exception aborts packaging.
+        stable = 0
+        prior = -1
+        for _ in range(150):
+            size = target.stat().st_size if target.exists() else 0
+            if size >= 175_000 and size == prior:
+                stable += 1
+            else:
+                stable = 0
+            if stable >= 12:
+                with target.open("rb") as f:
+                    header = f.read(4096)
+                if inspect_native_header(header) != ("windows", "x86_64"):
+                    raise ValueError("iexpress_output_not_windows_x64_executable")
+                return
+            prior = size
+            time.sleep(0.2)
+        raise ValueError("windows_iexpress_builder_output_not_stable")
+    finally:
+        if parent.hThread:
+            api.CloseHandle(parent.hThread)
+        if parent.hProcess:
+            api.CloseHandle(parent.hProcess)
+        if job:
+            api.CloseHandle(job)  # Kill only this builder's IExpress/makecab tree.
 
 
 def build(
