@@ -27,7 +27,7 @@ def desktop(monkeypatch: pytest.MonkeyPatch) -> Any:
 def test_public_projection_whitelists_fields(desktop: Any) -> None:
     payload = {
         "provenance_status": "not_validated",
-            "validation_exit": 2,
+        "validation_exit": 2,
         "malformed_exit": 1,
         "report_sha256": GOOD_HEX,
         "fixture_sha256": OTHER_HEX,
@@ -46,12 +46,19 @@ def test_public_projection_whitelists_fields(desktop: Any) -> None:
     "broken",
     [
         {"provenance_status": "valid"},
-        {"provenance_status": "not_validated",
-            "validation_exit": 2, "malformed_exit": 0},
-        {"provenance_status": "not_validated",
-            "validation_exit": 2, "malformed_exit": 1, "report_sha256": "xyz"},
-        {"provenance_status": "not_validated",
-            "validation_exit": 2, "malformed_exit": 1, "report_sha256": "A" * 64},
+        {"provenance_status": "not_validated", "validation_exit": 2, "malformed_exit": 0},
+        {
+            "provenance_status": "not_validated",
+            "validation_exit": 2,
+            "malformed_exit": 1,
+            "report_sha256": "xyz",
+        },
+        {
+            "provenance_status": "not_validated",
+            "validation_exit": 2,
+            "malformed_exit": 1,
+            "report_sha256": "A" * 64,
+        },
         {
             "provenance_status": "not_validated",
             "validation_exit": 2,
@@ -68,7 +75,6 @@ def test_public_projection_whitelists_fields(desktop: Any) -> None:
         },
         {
             "provenance_status": "not_validated",
-            "validation_exit": 2,
             "malformed_exit": 1,
             "validation_exit": True,
             "report_sha256": GOOD_HEX,
@@ -76,7 +82,6 @@ def test_public_projection_whitelists_fields(desktop: Any) -> None:
         },
         {
             "provenance_status": "not_validated",
-            "validation_exit": 2,
             "malformed_exit": 1,
             "validation_exit": 0,
             "report_sha256": GOOD_HEX,
@@ -171,6 +176,38 @@ def test_native_window_initializes_and_pages_navigate(desktop: Any) -> None:
         root.destroy()
 
 
+def _hosted_windows_tcl_bootstrap_failure(error: Exception) -> bool:
+    """Recognize ONLY a broken hosted Windows Tcl installation, never app errors."""
+    return (
+        os.name == "nt"
+        and os.environ.get("GITHUB_ACTIONS") == "true"
+        and any(
+            marker in str(error)
+            for marker in ("Can't find a usable init.tcl", "Can't find a usable tk.tcl")
+        )
+    )
+
+
+def test_hosted_tcl_deferral_is_exact_and_never_hides_other_gui_errors(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import tkinter as tk
+
+    known_init = tk.TclError("Can't find a usable init.tcl in the following directories")
+    known_tk = tk.TclError(
+        "Can't find a usable tk.tcl in the following directories: "
+        "tk8.6/ttk/sizegrip.tcl: no such file or directory"
+    )
+    other = tk.TclError("unexpected native GUI render failure")
+    monkeypatch.setenv("GITHUB_ACTIONS", "true")
+    assert _hosted_windows_tcl_bootstrap_failure(known_init) is (os.name == "nt")
+    assert _hosted_windows_tcl_bootstrap_failure(known_tk) is (os.name == "nt")
+    assert _hosted_windows_tcl_bootstrap_failure(other) is False
+    monkeypatch.delenv("GITHUB_ACTIONS")
+    assert _hosted_windows_tcl_bootstrap_failure(known_init) is False
+    assert _hosted_windows_tcl_bootstrap_failure(known_tk) is False
+
+
 def test_all_native_pages_can_scroll_to_their_end_at_minimum_window_size(
     desktop: Any,
 ) -> None:
@@ -180,7 +217,15 @@ def test_all_native_pages_can_scroll_to_their_end_at_minimum_window_size(
     import tkinter as tk
     from types import SimpleNamespace
 
-    root = tk.Tk()
+    try:
+        root = tk.Tk()
+    except tk.TclError as error:
+        if _hosted_windows_tcl_bootstrap_failure(error):
+            pytest.skip(
+                "Hosted Windows Tcl/Tk init scripts unavailable; "
+                "independent real-owner Windows GUI acceptance required"
+            )
+        raise
     try:
         app = desktop.Desktop(root, Path(sys.executable))
         root.geometry("850x610-2000-2000")
