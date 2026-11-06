@@ -156,6 +156,12 @@ class PrivateWindowsUserSetupTests(unittest.TestCase):
                 self._build(archive_sha256=bad)
         self.assertFalse(self.out.exists())
 
+    def test_iexpress_sed_paths_accept_safe_windows_8dot3_tilde_names(self):
+        # Windows hosted runners may resolve temp roots through short 8.3
+        # paths (RUNNER~1); '~' is not a cmd.exe metacharacter.
+        short_name = Path(r"C:\Users\RUNNER~1\AppData\Local\Temp\MO-SET~1\Private-Setup.exe")
+        self.assertEqual(setup._safe_sed_path(short_name), str(short_name))
+
     def test_iexpress_sed_path_rejects_shell_metacharacters_and_unc(self):
         for bad in (
             r"C:\Temp\bad&echo.exe",
