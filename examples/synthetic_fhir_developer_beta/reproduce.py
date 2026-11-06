@@ -8,6 +8,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import runpy
 import subprocess
 import sys
 from pathlib import Path
@@ -18,6 +19,12 @@ GOOD = HERE / "synthetic_structure_definition.json"
 BAD = HERE / "malformed.json"
 VERSION = "medscale 0.3.0"
 TIMESTAMP = "2026-10-24T00:00:00Z"
+# Source-backed Core explicitly does NOT validate HL7 FHIR profiles or terms.
+# The prior valid/exit0 demo claimed a validation that never occurred.
+WARNING = (
+    "FHIR R4 schema, terminology, and profile validation were not performed; "
+    "this local report records deterministic provenance only."
+)
 
 
 def exact_json_contract(actual: object, expected: object) -> bool:
@@ -67,14 +74,39 @@ def run_one(cli: Path, directory: Path, label: str) -> dict[str, Any]:
         ["fhir", "validate", str(GOOD), "--created-at", TIMESTAMP, "--output-dir", str(output)],
         directory,
     )
-    if validated.returncode:
-        raise ValueError(f"{label}: FHIR command failed: {validated.stderr[:250]}")
+    # Current Core intentionally prints a local report location on stderr.
+    # Do not echo it, depend on its value, or treat it as evidence of
+    # validation. The independently read report/stdout/exit contract below
+    # is the only trusted success path.
+    if validated.returncode != 2 or len(validated.stderr) > 64_000:
+        raise ValueError("Core FHIR must explicitly refuse unperformed validation")
     reports = list(output.rglob("report.json"))
-    if len(reports) != 1:
-        raise ValueError(f"{label}: expected one report, got {len(reports)}")
-    report = json.loads(reports[0].read_text(encoding="utf-8"))
-    if report.get("status") != "valid":
-        raise ValueError(f"{label}: local structural check returned non-valid")
+    if len(reports) != 1 or reports[0].is_symlink():
+        raise ValueError("exactly one synthetic report is required")
+    stored = reports[0].read_bytes()
+    if len(stored) > 64_000 or validated.stdout.encode("utf-8") != stored + b"\n":
+        raise ValueError("installed Core stdout does not match stored report")
+    report = json.loads(stored, object_pairs_hook=unique_json_object)
+    expected_input = json.loads(GOOD.read_text(encoding="utf-8"))
+    expected_input_hash = hashlib.sha256(
+        json.dumps(
+            expected_input, sort_keys=True, ensure_ascii=False,
+            separators=(",", ":"), allow_nan=False
+        ).encode("utf-8")
+    ).hexdigest()
+    expected_report = {
+        "created_at": TIMESTAMP,
+        "errors": [],
+        "format_version": "fhirkit-validation-report/v1",
+        "input_hash": expected_input_hash,
+        "report_id": "",
+        "status": "not_validated",
+        "validator_name": "medscale-fhirkit-local",
+        "validator_version": "0.1.0",
+        "warnings": [WARNING],
+    }
+    if not exact_json_contract(report, expected_report):
+        raise ValueError("Core report must state exact not-validated provenance")
     expected = json.loads(GOOD.read_text(encoding="utf-8"))
     for option in (["fhir", "validate"], ["fhir"]):
         result = call(cli, [*option, str(GOOD), "--summary-only"], directory)
@@ -89,8 +121,8 @@ def run_one(cli: Path, directory: Path, label: str) -> dict[str, Any]:
         "fixture_sha256": digest(GOOD),
         "report_sha256": digest(reports[0]),
         "report_path": reports[0].relative_to(directory).as_posix(),
-        "structural_status": report["status"],
-        "valid_exit": validated.returncode,
+        "provenance_status": report["status"],
+        "validation_exit": validated.returncode,
         "malformed_exit": rejected.returncode,
     }
 
@@ -131,6 +163,14 @@ def verify_workspace_shell(interpreter: Path, directory: Path) -> dict[str, obje
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--core-provenance-only",
+        action="store_true",
+        help=(
+            "Explicit Core-only negative-truth rehearsal; checks installed CLI "
+            "not_validated/exit2 and DOES NOT run the legacy false-valid preview."
+        ),
+    )
     parser.add_argument("--cli", required=True, type=Path, help="Installed medscale executable")
     parser.add_argument(
         "--workspace-python",
@@ -149,7 +189,7 @@ def main(argv: list[str] | None = None) -> int:
         clis.append(args.alt_cli.resolve())
     for cli in clis:
         if not cli.is_file():
-            parser.error(f"installed CLI not found: {cli}")
+            parser.error("installed CLI not found")
     workspace_python = args.workspace_python.resolve() if args.workspace_python else None
     if workspace_python is not None and not workspace_python.is_file():
         parser.error("installed Workspace Python interpreter not found")
@@ -158,15 +198,34 @@ def main(argv: list[str] | None = None) -> int:
             parser.error(f"missing synthetic fixture: {fixture}")
     output = args.out.resolve()
     if output.exists():
-        parser.error(f"refusing to overwrite existing evidence directory: {output}")
+        parser.error("refusing to overwrite existing evidence directory")
+    if args.core_provenance_only:
+        if workspace_python is not None:
+            print("MEDORIGIN_CORE_FHIR_PROVENANCE_ONLY_BLOCKED", file=sys.stderr)
+            return 2
+        try:
+            helper = runpy.run_path(str(HERE / "core_only.py"))
+            safe = helper["qualified_receipt"](clis)
+            helper["commit_new_receipt"](output, safe)
+        except (OSError, RuntimeError, TypeError, ValueError, KeyError):
+            # The source-gated installed CLI can include paths or patient-like
+            # text in failures; do not forward any exception or raw output.
+            print("MEDORIGIN_CORE_FHIR_PROVENANCE_ONLY_BLOCKED", file=sys.stderr)
+            return 2
+        print("MEDORIGIN_CORE_FHIR_PROVENANCE_ONLY_PASS")
+        print("fhir_conformance_validated=false")
+        print("prepublication_rehearsal_qualified=false")
+        return 0
     output.mkdir(parents=True)
     try:
         runs = [run_one(cli, output, f"run_{i + 1}") for i, cli in enumerate(clis)]
         if len(runs) == 2 and runs[0]["report_sha256"] != runs[1]["report_sha256"]:
             raise ValueError("cross-runtime report hashes differ")
         receipt = {
-            "schema": "medorigin-local-synthetic-fhir-example/v1",
-            "scope": "synthetic structural validation, not full HL7 conformance",
+            "schema": "medorigin-local-synthetic-fhir-example/v2",
+            "scope": "fictional Core provenance only, not FHIR validation",
+            "fhir_conformance_validated": False,
+            "full_beta_preview_qualified": False,
             "publication_authorized": False,
             "clinical_authorized": False,
             "independent_review_completed": False,
@@ -193,7 +252,7 @@ def main(argv: list[str] | None = None) -> int:
         )
         if preview.returncode != 0:
             raise ValueError(f"local static preview failed: {preview.stderr[:250]}")
-        print("MEDORIGIN_SYNTHETIC_FHIR_DEMO_PASS")
+        print("MEDORIGIN_SYNTHETIC_FHIR_NOT_VALIDATED_PREVIEW_ONLY")
         print(f"report_sha256={runs[0]['report_sha256']}")
         print(f"receipt_sha256={digest(record)}")
         return 0
@@ -203,8 +262,14 @@ def main(argv: list[str] | None = None) -> int:
         ValueError,
         json.JSONDecodeError,
         subprocess.TimeoutExpired,
-    ) as exc:
-        print(f"MEDORIGIN_SYNTHETIC_FHIR_DEMO_FAIL: {exc}", file=sys.stderr)
+    ):
+        # An older installed Core CLI can include absolute source paths or
+        # patient-like strings in its diagnostic. This legacy full-preview
+        # route is NO-GO; do not reprint untrusted child exception text.
+        print(
+            "MEDORIGIN_SYNTHETIC_FHIR_DEMO_FAIL: legacy_preview_contract_unqualified",
+            file=sys.stderr,
+        )
         print("Any partial output is nonqualifying; use a new --out directory.", file=sys.stderr)
         return 1
 
