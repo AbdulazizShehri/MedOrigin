@@ -76,6 +76,26 @@ jobs:
           & python -m py_compile "$scripts/build_windows_private_user_setup.py" "$scripts/qualify_windows_private_user_setup.py"
           if ($LASTEXITCODE -ne 0) { throw 'Private Windows setup/QA harness syntax failed' }
           Write-Output 'PRIVATE_WINDOWS_SYNTHETIC_SINGLE_FILE_INSTALLER_SOURCE_GUARDS_PASS_NO_HOSTED_INSTALL'
+      - name: Parse owner-only physical Windows OLE drag-drop QA (no CI GUI or cursor changes)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $path = 'experiments/desktop-d2-native-egui/tests/windows-native-local-fictional-ole-drop-uia.ps1'
+          $tokens = $null
+          $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile(
+            (Resolve-Path -LiteralPath $path).Path, [ref]$tokens, [ref]$errors
+          ) | Out-Null
+          if (@($errors).Count -ne 0) { throw 'Physical nonclinical OLE QA syntax rejected' }
+          $source = Get-Content -LiteralPath $path -Raw
+          foreach ($marker in @(
+            'REAL_WINDOWS_OLE_DRAG_DROP_LOCAL_FICTIONAL_FHIR_BUNDLE_UIA_PASS_NONCLINICAL',
+            'source_reviewed_fictional_fixture_path_or_digest_required',
+            'MEDORIGIN_PHYSICAL_WINDOWS_OLE_DRAG_QA_NO_GO'
+          )) {
+            if (-not $source.Contains($marker)) { throw 'Physical source-only QA marker missing' }
+          }
+          Write-Output 'SOURCE_ONLY_WINDOWS_OLE_DRAG_QA_SYNTAX_AND_FAIL_CLOSED_BOUNDARIES_PASS_NO_HOSTED_GUI'
       - name: Parse Windows real-UIA regression source without opening a GUI
         if: runner.os == 'Windows'
         shell: pwsh

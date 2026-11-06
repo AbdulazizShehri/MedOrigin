@@ -47,11 +47,22 @@ letter, so operators must use a reviewed local fixture drive for offline QA.
 
 This is useful end-user interaction work in the **experimental** native
 Desktop only; it is neither an EHR file importer nor a clinical validator.
-The Windows drag-and-drop action still requires real interactive UI testing
-on the exact commit. Rust tests cover positive canonical fictional input,
-invalid/oversize/noncanonical input, safe path checks and source/session
-fail-closed behavior. Source tests or compilation alone do not prove Windows
-drag-and-drop or an installed user journey.
+The native Windows drag-and-drop event was physically exercised in a
+reviewed private QA session on source commit `7e5282d96b1caf4f85cda3d4997b10f290871f31`,
+compiled EXE SHA-256
+`9f79f06ad0fcbb7401e5a4fc72be8e026963f08b3c16adc14b058247866f7654`:
+Windows OLE reported `DRAG_EFFECT_Copy`, and AccessKit/UIAutomation detected
+`Bundle: Opened local synthetic-only JSON (no PHI, session-only)`, exit 0.
+See `tests/windows-native-local-fictional-ole-drop-uia.ps1` for the exact
+Windows-only opt-in procedure; it uses only the source-controlled fictional
+fixture and temporarily controls mouse movement. A forged fixture digest was
+rejected before launch (exit 2). This does not prove any patient-data admission,
+operating-system network isolation or a qualified clinical product.
+
+Rust tests additionally cover canonical fictional input, invalid/oversize/
+noncanonical inputs, guarded paths and protected-session denial. The entire
+Windows installer lifecycle was exercised separately on an isolated mock
+LOCALAPPDATA/APPDATA profile; no real user installation or release was made.
 
 ## Browser/network dependency regression guard
 
