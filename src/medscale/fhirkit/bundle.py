@@ -145,6 +145,13 @@ def _resource_identity(resource: Any) -> tuple[str, str]:
             raise BundlePreflightError("incomplete_observation_subset")
         if resource["status"] not in _OBSERVATION_STATUS_R4:
             raise BundlePreflightError("observation_status_not_in_r4_required_codes")
+        # HL7 R4 Observation.value[x] is a single 0..1 choice element.
+        # The explicitly admitted local subset has only valueQuantity and
+        # valueString. Both may be ABSENT (e.g. preliminary/panel results),
+        # but never present simultaneously, regardless of their contents.
+        # Reject before encrypted import, even without optional JSON Schema.
+        if "valueQuantity" in resource and "valueString" in resource:
+            raise BundlePreflightError("observation_multiple_r4_choice_values_refused")
     return kind, fhir_id
 
 
