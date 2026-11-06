@@ -84,6 +84,24 @@ def _freeze_and_preflight(
             or preflight.get("full_fhir_r4_conformance_established") is not False
         ):
             raise SyntheticFileImportDemoError("fictional_import_preflight_contract_refused")
+        # The same source-scoped timeline that the cold-reopened reader
+        # constructs MUST be viable before allocating encrypted storage.
+        # This rejects malformed timezone timestamps or reversed periods
+        # before any write, and validates every source even when a later
+        # import is filtered from the user-visible timeline.
+        try:
+            from medscale.fhirkit.workspace_timeline import (
+                SyntheticTimelineError,
+                _events,
+            )
+
+            _, patient_count, _ = _events(snapshot, None)
+            if patient_count != 1:
+                raise SyntheticTimelineError("timeline_patient_count_refused")
+        except SyntheticTimelineError as exc:
+            raise SyntheticFileImportDemoError(
+                "fictional_import_timeline_preflight_refused"
+            ) from exc
         hashes.add(digest)
         resource_total += count
         if resource_total > _MAX_RESOURCES:

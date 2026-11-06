@@ -219,6 +219,41 @@ def main(argv: list[str] | None = None) -> int:
                     reason,
                 )
             cases += 1
+        # Actual installed EXEs must agree on the R4 Observation.value[x]
+        # 0..1 choice, not just required status values.
+        choice_cases = 0
+        for number, fields in enumerate((
+            {},
+            {"valueString": "invented-only"},
+            {"valueQuantity": {"value": 2.5, "unit": "mmol/L"}},
+        )):
+            source = _fictional_bundle()
+            source["entry"][0]["resource"].update(fields)
+            first = _assert_positive(
+                _run(clis[0], root, source, f"good-choice-{number}-311")
+            )
+            second = _assert_positive(
+                _run(clis[1], root, source, f"good-choice-{number}-312")
+            )
+            if first != second:
+                raise AssertionError("installed Core valid R4 choice differs across runtimes")
+            choice_cases += 1
+        for number, (string, quantity) in enumerate((
+            ("invented", {"value": 3.5, "unit": "mmol/L"}),
+            ("", {}),
+            (None, None),
+            ("invented", {"unit": "fake"}),
+        )):
+            source = _fictional_bundle()
+            obs = source["entry"][0]["resource"]
+            obs["valueString"] = string
+            obs["valueQuantity"] = quantity
+            for label, cli in enumerate(clis):
+                _assert_negative(
+                    _run(cli, root, source, f"bad-choice-{number}-{label}"),
+                    "observation_multiple_r4_choice_values_refused",
+                )
+            choice_cases += 1
         for label, cli in enumerate(clis):
             # Missing caller synthetic assertion has a separately specified
             # refusal prefix, not a resource-validation error.
@@ -235,6 +270,7 @@ def main(argv: list[str] | None = None) -> int:
     print("MEDORIGIN_INSTALLED_R4_STATUS_BINDINGS_PASS_NOT_RELEASE")
     print(f"R4_KNOWN_CODE_CLASSES={len(_ENCOUNTER_R4)}+{len(_OBSERVATION_R4)}")
     print(f"INDEPENDENT_RUNTIME_POSITIVE_NEGATIVE_CASES={cases}")
+    print(f"R4_OBSERVATION_SINGLE_CHOICE_CASES={choice_cases}")
     print("FHIR_CONFORMANCE_VALIDATED=false CLINICAL_USE_AUTHORIZED=false")
     return 0
 
