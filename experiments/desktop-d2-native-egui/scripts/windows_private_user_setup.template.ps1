@@ -5,6 +5,8 @@ param([ValidateSet('Install','Verify','Uninstall')][string]$Action='Install')
 Set-StrictMode -Version Latest
 $ErrorActionPreference='Stop'
 $expectedCommit='__EXPECTED_COMMIT__'
+$expectedArchiveSha256='__EXPECTED_ARCHIVE_SHA256__'
+$archiveName='MedOrigin-Reviewed-Archive.zip'
 $expected=@{
 __EXPECTED_HASHES__
 }
@@ -38,21 +40,45 @@ function Require-ExistingUnredirected([string]$path, [bool]$directory) {
     }
 }
 
+function Get-PinnedSha256([string]$path) {
+    Require-ExistingUnredirected $path $false
+    $stream=$null
+    $sha=$null
+    try {
+        $stream=[IO.File]::Open($path, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::Read)
+        $sha=[Security.Cryptography.SHA256]::Create()
+        $hash=$sha.ComputeHash($stream)
+        return [BitConverter]::ToString($hash).Replace('-', '').ToLowerInvariant()
+    } finally {
+        if ($stream) { $stream.Dispose() }
+        if ($sha) { $sha.Dispose() }
+    }
+}
+
+function Expand-PinnedArchive([string]$path, [string]$destination) {
+    Require-ExistingUnredirected $path $false
+    Require-ExistingUnredirected $destination $true
+    # Use signed framework ZIP classes without relying on an auto-imported
+    # PowerShell Gallery/Archive module or shell subprocess.
+    [Reflection.Assembly]::Load(
+        'System.IO.Compression.FileSystem, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089'
+    ) | Out-Null
+    [IO.Compression.ZipFile]::ExtractToDirectory($path, $destination)
+}
+
 function Confirm-Payload([string]$folder, [bool]$installed) {
     Require-ExistingUnredirected $folder $true
     $expectedNames=@($expected.Keys)
     if ($installed) { $expectedNames+=@($scriptName) }
     $files=@(Get-ChildItem -LiteralPath $folder -Force)
-    if ($installed) {
-        if (@($files | Where-Object { $_.PSIsContainer -or ($expectedNames -cnotcontains $_.Name) }).Count -ne 0) {
-            throw 'installed_payload_contains_unreviewed_files'
-        }
-        if ($files.Count -ne $expectedNames.Count) { throw 'installed_payload_incomplete' }
+    if (@($files | Where-Object { $_.PSIsContainer -or ($expectedNames -cnotcontains $_.Name) }).Count -ne 0) {
+        throw 'payload_contains_unreviewed_files'
     }
+    if ($files.Count -ne $expectedNames.Count) { throw 'payload_incomplete' }
     foreach ($entry in $expected.GetEnumerator()) {
         $file=Join-Path $folder $entry.Key
         Require-ExistingUnredirected $file $false
-        $actual=(Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash.ToLowerInvariant()
+        $actual=Get-PinnedSha256 $file
         if ($actual -cne $entry.Value) { throw 'payload_sha256_refused' }
     }
     $manifest=Get-Content -LiteralPath (Join-Path $folder 'MANIFEST.json') -Raw | ConvertFrom-Json
@@ -70,10 +96,19 @@ function Confirm-Payload([string]$folder, [bool]$installed) {
 
 function Confirm-Shortcut([string]$path, [string]$target, [string]$arguments) {
     Require-ExistingUnredirected $path $false
+    Require-ExistingUnredirected $target $false
     $shell=New-Object -ComObject WScript.Shell
     $link=$shell.CreateShortcut($path)
-    if ($link.TargetPath -ine $target -or $link.Arguments -cne $arguments) {
+    # The Windows Shell may expand RUNNER~1 / PROGRA~1 (8.3 names) in the
+    # saved shortcut target. Compare only normalized *existing local files*,
+    # not untrusted arbitrary textual names, and still pin exact arguments.
+    $observed=$link.TargetPath
+    Require-ExistingUnredirected $observed $false
+    if ([IO.Path]::GetFullPath($observed) -ine [IO.Path]::GetFullPath($target)) {
         throw 'existing_shortcut_target_refused'
+    }
+    if ($link.Arguments -cne $arguments) {
+        throw 'existing_shortcut_arguments_refused'
     }
 }
 
@@ -101,14 +136,27 @@ try {
         if ((Test-Path -LiteralPath $shortcut) -or (Test-Path -LiteralPath $uninstallShortcut)) {
             throw 'existing_shortcut_not_overwritten'
         }
-        Confirm-Payload $PSScriptRoot $false
+        # Only a source-hash-pinned ZIP, our static .cmd bootstrap and the
+        # generated source-verified .ps1 can be present in IExpress extraction.
+        Require-ExistingUnredirected $PSScriptRoot $true
+        $archive=Join-Path $PSScriptRoot $archiveName
+        Require-ExistingUnredirected $archive $false
         Require-ExistingUnredirected (Join-Path $PSScriptRoot $scriptName) $false
+        $sourceNames=@($archiveName,$scriptName,'Install-MedOrigin-Private.cmd')
+        $actualNames=@(Get-ChildItem -LiteralPath $PSScriptRoot -Force)
+        if ($actualNames.Count -ne $sourceNames.Count -or
+            @($actualNames | Where-Object {
+                $_.PSIsContainer -or ($sourceNames -cnotcontains $_.Name)
+            }).Count -ne 0) { throw 'iexpress_source_contains_unreviewed_files' }
+        if ((Get-PinnedSha256 $archive) -cne $expectedArchiveSha256) { throw 'reviewed_archive_sha256_refused' }
         if (-not (Test-Path -LiteralPath $appParent)) {
             New-Item -ItemType Directory -Path $appParent -ErrorAction Stop | Out-Null
         }
         Require-ExistingUnredirected $appParent $true
         $stage=Join-Path $appParent ('PendingPrivatePreview-'+[Guid]::NewGuid().ToString('N'))
+        $expand=Join-Path $appParent ('PendingPrivateExtract-'+[Guid]::NewGuid().ToString('N'))
         New-Item -ItemType Directory -Path $stage -ErrorAction Stop | Out-Null
+        New-Item -ItemType Directory -Path $expand -ErrorAction Stop | Out-Null
         $committed=$false
         $ownShortcut=$false
         $ownUninstallerShortcut=$false
@@ -116,8 +164,17 @@ try {
         $pendingShortcut=Join-Path $programs ('MedOrigin-Private-pending-'+$nonce+'.lnk')
         $pendingUninstall=Join-Path $programs ('MedOrigin-Private-uninstall-pending-'+$nonce+'.lnk')
         try {
+            # Archive SHA checked before extraction; strict five-file canonical
+            # source is checked again before copying any payload to staging.
+            Expand-PinnedArchive $archive $expand
+            $expanded=Join-Path $expand 'MedOrigin-Synthetic-Preview'
+            Require-ExistingUnredirected $expanded $true
+            if (@(Get-ChildItem -LiteralPath $expand -Force).Count -ne 1) {
+                throw 'reviewed_archive_extra_root_refused'
+            }
+            Confirm-Payload $expanded $false
             foreach ($entry in $expected.GetEnumerator()) {
-                Copy-Item -LiteralPath (Join-Path $PSScriptRoot $entry.Key) -Destination (Join-Path $stage $entry.Key) -ErrorAction Stop
+                Copy-Item -LiteralPath (Join-Path $expanded $entry.Key) -Destination (Join-Path $stage $entry.Key) -ErrorAction Stop
             }
             Copy-Item -LiteralPath (Join-Path $PSScriptRoot $scriptName) -Destination (Join-Path $stage $scriptName) -ErrorAction Stop
             Confirm-Payload $stage $true
@@ -170,6 +227,7 @@ try {
                 Remove-Item -LiteralPath $pendingUninstall -Force
             }
             if (Test-Path -LiteralPath $stage) { Remove-Item -LiteralPath $stage -Recurse -Force }
+            if (Test-Path -LiteralPath $expand) { Remove-Item -LiteralPath $expand -Recurse -Force }
         }
         Write-Output 'MEDORIGIN_PRIVATE_WINDOWS_USER_INSTALL_PASS_SYNTHETIC_NOT_RELEASED'
     } elseif ($Action -eq 'Verify') {

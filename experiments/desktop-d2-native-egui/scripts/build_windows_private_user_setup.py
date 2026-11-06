@@ -35,6 +35,7 @@ SHA = re.compile(r"[0-9a-f]{64}")
 SAFE_DRIVE_PATH = re.compile(r"[A-Za-z]:\\[A-Za-z0-9 _.~\\-]+")
 INSTALLER_SCRIPT = "Install-MedOrigin-Private.ps1"
 INSTALLER_COMMAND = "Install-MedOrigin-Private.cmd"
+REVIEWED_ARCHIVE = "MedOrigin-Reviewed-Archive.zip"
 MAX_BINARY = 120 * 1024 * 1024
 
 
@@ -71,10 +72,14 @@ def _safe_sed_path(path: Path) -> str:
         codes = sorted({f"U+{ord(ch):04X}" for ch in spelling if ch not in allowed})
         raise ValueError(
             "unreviewed_iexpress_sed_windows_path:characters_refused:"
-            + "codes=" + ",".join(codes[:12])
-            + ";length=" + str(len(spelling))
-            + ";drive=" + str(len(spelling) > 2 and spelling[1] == ":")
-            + ";backslashes=" + str(spelling.count("\\"))
+            + "codes="
+            + ",".join(codes[:12])
+            + ";length="
+            + str(len(spelling))
+            + ";drive="
+            + str(len(spelling) > 2 and spelling[1] == ":")
+            + ";backslashes="
+            + str(spelling.count("\\"))
         )
     return spelling
 
@@ -98,21 +103,30 @@ def _read_exact_zip_members(archive: Path) -> dict[str, bytes]:
     return output
 
 
-def render_script(template: str, source_commit: str, files: dict[str, bytes]) -> str:
+def render_script(
+    template: str, source_commit: str, files: dict[str, bytes], archive_sha256: str
+) -> str:
     if not re.fullmatch(r"[0-9a-f]{40}", source_commit) or set(files) != set(FILES):
         raise ValueError("setup_source_or_member_set_refused")
-    if template.count("__EXPECTED_COMMIT__") != 1 or template.count("__EXPECTED_HASHES__") != 1:
+    if not SHA.fullmatch(archive_sha256):
+        raise ValueError("setup_archive_digest_refused")
+    required = ("__EXPECTED_COMMIT__", "__EXPECTED_HASHES__", "__EXPECTED_ARCHIVE_SHA256__")
+    if any(template.count(marker) != 1 for marker in required):
         raise ValueError("setup_template_identity_missing")
     pins = "\n".join("    '" + name + "'='" + digest(files[name]) + "'" for name in sorted(FILES))
-    return template.replace("__EXPECTED_COMMIT__", source_commit).replace(
-        "__EXPECTED_HASHES__", pins
+    return (
+        template.replace("__EXPECTED_COMMIT__", source_commit)
+        .replace("__EXPECTED_HASHES__", pins)
+        .replace("__EXPECTED_ARCHIVE_SHA256__", archive_sha256)
     )
 
 
 def render_sed(stage: Path, target: Path) -> str:
     source = _safe_sed_path(stage)
     destination = _safe_sed_path(target)
-    names = (INSTALLER_COMMAND, INSTALLER_SCRIPT, *FILES)
+    # IExpress no longer redundantly compresses a 34 MB executable. It
+    # carries only the already source-verified, hash-pinned canonical ZIP.
+    names = (INSTALLER_COMMAND, INSTALLER_SCRIPT, REVIEWED_ARCHIVE)
     file_literals = "\n".join(f'FILE{i}="{name}"' for i, name in enumerate(names))
     file_slots = "\n".join(f"%FILE{i}%=" for i in range(len(names)))
     return (
@@ -275,15 +289,21 @@ def build(
         / "windows_private_user_setup.template.ps1"
     )
     template = _real_path(template_path, directory=False).read_text(encoding="utf-8")
-    script = render_script(template, commit, files)
+    script = render_script(template, commit, files, expected_archive)
     # Only a task-owned local builder output directory; no system installation.
     out.mkdir(mode=0o700)
     target = out / f"MedOrigin-Synthetic-Private-Setup-{commit[:8]}.exe"
     with tempfile.TemporaryDirectory(prefix="medorigin-iexpress-", dir=parent) as name:
         stage = Path(name)
         _safe_sed_path(stage)
-        for filename, data in files.items():
-            (stage / filename).write_bytes(data)
+        # Stage the exact canonical ZIP rather than a second 34 MB
+        # decompression/recompression pass over the native executable.
+        # Rechecking its hash closes the verification-to-staging gap.
+        if digest(archive.read_bytes()) != expected_archive:
+            raise ValueError("private_setup_archive_changed_before_stage")
+        (stage / REVIEWED_ARCHIVE).write_bytes(archive.read_bytes())
+        if digest((stage / REVIEWED_ARCHIVE).read_bytes()) != expected_archive:
+            raise ValueError("private_setup_staged_archive_sha256_refused")
         (stage / INSTALLER_SCRIPT).write_bytes(script.replace("\n", "\r\n").encode("utf-8"))
         (stage / INSTALLER_COMMAND).write_bytes(
             (
