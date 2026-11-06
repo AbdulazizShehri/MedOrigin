@@ -20,9 +20,9 @@ from pathlib import Path
 from typing import Any
 
 SCRIPT_ROOT = Path(__file__).resolve().parents[1]
-MARKER = "MEDORIGIN_SYNTHETIC_FHIR_DEMO_PASS"
+MARKER = "MEDORIGIN_SYNTHETIC_FHIR_NOT_VALIDATED_PREVIEW_ONLY"
 EXPECTED_VERSION = "0.3.0"
-EXPECTED_REPORT_SHA256 = "991d319d9c567db3a71985661a12abb67c8432ff43b439c08759f8ee1d52fbd9"
+EXPECTED_REPORT_SHA256 = "165b41acdc416617e8f207366d454ac6a713ecf4c9a5efd740d14a0af882bd08"
 MAX_OUTPUT = 100_000
 
 # Executes within the separately installed interpreter, with isolated
@@ -147,12 +147,66 @@ def installed_wheel_matches(wheel: Path, python: Path, expected_minor: int) -> i
     return len(expected)
 
 
+def _checked_core_preview_destination(destination: Path) -> Path:
+    """Only a fresh absolute location with a real, existing, non-symlink parent.
+
+    The requested location is never overwritten and the output contains
+    only nonclinical, source-verified, fictional FHIR provenance metadata.
+    """
+    if (
+        not isinstance(destination, Path)
+        or not destination.is_absolute()
+        or ".." in destination.parts
+        or destination.exists()
+        or destination.is_symlink()
+        or not destination.name
+        or not destination.parent.is_dir()
+        or destination.parent.is_symlink()
+        or destination.parent.resolve(strict=True) != destination.parent
+    ):
+        raise QualificationError("core negative-truth preview destination refused")
+    return destination
+
+
+def _promote_core_preview(
+    staged: Path,
+    destination: Path,
+    *,
+    record_sha256: str,
+    preview_sha256: str,
+) -> None:
+    """Promote the two already verified inert artifacts on one filesystem.
+
+    Staging is always inside the destination's parent. This never
+    deletes, merges into, or silently overwrites an existing output.
+    """
+    if (
+        {item.name for item in staged.iterdir()}
+        != {"core-negative-truth.json", "core-negative-truth.html"}
+        or any(item.is_symlink() or not item.is_file() for item in staged.iterdir())
+        or hashlib.sha256(
+            (staged / "core-negative-truth.json").read_bytes()
+        ).hexdigest() != record_sha256
+        or hashlib.sha256(
+            (staged / "core-negative-truth.html").read_bytes()
+        ).hexdigest() != preview_sha256
+    ):
+        raise QualificationError("core negative-truth staged evidence mismatch")
+    _checked_core_preview_destination(destination)
+    try:
+        staged.rename(destination)
+    except OSError as exc:
+        raise QualificationError("core negative-truth evidence promotion refused") from exc
+
+
 def source_qualified_core_negative_truth_preview(
     checkout: Path,
     cli311: Path,
     cli312: Path,
     python311: Path,
     python312: Path,
+    *,
+    evidence_destination: Path | None = None,
 ) -> dict[str, Any]:
     """Explicit nonrelease Core lane: actual installed modules, inert truthful UI.
 
@@ -160,6 +214,12 @@ def source_qualified_core_negative_truth_preview(
     and native installed Python byte inventories pass.
     """
     import importlib.util
+
+    checked_destination = (
+        None
+        if evidence_destination is None
+        else _checked_core_preview_destination(evidence_destination)
+    )
 
     def _module(file: Path, label: str) -> Any:
         spec = importlib.util.spec_from_file_location(label, file)
@@ -183,7 +243,10 @@ def source_qualified_core_negative_truth_preview(
             [cli311, cli312],
             interpreters=[python311, python312],
         )
-        with tempfile.TemporaryDirectory(prefix="medorigin-core-negative-preview-") as temp:
+        with tempfile.TemporaryDirectory(
+            prefix="medorigin-core-negative-preview-",
+            dir=checked_destination.parent if checked_destination is not None else None,
+        ) as temp:
             root = Path(temp)
             created = renderer.write_negative_truth_preview(root / "evidence", proof)
             evidence = root / "evidence"
@@ -216,6 +279,13 @@ def source_qualified_core_negative_truth_preview(
                 )
             ):
                 raise QualificationError("unsafe Core negative-truth preview")
+            if checked_destination is not None:
+                _promote_core_preview(
+                    evidence,
+                    checked_destination,
+                    record_sha256=created["record_sha256"],
+                    preview_sha256=created["preview_sha256"],
+                )
     except QualificationError:
         raise
     except Exception as exc:
@@ -223,7 +293,7 @@ def source_qualified_core_negative_truth_preview(
         # patient-like strings must never be reflected in the CI log.
         raise QualificationError("source-qualified_core_negative_preview_refused") from exc
 
-    return {
+    response: dict[str, Any] = {
         "status": "TECHNICAL_CORE_NEGATIVE_TRUTH_PREVIEW_ONLY",
         "distribution": "medscale",
         "installed_python_source_files_verified_per_runtime": None,
@@ -243,6 +313,11 @@ def source_qualified_core_negative_truth_preview(
         "full_beta_preview_qualified": False,
         "merge_or_tag_authorized": False,
     }
+    # Preserve the exact historical Core-only receipt shape when no durable
+    # export is requested. This opt-in field is never a clinical/release GO.
+    if checked_destination is not None:
+        response["durable_negative_truth_preview_exported"] = True
+    return response
 
 
 def qualify(
@@ -253,8 +328,13 @@ def qualify(
     python312: Path,
     *,
     core_negative_truth_preview: bool = False,
+    evidence_destination: Path | None = None,
 ) -> dict[str, Any]:
     """Verify exact source, package, two installs and real synthetic FHIR E2E."""
+    if evidence_destination is not None and core_negative_truth_preview is not True:
+        raise QualificationError("durable evidence requires explicit Core negative-truth preview")
+    if evidence_destination is not None:
+        _checked_core_preview_destination(evidence_destination)
     for path in (checkout, wheel, sdist):
         if not path.exists():
             raise QualificationError("checkout or candidate artifact missing")
@@ -299,7 +379,12 @@ def qualify(
         raise QualificationError("installed Core CLI absent")
     if core_negative_truth_preview is True:
         core_result = source_qualified_core_negative_truth_preview(
-            checkout, cli311, cli312, python311, python312
+            checkout,
+            cli311,
+            cli312,
+            python311,
+            python312,
+            evidence_destination=evidence_destination,
         )
         core_result["source_git_commit"] = source_sha
         core_result["wheel_sha256"] = sha
@@ -330,13 +415,39 @@ def qualify(
         runs = receipt.get("runs")
         if not isinstance(runs, list) or len(runs) != 2:
             raise QualificationError("expected two independent Core executions")
-        if any(r.get("report_sha256") != EXPECTED_REPORT_SHA256 for r in runs):
-            raise QualificationError("known synthetic report identity drifted")
+        if any(
+            not isinstance(item, dict)
+            or item.get("report_sha256") != EXPECTED_REPORT_SHA256
+            or item.get("provenance_status") != "not_validated"
+            or type(item.get("validation_exit")) is not int
+            or item["validation_exit"] != 2
+            for item in runs
+        ):
+            raise QualificationError("synthetic Core must return exact negative-truth provenance")
+        if (
+            receipt.get("schema") != "medorigin-local-synthetic-fhir-example/v2"
+            or receipt.get("fhir_conformance_validated") is not False
+            or receipt.get("full_beta_preview_qualified") is not False
+            or receipt.get("publication_authorized") is not False
+            or receipt.get("clinical_authorized") is not False
+        ):
+            raise QualificationError(
+                "synthetic Developer Beta receipt falsely claimed qualification"
+            )
         preview = (output / "preview.html").read_text(encoding="utf-8")
-        if "connect-src 'none'" not in preview or "script-src 'none'" not in preview:
-            raise QualificationError("local static preview CSP absent")
+        if (
+            "connect-src 'none'" not in preview
+            or "script-src 'none'" not in preview
+            or "Not validated." not in preview
+            or "NOT VALIDATED" not in preview
+            or "FHIR validators executed" not in preview
+        ):
+            raise QualificationError("local truthful static preview or CSP absent")
     return {
-        "status": "TECHNICAL_PREPUBLICATION_REHEARSAL_PASS",
+        "status": "TECHNICAL_TRUTHFUL_SYNTHETIC_BETA_REHEARSAL_ONLY",
+        "fhir_conformance_validated": False,
+        "full_beta_preview_qualified": False,
+        "prepublication_rehearsal_qualified": False,
         "source_git_commit": source_sha,
         "distribution": "medscale",
         "project": "MedOrigin",
@@ -365,7 +476,19 @@ def main(argv: list[str] | None = None) -> int:
         help="Explicit separate Core-only proof+static HTML path. "
         "NEVER qualifies old full Beta, release or FHIR conformance.",
     )
+    parser.add_argument(
+        "--evidence-dir",
+        type=Path,
+        help=(
+            "New absolute directory for retained, source-verified Core "
+            "NOT VALIDATED JSON and inert HTML. Requires "
+            "--core-negative-truth-preview; never overwrites."
+        ),
+    )
     args = parser.parse_args(argv)
+    if args.evidence_dir is not None and not args.core_negative_truth_preview:
+        print("MEDORIGIN_PREPUBLICATION_REHEARSAL_BLOCKED: Core preview required", file=sys.stderr)
+        return 2
     try:
         if args.core_negative_truth_preview:
             result = qualify(
@@ -375,6 +498,7 @@ def main(argv: list[str] | None = None) -> int:
                 args.python311.absolute(),
                 args.python312.absolute(),
                 core_negative_truth_preview=True,
+                evidence_destination=args.evidence_dir,
             )
         else:
             result = qualify(
