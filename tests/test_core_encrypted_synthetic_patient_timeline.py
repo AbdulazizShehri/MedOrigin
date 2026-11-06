@@ -17,9 +17,15 @@ from medscale_workspace.keyprovider import InMemoryTestKeyProvider, new_root_sec
 from medscale_workspace.storage import WorkspaceStore  # noqa: E402
 
 from medscale.cli import main as public_cli  # noqa: E402
-from medscale.fhirkit.bundle import inspect_synthetic_bundle  # noqa: E402
+from medscale.fhirkit.bundle import (  # noqa: E402
+    BundlePreflightError,
+    inspect_synthetic_bundle,
+)
 from medscale.fhirkit.workspace_demo import _fictional_bundle  # noqa: E402
-from medscale.fhirkit.workspace_ingest import ingest_synthetic_bundle_atomic  # noqa: E402
+from medscale.fhirkit.workspace_ingest import (  # noqa: E402
+    SyntheticWorkspaceImportError,
+    ingest_synthetic_bundle_atomic,
+)
 from medscale.fhirkit.workspace_timeline import (  # noqa: E402
     SyntheticTimelineError,
     _events,
@@ -274,13 +280,14 @@ def test_two_patient_selection_explicit_and_no_identity_emitted() -> None:
     assert PATIENT_URL not in json.dumps(one)
 
 
-def test_cross_patient_observation_encounter_link_refused_even_if_preflight_passes() -> None:
+def test_cross_patient_observation_encounter_link_refused_at_both_boundaries() -> None:
     source = _second_patient()
-    # Encounter belongs to the OTHER patient while Observation's subject
-    # still links to the original Patient. Existing preflight validates
-    # link types, but cannot assert same-patient graph consistency.
+    # The early Core Bundle preflight must now reject cross-patient
+    # Encounter ownership, while the independent timeline guard remains
+    # in force as defense in depth for unreviewed downstream sources.
     source["entry"][2]["resource"]["subject"]["reference"] = source["entry"][-1]["fullUrl"]
-    assert inspect_synthetic_bundle(source)["local_references_checked"] == 3
+    with pytest.raises(BundlePreflightError, match="observation_encounter_patient_mismatch"):
+        inspect_synthetic_bundle(source)
     with pytest.raises(SyntheticTimelineError, match="cross_patient_encounter_link_refused"):
         _events(source, PATIENT_URL)
 
@@ -358,12 +365,15 @@ def test_real_encrypted_multi_patient_selection_and_cross_person_mismatch(
 
     mismatched = _second_patient()
     mismatched["entry"][2]["resource"]["subject"]["reference"] = mismatched["entry"][-1]["fullUrl"]
-    assert inspect_synthetic_bundle(mismatched)["local_references_checked"] == 3
+    with pytest.raises(BundlePreflightError, match="observation_encounter_patient_mismatch"):
+        inspect_synthetic_bundle(mismatched)
     with _open(tmp_path / "mismatched", provider) as store:
-        imported = _import(store, provider, mismatched)
-        with pytest.raises(SyntheticTimelineError, match="cross_patient_encounter_link_refused"):
-            _read(store, provider, imported, patient_local_reference=PATIENT_URL)
-        assert store.object_count() == 10
+        with pytest.raises(
+            SyntheticWorkspaceImportError, match="synthetic_bundle_preflight_refused"
+        ):
+            _import(store, provider, mismatched)
+        # Failure must happen before *any* encrypted resource/provenance write.
+        assert store.object_count() == 0
 
 
 def test_real_encrypted_invalid_observation_date_fails_closed(
