@@ -7,8 +7,6 @@ anchor and the exact in-memory test key-provider are mandatory.
 
 from __future__ import annotations
 
-import re
-
 from medscale_workspace import fhir_r4 as fhir
 from medscale_workspace.audit import AuditEventType, verified_chain_from_objects
 from medscale_workspace.fhir_readback import read_synthetic_fhir_bundle_in_memory
@@ -16,7 +14,16 @@ from medscale_workspace.identity import WorkspaceObjectType
 from medscale_workspace.keyprovider import InMemoryTestKeyProvider
 from medscale_workspace.storage import WorkspaceStore
 
-_SHA256 = re.compile(r"[0-9a-f]{64}\Z")
+
+def _is_lower_sha256(value: object) -> bool:
+    """Match exactly 64 ASCII lowercase hexadecimal characters, without regex imports."""
+    return (
+        isinstance(value, str)
+        and len(value) == 64
+        and all("0" <= char <= "9" or "a" <= char <= "f" for char in value)
+    )
+
+
 _MAX_IMPORTS = 16
 _MAX_OBJECTS = 128
 _MAX_ENVELOPES = 8 * 1024 * 1024
@@ -55,9 +62,8 @@ def list_verified_synthetic_fhir_imports(
         raise SyntheticFhirCatalogError("in_memory_test_key_provider_required")
     if store._key_provider is not test_key_provider:
         raise SyntheticFhirCatalogError("workspace_key_provider_mismatch")
-    if (
-        not isinstance(expected_current_audit_head_digest, str)
-        or _SHA256.fullmatch(expected_current_audit_head_digest) is None
+    if not isinstance(expected_current_audit_head_digest, str) or not _is_lower_sha256(
+        expected_current_audit_head_digest
     ):
         raise SyntheticFhirCatalogError("current_audit_anchor_refused")
     if type(max_imports) is not int or not 1 <= max_imports <= _MAX_IMPORTS:
@@ -106,7 +112,7 @@ def list_verified_synthetic_fhir_imports(
             source_sha = event.metadata[1][1]
             raw_count = event.metadata[2][1]
             if (
-                _SHA256.fullmatch(source_sha) is None
+                not _is_lower_sha256(source_sha)
                 or not raw_count.isascii()
                 or not raw_count.isdecimal()
                 or str(int(raw_count)) != raw_count
