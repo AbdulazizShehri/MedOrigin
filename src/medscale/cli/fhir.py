@@ -114,6 +114,47 @@ def _bundle_preflight_main(argv: list[str]) -> int:
     return 0
 
 
+def _file_batch_triage_main(argv: list[str]) -> int:
+    """Read-only, per-file fictional relationship and timeline diagnostics."""
+    if argv in (["-h"], ["--help"]):
+        print(
+            "usage: medscale fhir file-batch-triage --synthetic-only "
+            "FICTIONAL_BUNDLE_1 FICTIONAL_BUNDLE_2 "
+            "[FICTIONAL_BUNDLE_3 ... FICTIONAL_BUNDLE_4]\\n"
+            "Return a fixed, source-ordinal explanation of invalid invented "
+            "FHIR relationships, dates or Encounter periods before import. "
+            "NO database, PHI, full FHIR validation or clinical authorization."
+        )
+        return 0
+    refused = "file triage refused: explicit_fictional_readonly_batch_required"
+    if (
+        not 3 <= len(argv) <= 5
+        or argv[0] != "--synthetic-only"
+        or any(not name or name.startswith("--") for name in argv[1:])
+    ):
+        print(refused, file=sys.stderr)
+        return 2
+    try:
+        sources = [read_fhir_json_document(Path(name)) for name in argv[1:]]
+    except FhirInputError:
+        # In particular, never echo invalid filenames or JSON parse errors.
+        # An unparseable/unmarked source cannot get per-file diagnostics.
+        print("file triage refused: fictional_source_input_refused", file=sys.stderr)
+        return 1
+    try:
+        from medscale.fhirkit.workspace_file_triage import (
+            fictional_file_batch_triage_json,
+        )
+
+        receipt = fictional_file_batch_triage_json(sources, synthetic_only=True)
+    except Exception:
+        print("file triage refused: unqualified_batch_or_marker", file=sys.stderr)
+        return 2
+    print(receipt, end="")
+    # Even all-sources-ready synthetic triage is not FHIR R4 conformance.
+    return 2
+
+
 def _file_batch_readiness_main(argv: list[str]) -> int:
     """Read-only local import preview; no encrypted store or patient output."""
     if argv in (["-h"], ["--help"]):
@@ -729,6 +770,8 @@ def main(argv: list[str] | None = None) -> int:
         return _multi_timeline_demo_main(tokens[1:])
     if tokens and tokens[0] == "timeline-demo":
         return _timeline_demo_main(tokens[1:])
+    if tokens and tokens[0] == "file-batch-triage":
+        return _file_batch_triage_main(tokens[1:])
     if tokens and tokens[0] == "file-batch-readiness":
         return _file_batch_readiness_main(tokens[1:])
     if tokens and tokens[0] == "file-batch-encrypted-demo":

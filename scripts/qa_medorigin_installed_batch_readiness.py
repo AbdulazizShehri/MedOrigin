@@ -126,6 +126,69 @@ def _negative(result: subprocess.CompletedProcess[str], message: str) -> None:
         raise AssertionError("installed Core did not fail closed without partial output")
 
 
+def _triage(
+    result: subprocess.CompletedProcess[str],
+    *, stage: str | None = None, reason: str | None = None,
+) -> dict:
+    if result.returncode != 2 or result.stderr:
+        raise AssertionError("installed Core failed truthful read-only file triage")
+    try:
+        report = json.loads(result.stdout)
+    except ValueError as exc:
+        raise AssertionError("actual installed Core triage missing JSON") from exc
+    if (
+        type(report) is not dict
+        or report.get("schema") != "medorigin-core-fictional-prestorage-file-triage/v1"
+        or report.get("status") != "SYNTHETIC_FILE_TRIAGE_ONLY_NOT_VALIDATED"
+        or report.get("source_count") != 2
+        or type(report.get("sources")) is not list
+        or len(report["sources"]) != 2
+    ):
+        raise AssertionError("actual installed Core triage contract drifted")
+    for flag in (
+        "source_filenames_included", "patient_identity_included",
+        "precise_timestamps_included", "payload_included", "workspace_allocated",
+        "output_persisted", "network_access_performed",
+        "cross_source_patient_join_performed", "official_r4_schema_checked",
+        "fhir_r4_conformance_validated", "clinical_use_authorized",
+        "publication_authorized",
+    ):
+        if report.get(flag) is not False:
+            raise AssertionError("actual installed Core triage claimed unsafe authority")
+    if (
+        type(report["sources"][0]) is not dict
+        or report["sources"][0].get("status") != "ready_for_synthetic_readiness_only"
+        or report["sources"][0].get("source_ordinal") != 1
+    ):
+        raise AssertionError("actual installed Core first source lost verified result")
+    second = report["sources"][1]
+    if type(second) is not dict or second.get("source_ordinal") != 2:
+        raise AssertionError("actual installed Core lost source ordinal")
+    if stage is None:
+        if (
+            report.get("source_ready_count") != 2
+            or report.get("source_blocked_count") != 0
+            or report.get("all_sources_locally_ready") is not True
+            or second.get("status") != "ready_for_synthetic_readiness_only"
+            or second.get("reason_code") is not None
+            or second.get("dated_event_count") != 2
+            or second.get("first_day_utc") != "2026-11-04"
+            or second.get("last_day_utc") != "2026-11-05"
+        ):
+            raise AssertionError("installed Core positive triage disagrees with readiness")
+    elif (
+        report.get("source_ready_count") != 1
+        or report.get("source_blocked_count") != 1
+        or report.get("all_sources_locally_ready") is not False
+        or second.get("status") != "blocked"
+        or second.get("stage") != stage
+        or second.get("reason_code") != reason
+        or second.get("source_content_sha256") is not None
+    ):
+        raise AssertionError("installed Core triage did not identify fixed second-file cause")
+    return report
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--cli311", type=Path, required=True)
@@ -160,6 +223,14 @@ def main(argv: list[str] | None = None) -> int:
         if first["sources"] != official_a["sources"]:
             raise AssertionError("schema option altered source identities or date counts")
 
+        # Source-ordinal triage is distinct from existing relationship-only
+        # triage: it must agree with actual no-store readiness when ready.
+        triage_args = ["file-batch-triage", "--synthetic-only", *(str(p) for p in sources)]
+        triage_311 = _triage(_call(clis[0], root, triage_args))
+        triage_312 = _triage(_call(clis[1], root, triage_args))
+        if triage_311 != triage_312:
+            raise AssertionError("actual installed pre-storage triage differs by Python")
+
         broken = _two()
         broken[1]["entry"][2]["resource"]["period"] = {
             "start": "2026-11-06T06:00:00Z",
@@ -167,6 +238,14 @@ def main(argv: list[str] | None = None) -> int:
         }
         invalid = _files(root, broken)
         for cli in clis:
+            _triage(
+                _call(cli, root, [
+                    "file-batch-triage", "--synthetic-only",
+                    *(str(p) for p in invalid),
+                ]),
+                stage="timeline",
+                reason="timeline_encounter_period_reversed",
+            )
             _negative(
                 _call(cli, root, [
                     "file-batch-readiness", "--synthetic-only",
@@ -185,11 +264,36 @@ def main(argv: list[str] | None = None) -> int:
                 _call(cli, root, ["file-batch-readiness", *(str(p) for p in sources)]),
                 "file readiness refused: explicit_fictional_readonly_batch_required",
             )
+        # A distinct invalid relationship also carries a source-ordinal
+        # finite reason; a completely unmarked source blocks ALL output.
+        invalid_rel = _two()
+        invalid_rel[1]["entry"][0]["resource"]["status"] = "FINAL"
+        invalid_files = _files(root, invalid_rel)
+        for cli in clis:
+            _triage(
+                _call(cli, root, [
+                    "file-batch-triage", "--synthetic-only",
+                    *(str(p) for p in invalid_files),
+                ]),
+                stage="local_relationship",
+                reason="observation_status_not_in_r4_required_codes",
+            )
+        invalid_rel[1].pop("meta")
+        unmarked = _files(root, invalid_rel)
+        for cli in clis:
+            _negative(
+                _call(cli, root, [
+                    "file-batch-triage", "--synthetic-only",
+                    *(str(p) for p in unmarked),
+                ]),
+                "file triage refused: unqualified_batch_or_marker",
+            )
         if {p.name for p in root.iterdir()} != {p.name for p in sources}:
             # Invalid version overwrites same named temporary caller inputs,
             # but neither workflow may create any SQLite/Workspace or output.
             raise AssertionError("readiness or refused import created unexpected files")
     print("MEDORIGIN_REAL_INSTALLED_FHIR_BATCH_READINESS_PASS_NOT_RELEASE")
+    print("MEDORIGIN_REAL_INSTALLED_FHIR_PRESTORE_TRIAGE_PASS_NOT_RELEASE")
     print("INSTALLED_PYTHON_RUNTIMES=3.11,3.12")
     print("OFFICIAL_HL7_R4_SCHEMA_STRUCTURE_ONLY_NOT_VALIDATED=true")
     print("READONLY_SOURCES=2 DATED_EVENTS=2 UNDATED_EVENTS=2")
