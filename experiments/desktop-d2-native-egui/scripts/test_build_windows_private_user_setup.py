@@ -284,7 +284,14 @@ class PrivateWindowsUserSetupTests(unittest.TestCase):
             path.mkdir(parents=True)
         sentinel = local / "not-an-app-owned-file.txt"
         sentinel.write_text("must survive", encoding="ascii")
-        env = {**os.environ, "LOCALAPPDATA": str(local), "APPDATA": str(roam)}
+        env = {
+            **os.environ,
+            "LOCALAPPDATA": str(local),
+            "APPDATA": str(roam),
+            # Simulate hosted runners with optional PowerShell auto-modules
+            # unavailable, rather than relying on an inherited PSModulePath.
+            "PSModulePath": "",
+        }
         ps = [
             "powershell.exe",
             "-NoProfile",
@@ -326,6 +333,13 @@ class PrivateWindowsUserSetupTests(unittest.TestCase):
         self.assertEqual(verify.returncode, 0, verify.stdout + verify.stderr)
         self.assertTrue(any(programs.glob("MedOrigin Synthetic Preview.lnk")))
         self.assertTrue(any(programs.glob("Uninstall MedOrigin Synthetic Preview.lnk")))
+        # A replaced shortcut must never pass integrity verification.
+        link = programs / "MedOrigin Synthetic Preview.lnk"
+        original_link = link.read_bytes()
+        link.write_bytes(b"fake-not-a-windows-shell-link")
+        self.assertNotEqual(action(installed / setup.INSTALLER_SCRIPT, "Verify").returncode, 0)
+        link.write_bytes(original_link)
+        self.assertEqual(action(installed / setup.INSTALLER_SCRIPT, "Verify").returncode, 0)
         tampered = installed / "README-SYNTHETIC.txt"
         before = tampered.read_bytes()
         tampered.write_bytes(before + b"tamper")

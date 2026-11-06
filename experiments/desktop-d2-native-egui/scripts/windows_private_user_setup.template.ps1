@@ -96,10 +96,19 @@ function Confirm-Payload([string]$folder, [bool]$installed) {
 
 function Confirm-Shortcut([string]$path, [string]$target, [string]$arguments) {
     Require-ExistingUnredirected $path $false
+    Require-ExistingUnredirected $target $false
     $shell=New-Object -ComObject WScript.Shell
     $link=$shell.CreateShortcut($path)
-    if ($link.TargetPath -ine $target -or $link.Arguments -cne $arguments) {
+    # The Windows Shell may expand RUNNER~1 / PROGRA~1 (8.3 names) in the
+    # saved shortcut target. Compare only normalized *existing local files*,
+    # not untrusted arbitrary textual names, and still pin exact arguments.
+    $observed=$link.TargetPath
+    Require-ExistingUnredirected $observed $false
+    if ([IO.Path]::GetFullPath($observed) -ine [IO.Path]::GetFullPath($target)) {
         throw 'existing_shortcut_target_refused'
+    }
+    if ($link.Arguments -cne $arguments) {
+        throw 'existing_shortcut_arguments_refused'
     }
 }
 
