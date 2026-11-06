@@ -32,7 +32,7 @@ FILES = (
     "UPSTREAM-NOTICE.md",
 )
 SHA = re.compile(r"[0-9a-f]{64}")
-SAFE_DRIVE_PATH = re.compile(r"[A-Za-z]:\\[A-Za-z0-9 _.\\-]+")
+SAFE_DRIVE_PATH = re.compile(r"[A-Za-z]:\\[A-Za-z0-9 _.~\\-]+")
 INSTALLER_SCRIPT = "Install-MedOrigin-Private.ps1"
 INSTALLER_COMMAND = "Install-MedOrigin-Private.cmd"
 MAX_BINARY = 120 * 1024 * 1024
@@ -67,7 +67,7 @@ def _safe_sed_path(path: Path) -> str:
     if not SAFE_DRIVE_PATH.fullmatch(spelling):
         # Do not expose absolute CI/user paths. Only character-code diagnostics
         # distinguish benign platform path spellings from SED injection.
-        allowed = set("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789 _.\\-:")
+        allowed = set("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789 _.~\\-:")
         codes = sorted({f"U+{ord(ch):04X}" for ch in spelling if ch not in allowed})
         raise ValueError(
             "unreviewed_iexpress_sed_windows_path:characters_refused:"
