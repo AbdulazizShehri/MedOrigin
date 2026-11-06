@@ -93,9 +93,9 @@ mod tests {
     #[test]
     fn canonical_fake_bundle_is_admitted_read_only() {
         let raw = include_bytes!("../fixtures/core/synthetic-multipatient-fhir-bundle.json");
-        let path = temp_json(raw);
-        let result = read_dropped_fictional_bundle(&path);
-        fs::remove_file(path).unwrap();
+        let candidate = temp_json(raw);
+        let result = read_dropped_fictional_bundle(&candidate);
+        fs::remove_file(candidate).unwrap();
         let parsed = result.expect("source-approved fake bundle");
         assert!(parsed.patient_count >= 1);
         assert!(parsed.resources.len() >= 3);
@@ -104,23 +104,23 @@ mod tests {
     #[test]
     fn rejects_personal_patient_content() {
         let raw = br#"{"resourceType":"Patient","id":"person-001","name":[{"family":"Real"}]}"#;
-        let path = temp_json(raw);
+        let candidate = temp_json(raw);
         assert!(matches!(
-            read_dropped_fictional_bundle(&path),
+            read_dropped_fictional_bundle(&candidate),
             Err("local_fictional_bundle_not_canonical_synthetic_no_phi")
         ));
-        fs::remove_file(path).unwrap();
+        fs::remove_file(candidate).unwrap();
     }
 
     #[test]
     fn rejects_empty_and_oversized_files_without_accepting_data() {
         for bytes in [Vec::new(), vec![b'x'; MAX_SYNTHETIC_BUNDLE_BYTES + 1]] {
-            let path = temp_json(&bytes);
+            let candidate = temp_json(&bytes);
             assert!(matches!(
-                read_dropped_fictional_bundle(&path),
+                read_dropped_fictional_bundle(&candidate),
                 Err("local_fictional_bundle_size_or_filetype_refused")
             ));
-            fs::remove_file(path).unwrap();
+            fs::remove_file(candidate).unwrap();
         }
     }
 
@@ -130,16 +130,16 @@ mod tests {
             read_dropped_fictional_bundle(Path::new("relative.json")),
             Err("local_fictional_bundle_absolute_path_required")
         ));
-        let path = std::env::temp_dir().join(format!(
+        let candidate = std::env::temp_dir().join(format!(
             "medorigin-d2-non-json-file-{:?}.txt",
             std::thread::current().id()
         ));
-        fs::write(&path, b"not a JSON file").unwrap();
+        fs::write(&candidate, b"not a JSON file").unwrap();
         assert!(matches!(
-            read_dropped_fictional_bundle(&path),
+            read_dropped_fictional_bundle(&candidate),
             Err("local_fictional_bundle_json_extension_required")
         ));
-        fs::remove_file(path).unwrap();
+        fs::remove_file(candidate).unwrap();
     }
 
     #[test]
@@ -147,26 +147,26 @@ mod tests {
         let mut raw =
             include_bytes!("../fixtures/core/synthetic-multipatient-fhir-bundle.json").to_vec();
         raw.push(b'\n');
-        let path = temp_json(&raw);
+        let candidate = temp_json(&raw);
         assert!(matches!(
-            read_dropped_fictional_bundle(&path),
+            read_dropped_fictional_bundle(&candidate),
             Err("local_fictional_bundle_not_canonical_synthetic_no_phi")
         ));
-        fs::remove_file(path).unwrap();
+        fs::remove_file(candidate).unwrap();
     }
 
     #[cfg(unix)]
     #[test]
     fn rejects_symlinked_file_without_following_it() {
         use std::os::unix::fs::symlink;
-        let path = temp_json(b"{}");
-        let link = path.with_extension("link.json");
-        symlink(&path, &link).unwrap();
+        let candidate = temp_json(b"{}");
+        let link = candidate.with_extension("link.json");
+        symlink(&candidate, &link).unwrap();
         assert!(matches!(
             read_dropped_fictional_bundle(&link),
             Err("local_fictional_bundle_symlink_refused")
         ));
         fs::remove_file(link).unwrap();
-        fs::remove_file(path).unwrap();
+        fs::remove_file(candidate).unwrap();
     }
 }
