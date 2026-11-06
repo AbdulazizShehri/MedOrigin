@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-import re
 
 from medscale_workspace import fhir_r4 as fhir
 from medscale_workspace.audit import (
@@ -30,7 +29,16 @@ from medscale_workspace.provenance import (
 )
 from medscale_workspace.storage import WorkspaceStore
 
-_DIGEST_RE = re.compile(r"[0-9a-f]{64}\Z")
+
+def _is_lower_sha256(value: object) -> bool:
+    """Match exactly 64 ASCII lowercase hexadecimal characters, without regex imports."""
+    return (
+        isinstance(value, str)
+        and len(value) == 64
+        and all("0" <= char <= "9" or "a" <= char <= "f" for char in value)
+    )
+
+
 _MAX_RESOURCES = 16
 _MAX_MANIFEST_BYTES = 2 * 1024 * 1024
 _MAX_SNAPSHOT_OBJECTS = 128
@@ -73,14 +81,14 @@ def read_synthetic_fhir_bundle_in_memory(
         raise SyntheticFhirReadbackError("workspace_key_provider_mismatch")
     if (
         not isinstance(source_content_sha256, str)
-        or _DIGEST_RE.fullmatch(source_content_sha256) is None
+        or not _is_lower_sha256(source_content_sha256)
         or not isinstance(expected_audit_head_digest, str)
-        or _DIGEST_RE.fullmatch(expected_audit_head_digest) is None
+        or not _is_lower_sha256(expected_audit_head_digest)
     ):
         raise SyntheticFhirReadbackError("source_or_audit_anchor_refused")
     if expected_current_audit_head_digest is not None and (
         not isinstance(expected_current_audit_head_digest, str)
-        or _DIGEST_RE.fullmatch(expected_current_audit_head_digest) is None
+        or not _is_lower_sha256(expected_current_audit_head_digest)
     ):
         raise SyntheticFhirReadbackError("current_audit_anchor_refused")
     current_anchor = (
