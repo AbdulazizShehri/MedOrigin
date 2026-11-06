@@ -240,7 +240,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         Box::new(move |cc| {
             // Theme is strictly local presentation: no OS theme calls,
             // telemetry, font download, WebView or Core process launch.
-            let mut style = (*cc.egui_ctx.style()).clone();
+            cc.egui_ctx.set_theme(eframe::egui::Theme::Dark);
+            let mut style = (*cc.egui_ctx.style_of(eframe::egui::Theme::Dark)).clone();
             style.visuals = eframe::egui::Visuals::dark();
             style.visuals.panel_fill = eframe::egui::Color32::from_rgb(16, 18, 23);
             style.visuals.window_fill = eframe::egui::Color32::from_rgb(20, 23, 29);
@@ -257,7 +258,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 eframe::egui::TextStyle::Heading,
                 eframe::egui::FontId::proportional(24.0),
             );
-            cc.egui_ctx.set_style(style);
+            cc.egui_ctx.set_style_of(eframe::egui::Theme::Dark, style);
             Ok(Box::new(app))
         }),
     )?;

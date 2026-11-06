@@ -3335,10 +3335,10 @@ impl MedOriginNativePreview {
 
     /// Consistent native product chrome without browser, remote fonts,
     /// external assets, telemetry, patient files or sidecar processes.
-    fn medorigin_chrome(&mut self, ctx: &egui::Context) {
+    fn medorigin_chrome(&mut self, ui: &mut egui::Ui) {
         let status = self.local_source_status();
         let mut clear = false;
-        egui::TopBottomPanel::top("medorigin-native-product-header").show(ctx, |ui| {
+        egui::Panel::top("medorigin-native-product-header").show(ui, |ui| {
             ui.horizontal(|ui| {
                 let (mark, _) =
                     ui.allocate_exact_size(egui::vec2(42.0, 42.0), egui::Sense::hover());
@@ -3406,7 +3406,7 @@ impl eframe::App for MedOriginNativePreview {
         if ui.input(|input| input.key_pressed(egui::Key::Escape)) {
             self.clear_fictional_output();
         }
-        self.medorigin_chrome(ui.ctx());
+        self.medorigin_chrome(ui);
         if self.protected_audit.is_some() {
             egui::CentralPanel::default().show(ui, |ui| self.protected_audit_ui(ui));
             return;
