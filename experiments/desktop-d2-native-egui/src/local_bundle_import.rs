@@ -83,8 +83,8 @@ mod tests {
     fn temp_json(data: &[u8]) -> std::path::PathBuf {
         let id = NEXT_TEST.fetch_add(1, Ordering::Relaxed);
         let file = std::env::temp_dir().join(format!(
-            "medorigin-d2-local-bundle-test-{}-{id}.json",
-            std::process::id()
+            "medorigin-d2-local-bundle-test-{:?}-{id}.json",
+            std::thread::current().id()
         ));
         fs::write(&file, data).expect("write isolated synthetic test");
         file
@@ -131,8 +131,8 @@ mod tests {
             Err("local_fictional_bundle_absolute_path_required")
         ));
         let path = std::env::temp_dir().join(format!(
-            "medorigin-d2-non-json-file-{}.txt",
-            std::process::id()
+            "medorigin-d2-non-json-file-{:?}.txt",
+            std::thread::current().id()
         ));
         fs::write(&path, b"not a JSON file").unwrap();
         assert!(matches!(
