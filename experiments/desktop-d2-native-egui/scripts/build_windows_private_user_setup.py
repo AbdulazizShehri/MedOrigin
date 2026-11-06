@@ -65,7 +65,17 @@ def _safe_sed_path(path: Path) -> str:
     if len(spelling) > 230:
         raise ValueError("unreviewed_iexpress_sed_windows_path:length_refused")
     if not SAFE_DRIVE_PATH.fullmatch(spelling):
-        raise ValueError("unreviewed_iexpress_sed_windows_path:characters_refused")
+        # Do not expose absolute CI/user paths. Only character-code diagnostics
+        # distinguish benign platform path spellings from SED injection.
+        allowed = set("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789 _.~\\-:")
+        codes = sorted({f"U+{ord(ch):04X}" for ch in spelling if ch not in allowed})
+        raise ValueError(
+            "unreviewed_iexpress_sed_windows_path:characters_refused:"
+            + "codes=" + ",".join(codes[:12])
+            + ";length=" + str(len(spelling))
+            + ";drive=" + str(len(spelling) > 2 and spelling[1] == ":")
+            + ";backslashes=" + str(spelling.count("\\"))
+        )
     return spelling
 
 
