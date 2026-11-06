@@ -1,6 +1,6 @@
 """Explicit, synthetic-only evidence export for the native Developer Beta demo.
 
-The export holds only validated status and SHA-256 digests, not a patient
+The export records truthful NOT VALIDATED provenance and SHA-256, not a patient
 record, original FHIR JSON, file paths, Workspace identifiers or PHI.
 Writing uses exclusive creation and never overwrites an existing file.
 """
@@ -24,8 +24,8 @@ def build_receipt(result: object, *, case_verified: bool = False) -> dict[str, A
     fhir = result["fhir"]
     if not isinstance(fhir, dict) or set(fhir) != {"status", "report_sha256", "fixture_sha256"}:
         raise ValueError("synthetic FHIR result has unexpected fields")
-    if fhir["status"] != "VALID":
-        raise ValueError("synthetic structural validation was not successful")
+    if fhir["status"] != "NOT_VALIDATED":
+        raise ValueError("synthetic Core provenance is not an admitted negative-truth result")
     report = fhir["report_sha256"]
     fixture = fhir["fixture_sha256"]
     if not all(isinstance(value, str) and _SHA.fullmatch(value) for value in (report, fixture)):
@@ -38,13 +38,15 @@ def build_receipt(result: object, *, case_verified: bool = False) -> dict[str, A
     if case_verified and workspace is None:
         raise ValueError("no installed synthetic Workspace was verified")
     return {
-        "schema": "medorigin-synthetic-desktop-evidence/v1",
+        "schema": "medorigin-synthetic-desktop-evidence/v2",
         "project": "MedOrigin",
         "distribution": "medscale 0.3.0",
         "data_class": "SYNTHETIC",
-        "validation_kind": "local structural fixture check, not complete HL7 FHIR conformance",
+        "validation_kind": "local Core provenance only; no HL7 FHIR R4 validation performed",
+        "fhir_conformance_validated": False,
+        "full_beta_preview_qualified": False,
         "fhir": {
-            "status": "VALID",
+            "status": "NOT_VALIDATED",
             "report_sha256": report,
             "synthetic_fixture_sha256": fixture,
         },
@@ -59,7 +61,7 @@ def build_receipt(result: object, *, case_verified: bool = False) -> dict[str, A
 
 
 def save_receipt_new(destination: Path, result: object, *, case_verified: bool = False) -> str:
-    """Write validated synthetic evidence once; fail safely if file exists."""
+    """Write clearly unvalidated synthetic evidence, never replace files."""
     receipt = build_receipt(result, case_verified=case_verified)
     if destination.suffix.lower() != ".json" or not destination.parent.is_dir():
         raise ValueError("choose a new JSON file in an existing local directory")
