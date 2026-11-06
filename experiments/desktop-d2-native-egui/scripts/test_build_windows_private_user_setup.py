@@ -222,6 +222,15 @@ class PrivateWindowsUserSetupTests(unittest.TestCase):
                 self.template, self.commit, {"one": b"unapproved"}, self.archive_sha
             )
 
+    def test_windows_installer_crypto_and_zip_are_framework_only(self):
+        # Hosted Windows runners may disable optional module autoload.
+        # SHA-256 and ZIP extraction must not depend on Get-FileHash or
+        # Expand-Archive, or invoke an arbitrary external decompressor.
+        self.assertNotIn("Get-FileHash", self.template)
+        self.assertNotIn("Expand-Archive", self.template)
+        self.assertIn("[Security.Cryptography.SHA256]::Create()", self.template)
+        self.assertIn("[IO.Compression.ZipFile]::ExtractToDirectory", self.template)
+
     def test_real_rendered_ps_script_parses_on_windows(self):
         import subprocess
         import sys

@@ -40,6 +40,32 @@ function Require-ExistingUnredirected([string]$path, [bool]$directory) {
     }
 }
 
+function Get-PinnedSha256([string]$path) {
+    Require-ExistingUnredirected $path $false
+    $stream=$null
+    $sha=$null
+    try {
+        $stream=[IO.File]::Open($path, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::Read)
+        $sha=[Security.Cryptography.SHA256]::Create()
+        $hash=$sha.ComputeHash($stream)
+        return [BitConverter]::ToString($hash).Replace('-', '').ToLowerInvariant()
+    } finally {
+        if ($stream) { $stream.Dispose() }
+        if ($sha) { $sha.Dispose() }
+    }
+}
+
+function Expand-PinnedArchive([string]$path, [string]$destination) {
+    Require-ExistingUnredirected $path $false
+    Require-ExistingUnredirected $destination $true
+    # Use signed framework ZIP classes without relying on an auto-imported
+    # PowerShell Gallery/Archive module or shell subprocess.
+    [Reflection.Assembly]::Load(
+        'System.IO.Compression.FileSystem, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089'
+    ) | Out-Null
+    [IO.Compression.ZipFile]::ExtractToDirectory($path, $destination)
+}
+
 function Confirm-Payload([string]$folder, [bool]$installed) {
     Require-ExistingUnredirected $folder $true
     $expectedNames=@($expected.Keys)
@@ -52,7 +78,7 @@ function Confirm-Payload([string]$folder, [bool]$installed) {
     foreach ($entry in $expected.GetEnumerator()) {
         $file=Join-Path $folder $entry.Key
         Require-ExistingUnredirected $file $false
-        $actual=(Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash.ToLowerInvariant()
+        $actual=Get-PinnedSha256 $file
         if ($actual -cne $entry.Value) { throw 'payload_sha256_refused' }
     }
     $manifest=Get-Content -LiteralPath (Join-Path $folder 'MANIFEST.json') -Raw | ConvertFrom-Json
@@ -113,8 +139,7 @@ try {
             @($actualNames | Where-Object {
                 $_.PSIsContainer -or ($sourceNames -cnotcontains $_.Name)
             }).Count -ne 0) { throw 'iexpress_source_contains_unreviewed_files' }
-        if ((Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash.ToLowerInvariant() -cne
-            $expectedArchiveSha256) { throw 'reviewed_archive_sha256_refused' }
+        if ((Get-PinnedSha256 $archive) -cne $expectedArchiveSha256) { throw 'reviewed_archive_sha256_refused' }
         if (-not (Test-Path -LiteralPath $appParent)) {
             New-Item -ItemType Directory -Path $appParent -ErrorAction Stop | Out-Null
         }
@@ -132,7 +157,7 @@ try {
         try {
             # Archive SHA checked before extraction; strict five-file canonical
             # source is checked again before copying any payload to staging.
-            Expand-Archive -LiteralPath $archive -DestinationPath $expand -ErrorAction Stop
+            Expand-PinnedArchive $archive $expand
             $expanded=Join-Path $expand 'MedOrigin-Synthetic-Preview'
             Require-ExistingUnredirected $expanded $true
             if (@(Get-ChildItem -LiteralPath $expand -Force).Count -ne 1) {
