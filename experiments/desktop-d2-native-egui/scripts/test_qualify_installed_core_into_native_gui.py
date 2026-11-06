@@ -1,13 +1,15 @@
 """Offline source-only QA of one-shot installed Core -> native GUI boundary."""
-from pathlib import Path
+
+import importlib
 import sys
 import unittest
+from pathlib import Path
 from unittest.mock import patch
 
 DIR = Path(__file__).resolve().parent
 ROOT = DIR.parent
 sys.path.insert(0, str(DIR))
-import qualify_installed_core_into_native_gui as guiqa
+guiqa = importlib.import_module("qualify_installed_core_into_native_gui")
 
 
 class NativeOneShotCoreSourceTests(unittest.TestCase):
@@ -17,7 +19,10 @@ class NativeOneShotCoreSourceTests(unittest.TestCase):
         self.assertIn("fn make_app<R: Read + Send + 'static>", native)
         # A dedicated dummy-Bundle path must NEVER broaden the original Core limit.
         self.assertIn("const MAX_FICTIONAL_CORE_STDIN: usize = 2048;", native)
-        self.assertIn('EXPLICIT_SYNTHETIC_MULTIPATIENT_FLAG: &str = "--synthetic-multipatient-bundle-stdin"', native)
+        self.assertIn(
+            'EXPLICIT_SYNTHETIC_MULTIPATIENT_FLAG: &str = "--synthetic-multipatient-bundle-stdin"',
+            native,
+        )
         self.assertRegex(
             native,
             r"let size_limit = if args\[0\] == EXPLICIT_SYNTHETIC_MULTIPATIENT_FLAG \{\s*"
@@ -73,10 +78,17 @@ class NativeOneShotCoreSourceTests(unittest.TestCase):
             self.assertIn(sha, script)
 
     def test_actual_gui_runner_denies_non_mac_before_running_any_process(self):
-        with patch.object(guiqa.sys, "platform", "win32"):
-            with self.assertRaisesRegex(ValueError, "apple_silicon"):
-                guiqa.qualify_gui(*([Path("/not-present")] * 3),
-                    Path("/not-present"), "0" * 64, Path("/not-present"), "0" * 64)
+        with (
+            patch.object(guiqa.sys, "platform", "win32"),
+            self.assertRaisesRegex(ValueError, "apple_silicon"),
+        ):
+            guiqa.qualify_gui(
+                *([Path("/not-present")] * 3),
+                Path("/not-present"),
+                "0" * 64,
+                Path("/not-present"),
+                "0" * 64,
+            )
 
 
 if __name__ == "__main__":

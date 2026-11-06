@@ -6,14 +6,15 @@ no in-GUI Python spawn, no production worker identity/keys. OS sandbox is
 applied to the Python child, not to the native GUI. Crypto QA caches on Mac
 are NOT a trusted/pinned production chain and must be disclosed as such.
 """
+
 from __future__ import annotations
 
 import argparse
 import hashlib
 import platform
-from pathlib import Path
 import subprocess
 import sys
+from pathlib import Path
 from tempfile import TemporaryDirectory
 
 from attest_installed_encrypted_core_readback import attest_installed
@@ -26,8 +27,8 @@ from qualify_sandboxed_synthetic_core import (
 PROJECTION_SHA = "c99af04367aeaedeecb29b7fccc8a8fb58f2a85753eeae874eae5ad363307a49"
 MAC_PASS = "MACOS_ATTESTED_INSTALLED_CORE_ENCRYPTED_READBACK_TO_NATIVE_D2_GUI_PASS_NONCLINICAL"
 NATIVE_AX = (
-    "MACOS_REAL_ENCRYPTED_CORE_READBACK_NATIVE_THREE_FICTIONAL_RESOURCE_NAV_AX_PASS_NOT_CLINICAL"
-).encode()
+    b"MACOS_REAL_ENCRYPTED_CORE_READBACK_NATIVE_THREE_FICTIONAL_RESOURCE_NAV_AX_PASS_NOT_CLINICAL"
+)
 # No wheel dynamically passes caller-selected code, flags, URL, FHIR, or key.
 INSTALLED_RUNNER = (
     "import sys,runpy;"
@@ -55,7 +56,8 @@ def qualify(args: argparse.Namespace) -> None:
     python = args.python.resolve(strict=True)
     gui = args.native_gui.resolve(strict=True)
     if (
-        args.python.is_symlink() or args.native_gui.is_symlink()
+        args.python.is_symlink()
+        or args.native_gui.is_symlink()
         or python.name != "python3.13"
         or gui.name != "medorigin-desktop-d2-native-egui"
         or sha(gui) != args.native_sha.lower()
@@ -66,8 +68,7 @@ def qualify(args: argparse.Namespace) -> None:
     fixture = root / "fixtures/core/encrypted-readback-projection.json"
     observer = root / "tests/macos-encrypted-core-readback-ax.swift"
     if (
-        any(path.is_symlink() or not path.is_file()
-            for path in (exporter, fixture, observer))
+        any(path.is_symlink() or not path.is_file() for path in (exporter, fixture, observer))
         or sha(fixture) != PROJECTION_SHA
     ):
         raise ValueError("source_pinned_synthetic_projection_refused")
@@ -85,12 +86,23 @@ def qualify(args: argparse.Namespace) -> None:
         prove_restrictive_mac_policy(profile, work, python)
         result = run_sandboxed(
             profile,
-            [str(python), "-I", "-S", "-B", "-c", INSTALLED_RUNNER,
-             str(site), str(caches[0]), str(caches[1]), str(exporter)],
+            [
+                str(python),
+                "-I",
+                "-S",
+                "-B",
+                "-c",
+                INSTALLED_RUNNER,
+                str(site),
+                str(caches[0]),
+                str(caches[1]),
+                str(exporter),
+            ],
             work,
         )
         if (
-            result.returncode != 0 or result.stderr
+            result.returncode != 0
+            or result.stderr
             or len(result.stdout) != 1164
             or sha(fixture) != PROJECTION_SHA
             or result.stdout != fixture.read_bytes()
@@ -102,8 +114,10 @@ def qualify(args: argparse.Namespace) -> None:
         # parent owns process lifetime, and always kills it on refusal/exit.
         proc = subprocess.Popen(
             [str(gui), "--synthetic-encrypted-readback-stdin"],
-            stdin=subprocess.PIPE, stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL, cwd=work,
+            stdin=subprocess.PIPE,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            cwd=work,
             env={"PATH": "/usr/bin:/bin", "HOME": str(work)},
         )
         try:
@@ -112,12 +126,11 @@ def qualify(args: argparse.Namespace) -> None:
             proc.stdin.close()
             tested = subprocess.run(
                 ["/usr/bin/swift", str(observer), str(proc.pid)],
-                capture_output=True, timeout=60, check=False,
+                capture_output=True,
+                timeout=60,
+                check=False,
             )
-            if (
-                tested.returncode != 0 or NATIVE_AX not in tested.stdout
-                or proc.poll() is not None
-            ):
+            if tested.returncode != 0 or NATIVE_AX not in tested.stdout or proc.poll() is not None:
                 raise ValueError("installed_core_decrypted_native_D2_accessibility_failed")
             print(NATIVE_AX.decode())
         finally:
@@ -137,13 +150,18 @@ def qualify(args: argparse.Namespace) -> None:
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     for name in (
-        "core-source", "wheels", "installed-site", "python", "native-gui",
-        "native-sha", "crypto-cache", "cffi-cache",
+        "core-source",
+        "wheels",
+        "installed-site",
+        "python",
+        "native-gui",
+        "native-sha",
+        "crypto-cache",
+        "cffi-cache",
     ):
-        parser.add_argument("--" + name, required=True,
-                            type=str if name == "native-sha" else Path)
+        parser.add_argument("--" + name, required=True, type=str if name == "native-sha" else Path)
     try:
         qualify(parser.parse_args())
     except (OSError, ValueError, subprocess.SubprocessError) as error:
         print("MACOS_INSTALLED_CORE_READBACK_NATIVE_GUI_NO_GO:" + str(error), file=sys.stderr)
-        raise SystemExit(2)
+        raise SystemExit(2) from None

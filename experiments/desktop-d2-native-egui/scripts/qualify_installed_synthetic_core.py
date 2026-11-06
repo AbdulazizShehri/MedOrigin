@@ -5,6 +5,7 @@ Fixed two fictional FHIR cases, no arbitrary clinical/user inputs or GUI launch.
 A SOURCE ATTESTATION harness and deprecation-limited local sandbox proof;
 NOT an approved installed Core product launcher or release security boundary.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -14,14 +15,14 @@ import hashlib
 import io
 import json
 import os
-from pathlib import Path
 import platform
 import re
 import stat
 import subprocess
 import sys
-from tempfile import TemporaryDirectory
 import zipfile
+from pathlib import Path
+from tempfile import TemporaryDirectory
 
 import qualify_sandboxed_synthetic_core as base
 
@@ -67,7 +68,8 @@ def parse_record(
         name, sha, size = row
         permitted_venv_launcher = allow_venv_script and name == "../../../bin/medscale"
         if not permitted_venv_launcher and (
-            name.startswith("/") or "\\" in name
+            name.startswith("/")
+            or "\\" in name
             or any(part in (".", "..") for part in name.split("/"))
         ):
             raise ValueError("wheel_record_path_traversal")
@@ -84,9 +86,7 @@ def parse_record(
     return parsed
 
 
-def attest_offline_wheel_and_install(
-    core_source: Path, wheel_path: Path, venv_root: Path
-) -> Path:
+def attest_offline_wheel_and_install(core_source: Path, wheel_path: Path, venv_root: Path) -> Path:
     base.source_commit(core_source)
     wheel = wheel_path.absolute()
     if wheel.is_symlink() or not wheel.is_file() or wheel.name != WHEEL_FILENAME:
@@ -94,8 +94,11 @@ def attest_offline_wheel_and_install(
     if wheel.stat().st_size > MAX_WHEEL_SIZE or base.sha256(wheel.read_bytes()) != WHEEL_SHA256:
         raise ValueError("installed_core_wheel_changed_or_unapproved")
     venv = venv_root.resolve(strict=True)
-    if (venv_root.is_symlink() or not venv.is_dir() or
-            (os.name == "posix" and venv.stat().st_mode & 0o077)):
+    if (
+        venv_root.is_symlink()
+        or not venv.is_dir()
+        or (os.name == "posix" and venv.stat().st_mode & 0o077)
+    ):
         raise ValueError("installed_core_venv_not_private")
     if not (venv / "pyvenv.cfg").is_file():
         raise ValueError("installed_core_venv_metadata_missing")
@@ -103,9 +106,7 @@ def attest_offline_wheel_and_install(
     if site.is_symlink() or not site.is_dir():
         raise ValueError("installed_core_site_path_not_directory")
     direct = {e.name for e in site.iterdir()}
-    if direct != {
-        "medscale", "medscale-0.3.0.dist-info", "_virtualenv.pth", "_virtualenv.py"
-    }:
+    if direct != {"medscale", "medscale-0.3.0.dist-info", "_virtualenv.pth", "_virtualenv.py"}:
         raise ValueError("installed_core_unreviewed_site_package_or_startup_hook")
     # -I -S -B deliberately disables ALL .pth/venv startup hooks, while
     # a single exact verified site-package directory is added in -c.
@@ -130,7 +131,9 @@ def attest_offline_wheel_and_install(
             raise ValueError("installed_core_wheel_expansion_refused")
         tracked = subprocess.run(
             ["/usr/bin/git", "-C", str(source), "ls-files", "-z", "--", "src/medscale"],
-            capture_output=True, timeout=10, check=True,
+            capture_output=True,
+            timeout=10,
+            check=True,
         ).stdout
         paths = [Path(s.decode("utf-8")) for s in tracked.split(b"\0") if s]
         if len(paths) != WHEEL_PACKAGE_FILES:
@@ -159,7 +162,9 @@ def attest_offline_wheel_and_install(
                 raise ValueError("installed_core_source_symlink_refused")
             if not original.is_file() or not installed.is_file():
                 raise ValueError("installed_core_source_file_missing")
-            if original.read_bytes() != archive.read(relative) or installed.read_bytes() != archive.read(relative):
+            if original.read_bytes() != archive.read(
+                relative
+            ) or installed.read_bytes() != archive.read(relative):
                 raise ValueError("installed_core_wheel_or_installed_source_bytes_changed")
         records = [n for n in names if n.endswith(".dist-info/RECORD")]
         if records != ["medscale-0.3.0.dist-info/RECORD"]:
@@ -189,14 +194,16 @@ def attest_offline_wheel_and_install(
     installed_entries = parse_record(installed_record.read_bytes(), allow_venv_script=True)
     for n in expected:
         if installed_entries.get(n) != (
-            _digest_record((site / n).read_bytes()), (site / n).stat().st_size
+            _digest_record((site / n).read_bytes()),
+            (site / n).stat().st_size,
         ):
             raise ValueError("installed_core_record_package_hash_mismatch")
     return site
 
 
-def qualify(core: Path, wheel: Path, venv: Path, python: Path,
-            python_sha: str, rust: Path, rust_sha: str) -> None:
+def qualify(
+    core: Path, wheel: Path, venv: Path, python: Path, python_sha: str, rust: Path, rust_sha: str
+) -> None:
     if sys.platform != "darwin" or platform.machine().lower() != "arm64":
         raise ValueError("macos_arm64_real_sandbox_host_required")
     site = attest_offline_wheel_and_install(core, wheel, venv)
@@ -209,10 +216,19 @@ def qualify(core: Path, wheel: Path, venv: Path, python: Path,
         work.chmod(0o700)
         profile = base.sandbox_profile(work)
         base.prove_restrictive_mac_policy(profile, work, python)
-        imported = base.run_sandboxed(profile, [
-            str(python), "-I", "-S", "-B", "-c", ISOLATED_SOURCE_PROBE,
-            str(site / "medscale/__init__.py"),
-        ], work)
+        imported = base.run_sandboxed(
+            profile,
+            [
+                str(python),
+                "-I",
+                "-S",
+                "-B",
+                "-c",
+                ISOLATED_SOURCE_PROBE,
+                str(site / "medscale/__init__.py"),
+            ],
+            work,
+        )
         if imported.returncode != 0 or imported.stdout != b"INSTALLED_CORE_PACKAGED_SOURCE_ONLY\n":
             raise ValueError("installed_core_package_import_provenance_refused")
         for label, raw_input in base.expected_inputs(core).items():
@@ -220,17 +236,35 @@ def qualify(core: Path, wheel: Path, venv: Path, python: Path,
             input_file.write_bytes(raw_input)
             output_dir = work / (label + "-output")
             output_dir.mkdir(mode=0o700)
-            proc = base.run_sandboxed(profile, [
-                str(python), "-I", "-S", "-B", "-c", INSTALLED_CODE,
-                str(site), "validate", str(input_file), "--created-at",
-                base.TIMESTAMP, "--output-dir", str(output_dir),
-            ], work)
+            proc = base.run_sandboxed(
+                profile,
+                [
+                    str(python),
+                    "-I",
+                    "-S",
+                    "-B",
+                    "-c",
+                    INSTALLED_CODE,
+                    str(site),
+                    "validate",
+                    str(input_file),
+                    "--created-at",
+                    base.TIMESTAMP,
+                    "--output-dir",
+                    str(output_dir),
+                ],
+                work,
+            )
             if proc.returncode != 2 or not proc.stdout.endswith(b"\n\n"):
                 raise ValueError("installed_core_cli_validation_status_changed")
             report = proc.stdout[:-1]
             base.check_core_report(report, base.PINNED_CASES[label][0])
             artifacts = list(output_dir.rglob("report.json"))
-            if len(artifacts) != 1 or artifacts[0].is_symlink() or artifacts[0].read_bytes() != report:
+            if (
+                len(artifacts) != 1
+                or artifacts[0].is_symlink()
+                or artifacts[0].read_bytes() != report
+            ):
                 raise ValueError("installed_core_report_persistence_or_provenance_mismatch")
             accepted = base.run_sandboxed(profile, [str(rust)], work, stdin=report)
             expected = (
@@ -242,9 +276,7 @@ def qualify(core: Path, wheel: Path, venv: Path, python: Path,
                 raise ValueError("installed_core_d2_rust_reader_refused")
             forged = json.loads(report)
             forged["status"] = "valid"
-            rejected = base.run_sandboxed(
-                profile, [str(rust)], work, stdin=base.canonical(forged)
-            )
+            rejected = base.run_sandboxed(profile, [str(rust)], work, stdin=base.canonical(forged))
             if rejected.returncode == 0:
                 raise ValueError("installed_core_d2_forged_valid_claim_accepted")
             print("INSTALLED_WHEEL_TO_D2_SANDBOXED_FICTIONAL_CASE_PASS " + label)
@@ -266,8 +298,13 @@ if __name__ == "__main__":
     a = p.parse_args()
     try:
         qualify(
-            a.core_source, a.wheel, a.venv, a.venv_python,
-            a.python_sha256, a.d2_reader, a.d2_reader_sha256,
+            a.core_source,
+            a.wheel,
+            a.venv,
+            a.venv_python,
+            a.python_sha256,
+            a.d2_reader,
+            a.d2_reader_sha256,
         )
     except (OSError, ValueError, zipfile.BadZipFile, subprocess.SubprocessError) as error:
         print("INSTALLED_CORE_TO_D2_SANDBOX_NO_GO:" + str(error), file=sys.stderr)

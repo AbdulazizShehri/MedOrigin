@@ -6,21 +6,23 @@ observes a short-lived encrypted fictional demo with a TEST-ONLY key provider
 under macOS Seatbelt and renders only exact source-bound aggregate metadata.
 Does NOT enable in-GUI Python process control, clinical storage or release.
 """
+
 from __future__ import annotations
 
 import argparse
 import hashlib
 import json
-import os
-from pathlib import Path
 import platform
 import subprocess
 import sys
 import tempfile
 import zipfile
+from pathlib import Path
 
 from qualify_sandboxed_synthetic_core import (
-    sandbox_profile, prove_restrictive_mac_policy, run_sandboxed,
+    prove_restrictive_mac_policy,
+    run_sandboxed,
+    sandbox_profile,
 )
 
 EXPECTED_CORE_COMMIT = "0351b667ec910480fd61c30f18cf3bb0dd0ae842"
@@ -37,13 +39,20 @@ def sha(raw: bytes) -> str:
 def attest_installed(core: Path, wheels: Path, site: Path) -> None:
     sha_head = subprocess.run(
         ["/usr/bin/git", "-C", str(core), "rev-parse", "HEAD"],
-        capture_output=True, check=True, text=True, timeout=12,
+        capture_output=True,
+        check=True,
+        text=True,
+        timeout=12,
     ).stdout.strip()
     if sha_head != EXPECTED_CORE_COMMIT:
         raise ValueError("reviewed_core_source_commit_not_matched")
     for package, wheel_filename, expected in (
         ("medscale", "medscale-0.3.0-py3-none-any.whl", EXPECTED_CORE_WHEEL),
-        ("medscale_workspace", "medscale_workspace-0.1.0.dev1-py3-none-any.whl", EXPECTED_WORKSPACE_WHEEL),
+        (
+            "medscale_workspace",
+            "medscale_workspace-0.1.0.dev1-py3-none-any.whl",
+            EXPECTED_WORKSPACE_WHEEL,
+        ),
     ):
         wheel = wheels / wheel_filename
         if wheel.is_symlink() or not wheel.is_file() or sha(wheel.read_bytes()) != expected:
@@ -51,7 +60,9 @@ def attest_installed(core: Path, wheels: Path, site: Path) -> None:
         path = "src/medscale" if package == "medscale" else "apps/workspace/src/medscale_workspace"
         tracked = subprocess.run(
             ["/usr/bin/git", "-C", str(core), "ls-files", "-z", "--", path],
-            capture_output=True, check=True, timeout=12,
+            capture_output=True,
+            check=True,
+            timeout=12,
         ).stdout
         files = [x.decode("utf-8") for x in tracked.split(b"\x00") if x]
         if not 25 <= len(files) <= 400:
@@ -68,8 +79,10 @@ def attest_installed(core: Path, wheels: Path, site: Path) -> None:
                 source = core / git_path
                 installed = site / pkg_file
                 if (
-                    source.is_symlink() or installed.is_symlink()
-                    or not source.is_file() or not installed.is_file()
+                    source.is_symlink()
+                    or installed.is_symlink()
+                    or not source.is_file()
+                    or not installed.is_file()
                     or archive.read(pkg_file) != source.read_bytes()
                     or installed.read_bytes() != source.read_bytes()
                 ):
@@ -110,8 +123,19 @@ def qualify(args: argparse.Namespace) -> None:
             "raise SystemExit(main(['workspace-demo','--synthetic-only','--ephemeral-demo']))"
         )
         result = run_sandboxed(
-            profile, [str(python), "-I", "-S", "-B", "-c", code,
-                      str(site), str(args.crypto_cache), str(args.cffi_cache)], work,
+            profile,
+            [
+                str(python),
+                "-I",
+                "-S",
+                "-B",
+                "-c",
+                code,
+                str(site),
+                str(args.crypto_cache),
+                str(args.cffi_cache),
+            ],
+            work,
         )
         if result.returncode != 0 or not result.stdout.endswith(b"\n"):
             raise ValueError("mac_sandboxed_ephemeral_encrypted_core_demo_refused")
@@ -122,31 +146,48 @@ def qualify(args: argparse.Namespace) -> None:
             raise ValueError("core_demo_falsely_authorized_clinical_data")
         process = subprocess.Popen(
             [str(binary), "--synthetic-workspace-receipt-stdin"],
-            stdin=subprocess.PIPE, stdout=subprocess.DEVNULL,
-            stderr=subprocess.PIPE, cwd=work,
+            stdin=subprocess.PIPE,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
+            cwd=work,
             env={"PATH": "/usr/bin:/bin", "HOME": str(work)},
         )
         try:
             assert process.stdin is not None
             process.stdin.write(raw)
             process.stdin.close()
-            ax = Path(__file__).resolve().parent.parent / "tests/macos-encrypted-workspace-native-ax.swift"
+            ax = (
+                Path(__file__).resolve().parent.parent
+                / "tests/macos-encrypted-workspace-native-ax.swift"
+            )
             observed = subprocess.run(
                 ["/usr/bin/swift", str(ax), str(process.pid), EXPECTED_RECEIPT_SHA],
-                capture_output=True, timeout=35, check=False,
+                capture_output=True,
+                timeout=35,
+                check=False,
             )
-            expected = ("MACOS_INSTALLED_ENCRYPTED_CORE_WORKSPACE_NATIVE_GUI_AX_PASS "
-                        + EXPECTED_RECEIPT_SHA + "\n").encode()
-            if observed.returncode != 0 or observed.stdout != expected or process.poll() is not None:
+            expected = (
+                "MACOS_INSTALLED_ENCRYPTED_CORE_WORKSPACE_NATIVE_GUI_AX_PASS "
+                + EXPECTED_RECEIPT_SHA
+                + "\n"
+            ).encode()
+            if (
+                observed.returncode != 0
+                or observed.stdout != expected
+                or process.poll() is not None
+            ):
                 raise ValueError("native_gui_encrypted_workspace_real_ax_refused")
             print("REAL_MAC_ENCRYPTED_WORKSPACE_FICTIONAL_REOPEN_AND_DELETE_DISPLAYED")
         finally:
             if process.poll() is None:
                 process.terminate()
-                try: process.wait(timeout=4)
+                try:
+                    process.wait(timeout=4)
                 except subprocess.TimeoutExpired:
-                    process.kill(); process.wait(timeout=4)
-            if process.stderr: process.stderr.close()
+                    process.kill()
+                    process.wait(timeout=4)
+            if process.stderr:
+                process.stderr.close()
     if sha(binary.read_bytes()) != args.native_sha.lower():
         raise ValueError("native_gui_binary_changed_during_test")
     attest_installed(root, args.wheels.resolve(strict=True), site)
@@ -155,8 +196,17 @@ def qualify(args: argparse.Namespace) -> None:
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser(description=__doc__)
-    for name in ("core-source", "wheels", "site", "python", "native-gui", "native-sha", "crypto-cache", "cffi-cache"):
-        ap.add_argument("--"+name, required=True, type=str if name == "native-sha" else Path)
+    for name in (
+        "core-source",
+        "wheels",
+        "site",
+        "python",
+        "native-gui",
+        "native-sha",
+        "crypto-cache",
+        "cffi-cache",
+    ):
+        ap.add_argument("--" + name, required=True, type=str if name == "native-sha" else Path)
     try:
         qualify(ap.parse_args())
     except (ValueError, OSError, subprocess.SubprocessError, zipfile.BadZipFile) as error:

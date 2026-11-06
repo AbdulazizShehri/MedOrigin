@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import importlib.util
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -14,7 +15,7 @@ checker = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(checker)
 
 
-def manifest(version: str = "13.0.0") -> dict:
+def manifest(version: str = "13.0.0") -> dict[str, Any]:
     return {
         "project": {
             "optional-dependencies": {
@@ -24,7 +25,7 @@ def manifest(version: str = "13.0.0") -> dict:
     }
 
 
-def valid_lock() -> dict:
+def valid_lock() -> dict[str, Any]:
     return {
         "package": [
             {"name": name, "version": minimum} for name, minimum in checker.PATCH_FLOORS.items()
