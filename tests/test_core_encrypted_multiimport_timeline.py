@@ -315,3 +315,200 @@ def test_help_is_nonclinical_and_identity_safe(
     result = capsys.readouterr()
     assert "NO cross-import patient identity linkage" in result.out
     assert result.err == ""
+
+
+def test_filter_cannot_skip_source_verification_on_hidden_import(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import medscale.fhirkit.workspace_multi_timeline as timeline_module
+
+    provider = InMemoryTestKeyProvider(new_root_secret())
+    root = tmp_path / "encrypted-hidden-proof"
+    first, latest = _two_imports(root, provider)
+    original = timeline_module.read_verified_synthetic_patient_timeline
+    calls: list[str] = []
+
+    def checked_read(**kwargs):
+        calls.append(kwargs["source_content_sha256"])
+        if kwargs["source_content_sha256"] == first["source_content_sha256"]:
+            raise ValueError("SYNTHETIC_PRIVATE_SOURCE_MUST_NOT_LEAK")
+        return original(**kwargs)
+
+    monkeypatch.setattr(timeline_module, "read_verified_synthetic_patient_timeline", checked_read)
+    with (
+        _open(root, provider) as store,
+        pytest.raises(
+            SyntheticMultiImportTimelineError,
+            match="multi_timeline_source_verification_refused",
+        ) as error,
+    ):
+        timeline_module.list_filtered_verified_synthetic_import_timelines(
+            store=store,
+            test_key_provider=provider,
+            actor_id=_ACTOR,
+            expected_current_audit_head_digest=latest["audit_head_digest"],
+            synthetic_only=True,
+            allow_in_memory_listing=True,
+            allow_in_memory_timeline=True,
+            from_day_utc="2026-11-04",
+            through_day_utc="2026-11-04",
+        )
+    assert calls == [first["source_content_sha256"]]
+    assert "SYNTHETIC_PRIVATE_SOURCE_MUST_NOT_LEAK" not in str(error.value)
+
+
+def test_filtered_multiimport_view_real_encrypted_reopen_and_independent_identity(
+    tmp_path: Path,
+) -> None:
+    from medscale.fhirkit.workspace_multi_timeline import (
+        list_filtered_verified_synthetic_import_timelines,
+    )
+
+    provider = InMemoryTestKeyProvider(new_root_secret())
+    root = tmp_path / "encrypted-filter"
+    first, latest = _two_imports(root, provider)
+    with _open(root, provider) as store:
+        args = {
+            "store": store,
+            "test_key_provider": provider,
+            "actor_id": _ACTOR,
+            "expected_current_audit_head_digest": latest["audit_head_digest"],
+            "synthetic_only": True,
+            "allow_in_memory_listing": True,
+            "allow_in_memory_timeline": True,
+        }
+        chosen = list_filtered_verified_synthetic_import_timelines(
+            **args,
+            from_day_utc="2026-11-04",
+            through_day_utc="2026-11-04",
+            resource_type="Encounter",
+        )
+        assert chosen["status"] == "verified_source_scoped_fictional_timeline_view"
+        assert chosen["import_count"] == 2
+        assert chosen["source_total_event_count"] == 4
+        assert chosen["visible_total_event_count"] == 1
+        assert chosen["hidden_total_event_count"] == 3
+        assert [x["visible_event_count"] for x in chosen["imports"]] == [0, 1]
+        assert [x["source_event_count"] for x in chosen["imports"]] == [2, 2]
+        assert chosen["imports"][0]["source_content_sha256"] == first["source_content_sha256"]
+        assert chosen["imports"][1]["source_content_sha256"] == latest["source_content_sha256"]
+        assert chosen["imports"][0]["events"] == []
+        assert chosen["imports"][1]["events"] == [
+            {
+                "ordinal": 1,
+                "resource_type": "Encounter",
+                "day_utc": "2026-11-04",
+                "date_available": True,
+            }
+        ]
+        assert chosen["cross_import_patient_identity_join_performed"] is False
+        no_matches = list_filtered_verified_synthetic_import_timelines(
+            **args, from_day_utc="2025-01-01", through_day_utc="2025-01-31"
+        )
+        assert no_matches["visible_total_event_count"] == 0
+        assert no_matches["import_count"] == 2  # still verify original imports
+        all_observations = list_filtered_verified_synthetic_import_timelines(
+            **args, resource_type="Observation"
+        )
+        assert all_observations["visible_total_event_count"] == 2
+        assert [e["ordinal"] for i in all_observations["imports"] for e in i["events"]] == [2, 2]
+        for forbidden in (_SECRET, "urn:uuid:", "valueString", "fictional-patient"):
+            assert forbidden not in json.dumps(chosen, sort_keys=True)
+        for key in (
+            "patient_identity_included",
+            "resource_payload_included",
+            "filesystem_export_performed",
+            "network_access_performed",
+            "fhir_r4_conformance_validated",
+            "clinical_use_authorized",
+            "release_authorized",
+        ):
+            assert chosen[key] is False
+
+
+@pytest.mark.parametrize(
+    "filters,reason",
+    [
+        ({"from_day_utc": "2026-02-30"}, "multi_timeline_filter_day_refused"),
+        ({"through_day_utc": "2026-2-03"}, "multi_timeline_filter_day_refused"),
+        (
+            {"from_day_utc": "2026-11-05", "through_day_utc": "2026-11-04"},
+            "multi_timeline_filter_range_refused",
+        ),
+        ({"from_day_utc": True}, "multi_timeline_filter_day_refused"),
+        ({"resource_type": "Patient"}, "multi_timeline_filter_type_refused"),
+        ({"resource_type": "Encounter;evil"}, "multi_timeline_filter_type_refused"),
+        ({"synthetic_only": False}, "multi_timeline_explicit_permissions_required"),
+        (
+            {"expected_current_audit_head_digest": "f" * 64},
+            "multi_timeline_catalog_verification_refused",
+        ),
+        ({"test_key_provider": None}, "multi_timeline_catalog_verification_refused"),
+    ],
+)
+def test_filtered_view_rejects_forged_filters_and_refuses_unverified_original(
+    tmp_path: Path, filters: dict, reason: str
+) -> None:
+    from medscale.fhirkit.workspace_multi_timeline import (
+        list_filtered_verified_synthetic_import_timelines,
+    )
+
+    provider = InMemoryTestKeyProvider(new_root_secret())
+    root = tmp_path / "encrypted-filter"
+    _, latest = _two_imports(root, provider)
+    with _open(root, provider) as store:
+        args = {
+            "store": store,
+            "test_key_provider": provider,
+            "actor_id": _ACTOR,
+            "expected_current_audit_head_digest": latest["audit_head_digest"],
+            "synthetic_only": True,
+            "allow_in_memory_listing": True,
+            "allow_in_memory_timeline": True,
+        }
+        args.update(filters)
+        with pytest.raises(SyntheticMultiImportTimelineError, match=reason):
+            list_filtered_verified_synthetic_import_timelines(**args)
+
+
+def test_filtered_installed_style_public_cli_is_ephemeral_source_scoped(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    args = [
+        "fhir",
+        "filtered-multi-timeline-demo",
+        "--synthetic-only",
+        "--ephemeral-demo",
+        "--from-day",
+        "2026-11-04",
+        "--through-day",
+        "2026-11-04",
+        "--event-type",
+        "Encounter",
+    ]
+    assert public_cli(args) == 0
+    receipt = json.loads(capsys.readouterr().out)
+    assert (
+        receipt["schema"] == "medorigin-core-fake-encrypted-filtered-multiimport-timeline-demo/v1"
+    )
+    assert receipt["status"] == "SYNTHETIC_VERIFIED_FILTERED_MULTIIMPORT_TIMELINES_PASS"
+    assert receipt["closed_and_reopened"] is True
+    assert receipt["ephemeral_store_removed"] is True
+    assert receipt["source_total_event_count"] == 4
+    assert receipt["visible_total_event_count"] == 1
+    assert receipt["import_count"] == 2
+    assert [x["visible_event_count"] for x in receipt["imports"]] == [0, 1]
+    assert receipt["clinical_use_authorized"] is False
+    assert receipt["cross_import_patient_identity_join_performed"] is False
+    assert _SECRET not in json.dumps(receipt)
+    for bad in (
+        [*args, "--patient", _SECRET],
+        [*args, "--event-type", "Observation"],
+        [*args[:4], "--from-day", "2026-02-30"],
+        [*args[:4], "--from-day", "2026-11-05", "--through-day", "2026-11-04"],
+        ["fhir", "filtered-multi-timeline-demo", "--event-type", "Observation"],
+    ):
+        assert public_cli(bad) == 2
+        captured = capsys.readouterr()
+        assert _SECRET not in captured.err
+        assert not captured.out

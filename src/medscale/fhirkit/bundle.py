@@ -16,6 +16,36 @@ from medscale.reproducibility import content_hash
 _BUNDLE_TAG_SYSTEM = "urn:medorigin:fixture-classification"
 _BUNDLE_TAG_CODE = "synthetic"
 _FHIR_ID = re.compile(r"[A-Za-z0-9.-]{1,64}\Z")
+# Exact required status codes for the specifically supported HL7 FHIR R4 v4.0.1
+# narrow synthetic subset. These are NOT R4B/R5 codes. Local code admission
+# alone never proves full FHIR terminology/profile/invariant conformance.
+# https://hl7.org/fhir/R4/codesystem-encounter-status.html
+# https://hl7.org/fhir/R4/valueset-observation-status.html
+_ENCOUNTER_STATUS_R4 = frozenset(
+    {
+        "planned",
+        "arrived",
+        "triaged",
+        "in-progress",
+        "onleave",
+        "finished",
+        "cancelled",
+        "entered-in-error",
+        "unknown",
+    }
+)
+_OBSERVATION_STATUS_R4 = frozenset(
+    {
+        "registered",
+        "preliminary",
+        "final",
+        "amended",
+        "corrected",
+        "cancelled",
+        "entered-in-error",
+        "unknown",
+    }
+)
 _ALLOWED_RESOURCE_KEYS = {
     "Patient": {
         "resourceType",
@@ -106,10 +136,22 @@ def _resource_identity(resource: Any) -> tuple[str, str]:
             resource.get("class"), dict
         ):
             raise BundlePreflightError("incomplete_encounter_subset")
-    elif kind == "Observation" and (
-        not isinstance(resource.get("status"), str) or not isinstance(resource.get("code"), dict)
-    ):
-        raise BundlePreflightError("incomplete_observation_subset")
+        if resource["status"] not in _ENCOUNTER_STATUS_R4:
+            raise BundlePreflightError("encounter_status_not_in_r4_required_codes")
+    elif kind == "Observation":
+        if not isinstance(resource.get("status"), str) or not isinstance(
+            resource.get("code"), dict
+        ):
+            raise BundlePreflightError("incomplete_observation_subset")
+        if resource["status"] not in _OBSERVATION_STATUS_R4:
+            raise BundlePreflightError("observation_status_not_in_r4_required_codes")
+        # HL7 R4 Observation.value[x] is a single 0..1 choice element.
+        # The explicitly admitted local subset has only valueQuantity and
+        # valueString. Both may be ABSENT (e.g. preliminary/panel results),
+        # but never present simultaneously, regardless of their contents.
+        # Reject before encrypted import, even without optional JSON Schema.
+        if "valueQuantity" in resource and "valueString" in resource:
+            raise BundlePreflightError("observation_multiple_r4_choice_values_refused")
     return kind, fhir_id
 
 
@@ -159,6 +201,17 @@ def inspect_synthetic_bundle(payload: dict[str, Any]) -> dict[str, object]:
         identities.add(identity)
         resources.append((kind, fhir_id, resource))
 
+    # Bind each Encounter's local Patient subject to its fullUrl before
+    # scanning Observations. The caller's entries may be in ANY order.
+    # Merely confirming that Observation.encounter resolves to *some*
+    # Encounter is insufficient: a multi-patient Bundle could otherwise
+    # silently associate another Patient's Encounter with an Observation.
+    encounter_patients: dict[str, str] = {
+        entry["fullUrl"]: _ref(entry["resource"], "subject")
+        for entry in entries
+        if entry["resource"]["resourceType"] == "Encounter"
+    }
+
     # All local identities are known before checking forward references.
     checked_references = 0
     for kind, _, resource in resources:
@@ -175,6 +228,8 @@ def inspect_synthetic_bundle(payload: dict[str, Any]) -> dict[str, object]:
                 raise BundlePreflightError("unresolved_local_encounter_reference")
             if urls[encounter] != "Encounter":
                 raise BundlePreflightError("local_reference_target_type_mismatch")
+            if encounter_patients[encounter] != patient:
+                raise BundlePreflightError("observation_encounter_patient_mismatch")
             checked_references += 1
 
     counts = Counter(kind for kind, _, _ in resources)

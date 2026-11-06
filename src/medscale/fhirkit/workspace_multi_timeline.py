@@ -254,3 +254,129 @@ def list_verified_synthetic_import_timelines(
         "clinical_use_authorized": False,
         "release_authorized": False,
     }
+
+
+def _checked_day(value: str | None) -> str | None:
+    """Admit only actual Gregorian UTC calendar days, never caller text."""
+    from datetime import date
+
+    if value is None:
+        return None
+    if type(value) is not str or re.fullmatch(r"[0-9]{4}-[0-9]{2}-[0-9]{2}", value) is None:
+        raise SyntheticMultiImportTimelineError("multi_timeline_filter_day_refused")
+    try:
+        date.fromisoformat(value)
+    except ValueError as exc:
+        raise SyntheticMultiImportTimelineError("multi_timeline_filter_day_refused") from exc
+    return value
+
+
+def list_filtered_verified_synthetic_import_timelines(
+    *,
+    store: object,
+    test_key_provider: object,
+    actor_id: str,
+    expected_current_audit_head_digest: str,
+    synthetic_only: bool = False,
+    allow_in_memory_listing: bool = False,
+    allow_in_memory_timeline: bool = False,
+    patient_selections: dict[str, str] | None = None,
+    from_day_utc: str | None = None,
+    through_day_utc: str | None = None,
+    resource_type: str | None = None,
+    max_imports: int = 16,
+    max_total_events: int = 128,
+) -> dict[str, object]:
+    """Search verified encrypted fictional imports by UTC day and resource kind.
+
+    Filters only an already complete source/audit-verified timeline. Every
+    imported source is checked even if the selected view hides all its events.
+    Per-import grouping and original event ordinal are preserved, never joined.
+    Dates absent from a source event are visible only without a day filter.
+    """
+    start = _checked_day(from_day_utc)
+    end = _checked_day(through_day_utc)
+    if start is not None and end is not None and start > end:
+        raise SyntheticMultiImportTimelineError("multi_timeline_filter_range_refused")
+    if resource_type is not None and (
+        type(resource_type) is not str or resource_type not in ("Encounter", "Observation")
+    ):
+        raise SyntheticMultiImportTimelineError("multi_timeline_filter_type_refused")
+
+    # Full encrypted/audited source readback FIRST, before any filtering.
+    verified = list_verified_synthetic_import_timelines(
+        store=store,
+        test_key_provider=test_key_provider,
+        actor_id=actor_id,
+        expected_current_audit_head_digest=expected_current_audit_head_digest,
+        synthetic_only=synthetic_only,
+        allow_in_memory_listing=allow_in_memory_listing,
+        allow_in_memory_timeline=allow_in_memory_timeline,
+        patient_selections=patient_selections,
+        max_imports=max_imports,
+        max_total_events=max_total_events,
+    )
+    results: list[dict[str, object]] = []
+    visible_total = 0
+    hidden_total = 0
+    for original in verified["imports"]:
+        included: list[dict[str, object]] = []
+        for event in original["events"]:
+            day = event["day_utc"]
+            # Every event has been authenticated by the underlying readback.
+            matches_day = (start is None and end is None) or (
+                day is not None and (start is None or day >= start) and (end is None or day <= end)
+            )
+            if matches_day and (resource_type is None or event["resource_type"] == resource_type):
+                included.append(
+                    {
+                        "ordinal": event["ordinal"],
+                        "resource_type": event["resource_type"],
+                        "day_utc": day,
+                        "date_available": event["date_available"],
+                    }
+                )
+        visible_total += len(included)
+        hidden_total += original["event_count"] - len(included)
+        results.append(
+            {
+                "import_ordinal": original["import_ordinal"],
+                "audit_sequence": original["audit_sequence"],
+                "source_content_sha256": original["source_content_sha256"],
+                "import_audit_event_digest": original["import_audit_event_digest"],
+                "patient_count_within_import": original["patient_count_within_import"],
+                "patient_selection_mode": original["patient_selection_mode"],
+                "source_event_count": original["event_count"],
+                "visible_event_count": len(included),
+                "hidden_event_count": original["event_count"] - len(included),
+                "events": included,
+            }
+        )
+    if (
+        visible_total + hidden_total != verified["total_event_count"]
+        or len(results) != verified["import_count"]
+    ):
+        raise SyntheticMultiImportTimelineError("multi_timeline_filter_reconciliation_refused")
+
+    return {
+        "schema": "medorigin-core-verified-fictional-multiimport-filtered-timelines/v1",
+        "status": "verified_source_scoped_fictional_timeline_view",
+        "current_audit_head_digest": expected_current_audit_head_digest,
+        "from_day_utc": start,
+        "through_day_utc": end,
+        "resource_type_filter": resource_type,
+        "date_missing_included": start is None and end is None,
+        "import_count": len(results),
+        "source_total_event_count": verified["total_event_count"],
+        "visible_total_event_count": visible_total,
+        "hidden_total_event_count": hidden_total,
+        "imports": results,
+        "cross_import_patient_identity_join_performed": False,
+        "patient_identity_included": False,
+        "resource_payload_included": False,
+        "filesystem_export_performed": False,
+        "network_access_performed": False,
+        "fhir_r4_conformance_validated": False,
+        "clinical_use_authorized": False,
+        "release_authorized": False,
+    }
