@@ -699,6 +699,9 @@ pub struct MedOriginNativePreview {
     synthetic_bundle: Option<SyntheticBundlePreview>,
     local_bundle_dragged_source: bool,
     local_bundle_drop_notice: Option<&'static str>,
+    // Typed path is ephemeral user input, not a recently-opened-file list.
+    // It is cleared immediately after either attempt and is never persisted.
+    local_bundle_path_entry: String,
     synthetic_bundle_selected: Option<usize>,
     synthetic_bundle_history: Vec<usize>,
     // Ephemeral exploration state; opened != clinician-reviewed or approved.
@@ -1108,6 +1111,35 @@ impl MedOriginNativePreview {
                 Err("local_drop_nonfictional_or_unreviewed_refused")
             }
         }
+    }
+
+    /// Paste a path copied from File Explorer, or enter one explicitly.
+    /// Exactly the same strict, local, synthetic-only admission as OLE drop.
+    /// No path, filename, bytes, or error echo is retained or logged.
+    fn import_typed_fictional_bundle(&mut self) -> Result<(), &'static str> {
+        let input = std::mem::take(&mut self.local_bundle_path_entry);
+        let candidate = input.trim();
+        let candidate =
+            if candidate.len() >= 2 && candidate.starts_with('"') && candidate.ends_with('"') {
+                &candidate[1..candidate.len() - 1]
+            } else {
+                candidate
+            };
+        if candidate.is_empty()
+            || candidate.len() > 1024
+            || candidate.contains('"')
+            || candidate.chars().any(|ch| {
+                ch.is_control() || matches!(ch, '\u{202a}'..='\u{202e}' | '\u{2066}'..='\u{2069}')
+            })
+        {
+            // The one-file source guard also denies replacement of protected
+            // Core or encrypted readback sessions. Reuse it on invalid input.
+            let _ = self.import_dropped_fictional_bundle(&[]);
+            self.local_bundle_drop_notice =
+                Some("Open refused: paste exactly one local synthetic-only JSON file path.");
+            return Err("local_typed_path_invalid_refused");
+        }
+        self.import_dropped_fictional_bundle(&[std::path::PathBuf::from(candidate)])
     }
 
     /// One-click, compiled, nonclinical demo from the same strict reviewed
@@ -1574,6 +1606,7 @@ impl MedOriginNativePreview {
         self.synthetic_bundle = None;
         self.local_bundle_dragged_source = false;
         self.local_bundle_drop_notice = None;
+        self.local_bundle_path_entry.clear();
         self.synthetic_bundle_selected = None;
         self.synthetic_bundle_history.clear();
         self.synthetic_bundle_visited.clear();
@@ -1623,6 +1656,7 @@ impl MedOriginNativePreview {
         self.synthetic_bundle = None;
         self.local_bundle_dragged_source = false;
         self.local_bundle_drop_notice = None;
+        self.local_bundle_path_entry.clear();
         self.synthetic_bundle_selected = None;
         self.synthetic_bundle_history.clear();
         self.synthetic_bundle_visited.clear();
@@ -3294,6 +3328,29 @@ impl eframe::App for MedOriginNativePreview {
             // Keep all four original controls visible in the same order.
             // This retains the testable AX/UIA keyboard contract from D2.
             ui.label("Open a local imaginary FHIR Bundle by dragging one canonical synthetic-only .json file into this window (no patient records).");
+            ui.label("Alternatively, copy a fictional JSON file path from Windows Explorer, paste it below, then choose Open. Ctrl+O focuses the field.");
+            let mut open_typed_source = false;
+            ui.horizontal_wrapped(|ui| {
+                ui.label("Local fictional JSON file path:");
+                let editor = ui.add(
+                    egui::TextEdit::singleline(&mut self.local_bundle_path_entry)
+                        .hint_text("Paste a local synthetic-only .json path")
+                        .char_limit(512)
+                        .desired_width(360.0),
+                );
+                if ui.input(|input| input.modifiers.command && input.key_pressed(egui::Key::O)) {
+                    editor.request_focus();
+                }
+                if editor.lost_focus() && ui.input(|input| input.key_pressed(egui::Key::Enter)) {
+                    open_typed_source = true;
+                }
+                if ui.button("Open local fictional JSON (NO PHI)").clicked() {
+                    open_typed_source = true;
+                }
+            });
+            if open_typed_source {
+                let _ = self.import_typed_fictional_bundle();
+            }
             if let Some(notice) = self.local_bundle_drop_notice {
                 ui.label(notice);
             }
@@ -3872,6 +3929,66 @@ impl eframe::App for MedOriginNativePreview {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn typed_local_fictional_bundle_path_accepts_explorer_quoted_file_without_retaining_path() {
+        let raw = include_bytes!("../fixtures/core/synthetic-multipatient-fhir-bundle.json");
+        let file = std::env::temp_dir().join(format!(
+            "medorigin-native-typed-open-{:?}.json",
+            std::thread::current().id()
+        ));
+        std::fs::write(&file, raw).unwrap();
+        let mut app = MedOriginNativePreview {
+            local_bundle_path_entry: format!("\"{}\"", file.display()),
+            ..Default::default()
+        };
+        let result = app.import_typed_fictional_bundle();
+        std::fs::remove_file(&file).unwrap();
+        assert_eq!(result, Ok(()));
+        assert!(app.local_bundle_dragged_source);
+        assert_eq!(app.synthetic_bundle_resource_count(), 8);
+        assert!(app.local_bundle_path_entry.is_empty());
+        app.clear_fictional_output();
+        assert_eq!(app.synthetic_bundle_resource_count(), 0);
+        assert!(app.local_bundle_path_entry.is_empty());
+    }
+
+    #[test]
+    fn typed_local_fictional_bundle_path_rejects_control_text_and_non_fictional_data() {
+        let mut app = MedOriginNativePreview::default();
+        for malformed in [
+            "".to_owned(),
+            " ".to_owned(),
+            "\n".to_owned(),
+            "C:\\fake\u{202e}file.json".to_owned(),
+            "a".repeat(1025),
+        ] {
+            app.local_bundle_path_entry = malformed;
+            assert_eq!(
+                app.import_typed_fictional_bundle(),
+                Err("local_typed_path_invalid_refused")
+            );
+            assert!(app.local_bundle_path_entry.is_empty());
+            assert_eq!(app.synthetic_bundle_resource_count(), 0);
+            assert!(app.local_bundle_drop_notice.is_some());
+        }
+    }
+
+    #[test]
+    fn typed_local_fictional_bundle_path_refuses_to_replace_protected_core() {
+        let raw = include_bytes!(
+            "../fixtures/core/core963-real-encrypted-fictional-file-batch-redacted.json"
+        );
+        let mut app =
+            MedOriginNativePreview::from_one_time_core_file_batch_receipt_stdin(raw).unwrap();
+        app.local_bundle_path_entry = "\"C:\\any-synthetic-file.json\"".to_owned();
+        assert_eq!(
+            app.import_typed_fictional_bundle(),
+            Err("local_drop_protected_source_refused")
+        );
+        assert_eq!(app.core_file_batch_import_count(), 2);
+        assert!(app.local_bundle_path_entry.is_empty());
+    }
 
     #[test]
     fn local_user_drop_admits_only_the_one_canonical_fictional_bundle() {

@@ -96,6 +96,27 @@ jobs:
             if (-not $source.Contains($marker)) { throw 'Physical source-only QA marker missing' }
           }
           Write-Output 'SOURCE_ONLY_WINDOWS_OLE_DRAG_QA_SYNTAX_AND_FAIL_CLOSED_BOUNDARIES_PASS_NO_HOSTED_GUI'
+      - name: Parse typed local fictional file-path UIAutomation source (no hosted GUI)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $path = 'experiments/desktop-d2-native-egui/tests/windows-native-typed-fictional-path-uia.ps1'
+          $tokens = $null
+          $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile(
+            (Resolve-Path -LiteralPath $path).Path, [ref]$tokens, [ref]$errors
+          ) | Out-Null
+          if (@($errors).Count -ne 0) { throw 'Typed local fictional source UIA has syntax errors' }
+          $source = Get-Content -LiteralPath $path -Raw
+          foreach ($required in @(
+            'OWNER_WINDOWS_NATIVE_TYPED_SYNTHETIC_FILE_PATH_UIA_PASS_NONCLINICAL',
+            'reviewed_synthetic_fixture_sha_refused',
+            'typed_local_path_persisted_after_clear',
+            'MEDORIGIN_TYPED_LOCAL_FILE_UIA_NO_GO'
+          )) {
+            if (-not $source.Contains($required)) { throw 'Missing typed import QA safety marker' }
+          }
+          Write-Output 'WINDOWS_TYPED_LOCAL_IMPORT_UIA_SOURCE_PARSE_PASS_NO_HOSTED_GUI'
       - name: Parse Windows real-UIA regression source without opening a GUI
         if: runner.os == 'Windows'
         shell: pwsh

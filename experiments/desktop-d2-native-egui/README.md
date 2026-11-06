@@ -64,6 +64,31 @@ noncanonical inputs, guarded paths and protected-session denial. The entire
 Windows installer lifecycle was exercised separately on an isolated mock
 LOCALAPPDATA/APPDATA profile; no real user installation or release was made.
 
+## Keyboard-accessible local JSON opening (private, NONCLINICAL)
+
+As an alternative to dragging a file, launch the native Windows app normally.
+On the initial screen, use **Ctrl+O** to focus **Local fictional JSON file
+path**, paste a local file path copied from Windows Explorer (including its
+optional surrounding quotation marks), then select **Open local fictional JSON
+(NO PHI)** or press Enter. The same strict bounded fictional-only source
+admission path is used as for drag/drop. The path is removed from the
+in-memory input immediately after the attempt and never written to a
+recent-files list, logger or cache; this is not secure memory erasure. Invalid
+paths, control/bidirectional formatting characters, overlong entries and
+unapproved file contents are refused. Existing protected Core sessions
+cannot be silently replaced by a typed file path.
+
+The source-controlled opt-in Windows UIAutomation test
+`tests/windows-native-typed-fictional-path-uia.ps1` uses a hash-verified
+source fixture, types it through the native UI accessibility layer, verifies
+the imaginary patient worklist, clears the source and checks the local path
+has been cleared. It never uses the user's clipboard or files outside
+the source checkout. Host CI only syntax-checks this script; actual Windows
+GUI acceptance must be run separately on the owner machine.
+
+This does NOT provide a production file-picker, EHR import, patient privacy
+approval, signed distribution, authenticated Core or clinical-use permission.
+
 ## Browser/network dependency regression guard
 
 `tests/browser_free_boundary.rs` runs automatically with `cargo test
