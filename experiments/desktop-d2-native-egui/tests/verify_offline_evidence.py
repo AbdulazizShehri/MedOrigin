@@ -3,6 +3,7 @@
 
 Does not capture network traffic, enforce OS policy or authorize release.
 """
+
 import argparse
 import json
 import re
@@ -14,12 +15,21 @@ GATES = tuple(f"NET-{i:02}" for i in range(1, 10))
 def evaluate(packet):
     problems = []
     if type(packet) is not dict:
-        return {"decision": "NO_GO", "problems": ["root must be an object"], "release_authorized": False, "zero_egress_proven": False}
+        return {
+            "decision": "NO_GO",
+            "problems": ["root must be an object"],
+            "release_authorized": False,
+            "zero_egress_proven": False,
+        }
     if packet.get("schema") != "medorigin-offline-evidence-v1":
         problems.append("invalid evidence schema")
-    if not isinstance(packet.get("source_commit"), str) or not re.fullmatch(r"[0-9a-f]{40}", packet["source_commit"]):
+    if not isinstance(packet.get("source_commit"), str) or not re.fullmatch(
+        r"[0-9a-f]{40}", packet["source_commit"]
+    ):
         problems.append("missing exact source commit")
-    if not isinstance(packet.get("binary_sha256"), str) or not re.fullmatch(r"[0-9a-fA-F]{64}", packet["binary_sha256"]):
+    if not isinstance(packet.get("binary_sha256"), str) or not re.fullmatch(
+        r"[0-9a-fA-F]{64}", packet["binary_sha256"]
+    ):
         problems.append("missing exact binary SHA-256")
     if packet.get("clinical_data_used") is not False:
         problems.append("clinical data restriction not attested")
@@ -39,7 +49,14 @@ def evaluate(packet):
         status = item.get("status")
         evidence = item.get("evidence")
         reviewer = item.get("reviewer")
-        if status != "PASS" or type(evidence) is not list or not evidence or not all(type(s) is str and s.strip() and len(s) <= 256 for s in evidence) or type(reviewer) is not str or not reviewer.strip():
+        if (
+            status != "PASS"
+            or type(evidence) is not list
+            or not evidence
+            or not all(type(s) is str and s.strip() and len(s) <= 256 for s in evidence)
+            or type(reviewer) is not str
+            or not reviewer.strip()
+        ):
             gate_out[gate] = "FAIL" if status == "FAIL" else "UNKNOWN"
             problems.append(f"{gate}: not independently evidenced PASS")
         else:
@@ -62,7 +79,15 @@ def main():
     try:
         data = json.loads(args.packet.read_text(encoding="utf-8"))
     except (OSError, UnicodeError, json.JSONDecodeError) as error:
-        print(json.dumps({"decision": "NO_GO", "problems": [f"invalid packet: {type(error).__name__}"], "release_authorized": False}))
+        print(
+            json.dumps(
+                {
+                    "decision": "NO_GO",
+                    "problems": [f"invalid packet: {type(error).__name__}"],
+                    "release_authorized": False,
+                }
+            )
+        )
         return 2
     result = evaluate(data)
     print(json.dumps(result, indent=2, sort_keys=True))

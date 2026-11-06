@@ -4,16 +4,16 @@
 NOT production key management, patient data storage, or MedOrigin GUI access.
 Uses real age X25519 recipient encryption and never persists fixture plaintext.
 """
+
 from __future__ import annotations
 
 import argparse
 import hashlib
 import os
-from pathlib import Path
 import re
-import stat
 import subprocess
 import sys
+from pathlib import Path
 from tempfile import TemporaryDirectory
 
 VERSION = "v1.3.1"
@@ -37,7 +37,10 @@ def prove_binary(path: Path, expected_sha256: str, name: str) -> Path:
     if hash_bytes(binary.read_bytes()) != expected_sha256:
         raise ValueError(name + "_binary_hash_changed")
     version = subprocess.run(
-        [str(binary), "--version"], capture_output=True, timeout=6, check=False,
+        [str(binary), "--version"],
+        capture_output=True,
+        timeout=6,
+        check=False,
     )
     if version.returncode != 0 or version.stdout.strip().decode("ascii") != VERSION:
         raise ValueError(name + "_version_unqualified")
@@ -48,14 +51,11 @@ def ensure_private_directory(folder: Path) -> None:
     if folder.is_symlink() or not folder.is_dir():
         raise ValueError("workspace_directory_not_regular")
     mode = folder.stat().st_mode
-    if os.name == "posix":
-        if mode & 0o077 or folder.stat().st_uid != os.getuid():
-            raise ValueError("workspace_directory_not_owner_private")
+    if os.name == "posix" and (mode & 0o077 or folder.stat().st_uid != os.getuid()):
+        raise ValueError("workspace_directory_not_owner_private")
 
 
-def authorize_fixed_synthetic_only(
-    raw: bytes, *, role: str, consent: bool, purpose: str
-) -> None:
+def authorize_fixed_synthetic_only(raw: bytes, *, role: str, consent: bool, purpose: str) -> None:
     # This is a *test intent guard*, not real user authentication or RBAC.
     if role != "synthetic_test_owner" or consent is not True or purpose != "synthetic_workspace_qa":
         raise ValueError("workspace_test_intent_not_authorized")
@@ -66,7 +66,10 @@ def authorize_fixed_synthetic_only(
 def run_age(binary: Path, args: list[str], *, raw: bytes = b"") -> bytes:
     result = subprocess.run(
         [str(binary), *args],
-        input=raw, capture_output=True, timeout=15, check=False,
+        input=raw,
+        capture_output=True,
+        timeout=15,
+        check=False,
         env={
             "PATH": "/usr/bin:/bin",
             "HOME": os.environ.get("TMPDIR", "/tmp"),
@@ -87,7 +90,9 @@ def generate_keypair(keygen: Path, keydir: Path, filename: str) -> tuple[Path, s
         raise ValueError("refuse_existing_workspace_identity")
     generated = subprocess.run(
         [str(keygen), "-o", str(key)],
-        capture_output=True, timeout=10, check=False,
+        capture_output=True,
+        timeout=10,
+        check=False,
         env={"PATH": "/usr/bin:/bin", "HOME": str(keydir)},
     )
     if generated.returncode != 0 or generated.stdout:
@@ -130,7 +135,7 @@ def stage_ciphertext_exclusively(vault: Path, name: str, ciphertext: bytes) -> P
         # Hard-link on the same volume is atomic and *refuses overwrites*;
         # os.replace would silently clobber a concurrently created target.
         os.link(staged, target, follow_symlinks=False)
-        os.unlink(staged)
+        staged.unlink()
         if os.name == "posix":
             dir_fd = os.open(vault, os.O_RDONLY)
             try:
@@ -192,7 +197,10 @@ def qualify(age: Path, age_sha: str, keygen: Path, keygen_sha: str) -> None:
         wrong_key, _ = generate_keypair(keygen, keydir, "wrong-identity.txt")
         wrong = subprocess.run(
             [str(age), "--decrypt", "--identity", str(wrong_key)],
-            input=ciphertext, capture_output=True, timeout=10, check=False,
+            input=ciphertext,
+            capture_output=True,
+            timeout=10,
+            check=False,
         )
         if wrong.returncode == 0 or wrong.stdout:
             raise ValueError("workspace_wrong_key_accepted")
@@ -200,7 +208,10 @@ def qualify(age: Path, age_sha: str, keygen: Path, keygen_sha: str) -> None:
         modified[-1] ^= 0x01
         tampered = subprocess.run(
             [str(age), "--decrypt", "--identity", str(key)],
-            input=bytes(modified), capture_output=True, timeout=10, check=False,
+            input=bytes(modified),
+            capture_output=True,
+            timeout=10,
+            check=False,
         )
         if tampered.returncode == 0 or tampered.stdout:
             raise ValueError("workspace_modified_ciphertext_accepted")

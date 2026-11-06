@@ -1,27 +1,32 @@
 """Offline source/adversarial controls for Core encrypted Workspace -> D2 GUI."""
-from pathlib import Path
+
+import importlib
 import sys
-from tempfile import TemporaryDirectory
 import unittest
+from pathlib import Path
+from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "scripts"))
-import qualify_installed_workspace_to_native_gui as demo
+demo = importlib.import_module("qualify_installed_workspace_to_native_gui")
 
 
 class EncryptedWorkspaceToNativeD2(unittest.TestCase):
     def test_non_mac_real_sandbox_must_fail_closed_before_launch(self):
-        with patch.object(demo.sys, "platform", "win32"):
-            with self.assertRaisesRegex(ValueError, "apple_silicon"):
-                demo.qualify(None)
+        with (
+            patch.object(demo.sys, "platform", "win32"),
+            self.assertRaisesRegex(ValueError, "apple_silicon"),
+        ):
+            demo.qualify(None)
 
     def test_both_installed_wheels_source_and_metadata_are_pinned(self):
         source = Path(demo.__file__).read_text(encoding="utf-8")
-        self.assertEqual(demo.EXPECTED_CORE_COMMIT,
-            "0351b667ec910480fd61c30f18cf3bb0dd0ae842")
-        self.assertEqual(demo.EXPECTED_RECEIPT_SHA,
-            "25acdb57db8ca3f11d353cf311167973760caaa95bb64de7339fe21e3b05cc2e")
+        self.assertEqual(demo.EXPECTED_CORE_COMMIT, "0351b667ec910480fd61c30f18cf3bb0dd0ae842")
+        self.assertEqual(
+            demo.EXPECTED_RECEIPT_SHA,
+            "25acdb57db8ca3f11d353cf311167973760caaa95bb64de7339fe21e3b05cc2e",
+        )
         self.assertIn("installed.read_bytes() != source.read_bytes()", source)
         self.assertIn("set(expected_files) != packaged", source)
         self.assertIn("mac_sandboxed_ephemeral_encrypted_core_demo_refused", source)
@@ -39,7 +44,10 @@ class EncryptedWorkspaceToNativeD2(unittest.TestCase):
         self.assertIn("if args.is_empty()", native)
         self.assertIn("raw != SOURCE_RECEIPT", receipt)
         self.assertIn("clinical", receipt)
-        self.assertIn("publication_authorized", (ROOT / "fixtures/core/workspace-ephemeral-demo.json").read_text())
+        self.assertIn(
+            "publication_authorized",
+            (ROOT / "fixtures/core/workspace-ephemeral-demo.json").read_text(),
+        )
         self.assertIn("encrypted_workspace_receipt = None", app)
         self.assertIn("Encrypted Workspace proof", app)
         self.assertIn("source and freshness NOT authenticated by GUI", app)

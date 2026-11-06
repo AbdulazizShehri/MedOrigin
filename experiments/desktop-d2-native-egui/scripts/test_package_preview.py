@@ -1,15 +1,15 @@
 """No patient data or native launch: test portable synthetic archive contracts."""
+
 from __future__ import annotations
 
-import io
 import json
-from pathlib import Path
 import struct
 import sys
 import tarfile
-from tempfile import TemporaryDirectory
 import unittest
 import zipfile
+from pathlib import Path
+from tempfile import TemporaryDirectory
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import package_preview as p
@@ -45,15 +45,21 @@ class PortablePreviewTests(unittest.TestCase):
         self.assertEqual(p.inspect_native_header(fake_elf()), ("linux", "x86_64"))
         self.assertEqual(p.inspect_native_header(fake_elf(183)), ("linux", "arm64"))
         self.assertEqual(p.inspect_native_header(fake_macho()), ("macos", "arm64"))
-        self.assertEqual(p.inspect_native_header(fake_macho(0x01000007)),
-                         ("macos", "x86_64"))
+        self.assertEqual(p.inspect_native_header(fake_macho(0x01000007)), ("macos", "x86_64"))
 
     def test_refuse_spoofed_invalid_or_unsupported_binaries(self) -> None:
-        for blob in (b"", b"not-native" * 100, b"MZ", b"\x7fELF",
-                     b"\xcf\xfa\xed\xfe", fake_pe(0), fake_elf(0), fake_macho(0)):
-            with self.subTest(prefix=blob[:5]):
-                with self.assertRaises(ValueError):
-                    p.inspect_native_header(blob)
+        for blob in (
+            b"",
+            b"not-native" * 100,
+            b"MZ",
+            b"\x7fELF",
+            b"\xcf\xfa\xed\xfe",
+            fake_pe(0),
+            fake_elf(0),
+            fake_macho(0),
+        ):
+            with self.subTest(prefix=blob[:5]), self.assertRaises(ValueError):
+                p.inspect_native_header(blob)
 
     def test_mac_bundle_is_executable_and_carries_no_clinical_claims(self) -> None:
         data = fake_macho()
@@ -68,16 +74,21 @@ class PortablePreviewTests(unittest.TestCase):
         self.assertFalse(manifest["clinical_use_authorized"])
         self.assertFalse(manifest["zero_egress_qualified"])
         self.assertEqual(manifest["binary_sha256"], p.digest(data))
-        self.assertIn(b"NOT FOR PATIENT DATA", next(value[0] for name, value in files.items()
-                            if name.endswith("README-SYNTHETIC.txt")))
+        self.assertIn(
+            b"NOT FOR PATIENT DATA",
+            next(
+                value[0] for name, value in files.items() if name.endswith("README-SYNTHETIC.txt")
+            ),
+        )
 
     def test_windows_zip_and_linux_tar_extract_exact_bytes(self) -> None:
-        for system, binary, suffix in (("windows", fake_pe(), ".zip"),
-                                       ("linux", fake_elf(), ".tar.gz")):
+        for system, binary, suffix in (
+            ("windows", fake_pe(), ".zip"),
+            ("linux", fake_elf(), ".tar.gz"),
+        ):
             with self.subTest(system=system), TemporaryDirectory() as folder:
                 output = Path(folder) / ("preview" + suffix)
-                files = p.files_for(binary, system, "x86_64", "b" * 40,
-                                    b"apache", b"notice")
+                files = p.files_for(binary, system, "x86_64", "b" * 40, b"apache", b"notice")
                 p.write_archive(output, files, system)
                 self.assertTrue(output.is_file())
                 if suffix == ".zip":
@@ -99,8 +110,7 @@ class PortablePreviewTests(unittest.TestCase):
         for bad in ("linux-unknown", "linux", "windows-i386", "freebsd-x86_64"):
             with self.assertRaises(ValueError):
                 p.selected_target(bad)
-        self.assertNotEqual(p.inspect_native_header(fake_elf()),
-                            p.selected_target("macos-arm64"))
+        self.assertNotEqual(p.inspect_native_header(fake_elf()), p.selected_target("macos-arm64"))
 
     def test_host_arch_detection_and_commit_restrictions(self) -> None:
         self.assertIn(p.target_host()[0], ("linux", "windows", "macos"))

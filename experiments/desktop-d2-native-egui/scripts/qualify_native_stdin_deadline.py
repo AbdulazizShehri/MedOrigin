@@ -4,21 +4,20 @@
 Runs exactly two source-fixed, fictional timeout probes; no online calls, PHI,
 EHR, user data, arbitrary options or installer. Windows/macOS/Linux local QA.
 """
+
 from __future__ import annotations
 
 import argparse
 import hashlib
-from pathlib import Path
 import re
 import subprocess
 import sys
 import time
+from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 MAX_WAIT = 8.0
-EXPECTED_NAME = "medorigin-desktop-d2-native-egui" + (
-    ".exe" if sys.platform == "win32" else ""
-)
+EXPECTED_NAME = "medorigin-desktop-d2-native-egui" + (".exe" if sys.platform == "win32" else "")
 KNOWN_REPORT = ROOT / "fixtures/core/known-structure-definition.json"
 KNOWN_SHA = "165b41acdc416617e8f207366d454ac6a713ecf4c9a5efd740d14a0af882bd08"
 SUCCESS = "D2_NATIVE_SYNTHETIC_STDIN_DEADLINE_IDLE_AND_MISSING_EOF_PASS_NOT_RELEASE"

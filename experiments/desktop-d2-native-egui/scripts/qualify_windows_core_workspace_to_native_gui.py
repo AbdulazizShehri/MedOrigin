@@ -5,14 +5,15 @@ Private nonclinical only. Uses a source-pinned checkout, fixed CLI flags,
 and temporary output with no resource payload. Windows network egress is NOT
 OS-blocked here, and this is NOT an authenticated in-GUI Core worker.
 """
+
 from __future__ import annotations
 
 import argparse
 import hashlib
 import os
-from pathlib import Path
 import subprocess
 import sys
+from pathlib import Path
 from tempfile import TemporaryDirectory
 
 CORE_SHA = "0351b667ec910480fd61c30f18cf3bb0dd0ae842"
@@ -40,7 +41,9 @@ def digest(path: Path) -> str:
 def git(core: Path, *args: str) -> bytes:
     result = subprocess.run(
         ["git", "-C", str(core), *args],
-        capture_output=True, check=True, timeout=12,
+        capture_output=True,
+        check=True,
+        timeout=12,
     )
     if len(result.stdout) > 1_000_000:
         raise ValueError("core_git_evidence_too_large")
@@ -56,10 +59,7 @@ def verify_pinned_core(core: Path) -> None:
         raise ValueError("reviewed_core_checkout_not_clean")
     for section, minimum, maximum in SOURCE_SECTIONS:
         inventory = git(core, "ls-files", "-z", "--", section)
-        tracked = {
-            name.decode("utf-8")
-            for name in inventory.split(b"\x00") if name
-        }
+        tracked = {name.decode("utf-8") for name in inventory.split(b"\x00") if name}
         if not minimum <= len(tracked) <= maximum:
             raise ValueError("core_workspace_tracked_source_inventory_refused")
         relative = Path(section)
@@ -74,8 +74,16 @@ def verify_pinned_core(core: Path) -> None:
                 raise ValueError("unreviewed_ignored_python_bytecode_refused")
             if item.is_file():
                 path = item.relative_to(core).as_posix()
-                if item.suffix.lower() in (".py", ".pyc", ".pyo", ".pyd", ".pth",
-                                           ".dll", ".so", ".dylib"):
+                if item.suffix.lower() in (
+                    ".py",
+                    ".pyc",
+                    ".pyo",
+                    ".pyd",
+                    ".pth",
+                    ".dll",
+                    ".so",
+                    ".dylib",
+                ):
                     if path not in tracked or item.suffix.lower() != ".py":
                         raise ValueError("unreviewed_python_startup_or_native_source")
                     seen.add(path)
@@ -83,6 +91,7 @@ def verify_pinned_core(core: Path) -> None:
         if seen != expected_python:
             raise ValueError("core_workspace_python_source_files_missing")
     print("WINDOWS_SOURCE_FIXED_CORE_WORKSPACE_GIT_INVENTORY_ATTESTED")
+
 
 def strip_platform_one_newline(payload: bytes) -> bytes:
     """Remove exactly one Python print newline (Windows CRLF or POSIX LF).
@@ -104,9 +113,13 @@ def qualify(args: argparse.Namespace) -> None:
     python = args.python
     binary = args.native_gui
     if (
-        core.is_symlink() or python.is_symlink() or binary.is_symlink()
-        or not python.is_file() or python.name.lower() != "python.exe"
-        or not binary.is_file() or binary.name != "medorigin-desktop-d2-native-egui.exe"
+        core.is_symlink()
+        or python.is_symlink()
+        or binary.is_symlink()
+        or not python.is_file()
+        or python.name.lower() != "python.exe"
+        or not binary.is_file()
+        or binary.name != "medorigin-desktop-d2-native-egui.exe"
     ):
         raise ValueError("python_or_d2_binary_identity_refused")
     core = core.resolve(strict=True)
@@ -117,10 +130,14 @@ def qualify(args: argparse.Namespace) -> None:
     if not args.site.is_dir() or args.site.is_symlink():
         raise ValueError("system_installed_crypto_site_directory_refused")
     verify_pinned_core(core)
-    source_receipt = Path(__file__).resolve().parent.parent / "fixtures/core/workspace-ephemeral-demo.json"
+    source_receipt = (
+        Path(__file__).resolve().parent.parent / "fixtures/core/workspace-ephemeral-demo.json"
+    )
     if source_receipt.is_symlink() or digest(source_receipt) != RECEIPT_SHA:
         raise ValueError("source_compiled_encrypted_workspace_receipt_modified")
-    observer = Path(__file__).resolve().parent.parent / "tests/windows-encrypted-workspace-native-uia.ps1"
+    observer = (
+        Path(__file__).resolve().parent.parent / "tests/windows-encrypted-workspace-native-uia.ps1"
+    )
     if observer.is_symlink() or not observer.is_file():
         raise ValueError("reviewed_windows_native_uia_observer_missing")
     with TemporaryDirectory(prefix="medorigin-windows-encrypted-core-qa-") as tmp:
@@ -135,16 +152,25 @@ def qualify(args: argparse.Namespace) -> None:
             "PYTHONDONTWRITEBYTECODE": "1",
         }
         command = [
-            str(python), "-I", "-S", "-B", "-c", FIXED_CLI,
-            str(core / "src"), str(core / "apps/workspace/src"), str(args.site),
+            str(python),
+            "-I",
+            "-S",
+            "-B",
+            "-c",
+            FIXED_CLI,
+            str(core / "src"),
+            str(core / "apps/workspace/src"),
+            str(args.site),
         ]
         result = subprocess.run(
-            command, cwd=work, env=env, capture_output=True, timeout=25, check=False,
+            command,
+            cwd=work,
+            env=env,
+            capture_output=True,
+            timeout=25,
+            check=False,
         )
-        if (
-            result.returncode != 0 or len(result.stdout) > 1024
-            or len(result.stderr) > 2048
-        ):
+        if result.returncode != 0 or len(result.stdout) > 1024 or len(result.stderr) > 2048:
             raise ValueError("windows_source_core_ephemeral_workspace_demo_no_go")
         raw = strip_platform_one_newline(result.stdout)
         if raw != source_receipt.read_bytes() or hashlib.sha256(raw).hexdigest() != RECEIPT_SHA:
@@ -152,15 +178,29 @@ def qualify(args: argparse.Namespace) -> None:
         receipt_file = work / "only-fictional-aggregate.json"
         receipt_file.write_bytes(raw)
         observed = subprocess.run(
-            ["powershell.exe", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
-             "-File", str(observer), "-ExePath", str(binary),
-             "-ExpectedSha256", args.native_sha256,
-             "-LiveReceiptPath", str(receipt_file)],
-            capture_output=True, timeout=45, check=False,
+            [
+                "powershell.exe",
+                "-NoProfile",
+                "-NonInteractive",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-File",
+                str(observer),
+                "-ExePath",
+                str(binary),
+                "-ExpectedSha256",
+                args.native_sha256,
+                "-LiveReceiptPath",
+                str(receipt_file),
+            ],
+            capture_output=True,
+            timeout=45,
+            check=False,
         )
         marker = b"D2_WINDOWS_ENCRYPTED_WORKSPACE_NATIVE_UIA_PASS_NONCLINICAL"
         if (
-            observed.returncode != 0 or marker not in observed.stdout
+            observed.returncode != 0
+            or marker not in observed.stdout
             or b"WINDOWS_FORGED_CLINICAL_WORKSPACE_APPROVAL_REFUSED" not in observed.stdout
         ):
             raise ValueError("windows_actual_native_gui_core_live_receipt_uia_no_go")
@@ -175,8 +215,7 @@ def qualify(args: argparse.Namespace) -> None:
 if __name__ == "__main__":
     p = argparse.ArgumentParser(description=__doc__)
     for key in ("core-source", "python", "site", "native-gui", "python-sha256", "native-sha256"):
-        p.add_argument("--" + key, required=True,
-                       type=str if key.endswith("sha256") else Path)
+        p.add_argument("--" + key, required=True, type=str if key.endswith("sha256") else Path)
     try:
         qualify(p.parse_args())
     except (OSError, ValueError, subprocess.SubprocessError, UnicodeError) as error:

@@ -5,13 +5,13 @@ This is deliberately NEVER a release-success predicate. It reports RustSec
 informational maintenance risk through the resolved linux Cargo dependency
 graph and refuses both known risk and unreviewed graph changes.
 """
+
 import argparse
-from collections import deque
 import json
-from pathlib import Path
 import re
 import subprocess
-import sys
+from collections import deque
+from pathlib import Path
 
 ROOT_PACKAGE = "medorigin-desktop-d2-native-egui"
 LEGACY = frozenset({"zvariant", "zvariant_derive", "zbus_names"})
@@ -38,7 +38,9 @@ def evaluate(data):
             raise ValueError("UNIDENTIFIED_ROOT")
         packages = {}
         for p in data["packages"]:
-            if type(p) is not dict or not all(isinstance(p.get(k), str) for k in ("id", "name", "version")):
+            if type(p) is not dict or not all(
+                isinstance(p.get(k), str) for k in ("id", "name", "version")
+            ):
                 raise ValueError("INVALID_PACKAGE_ENTRY")
             if p["id"] in packages:
                 raise ValueError("DUPLICATE_PACKAGE_ID")
@@ -86,11 +88,12 @@ def evaluate(data):
                 if int(match.group(1)) < 6:
                     zbus5.append((pid, p))
         stale = [(pid, p) for pid, p in reachable if p["name"] in LEGACY]
-        result["accesskit_unix"] = [{"version": p["version"], "path": chain(pid)} for pid, p in accesskit]
+        result["accesskit_unix"] = [
+            {"version": p["version"], "path": chain(pid)} for pid, p in accesskit
+        ]
         result["legacy_zbus"] = [{"version": p["version"], "path": chain(pid)} for pid, p in zbus5]
         result["unmaintained"] = [
-            {"package": p["name"], "version": p["version"], "path": chain(pid)}
-            for pid, p in stale
+            {"package": p["name"], "version": p["version"], "path": chain(pid)} for pid, p in stale
         ]
         result["reachable_packages"] = len(parent)
         if not accesskit:
@@ -110,22 +113,30 @@ def evaluate(data):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
-        "--manifest-path", type=Path,
+        "--manifest-path",
+        type=Path,
         default=Path(__file__).resolve().parents[1] / "Cargo.toml",
     )
     args = parser.parse_args()
     try:
         cmd = [
-            "cargo", "metadata", "--offline", "--locked",
-            "--format-version", "1", "--filter-platform", LINUX_TARGET,
-            "--manifest-path", str(args.manifest_path.resolve(strict=True)),
+            "cargo",
+            "metadata",
+            "--offline",
+            "--locked",
+            "--format-version",
+            "1",
+            "--filter-platform",
+            LINUX_TARGET,
+            "--manifest-path",
+            str(args.manifest_path.resolve(strict=True)),
         ]
         process = subprocess.run(cmd, capture_output=True, text=True, timeout=90, check=False)
         if process.returncode:
             raise RuntimeError("OFFLINE_LOCKED_CARGO_METADATA_FAILED")
         data = json.loads(process.stdout)
         result = evaluate(data)
-    except (OSError, subprocess.TimeoutExpired, RuntimeError, json.JSONDecodeError) as error:
+    except (OSError, subprocess.TimeoutExpired, RuntimeError, json.JSONDecodeError):
         result = {
             "schema": "medorigin-d2-linux-accesskit-dependency-maintenance-v1",
             "decision": "NO_GO_CARGO_METADATA_UNAVAILABLE",

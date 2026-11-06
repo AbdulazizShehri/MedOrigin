@@ -10,9 +10,13 @@ from generate_fictional_multipatient_bundle import make_fictional_bundle
 
 HERE = Path(__file__).resolve().parent
 FIXTURE = HERE.parent / "fixtures" / "core" / "synthetic-multipatient-fhir-bundle.json"
+FIXTURE_48 = HERE.parent / "fixtures" / "core" / "synthetic-multipatient-fhir-bundle-48.json"
 
 
 class SyntheticMultipatientBundleGeneratorTests(unittest.TestCase):
+    def test_sixteen_patients_generator_is_exact_48_resource_source_fixture(self):
+        self.assertEqual(make_fictional_bundle(16, 1), FIXTURE_48.read_bytes())
+
     def test_two_patients_generator_is_exact_source_fixture(self):
         self.assertEqual(make_fictional_bundle(2, 2), FIXTURE.read_bytes())
 

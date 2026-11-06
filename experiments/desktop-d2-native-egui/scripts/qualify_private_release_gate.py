@@ -4,13 +4,14 @@
 This QA tool never ships in D2, requires authorized gh access and does not
 change any issue, security alert, branch, release, artifact, or remote setting.
 """
+
 from __future__ import annotations
 
-from collections import Counter
 import json
 import shutil
 import subprocess
 import sys
+from collections import Counter
 
 REPO = "AbdulazizShehri/MedOrigin"
 BLOCKER_ISSUES = (574, 603, 622, 662, 673, 676)
@@ -20,8 +21,12 @@ STATUS = "NO_GO_INDEPENDENT_SECURITY_CLINICAL_AND_OWNER_RELEASE_GATES_UNMET"
 MAX_GH_API_BYTES = 8_000_000
 
 
-class QualificationRefused(ValueError):
+class QualificationRefusedError(ValueError):
     """Refuse a missing or implausible source of release evidence."""
+
+
+# Stable compatibility alias for all existing source-review entrypoints.
+QualificationRefused = QualificationRefusedError
 
 
 def gh_json(resource: str) -> object:
@@ -31,7 +36,9 @@ def gh_json(resource: str) -> object:
         raise QualificationRefused("authenticated_github_cli_unavailable")
     proc = subprocess.run(
         ["gh", "api", resource],
-        capture_output=True, timeout=25, check=False,
+        capture_output=True,
+        timeout=25,
+        check=False,
     )
     if proc.returncode != 0:
         raise QualificationRefused("github_security_evidence_unavailable")
@@ -51,7 +58,9 @@ def live_security_snapshot() -> tuple[list[dict], dict[int, dict]]:
         raise QualificationRefused("authenticated_github_cli_unavailable")
     proc = subprocess.run(
         ["gh", "api", "--paginate", "--slurp", endpoint],
-        capture_output=True, timeout=90, check=False,
+        capture_output=True,
+        timeout=90,
+        check=False,
     )
     if proc.returncode != 0 or not proc.stdout or len(proc.stdout) > MAX_GH_API_BYTES:
         raise QualificationRefused("github_security_alert_inventory_unavailable")
@@ -103,7 +112,8 @@ def determine_release_status(alerts: list[dict], issues: dict[int, dict]) -> dic
             not isinstance(package, dict)
             or not isinstance(package.get("name"), str)
             or not package["name"].strip()
-            or not isinstance(manifest, str) or not manifest.strip()
+            or not isinstance(manifest, str)
+            or not manifest.strip()
             or severity not in SEVERITIES
         ):
             raise QualificationRefused("alert_security_scope_undetermined")
@@ -151,8 +161,7 @@ def main() -> int:
         print(json.dumps(result, sort_keys=True))
         print("MEDORIGIN_PRIVATE_RELEASE_GUARD_ENFORCED_NO_GO")
     except (QualificationRefused, OSError, subprocess.SubprocessError) as exc:
-        print("MEDORIGIN_RELEASE_GUARD_NO_GO_EVIDENCE_UNAVAILABLE:" + str(exc),
-              file=sys.stderr)
+        print("MEDORIGIN_RELEASE_GUARD_NO_GO_EVIDENCE_UNAVAILABLE:" + str(exc), file=sys.stderr)
     # Deliberately no path to exit zero; independent sign-offs and clinical
     # approvals cannot be generated or self-awarded by an assistant or script.
     return 2

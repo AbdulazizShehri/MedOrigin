@@ -1,6 +1,7 @@
 """Source-only checks: macOS AX/keyboard test must keep bounded actual GUI QA."""
-from pathlib import Path
+
 import unittest
+from pathlib import Path
 
 TESTS = Path(__file__).resolve().parent
 
@@ -35,9 +36,9 @@ class MacNativeAXKeyboardHarnessContract(unittest.TestCase):
         self.assertIn("AXIsProcessTrusted()", self.keyboard)
 
     def test_no_silent_keyboard_skip_or_unbounded_target_navigation(self):
-        self.assertIn('guard found else {', self.keyboard)
+        self.assertIn("guard found else {", self.keyboard)
         self.assertIn('fail("Tab cannot reach selector', self.keyboard)
-        self.assertIn('guard displayed else {', self.keyboard)
+        self.assertIn("guard displayed else {", self.keyboard)
         self.assertIn('fail("Space-activated', self.keyboard)
 
 

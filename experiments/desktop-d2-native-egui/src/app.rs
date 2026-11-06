@@ -2100,6 +2100,46 @@ impl MedOriginNativePreview {
         Ok(())
     }
 
+    // Fast, bounded navigation for up to 16 fake patient groups. Only actual
+    // Patient resources from the admitted source may become a group.
+    fn bundle_step_patient_group(&mut self, forward: bool) -> Result<(), &'static str> {
+        let bundle = self
+            .synthetic_bundle
+            .as_ref()
+            .ok_or("synthetic_bundle_missing")?;
+        let patients: Vec<usize> = bundle
+            .resources
+            .iter()
+            .enumerate()
+            .filter_map(|(index, record)| (record.resource_type == "Patient").then_some(index))
+            .collect();
+        if patients.len() != bundle.patient_count || patients.is_empty() {
+            self.clear_fictional_output();
+            return Err("synthetic_bundle_patient_groups_invalid");
+        }
+        let target = match self.synthetic_bundle_patient {
+            None if forward => patients.first(),
+            None => patients.last(),
+            Some(current) => {
+                let Some(position) = patients.iter().position(|index| *index == current) else {
+                    self.clear_fictional_output();
+                    return Err("synthetic_bundle_unknown_current_group");
+                };
+                if forward {
+                    patients.get(position + 1)
+                } else {
+                    position
+                        .checked_sub(1)
+                        .and_then(|index| patients.get(index))
+                }
+            }
+        };
+        let Some(&index) = target else {
+            return Err("synthetic_bundle_patient_group_boundary");
+        };
+        self.bundle_set_patient(Some(index))
+    }
+
     fn bundle_set_type(&mut self, kind: &'static str) -> Result<(), &'static str> {
         if !["All", "Patient", "Encounter", "Observation"].contains(&kind) {
             self.clear_fictional_output();
@@ -2287,6 +2327,7 @@ impl MedOriginNativePreview {
         enum Action {
             Clear,
             Patient(Option<usize>),
+            PatientStep(bool),
             Type(&'static str),
             Select(usize),
             Step(bool),
@@ -2310,20 +2351,50 @@ impl MedOriginNativePreview {
             }
             ui.separator();
             ui.strong("Fictional patient groups");
+            let group_label = self
+                .synthetic_bundle_patient
+                .and_then(|index| bundle.resources.get(index))
+                .map_or("All imaginary patients", |patient| patient.resource_id.as_str());
+            ui.label(format!("Bundle: Active fictional patient group: {group_label}"));
             ui.horizontal_wrapped(|ui| {
+                if ui.button("Bundle: Previous patient group").clicked() {
+                    next = Some(Action::PatientStep(false));
+                }
+                if ui.button("Bundle: Next patient group").clicked() {
+                    next = Some(Action::PatientStep(true));
+                }
                 if ui.button("Bundle: All patients").clicked() {
                     next = Some(Action::Patient(None));
                 }
-                for (index, record) in bundle.resources.iter().enumerate() {
-                    if record.resource_type == "Patient"
-                        && ui
-                            .button(format!("Bundle: Patient {}", record.resource_id))
-                            .clicked()
-                    {
-                        next = Some(Action::Patient(Some(index)));
+                if bundle.patient_count <= 4 {
+                    for (index, record) in bundle.resources.iter().enumerate() {
+                        if record.resource_type == "Patient"
+                            && ui
+                                .button(format!("Bundle: Patient {}", record.resource_id))
+                                .clicked()
+                        {
+                            next = Some(Action::Patient(Some(index)));
+                        }
                     }
                 }
             });
+            // Avoid rendering sixteen patient buttons in the primary toolbar.
+            // All source-derived groups remain available on demand.
+            if bundle.patient_count > 4 {
+                ui.collapsing("Bundle: Choose fictional patient by ID", |ui| {
+                    ui.horizontal_wrapped(|ui| {
+                        for (index, record) in bundle.resources.iter().enumerate() {
+                            if record.resource_type == "Patient"
+                                && ui
+                                    .button(format!("Bundle: Patient {}", record.resource_id))
+                                    .clicked()
+                            {
+                                next = Some(Action::Patient(Some(index)));
+                            }
+                        }
+                    });
+                });
+            }
             ui.strong("Resource types");
             ui.horizontal_wrapped(|ui| {
                 for kind in ["All", "Patient", "Encounter", "Observation"] {
@@ -2460,6 +2531,9 @@ impl MedOriginNativePreview {
             Some(Action::Clear) => self.clear_fictional_output(),
             Some(Action::Patient(index)) => {
                 let _ = self.bundle_set_patient(index);
+            }
+            Some(Action::PatientStep(forward)) => {
+                let _ = self.bundle_step_patient_group(forward);
             }
             Some(Action::Type(kind)) => {
                 let _ = self.bundle_set_type(kind);
@@ -3159,6 +3233,103 @@ mod tests {
         );
         assert!(app.synthetic_bundle.is_none());
         assert!(app.synthetic_bundle_history.is_empty());
+    }
+
+    #[test]
+    fn fictional_group_shortcuts_are_bounded_and_cannot_switch_to_unknown_patient() {
+        let raw = include_bytes!("../fixtures/core/synthetic-multipatient-fhir-bundle.json");
+        let mut app = MedOriginNativePreview::from_one_time_synthetic_bundle_stdin(raw).unwrap();
+        assert_eq!(
+            app.bundle_step_patient_group(false),
+            Err("synthetic_bundle_patient_group_boundary")
+        );
+        assert_eq!(app.synthetic_bundle_patient, Some(0));
+        app.bundle_step_patient_group(true).unwrap();
+        assert_eq!(app.synthetic_bundle_patient, Some(4));
+        assert_eq!(app.synthetic_bundle_selected, None);
+        assert_eq!(
+            app.bundle_step_patient_group(true),
+            Err("synthetic_bundle_patient_group_boundary")
+        );
+        assert!(app.synthetic_bundle.is_some());
+        app.bundle_set_patient(None).unwrap();
+        app.bundle_step_patient_group(false).unwrap();
+        assert_eq!(app.synthetic_bundle_patient, Some(4));
+        app.bundle_step_patient_group(false).unwrap();
+        assert_eq!(app.synthetic_bundle_patient, Some(0));
+        app.bundle_set_patient(None).unwrap();
+        app.bundle_step_patient_group(true).unwrap();
+        assert_eq!(app.synthetic_bundle_patient, Some(0));
+        app.synthetic_bundle_patient = Some(usize::MAX);
+        assert_eq!(
+            app.bundle_step_patient_group(true),
+            Err("synthetic_bundle_unknown_current_group")
+        );
+        assert!(app.synthetic_bundle.is_none());
+    }
+
+    #[test]
+    fn all_sixteen_fictional_patient_groups_are_navigable_at_capacity() {
+        let mut entries = Vec::new();
+        let urn = |i: usize| format!("urn:uuid:00000000-0000-4000-8000-{i:012}");
+        for patient in 1..=16 {
+            let patient_url = urn(patient);
+            let encounter_url = urn(patient + 16);
+            entries.push(serde_json::json!({
+                "fullUrl": patient_url,
+                "resource": {"id":format!("fictional-patient-{patient:03}"),"resourceType":"Patient"}
+            }));
+            entries.push(serde_json::json!({
+                "fullUrl": encounter_url,
+                "resource":{"id":format!("fictional-encounter-{patient:03}"),"resourceType":"Encounter",
+                    "subject":{"reference":patient_url}}
+            }));
+            entries.push(serde_json::json!({
+                "fullUrl":urn(patient+32),
+                "resource":{"id":format!("fictional-observation-{patient:03}"),"resourceType":"Observation",
+                    "subject":{"reference":patient_url},"encounter":{"reference":encounter_url}}
+            }));
+        }
+        let raw = serde_json::to_vec(&serde_json::json!({
+            "entry":entries,
+            "meta":{"tag":[{"code":"fictional-structural-demo-no-phi",
+                "system":"https://medorigin.si/synthetic-only"}]},
+            "resourceType":"Bundle",
+            "type":"collection"
+        }))
+        .unwrap();
+        assert_eq!(
+            raw,
+            include_bytes!("../fixtures/core/synthetic-multipatient-fhir-bundle-48.json").to_vec()
+        );
+        let mut app = MedOriginNativePreview::from_one_time_synthetic_bundle_stdin(&raw).unwrap();
+        assert_eq!(app.synthetic_bundle_resource_count(), 48);
+        assert_eq!(app.synthetic_bundle_visited.len(), 48);
+        assert_eq!(app.synthetic_bundle_patient, Some(0));
+        for patient in 2..=16 {
+            app.bundle_step_patient_group(true).unwrap();
+            assert_eq!(app.synthetic_bundle_patient, Some((patient - 1) * 3));
+        }
+        assert_eq!(
+            app.bundle_step_patient_group(true),
+            Err("synthetic_bundle_patient_group_boundary")
+        );
+        assert!(app.synthetic_bundle.is_some());
+        app.bundle_set_type("Observation").unwrap();
+        app.bundle_open_next_unexplored().unwrap();
+        assert_eq!(app.synthetic_bundle_selected, Some(47));
+        assert_eq!(
+            app.synthetic_bundle_visited.iter().filter(|b| **b).count(),
+            2
+        );
+        app.bundle_set_patient(None).unwrap();
+        assert_eq!(app.synthetic_bundle_patient, None);
+        app.bundle_step_patient_group(false).unwrap();
+        assert_eq!(app.synthetic_bundle_patient, Some(45));
+        app.bundle_step_patient_group(false).unwrap();
+        assert_eq!(app.synthetic_bundle_patient, Some(42));
+        app.clear_fictional_output();
+        assert!(app.synthetic_bundle_visited.is_empty());
     }
 
     #[test]

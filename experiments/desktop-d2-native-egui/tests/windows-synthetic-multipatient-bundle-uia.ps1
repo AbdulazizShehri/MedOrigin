@@ -5,17 +5,20 @@ param(
   [Parameter(Mandatory=$true)][string]$ExePath,
   [Parameter(Mandatory=$true)][ValidatePattern('^[a-fA-F0-9]{64}$')][string]$ExpectedSha256,
   [Parameter(Mandatory=$true)][ValidatePattern('^[a-fA-F0-9]{64}$')][string]$FixtureSha256,
-  [switch]$EmbeddedDemo
+  [switch]$EmbeddedDemo,
+  [switch]$Stress48
 )
 $ErrorActionPreference='Stop'
 $process=$null
 try {
+  if($EmbeddedDemo -and $Stress48){throw 'incompatible_native_test_modes'}
   $exe=(Resolve-Path -LiteralPath $ExePath -ErrorAction Stop).Path
   if((Split-Path -Leaf $exe) -cne 'medorigin-desktop-d2-native-egui.exe' -or
      (Get-FileHash -LiteralPath $exe -Algorithm SHA256).Hash -ine $ExpectedSha256) {
     throw 'reviewed_native_binary_refused'
   }
-  $fixture=(Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..\fixtures\core\synthetic-multipatient-fhir-bundle.json')).Path
+  $fixtureName=if($Stress48){'synthetic-multipatient-fhir-bundle-48.json'}else{'synthetic-multipatient-fhir-bundle.json'}
+  $fixture=(Resolve-Path -LiteralPath (Join-Path $PSScriptRoot ('..\fixtures\core\'+$fixtureName))).Path
   $item=Get-Item -LiteralPath $fixture
   if($item.PSIsContainer -or ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -or
      $item.Length -gt 32768 -or
@@ -96,8 +99,41 @@ try {
     Press 'Open built-in two-patient fictional demo (NO PHI)'
   }
   Expect 'Fictional Multi-Patient Workspace'
+  if($Stress48){
+    Expect '48 imaginary source-only records across 16 fictional patients'
+    Expect 'Bundle: Active fictional patient group: fictional-patient-001'
+    for($patient=2;$patient -le 16;$patient++){
+      Press 'Bundle: Next patient group'
+      Expect ('Bundle: Active fictional patient group: fictional-patient-{0:D3}' -f $patient)
+    }
+    Expect 'Bundle: 3 of 48 fictional resources visible'
+    Press 'Bundle: Next patient group'
+    Expect 'Bundle: Active fictional patient group: fictional-patient-016'
+    Press 'Bundle: Previous patient group'
+    Expect 'Bundle: Active fictional patient group: fictional-patient-015'
+    Press 'Bundle: All patients'
+    Expect 'Bundle: 48 of 48 fictional resources visible'
+    Press 'Bundle: Type Observation'
+    Expect 'Bundle: 16 of 48 fictional resources visible'
+    Press 'Bundle: Open next unexplored visible record'
+    Expect 'Bundle record: Observation/fictional-observation-001'
+    Press 'Bundle: Reset session exploration'
+    Expect 'Bundle exploration: 0 of 16 visible fictional records opened'
+    Press 'Bundle: Clear fictional records'
+    Expect 'Native Rust Experiment'
+    Write-Output 'WINDOWS_REAL_48_RECORD_16_PATIENT_GROUP_SWITCH_UIA_PASS_NONCLINICAL'
+    return
+  }
   Expect '8 imaginary source-only records across 2 fictional patients'
   Expect 'Bundle: 4 of 8 fictional resources visible'
+  Expect 'Bundle record: Patient/fictional-patient-001'
+  Expect 'Bundle: Active fictional patient group: fictional-patient-001'
+  Press 'Bundle: Next patient group'
+  Expect 'Bundle: Active fictional patient group: fictional-patient-002'
+  Expect 'Bundle: 4 of 8 fictional resources visible'
+  Press 'Bundle: Previous patient group'
+  Expect 'Bundle: Active fictional patient group: fictional-patient-001'
+  Press 'Bundle: Open Patient/fictional-patient-001'
   Expect 'Bundle record: Patient/fictional-patient-001'
   Expect 'Bundle exploration: 1 of 4 visible fictional records opened'
   Press 'Bundle: Open next unexplored visible record'
