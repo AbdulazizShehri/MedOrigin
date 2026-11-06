@@ -52,6 +52,10 @@ For the separately stacked fictional-only native keyboard-file feature in D2 #10
 
 This new journey remains source-gated and fictional-only. Hosted CI parses its source but **does not physically drive Windows GUI or install a public application**; separate owner Windows qualification must actually pass on the exact reviewed commit. Do not treat a successful installer GUI test as EHR, PHI, clinical, release, network-isolation or code-signing authority.
 
+## Bounded IExpress subtree ownership
+
+Owner Windows qualification found that the earlier 90-second `subprocess.run` IExpress timeout could leave its `makecab.exe` child running after the parent was killed. The builder now starts only the fixed Windows system IExpress executable **suspended**, assigns that process to a private Windows Job Object with `KILL_ON_JOB_CLOSE`, then resumes it. It waits for the exact builder process for up to 240 seconds and continues to require a stable, architecture-verified output. Closing the Job terminates only descendants created by that builder, including on timeout or exception. The isolated regression test simulates a timed-out parent and verifies the owned Job is closed. The 240-second bound is a reliability allowance for busy local Windows hosts, not permission to ignore a hang or publish a partial installer.
+
 ## Hard release NO-GO
 
 Before public download, separately complete clinical identity, RBAC, patient consent and privacy governance; authenticated Core process handoff, packet and DNS network isolation; real FHIR profiles, terminology, invariants and clinical validation; production encryption key provision, recovery and rotation; all reachable dependency advisories and supply chain review; complete accessibility and usability acceptance; signed and reputable Windows installer, app identity/icon/version, Add or Remove Programs registration, safe updates and qualified uninstaller; independent security review and final owner authorization. Protected main and the public website are intentionally unchanged.
