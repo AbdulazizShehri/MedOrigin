@@ -20,9 +20,9 @@ from pathlib import Path
 from typing import Any
 
 SCRIPT_ROOT = Path(__file__).resolve().parents[1]
-MARKER = "MEDORIGIN_SYNTHETIC_FHIR_DEMO_PASS"
+MARKER = "MEDORIGIN_SYNTHETIC_FHIR_NOT_VALIDATED_PREVIEW_ONLY"
 EXPECTED_VERSION = "0.3.0"
-EXPECTED_REPORT_SHA256 = "991d319d9c567db3a71985661a12abb67c8432ff43b439c08759f8ee1d52fbd9"
+EXPECTED_REPORT_SHA256 = "165b41acdc416617e8f207366d454ac6a713ecf4c9a5efd740d14a0af882bd08"
 MAX_OUTPUT = 100_000
 
 # Executes within the separately installed interpreter, with isolated
@@ -415,13 +415,39 @@ def qualify(
         runs = receipt.get("runs")
         if not isinstance(runs, list) or len(runs) != 2:
             raise QualificationError("expected two independent Core executions")
-        if any(r.get("report_sha256") != EXPECTED_REPORT_SHA256 for r in runs):
-            raise QualificationError("known synthetic report identity drifted")
+        if any(
+            not isinstance(item, dict)
+            or item.get("report_sha256") != EXPECTED_REPORT_SHA256
+            or item.get("provenance_status") != "not_validated"
+            or type(item.get("validation_exit")) is not int
+            or item["validation_exit"] != 2
+            for item in runs
+        ):
+            raise QualificationError("synthetic Core must return exact negative-truth provenance")
+        if (
+            receipt.get("schema") != "medorigin-local-synthetic-fhir-example/v2"
+            or receipt.get("fhir_conformance_validated") is not False
+            or receipt.get("full_beta_preview_qualified") is not False
+            or receipt.get("publication_authorized") is not False
+            or receipt.get("clinical_authorized") is not False
+        ):
+            raise QualificationError(
+                "synthetic Developer Beta receipt falsely claimed qualification"
+            )
         preview = (output / "preview.html").read_text(encoding="utf-8")
-        if "connect-src 'none'" not in preview or "script-src 'none'" not in preview:
-            raise QualificationError("local static preview CSP absent")
+        if (
+            "connect-src 'none'" not in preview
+            or "script-src 'none'" not in preview
+            or "Not validated." not in preview
+            or "NOT VALIDATED" not in preview
+            or "FHIR validators executed" not in preview
+        ):
+            raise QualificationError("local truthful static preview or CSP absent")
     return {
-        "status": "TECHNICAL_PREPUBLICATION_REHEARSAL_PASS",
+        "status": "TECHNICAL_TRUTHFUL_SYNTHETIC_BETA_REHEARSAL_ONLY",
+        "fhir_conformance_validated": False,
+        "full_beta_preview_qualified": False,
+        "prepublication_rehearsal_qualified": False,
         "source_git_commit": source_sha,
         "distribution": "medscale",
         "project": "MedOrigin",
