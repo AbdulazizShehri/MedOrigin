@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-import re
 
 from medscale_workspace import fhir_r4 as fhir
 from medscale_workspace.audit import (
@@ -36,7 +35,16 @@ from medscale_workspace.provenance import (
 )
 from medscale_workspace.storage import ObjectWrite, WorkspaceStore
 
-_SHA = re.compile(r"[0-9a-f]{64}\Z")
+
+def _is_lower_sha256(value: object) -> bool:
+    """Match exactly 64 ASCII lowercase hexadecimal characters, without regex imports."""
+    return (
+        isinstance(value, str)
+        and len(value) == 64
+        and all("0" <= char <= "9" or "a" <= char <= "f" for char in value)
+    )
+
+
 _ALLOWED_KEYWORDS = frozenset(
     [
         "additionalItems",
@@ -139,8 +147,7 @@ def _admit_store(
     if type(provider) is not InMemoryTestKeyProvider or store._key_provider is not provider:
         raise SyntheticStructuralReceiptError("in_memory_test_key_required")
     if not all(
-        isinstance(v, str) and _SHA.fullmatch(v) is not None
-        for v in (source_sha, import_sha, head_sha)
+        isinstance(v, str) and _is_lower_sha256(v) for v in (source_sha, import_sha, head_sha)
     ):
         raise SyntheticStructuralReceiptError("source_or_audit_anchor_refused")
     if store.object_count() > _MAX_OBJECTS or store.stored_envelope_bytes() > _MAX_ENVELOPES:
@@ -311,9 +318,8 @@ def read_verified_synthetic_structural_outcome(
         import_audit_event_digest,
         expected_current_audit_head_digest,
     )
-    if (
-        not isinstance(expected_receipt_sha256, str)
-        or _SHA.fullmatch(expected_receipt_sha256) is None
+    if not isinstance(expected_receipt_sha256, str) or not _is_lower_sha256(
+        expected_receipt_sha256
     ):
         raise SyntheticStructuralReceiptError("receipt_digest_refused")
     try:

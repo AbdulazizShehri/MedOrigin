@@ -215,9 +215,21 @@ def test_failed_relationship_check_never_runs_fake_validator_or_reports_patient(
     archive = tmp_path / "does-not-exist.zip"
     assert public_cli(_cli(source, archive)) == 2
     result = capsys.readouterr()
-    assert result.out == ""
-    assert "relationship_preflight_refused" in result.err
-    assert NEVER_ECHO not in result.err
+    if "meta" not in payload:
+        # Without the exact synthetic fixture marker, do not produce
+        # a FHIR-looking outcome from unknown/unapproved source data.
+        assert result.out == ""
+        assert "relationship_preflight_refused" in result.err
+    else:
+        assert result.err == ""
+        issue = json.loads(result.out)
+        assert issue["resourceType"] == "OperationOutcome"
+        assert [item["severity"] for item in issue["issue"]] == ["error", "warning"]
+        assert [item["code"] for item in issue["issue"]] == ["structure", "informational"]
+        assert set(issue) == {"resourceType", "issue"}
+    assert NEVER_ECHO not in result.err + result.out
+    assert "fictional-patient-001" not in result.out
+    assert "private.example" not in result.out
     assert sorted(tmp_path.iterdir()) == [source]
 
 
