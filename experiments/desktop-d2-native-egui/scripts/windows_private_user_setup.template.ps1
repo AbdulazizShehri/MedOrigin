@@ -242,7 +242,14 @@ try {
     } else {
         # Uninstall is runnable only from the exact installed script, never
         # from the IExpress temporary extraction or an arbitrary folder.
-        if ($PSScriptRoot -ine $destination) { throw 'uninstall_requires_installed_script' }
+        Require-ExistingUnredirected $PSScriptRoot $true
+        Require-ExistingUnredirected $destination $true
+        # PowerShell may return the launcher's 8.3 alias as PSScriptRoot on
+        # hosted Windows. Compare canonical existing directories, not the
+        # spelling of their paths, and still reject any other script root.
+        $runningRoot=(Get-Item -LiteralPath $PSScriptRoot -Force).FullName
+        $installedRoot=(Get-Item -LiteralPath $destination -Force).FullName
+        if ($runningRoot -ine $installedRoot) { throw 'uninstall_requires_installed_script' }
         Confirm-Payload $destination $true
         Confirm-Shortcut $shortcut $exe ''
         Confirm-Shortcut $uninstallShortcut $psExe $uninstallArguments

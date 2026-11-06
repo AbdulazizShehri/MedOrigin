@@ -373,6 +373,11 @@ class PrivateWindowsUserSetupTests(unittest.TestCase):
         self.assertNotEqual(refused.returncode, 0)
         tampered.write_bytes(before)
         self.assertEqual(action(installed / setup.INSTALLER_SCRIPT, "Verify").returncode, 0)
+        # The extraction copy is not authorized to uninstall a real installed
+        # profile, even when its embedded archive and manifest are valid.
+        stray_uninstall = action(script, "Uninstall")
+        self.assertNotEqual(stray_uninstall.returncode, 0)
+        self.assertTrue(installed.is_dir())
         remove = action(installed / setup.INSTALLER_SCRIPT, "Uninstall")
         self.assertEqual(remove.returncode, 0, remove.stdout + remove.stderr)
         self.assertFalse(installed.exists())
