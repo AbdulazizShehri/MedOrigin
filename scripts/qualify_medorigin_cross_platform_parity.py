@@ -24,7 +24,9 @@ from typing import Any
 
 SCHEMA = "MEDORIGIN_CORE_PARITY_REVIEW_V1"
 HEX = re.compile(r"[0-9a-f]{64}\Z")
-EXPECTED = {"wheel": 255, "sdist": 258}
+# Re-baselined +26 (wheel 255->281, sdist 258->284) on 2026-11-08 with the
+# founder-approved Core source inventory (see verify_medorigin_base_only_proposal).
+EXPECTED = {"wheel": 281, "sdist": 284}
 EXPECTED_FILES = {
     "wheel": "medscale-0.3.0-py3-none-any.whl",
     "sdist": "medscale-0.3.0.tar.gz",
@@ -55,7 +57,11 @@ def _inventory(name: str, path: Path, members: dict[str, bytes]) -> dict[str, An
     return record
 
 
-SYNTHETIC_REPORT_SHA256 = "991d319d9c567db3a71985661a12abb67c8432ff43b439c08759f8ee1d52fbd9"
+# Truthful Core report after #877/#882: the legacy demo is "not_validated"
+# (exit 2), never "valid". Must equal qualify_medorigin_developer_beta
+# EXPECTED_REPORT_SHA256 (enforced by tests). Kept literal so compare mode
+# stays standard-library-only. Re-baselined 2026-11-08 (founder-approved).
+SYNTHETIC_REPORT_SHA256 = "165b41acdc416617e8f207366d454ac6a713ecf4c9a5efd740d14a0af882bd08"
 
 
 def _offline_command(args: list[str], repo: Path) -> None:
@@ -91,7 +97,9 @@ def _verify_synthetic_evidence(path: Path) -> None:
         or any(
             not isinstance(row, dict)
             or row.get("report_sha256") != SYNTHETIC_REPORT_SHA256
-            or row.get("structural_status") != "valid"
+            or row.get("provenance_status") != "not_validated"
+            or type(row.get("validation_exit")) is not int
+            or row["validation_exit"] != 2
             or type(row.get("malformed_exit")) is not int
             or row["malformed_exit"] != 1
             for row in receipt["runs"]

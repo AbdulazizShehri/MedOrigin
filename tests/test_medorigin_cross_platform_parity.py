@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import copy
 import importlib.util
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -35,7 +36,7 @@ def _record(system: str, *, archive_hash: str = "a") -> dict[str, Any]:
         "installed_python_versions": ["3.11", "3.12"],
         "installed_python_source_count": 249,
         "synthetic_report_sha256": (
-            "991d319d9c567db3a71985661a12abb67c8432ff43b439c08759f8ee1d52fbd9"
+            "165b41acdc416617e8f207366d454ac6a713ecf4c9a5efd740d14a0af882bd08"
         ),
         "archives": {
             name: {
@@ -48,7 +49,7 @@ def _record(system: str, *, archive_hash: str = "a") -> dict[str, Any]:
                     else {}
                 ),
             }
-            for name, size in (("wheel", 255), ("sdist", 258))
+            for name, size in (("wheel", 281), ("sdist", 284))
         },
     }
 
@@ -159,7 +160,8 @@ def test_synthetic_evidence_rejects_tampered_reports(tmp_path: Path) -> None:
         "runs": [
             {
                 "report_sha256": subject.SYNTHETIC_REPORT_SHA256,
-                "structural_status": "valid",
+                "provenance_status": "not_validated",
+                "validation_exit": 2,
                 "malformed_exit": 1,
             }
         ]
@@ -171,7 +173,9 @@ def test_synthetic_evidence_rejects_tampered_reports(tmp_path: Path) -> None:
         {"runs": baseline["runs"][:1]},
         {"runs": [baseline["runs"][0], dict(baseline["runs"][0], report_sha256="f" * 64)]},
         {"runs": [baseline["runs"][0], dict(baseline["runs"][0], malformed_exit=0)]},
-        {"runs": [baseline["runs"][0], dict(baseline["runs"][0], structural_status="invalid")]},
+        {"runs": [baseline["runs"][0], dict(baseline["runs"][0], provenance_status="valid")]},
+        {"runs": [baseline["runs"][0], dict(baseline["runs"][0], validation_exit=0)]},
+        {"runs": [baseline["runs"][0], dict(baseline["runs"][0], validation_exit=True)]},
         {"runs": [baseline["runs"][0], dict(baseline["runs"][0], malformed_exit=True)]},
     ):
         report.write_text(json.dumps(tampered), encoding="utf-8")
@@ -249,3 +253,10 @@ def test_build_cli_keeps_source_metadata_off_stdout(
     assert marker not in output
     assert json.loads(output)["status"] == "SOURCE_BOUND_ARTIFACT_MANIFEST_VERIFIED"
     assert json.loads(receipt.read_text(encoding="utf-8")) == evidence
+
+
+def test_parity_report_digest_matches_truthful_developer_beta_contract() -> None:
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
+    import qualify_medorigin_developer_beta as beta
+
+    assert _load().SYNTHETIC_REPORT_SHA256 == beta.EXPECTED_REPORT_SHA256
