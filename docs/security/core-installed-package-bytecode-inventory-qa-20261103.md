@@ -1,6 +1,6 @@
 # MedOrigin Core — full installed-package integrity, forged bytecode QA
 
-**Date:** 2026-11-03 (Asia/Riyadh)  
+**Date:** 2026-11-03 (Asia/Riyadh)
 **Status:** Private Draft, synthetic only. **Publication remains NO-GO.**
 
 ## Source boundary

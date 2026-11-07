@@ -1,6 +1,6 @@
 # MedOrigin Core — secure release build contract and broad non-UI Windows regression QA
 
-**Date:** 2026-11-03 (Asia/Riyadh)  
+**Date:** 2026-11-03 (Asia/Riyadh)
 **Status:** Private Draft, unpublished, synthetic only. **Release remains NO-GO.**
 
 ## Parent, task scope, regression source

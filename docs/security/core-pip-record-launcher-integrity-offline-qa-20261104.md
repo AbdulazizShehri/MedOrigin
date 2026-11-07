@@ -1,6 +1,6 @@
 # MedOrigin Core — installed pip RECORD / console-launcher vendor resource integrity
 
-**Date:** 2026-11-04 Asia/Riyadh  
+**Date:** 2026-11-04 Asia/Riyadh
 **Decision:** Private synthetic-only source-bound Core QA. **RELEASE / FHIR CONFORMANCE / INDEPENDENT VENDOR SIGNOFF STILL NO-GO.**
 
 ## Source, boundaries and reproducible finding

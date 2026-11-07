@@ -257,13 +257,17 @@ def verify_linux_keyboard_only(window: object, pyatspi: object) -> None:
         time.sleep(0.12)
 
     def focus_target(label: str, direction: str = "Tab") -> None:
-        for _ in range(18):
+        # Bounded by the full focus cycle (header, settings, navigation and
+        # fixture controls); the label is checked again after the last key.
+        for _ in range(40):
             names = focused_names()
             if names == [label]:
                 return
             if len(names) > 1:
                 refuse(f"ambiguous AT-SPI keyboard focus {names}")
             send_key(direction)
+        if focused_names() == [label]:
+            return
         refuse(f"keyboard-only tab traversal never focused {label!r}; last_focus={focused_names()}")
 
     # Do not use AT-SPI programmatic presses anywhere on this path: only
@@ -565,6 +569,17 @@ def main() -> int:
                 window, "patient-minimal (57 bytes)", ("check", "radio", "toggle")
             ) and find(window, "Verify synthetic SHA-256", ("push", "button"))
 
+        # A plain launch opens Home; the fixture controls live under the
+        # "Developer evidence" navigation item. Opening it is setup only.
+        navigation = wait_for(
+            lambda: find(
+                window, "Developer evidence", ("check", "radio", "toggle", "push", "button")
+            ),
+            "Developer evidence navigation",
+        )
+        if len(navigation) != 1:
+            refuse("ambiguous Developer evidence navigation")
+        press(navigation[0], "open Developer evidence")
         wait_for(existing_controls, "original native D2 AT-SPI controls")
         if preview_mode:
             verify_linux_fictional_json_preview(window)

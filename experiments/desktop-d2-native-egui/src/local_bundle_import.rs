@@ -73,6 +73,19 @@ pub fn read_dropped_fictional_bundle(path: &Path) -> Result<SyntheticBundlePrevi
         .map_err(|_| "local_fictional_bundle_not_canonical_synthetic_no_phi")
 }
 
+/// macOS places the per-user temp directory under the `/var` symlink, which
+/// the production ancestor guard correctly refuses. Tests resolve it first so
+/// they exercise admission rather than the symlink refusal.
+#[cfg(test)]
+pub(crate) fn resolved_test_temp_dir() -> std::path::PathBuf {
+    let dir = std::env::temp_dir();
+    if cfg!(target_os = "macos") {
+        dir.canonicalize().expect("canonical macOS temp directory")
+    } else {
+        dir
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -82,7 +95,7 @@ mod tests {
 
     fn temp_json(data: &[u8]) -> std::path::PathBuf {
         let id = NEXT_TEST.fetch_add(1, Ordering::Relaxed);
-        let file = std::env::temp_dir().join(format!(
+        let file = crate::local_bundle_import::resolved_test_temp_dir().join(format!(
             "medorigin-d2-local-bundle-test-{:?}-{id}.json",
             std::thread::current().id()
         ));
@@ -130,7 +143,7 @@ mod tests {
             read_dropped_fictional_bundle(Path::new("relative.json")),
             Err("local_fictional_bundle_absolute_path_required")
         ));
-        let candidate = std::env::temp_dir().join(format!(
+        let candidate = crate::local_bundle_import::resolved_test_temp_dir().join(format!(
             "medorigin-d2-non-json-file-{:?}.txt",
             std::thread::current().id()
         ));

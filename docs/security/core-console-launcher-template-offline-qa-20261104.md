@@ -1,6 +1,6 @@
 # MedOrigin Core — pinned installed console launcher template qualification
 
-**Date:** 2026-11-04 (Asia/Riyadh)  
+**Date:** 2026-11-04 (Asia/Riyadh)
 **Status:** Private source-bound Core security QA, synthetic only. **NO RELEASE / MERGE / CLINICAL GO.**
 
 ## Exact source scope

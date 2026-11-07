@@ -1,6 +1,6 @@
 # MedOrigin Core — source-binding installed Windows Python executable before use
 
-**Date:** 2026-11-04 (Asia/Riyadh)  
+**Date:** 2026-11-04 (Asia/Riyadh)
 **Status:** PRIVATE DRAFT / source-bound synthetic Core security qualification only. **RELEASE / CLINICAL / VENDOR-SIGNATURE / MAIN MERGE NO-GO.**
 
 ## Exact source and ownership
