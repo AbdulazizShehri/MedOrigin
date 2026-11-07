@@ -11,7 +11,7 @@ States: `complete` · `partial` · `missing` · `blocked` (blocked means an exte
 
 | Area | Capability | State | Evidence | Remaining work (smallest next task) | Acceptance | Owner | Dependency | Release impact |
 |---|---|---|---|---|---|---|---|---|
-| QA | One integrated Core + Desktop branch | partial | Merge commit `b8f8e64`; draft PR #1010. First CI run: trailing whitespace in Core docs (fixed), macOS temp-symlink test fixtures (fixed), Linux AT-SPI Tab bound (fixed) | Remaining red check: Core "source-bound inventory" pins 254 frozen `src/medscale` files and the frozen `pyproject`/`uv.lock` hashes; the Core stack already exceeds that. Changing it is a research-governance decision, so it needs founder approval | Integration PR CI is green on its exact head | Claude + founder | governance decision | blocking |
+| QA | One integrated Core + Desktop branch | partial | Merge commit `b8f8e64`; draft PR #1010. First CI run: trailing whitespace in Core docs (fixed), macOS temp-symlink test fixtures (fixed), Linux AT-SPI Tab bound (fixed) | Core source-inventory gate re-baselined 254 to 280 with founder approval (`docs/security/core-source-inventory-rebaseline-20261108.md`); frozen digests unchanged. Still red: repo-wide Ruff (205 findings, mostly Desktop-stack Python scripts) and the out-of-date D1 Tauri `Cargo.lock` | Integration PR CI is green on its exact head | Claude | none | blocking |
 | Desktop | Design-token system (light/dark, type, spacing, AA contrast) | partial | `experiments/desktop-d2-native-egui/src/theme.rs`; `theme::tests` WCAG checks; `evidence/design-system-20261108/*.png` | Replace about 40 remaining ad-hoc `RichText` sizes and colours in `app.rs` with tokens | `rg "Color32::from_rgb" src/app.rs` returns 0; screenshots in both modes | Claude | none | blocking |
 | Desktop | Settings: appearance, privacy facts, version | partial | `settings_help_ui` in `app.rs`; real-app screenshots | Add accessibility (text scale) and import options once the import scope is defined | Settings opens with F1 or the button; theme switches live | Claude | none | blocking |
 | Desktop | Report an issue (sanitized, user-initiated) | partial | `src/support.rs` and its tests; `.github/ISSUE_TEMPLATE/desktop_bug_report.yml` | Link the issue form from the failure dialogs | Diagnostics hold only allowlisted fields; nothing is sent automatically | Claude | none | non-blocking |
@@ -31,7 +31,7 @@ States: `complete` · `partial` · `missing` · `blocked` (blocked means an exte
 | Clinical | Real patient data | blocked | none | External security, privacy, legal and regulatory review | Independent sign-off | External | external | blocking for level 2+ |
 
 ## Next actions (in priority order)
-1. Founder decision on the frozen Core source-inventory gate (the last red check on #1010).
+1. Clear the remaining red checks on #1010: repo-wide Ruff findings and the D1 Tauri `Cargo.lock`.
 2. Land the patched `uv.lock` (critical/high alerts).
 3. Move the remaining developer-only Windows UIA scripts to the navigation-aware flow (click "Developer evidence" first). `windows-native-uia-smoke.ps1` and the Linux AT-SPI script are already updated.
 4. Rebase the installer PRs (#1008, #1009) onto the integration branch.

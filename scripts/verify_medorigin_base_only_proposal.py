@@ -38,6 +38,11 @@ SOURCES = (
     "apps/workspace/LICENSE",
 )
 MRL = "specs/mesc-experiment-0/mrl-0809-static-prerequisites-v1.json"
+# Re-baselined 254 -> 280 on 2026-11-08 with founder approval: the Core stack
+# (#939) added 26 reviewed src/medscale/fhirkit modules. The frozen pyproject,
+# lock and MRL digests above are unchanged. See docs/security/
+# core-source-inventory-rebaseline-20261108.md.
+FROZEN_SOURCE_FILE_COUNT = 280
 SD = "medscale-0.3.0/"
 DI = "medscale-0.3.0.dist-info/"
 DIST_META = frozenset(
@@ -206,7 +211,7 @@ def trusted_source(repository: Path) -> tuple[str, dict[str, bytes], bytes, byte
             if item.filename in sources or (item.external_attr >> 16) & 0o170000 == 0o120000:
                 raise ProposalVerificationError("untrusted committed source")
             sources[item.filename] = z.read(item)
-    if len(sources) != 254 or "src/medscale/__init__.py" not in sources:
+    if len(sources) != FROZEN_SOURCE_FILE_COUNT or "src/medscale/__init__.py" not in sources:
         raise ProposalVerificationError("unexpected Git source inventory")
     return revision, sources, root, lock, manifest
 

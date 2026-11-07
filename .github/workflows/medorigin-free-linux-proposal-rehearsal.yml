@@ -74,7 +74,7 @@ jobs:
           commit = subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()
           assert receipt["source_git_commit"] == commit
           assert sha(items["medscale-0.3.0/pyproject.toml"]) == receipt["projected_pyproject_sha256"]
-          assert len(receipt["source_files"]) == 254
+          assert len(receipt["source_files"]) == 280
           for name, expected in receipt["source_files"].items():
               packaged = items["medscale-0.3.0/" + name]
               assert sha(packaged) == expected, name

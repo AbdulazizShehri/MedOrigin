@@ -71,7 +71,7 @@ def test_provenance_template_never_grants_release(gate: Any) -> None:
     base, changed = gate.exact_removed_projected_root(original)
     manifest = json.loads(gate.expected_receipt(revision, sources, base, changed))
     assert manifest["source_git_commit"] == revision
-    assert manifest["source_file_count"] == 254
+    assert manifest["source_file_count"] == 280
     assert manifest["publication_authorized"] is False
     assert manifest["adr_0044_amendment_accepted"] is False
     assert manifest["independent_security_review_completed"] is False
