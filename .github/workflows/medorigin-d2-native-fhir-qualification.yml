@@ -1,0 +1,517 @@
+# Synthetic-only native Rust D2 integration, no GUI launch or publication.
+name: D2 native fictional FHIR and offline source qualification
+on:
+  push:
+    branches:
+      - feat/medorigin-d2-native-fhir-bundle-20261102
+      - feat/medorigin-d2-fictional-json-preview-20261102
+  pull_request:
+    paths:
+      - 'experiments/desktop-d0-rust/**'
+      - 'experiments/desktop-d2-native-egui/**'
+      - '.github/workflows/medorigin-d2-native-fhir-qualification.yml'
+permissions:
+  contents: read
+jobs:
+  native-offline:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-2025, ubuntu-24.04]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    steps:
+      - name: Checkout candidate by exact head SHA without persisted credentials
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - name: Install pinned Rust with formatter and Clippy
+        shell: pwsh
+        run: |
+          rustup toolchain install 1.97.1 --profile minimal --component rustfmt --component clippy
+          if ($LASTEXITCODE -ne 0) { throw 'Rust install failed' }
+          rustup default 1.97.1
+          if ($LASTEXITCODE -ne 0) { throw 'Rust version selection failed' }
+      - name: Linux graphical build dependencies (no GUI launched)
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends libgtk-3-dev libxkbcommon-dev libwayland-dev libegl1-mesa-dev libgl1-mesa-dev pkg-config
+      - name: Verify exact fixed fictional Bundle JSON with no writes
+        shell: pwsh
+        run: |
+          $py = if ($IsWindows) { 'python' } else { 'python3' }
+          & $py experiments/desktop-d0-rust/tools/generate_fictional_bundles.py --check
+          if ($LASTEXITCODE -ne 0) { throw 'Fictional fixture bytes drifted' }
+      - name: Test actual D0 parser and fictional reference graph
+        shell: pwsh
+        run: |
+          cargo test --locked --all-targets --manifest-path experiments/desktop-d0-rust/Cargo.toml
+          if ($LASTEXITCODE -ne 0) { throw 'D0 Rust tests failed' }
+      - name: Compile native D2 and run real Rust view model plus source boundary
+        shell: pwsh
+        run: |
+          cargo fmt --all --manifest-path experiments/desktop-d2-native-egui/Cargo.toml -- --check
+          if ($LASTEXITCODE -ne 0) { throw 'D2 Rust format failed' }
+          cargo test --locked --all-targets --manifest-path experiments/desktop-d2-native-egui/Cargo.toml
+          if ($LASTEXITCODE -ne 0) { throw 'D2 native Rust tests failed' }
+          cargo clippy --locked --all-targets --manifest-path experiments/desktop-d2-native-egui/Cargo.toml -- -D warnings
+          if ($LASTEXITCODE -ne 0) { throw 'D2 Clippy failed' }
+      - name: Test private extracted Windows ZIP GUI acceptance harness (no hosted GUI)
+        shell: pwsh
+        run: |
+          $py = if ($IsWindows) { 'python' } else { 'python3' }
+          & $py -m unittest discover -s experiments/desktop-d2-native-egui/scripts -p test_qualify_windows_extracted_portable_gui.py -v
+          if ($LASTEXITCODE -ne 0) { throw 'Private extracted Windows ZIP integrity and UIA harness source tests failed' }
+          Write-Output 'D2_PRIVATE_EXTRACTED_WINDOWS_ZIP_SOURCE_CONTRACT_PASS_NO_HOSTED_GUI_EXECUTION'
+      - name: Test private Windows unsigned single-file per-user setup (source-only, no install)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $scripts = 'experiments/desktop-d2-native-egui/scripts'
+          & python -B -m unittest discover -s $scripts -p test_build_windows_private_user_setup.py -v
+          if ($LASTEXITCODE -ne 0) { throw 'Private Windows single-file installer source/attack tests failed' }
+          & python -m py_compile "$scripts/build_windows_private_user_setup.py" "$scripts/qualify_windows_private_user_setup.py"
+          if ($LASTEXITCODE -ne 0) { throw 'Private Windows setup/QA harness syntax failed' }
+          Write-Output 'PRIVATE_WINDOWS_SYNTHETIC_SINGLE_FILE_INSTALLER_SOURCE_GUARDS_PASS_NO_HOSTED_INSTALL'
+      - name: Parse owner-only physical Windows OLE drag-drop QA (no CI GUI or cursor changes)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $path = 'experiments/desktop-d2-native-egui/tests/windows-native-local-fictional-ole-drop-uia.ps1'
+          $tokens = $null
+          $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile(
+            (Resolve-Path -LiteralPath $path).Path, [ref]$tokens, [ref]$errors
+          ) | Out-Null
+          if (@($errors).Count -ne 0) { throw 'Physical nonclinical OLE QA syntax rejected' }
+          $source = Get-Content -LiteralPath $path -Raw
+          foreach ($marker in @(
+            'REAL_WINDOWS_OLE_DRAG_DROP_LOCAL_FICTIONAL_FHIR_BUNDLE_UIA_PASS_NONCLINICAL',
+            'source_reviewed_fictional_fixture_path_or_digest_required',
+            'MEDORIGIN_PHYSICAL_WINDOWS_OLE_DRAG_QA_NO_GO'
+          )) {
+            if (-not $source.Contains($marker)) { throw 'Physical source-only QA marker missing' }
+          }
+          Write-Output 'SOURCE_ONLY_WINDOWS_OLE_DRAG_QA_SYNTAX_AND_FAIL_CLOSED_BOUNDARIES_PASS_NO_HOSTED_GUI'
+      - name: Parse typed local fictional file-path UIAutomation source (no hosted GUI)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $path = 'experiments/desktop-d2-native-egui/tests/windows-native-typed-fictional-path-uia.ps1'
+          $tokens = $null
+          $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile(
+            (Resolve-Path -LiteralPath $path).Path, [ref]$tokens, [ref]$errors
+          ) | Out-Null
+          if (@($errors).Count -ne 0) { throw 'Typed local fictional source UIA has syntax errors' }
+          $source = Get-Content -LiteralPath $path -Raw
+          foreach ($required in @(
+            'OWNER_WINDOWS_NATIVE_TYPED_SYNTHETIC_FILE_PATH_UIA_PASS_NONCLINICAL',
+            'reviewed_synthetic_fixture_sha_refused',
+            'typed_local_path_persisted_after_clear',
+            'MEDORIGIN_TYPED_LOCAL_FILE_UIA_NO_GO'
+          )) {
+            if (-not $source.Contains($required)) { throw 'Missing typed import QA safety marker' }
+          }
+          Write-Output 'WINDOWS_TYPED_LOCAL_IMPORT_UIA_SOURCE_PARSE_PASS_NO_HOSTED_GUI'
+      - name: Parse Windows real-UIA regression source without opening a GUI
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $path = 'experiments/desktop-d2-native-egui/tests/windows-native-fhir-uia-qualification.ps1'
+          $tokens = $null
+          $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile(
+            (Resolve-Path $path).Path, [ref]$tokens, [ref]$errors
+          ) | Out-Null
+          if (@($errors).Count -ne 0) { throw 'Native Windows UIA test has PowerShell syntax errors' }
+          $text = Get-Content -LiteralPath $path -Raw
+          if (-not $text.Contains('D2_NATIVE_FHIR_UIA_8_OF_8_PASS_NONPUBLISHING')) { throw 'Missing UIA acceptance marker' }
+          if ([regex]::Matches($text, "@\{id='").Count -ne 8) { throw 'Expected eight fictional UIA test cases' }
+          Write-Output 'UIA_SCRIPT_SYNTAX_AND_EIGHT_FIXTURES_OK_SOURCE_ONLY_NO_GUI'
+      - name: Parse real Windows read-only fictional JSON UIA acceptance script
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $path = 'experiments/desktop-d2-native-egui/tests/windows-native-json-preview-uia.ps1'
+          $tokens = $null
+          $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile(
+            (Resolve-Path $path).Path, [ref]$tokens, [ref]$errors
+          ) | Out-Null
+          if (@($errors).Count -ne 0) { throw 'New native UIA preview script syntax failed' }
+          $text = Get-Content -LiteralPath $path -Raw
+          if (-not $text.Contains('NATIVE_JSON_PREVIEW_3_OF_3_PASS_NONPUBLISHING')) {
+            throw 'New preview script lacks full acceptance marker'
+          }
+          Write-Output 'NEW_JSON_PREVIEW_UIA_POWERSHELL_SOURCE_ONLY_PASS'
+      - name: Test synthetic Core-to-D2 report admission and fail-closed Mac sandbox preflight
+        shell: pwsh
+        run: |
+          $py = if ($IsWindows) { 'python' } else { 'python3' }
+          & $py -m unittest discover -s experiments/desktop-d2-native-egui/scripts -p test_qualify_sandboxed_synthetic_core.py -v
+          if ($LASTEXITCODE -ne 0) { throw 'Core-to-D2 synthetic report/sandbox contract failed' }
+          Write-Output 'D2_CORE_QA_SOURCE_ONLY_OS_SANDBOX_NOT_EXECUTED_ON_RUNNER'
+      - name: Source-only synthetic encrypted workspace intent and filesystem denial tests
+        shell: pwsh
+        run: |
+          $py = if ($IsWindows) { 'python' } else { 'python3' }
+          & $py -m unittest discover -s experiments/desktop-d2-native-egui/scripts -p test_age_synthetic_workspace.py -v
+          if ($LASTEXITCODE -ne 0) { throw 'Synthetic workspace consent/permissions/overwrite contract failed' }
+          Write-Output 'SYNTHETIC_AGE_WORKSPACE_SOURCE_ONLY_NO_CI_CRYPTO_OR_CLINICAL_APPROVAL'
+      - name: Guarded Core979 cross-patient official R4 HMAC native source contract
+        shell: pwsh
+        run: |
+          $py = if ($IsWindows) { 'python' } else { 'python3' }
+          & $py -m unittest discover -s experiments/desktop-d2-native-egui/scripts -p test_launch_windows_real_core979_guarded_r4_fictional_batch.py -v
+          if ($LASTEXITCODE -ne 0) { throw 'Core979 reference-protected R4 HMAC source contract failed' }
+          Write-Output 'CORE979_REVIEWED_SOURCE_ONLY_R4_HMAC_GUARD_PASS_NOT_LIVE_EXECUTION'
+
+      - name: Source-only Core971 genuine official R4 structural-to-native fail-close contract
+        shell: pwsh
+        run: |
+          $py = if ($IsWindows) { 'python' } else { 'python3' }
+          & $py -m unittest discover -s experiments/desktop-d2-native-egui/scripts -p test_launch_windows_real_core971_official_r4_fictional_batch.py -v
+          if ($LASTEXITCODE -ne 0) { throw 'Core971 R4 source-gate-to-native contract failed' }
+          Write-Output 'CORE971_R4_STRUCTURAL_NATIVE_BRIDGE_SOURCE_ONLY_NO_CORE_OR_GUI_EXECUTED'
+
+      - name: Core981 protected fictional audit to native read-only HMAC source contract
+        shell: pwsh
+        run: |
+          $py = if ($IsWindows) { 'python' } else { 'python3' }
+          & $py -m unittest discover -s experiments/desktop-d2-native-egui/scripts -p test_launch_windows_protected_audit_readonly.py -v
+          if ($LASTEXITCODE -ne 0) { throw 'Core981 protected fictional audit read-only native contract refused' }
+          Write-Output 'CORE981_PROTECTED_AUDIT_SOURCE_ONLY_NO_OS_CREDENTIAL_OR_GUI_CLAIM'
+
+      - name: Parse Windows protected fictional audit UIAutomation source (not execution)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $path = 'experiments/desktop-d2-native-egui/tests/windows-protected-audit-readonly-uia.ps1'
+          $tokens = $null
+          $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile(
+            (Resolve-Path $path).Path, [ref]$tokens, [ref]$errors
+          ) | Out-Null
+          if (@($errors).Count -ne 0) { throw 'Core981 Windows protected audit UIA source syntax refused' }
+          $source = Get-Content -LiteralPath $path -Raw
+          foreach ($required in @(
+            'Protected audit: 1 independently anchored fictional event verified',
+            'Protected audit: Clear verification result',
+            'WINDOWS_REAL_CORE981_PROTECTED_AUDIT_STATUS_UIA_PASS_NONCLINICAL',
+            '--synthetic-protected-audit-session-stdin'
+          )) {
+            if (-not $source.Contains($required)) { throw 'Core981 Windows protected audit UIA control missing' }
+          }
+          Write-Output 'CORE981_PROTECTED_AUDIT_UIA_SOURCE_GUARDS_PASS_NO_HOSTED_GUI_EXECUTION'
+
+      - name: Windows owner-private clickable Core971 R4 worklist entry fail-closed source and actual CMD test
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          python -m unittest discover -s experiments/desktop-d2-native-egui/scripts -p test_install_windows_private_r4_desktop_entry.py -v
+          if ($LASTEXITCODE -ne 0) { throw 'Private R4 clickable entry negative-first Windows source or CMD test failed' }
+          Write-Output 'PRIVATE_R4_CLICKABLE_ENTRY_ACTUAL_WINDOWS_CMD_NEGATIVE_PASS_NO_INSTALLER_OR_GUI'
+      - name: Windows-only parse real Core971 official R4 UIA source (not execution)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $path = 'experiments/desktop-d2-native-egui/tests/windows-real-core971-official-r4-uia.ps1'
+          $tokens = $null
+          $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile(
+            (Resolve-Path $path).Path, [ref]$tokens, [ref]$errors
+          ) | Out-Null
+          if (@($errors).Count -ne 0) { throw 'Core971 R4 real Windows GUI UIA script syntax error' }
+          $text = Get-Content -LiteralPath $path -Raw
+          if (-not $text.Contains('WINDOWS_CORE971_OFFICIAL_R4_STRUCTURAL_REDACTED_NATIVE_UIA_PASS_NONCLINICAL')) {
+            throw 'Core971 R4 native UIA acceptance marker missing'
+          }
+          Write-Output 'CORE971_OFFICIAL_R4_WINDOWS_UIA_SOURCE_ONLY_NOT_ACTUAL_EXECUTION'
+      - name: Source-only official FHIR R4 JSON schema provenance and negative gate tests
+        shell: pwsh
+        run: |
+          $py = if ($IsWindows) { 'python' } else { 'python3' }
+          & $py -m unittest discover -s experiments/desktop-d2-native-egui/scripts -p test_offline_fhir_r4_schema.py -v
+          if ($LASTEXITCODE -ne 0) { throw 'Pinned HL7 R4 schema admission/fail-close tests failed' }
+          Write-Output 'FHIR_R4_SCHEMA_SOURCE_ONLY_NOT_ACTUAL_FHIR_VALIDATOR_OR_CLINICAL_RELEASE'
+      - name: Assert private release gate always refuses without independent approval
+        shell: pwsh
+        run: |
+          $py = if ($IsWindows) { 'python' } else { 'python3' }
+          & $py -m unittest discover -s experiments/desktop-d2-native-egui/scripts -p test_private_release_gate.py -v
+          if ($LASTEXITCODE -ne 0) { throw 'Private release NO-GO gate contract failed' }
+          Write-Output 'PRIVATE_RELEASE_SOURCE_ONLY_NOT_LIVE_GITHUB_OR_CLINICAL_ATTESTATION'
+      - name: Source-only Mac AX and genuine keyboard harness regression controls
+        shell: pwsh
+        run: |
+          $py = if ($IsWindows) { 'python' } else { 'python3' }
+          & $py -m unittest discover -s experiments/desktop-d2-native-egui/tests -p test_macos_keyboard_ax_source_contract.py -v
+          if ($LASTEXITCODE -ne 0) { throw 'macOS native AX and keyboard source contract refused' }
+          Write-Output 'MACOS_AX_KEYBOARD_SOURCE_ONLY_NO_HOSTED_GUI_OR_VOICEOVER_APPROVAL'
+      - name: Qualify two exact Python Core provenance reports embedded in native D2 UI
+        shell: pwsh
+        run: |
+          $py = if ($IsWindows) { 'python' } else { 'python3' }
+          & $py -m unittest discover -s experiments/desktop-d2-native-egui/scripts -p test_core_source_embedded_ui.py -v
+          if ($LASTEXITCODE -ne 0) { throw 'Native D2 embedded Core fixture/provenance contract refused' }
+          Write-Output 'D2_CORE_EMBEDDED_2_SOURCE_REPORTS_NOT_VALIDATED_NOT_LIVE_WORKER'
+      - name: Windows source-parse real native Core provenance UIA 2-case acceptance
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $path = 'experiments/desktop-d2-native-egui/tests/windows-native-core-provenance-uia.ps1'
+          $tokens = $null
+          $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile(
+            (Resolve-Path $path).Path, [ref]$tokens, [ref]$errors
+          ) | Out-Null
+          if (@($errors).Count -ne 0) { throw 'Core provenance native UIA script syntax failed' }
+          $text = Get-Content -LiteralPath $path -Raw
+          if (-not $text.Contains('D2_WINDOWS_CORE_PROVENANCE_UIA_2_OF_2_PASS_NONPUBLISHING')) {
+            throw 'Missing real native Core provenance two-case test marker'
+          }
+          Write-Output 'WINDOWS_NATIVE_CORE_PROVENANCE_UIA_SOURCE_ONLY_NOT_GUI_EXECUTION'
+      - name: Parse Windows native fictional Workspace UIA acceptance script
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $path = 'experiments/desktop-d2-native-egui/tests/windows-native-fictional-workspace-uia.ps1'
+          $tokens = $null
+          $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile(
+            (Resolve-Path $path).Path, [ref]$tokens, [ref]$errors
+          ) | Out-Null
+          if (@($errors).Count -ne 0) { throw 'Native fictional workspace Windows UIA script syntax failed' }
+          $source = Get-Content -LiteralPath $path -Raw
+          if (-not $source.Contains('D2_WINDOWS_FICTIONAL_WORKSPACE_4_CASES_FILTER_AND_CLEAR_PASS_NOT_CLINICAL') -or
+              -not $source.Contains('D2_WINDOWS_FICTIONAL_WORKSPACE_RESOURCE_FACET_LINK_AND_BACK_PASS_NOT_CLINICAL')) {
+            throw 'Native fictional Workspace filter and verified-reference navigation test markers missing'
+          }
+          Write-Output 'WINDOWS_FICTIONAL_WORKSPACE_UIA_SOURCE_ONLY_NOT_HOSTED_GUI_APPROVAL'
+      - name: Verify installed-Wheel Core to Rust synthetic provenance source guards
+        shell: pwsh
+        run: |
+          $py = if ($IsWindows) { 'python' } else { 'python3' }
+          & $py -m unittest discover -s experiments/desktop-d2-native-egui/scripts -p test_qualify_installed_synthetic_core.py -v
+          if ($LASTEXITCODE -ne 0) { throw 'Installed Core wheel provenance/record negative guards failed' }
+          Write-Output 'INSTALLED_WHEEL_CORE_SOURCE_ONLY_NO_CI_INSTALL_OR_OS_SANDBOX_CLAIM'
+      - name: Parse actual Core963 read-only native import worklist UIAutomation contract
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $path = 'experiments/desktop-d2-native-egui/tests/windows-real-core963-file-batch-receipt-uia.ps1'
+          $tokens = $null
+          $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile(
+            (Resolve-Path $path).Path, [ref]$tokens, [ref]$errors
+          ) | Out-Null
+          if (@($errors).Count -ne 0) { throw 'Native Core963 worklist UIA PowerShell source syntax refused' }
+          $scriptText = Get-Content -LiteralPath $path -Raw
+          foreach ($required in @(
+            'Core batch: Open next unexplored import',
+            'Core batch: Previous visible import',
+            'Core batch: Next visible import',
+            'Core batch: First visible import',
+            'Core batch: Last visible import',
+            'Core batch: Only imports with activity',
+            'Core batch: Reset session exploration',
+            'Core batch: Open import 2',
+            'Core batch: Only imports opened this session',
+            'Core batch: Show opened and unopened imports',
+            'opened_only_facet_reexposed_unopened_import',
+            'D2_CORE_BATCH_OPENED_ONLY_ACTUAL_WINDOWS_UIA_PASS_NONCLINICAL',
+            'D2_CORE_BATCH_VISIBLE_BOUNDARY_ACTUAL_WINDOWS_UIA_PASS_NONCLINICAL',
+            'Core batch: Compare with import 2',
+            'Core batch: Comparing import 1 with import 2',
+            'source_comparison_not_cleared',
+            'hidden_import_comparison_exposed_after_opened_filter',
+            'D2_CORE_BATCH_REDACTED_SIDE_BY_SIDE_ACTUAL_WINDOWS_UIA_PASS_NONCLINICAL',
+            'Core batch: Clear redacted receipt',
+            'WINDOWS_REAL_CORE963_TWO_FILES_ENCRYPTED_REOPEN_REDACTED_D2_NATIVE_UIA_PASS_NONCLINICAL'
+          )) {
+            if (-not $scriptText.Contains($required)) { throw 'Native Core963 worklist UIA acceptance control missing' }
+          }
+          Write-Output 'NATIVE_CORE963_WORKLIST_UIA_SOURCE_CONTRACT_PASS_NO_HOSTED_GUI_EXECUTION'
+      - name: Verify source-only one-command fictional Core963 to native GUI launcher guards
+        shell: pwsh
+        run: |
+          $py = if ($IsWindows) { 'python' } else { 'python3' }
+          & $py -m unittest discover -s experiments/desktop-d2-native-egui/scripts -p test_launch_windows_real_core963_fictional_batch.py -v
+          if ($LASTEXITCODE -ne 0) { throw 'Fictional Core963 one-command source guard failed' }
+          Write-Output 'CORE963_ONE_COMMAND_LAUNCHER_SOURCE_GUARDS_PASS_NO_HOSTED_GUI_OR_CORE_PROOF'
+      - name: Source-only strict native GUI one-shot installed Core stdin contract
+        shell: pwsh
+        run: |
+          $py = if ($IsWindows) { 'python' } else { 'python3' }
+          & $py -m unittest discover -s experiments/desktop-d2-native-egui/scripts -p test_qualify_installed_core_into_native_gui.py -v
+          if ($LASTEXITCODE -ne 0) { throw 'One-shot installed Core to native GUI source guard refused' }
+          Write-Output 'NATIVE_GUI_CORE_STDIN_SOURCE_ONLY_NO_HOSTED_MAC_AX_OR_INSTALLED_CORE_PROOF'
+      - name: Parse Windows exact-binary native one-shot Core stdin UIA tests
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $path = 'experiments/desktop-d2-native-egui/tests/windows-native-core-stdin-uia.ps1'
+          $tokens = $null
+          $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile(
+            (Resolve-Path $path).Path, [ref]$tokens, [ref]$errors
+          ) | Out-Null
+          if (@($errors).Count -ne 0) { throw 'One-shot native stdin UIA PowerShell syntax invalid' }
+          $source = Get-Content -LiteralPath $path -Raw
+          if (-not $source.Contains('D2_WINDOWS_ONE_SHOT_CORE_STDIN_NATIVE_UIA_2_OF_2_PASS_NOT_CLINICAL')) {
+            throw 'Two-case Windows one-shot Core stdin GUI test marker missing'
+          }
+          Write-Output 'D2_WINDOWS_ONE_SHOT_STDIN_UIA_SOURCE_ONLY_NOT_GUI_EXECUTION'
+      - name: Verify bounded native Core stdin no-EOF and stalled-pipe source contract
+        shell: pwsh
+        run: |
+          $py = if ($IsWindows) { 'python' } else { 'python3' }
+          & $py -m unittest discover -s experiments/desktop-d2-native-egui/scripts -p test_native_stdin_deadline.py -v
+          if ($LASTEXITCODE -ne 0) { throw 'Native D2 one-shot synthetic stdin deadline source regression failed' }
+          Write-Output 'D2_NATIVE_CORE_STDIN_SOURCE_DEADLINE_NOT_HOSTED_GUI_TEST'
+      - name: Verify synthetic Windows Job Object descendant kill on-close source contract
+        shell: pwsh
+        run: |
+          $py = if ($IsWindows) { 'python' } else { 'python3' }
+          & $py -m unittest discover -s experiments/desktop-d2-native-egui/scripts -p test_windows_job_subtree.py -v
+          if ($LASTEXITCODE -ne 0) { throw 'Windows synthetic subprocess Job Object source contract failed' }
+          Write-Output 'WINDOWS_JOB_SUBTREE_SOURCE_ONLY_NO_HOSTED_DESCENDANT_KILL_CLAIM'
+      - name: Real Windows kernel Job Object descendant kill-on-close (synthetic only)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          & python experiments/desktop-d2-native-egui/scripts/qualify_windows_job_subtree.py
+          if ($LASTEXITCODE -ne 0) { throw 'Windows Job Object OS descendant lifecycle proof NO-GO' }
+          Write-Output 'WINDOWS_JOB_OBJECT_REAL_OS_SYNTHETIC_CHILD_SUBTREE_KILLED_NO_PATIENT_DATA'
+      - name: Verify source-bound encrypted Core Workspace native preview limits
+        shell: pwsh
+        run: |
+          $py = if ($IsWindows) { 'python' } else { 'python3' }
+          & $py -m unittest discover -s experiments/desktop-d2-native-egui/scripts -p test_installed_workspace_to_native_gui.py -v
+          if ($LASTEXITCODE -ne 0) { throw 'Encrypted Workspace synthetic Core-to-native GUI source limits FAILED' }
+          Write-Output 'D2_ENCRYPTED_WORKSPACE_SOURCE_ONLY_NO_REAL_CI_GUI_OR_INSTALLED_CORE_CLAIM'
+      - name: Parse real Windows encrypted Workspace native UIA source
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $path = 'experiments/desktop-d2-native-egui/tests/windows-encrypted-workspace-native-uia.ps1'
+          $tokens = $null
+          $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile(
+            (Resolve-Path $path).Path, [ref]$tokens, [ref]$errors
+          ) | Out-Null
+          if (@($errors).Count -ne 0) { throw 'Windows synthetic encrypted Workspace UIA syntax FAILED' }
+          if (-not (Get-Content -Raw $path).Contains('D2_WINDOWS_ENCRYPTED_WORKSPACE_NATIVE_UIA_PASS_NONCLINICAL')) {
+            throw 'Windows encrypted Workspace GUI QA marker missing'
+          }
+          Write-Output 'WINDOWS_ENCRYPTED_WORKSPACE_UIA_SYNTAX_ONLY_NOT_ACTUAL_INTERACTION'
+      - name: Verify Windows source-pinned live Core Workspace-to-GUI limits
+        shell: pwsh
+        run: |
+          $py = if ($IsWindows) { 'python' } else { 'python3' }
+          & $py -m unittest discover -s experiments/desktop-d2-native-egui/scripts -p test_windows_live_core_workspace_gui.py -v
+          if ($LASTEXITCODE -ne 0) { throw 'Windows live Core Workspace-to-D2 synthetic safety source checks failed' }
+          Write-Output 'WINDOWS_LIVE_CORE_WORKSPACE_GUI_SOURCE_ONLY_NOT_HOSTED_FUNCTIONAL_PROOF'
+      - name: Source-bound Core encrypted readback into native D2 QA guards
+        shell: pwsh
+        run: |
+          $py = if ($IsWindows) { 'python' } else { 'python3' }
+          & $py -m unittest discover -s experiments/desktop-d2-native-egui/scripts -p test_encrypted_readback_projection_source.py -v
+          if ($LASTEXITCODE -ne 0) { throw 'Encrypted Core readback GUI source controls failed' }
+          Write-Output 'CORE_ENCRYPTED_READBACK_SOURCE_ONLY_NO_HOSTED_CLINICAL_OR_ACTUAL_GUI_CLAIM'
+      - name: Parse Windows real encrypted Core memory-readback GUI QA source
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $path = 'experiments/desktop-d2-native-egui/tests/windows-encrypted-core-readback-uia.ps1'
+          $tokens = $null
+          $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile(
+            (Resolve-Path $path).Path, [ref]$tokens, [ref]$errors
+          ) | Out-Null
+          if (@($errors).Count -ne 0) { throw 'Encrypted Core readback native UIA PowerShell syntax invalid' }
+          if (-not (Get-Content -LiteralPath $path -Raw).Contains('WINDOWS_REAL_ENCRYPTED_CORE_READBACK_THREE_RESOURCES_LINK_AND_BACK_UIA_PASS_NOT_CLINICAL')) {
+            throw 'Encrypted Core readback GUI functional QA marker missing'
+          }
+          Write-Output 'WINDOWS_ENCRYPTED_READBACK_UIA_SOURCE_SYNTAX_ONLY_NOT_ACTUAL_INTERACTION'
+      - name: Verify offline installed Core Wheel source integrity adversarial guards
+        shell: pwsh
+        run: |
+          $py = if ($IsWindows) { 'python' } else { 'python3' }
+          & $py -m unittest discover -s experiments/desktop-d2-native-egui/scripts -p test_attest_installed_encrypted_readback.py -v
+          if ($LASTEXITCODE -ne 0) { throw 'Offline Core Wheel/source/install byte-integrity adversarial guards failed' }
+          Write-Output 'INSTALLED_PYTHON_TWO_WHEELS_ADVERSARIAL_SOURCE_TESTS_ONLY_NOT_HOSTED_RUNTIME_PROOF'
+      - name: Verify Windows installed-Wheel interactive Core source boundary (source-only)
+        shell: pwsh
+        run: |
+          $py = if ($IsWindows) { 'python' } else { 'python3' }
+          & $py -m unittest discover -s experiments/desktop-d2-native-egui/scripts -p test_windows_installed_fictional_core.py -v
+          if ($LASTEXITCODE -ne 0) { throw 'Installed-Wheel interactive Core source-only safeguards failed' }
+          Write-Output 'INSTALLED_WINDOWS_CORE_TO_D2_TESTS_SOURCE_ONLY_NOT_WHEEL_RUNTIME_OR_PHI'
+      - name: Verify source-only portable fictional Core package and manifest refusal gates
+        shell: pwsh
+        run: |
+          $py = if ($IsWindows) { 'python' } else { 'python3' }
+          & $py -m unittest discover -s experiments/desktop-d2-native-egui/scripts -p test_portable_fictional_core.py -v
+          if ($LASTEXITCODE -ne 0) { throw 'Portable 290-file fictional Core source/manifest guard failed' }
+          Write-Output 'PORTABLE_D2_CORE_SOURCE_ONLY_TESTS_NOT_PACKAGED_RUNTIME_OR_RELEASE'
+      - name: Verify fictional one-time Core session HMAC and refusal rules (source-only)
+        shell: pwsh
+        run: |
+          $py = if ($IsWindows) { 'python' } else { 'python3' }
+          & $py -m unittest discover -s experiments/desktop-d2-native-egui/scripts -p test_fictional_session_frame.py -v
+          if ($LASTEXITCODE -ne 0) { throw 'Session MAC/nonce source-only adversarial guards failed' }
+          Write-Output 'FICTIONAL_PER_LAUNCH_MAC_SOURCE_ONLY_NOT_SENDER_AUTHENTICATION_OR_OS_EGRESS'
+      - name: Verify Windows DPAPI synthetic-only persistent Core cold-reopen source safeguards
+        shell: pwsh
+        run: |
+          $py = if ($IsWindows) { 'python' } else { 'python3' }
+          & $py -m unittest discover -s experiments/desktop-d2-native-egui/scripts -p test_windows_fictional_persistent_vault.py -v
+          if ($LASTEXITCODE -ne 0) { throw 'Windows protected persistent synthetic Core contract tests failed' }
+          Write-Output 'PERSISTENT_FICTIONAL_WORKSPACE_QA_ONLY_NOT_PRODUCTION_KEY_PROVIDER_OR_PATIENT_DATA'
+      - name: Verify first-launch persistent fictional Core workspace safety (source-only)
+        shell: pwsh
+        run: |
+          $py = if ($IsWindows) { 'python' } else { 'python3' }
+          & $py -m unittest discover -s experiments/desktop-d2-native-egui/scripts -p test_windows_fictional_demo_first_run.py -v
+          if ($LASTEXITCODE -ne 0) { throw 'First-launch persistent fictional Workspace guards failed' }
+          Write-Output 'EXPLICIT_FICTIONAL_FIRST_LAUNCH_SOURCE_ONLY_NOT_PRODUCTION_STORAGE_OR_PHI'
+      - name: Verify private Windows one-click fictional Desktop launcher guards (source-only)
+        shell: pwsh
+        run: |
+          $py = if ($IsWindows) { 'python' } else { 'python3' }
+          & $py -m unittest discover -s experiments/desktop-d2-native-egui/scripts -p test_windows_private_fictional_desktop_entry.py -v
+          if ($LASTEXITCODE -ne 0) { throw 'Private fictional Windows one-click launcher source contract tests failed' }
+          Write-Output 'PRIVATE_ONE_CLICK_GUI_ENTRY_QA_ONLY_NOT_INSTALLER_PATIENT_DATA_OR_SIGNED_BINARY'
+      - name: Verify multi-patient fictional Bundle generator and 48-resource bound
+        shell: pwsh
+        run: |
+          $py = if ($IsWindows) { 'python' } else { 'python3' }
+          & $py -m unittest discover -s experiments/desktop-d2-native-egui/scripts -p test_synthetic_multipatient_bundle.py -v
+          if ($LASTEXITCODE -ne 0) { throw 'Multi-patient dummy-only FHIR Bundle generator drifted' }
+          Write-Output 'SYNTHETIC_MULTI_PATIENT_16_PATIENT_48_RESOURCE_NO_PHI_SOURCE_PASS'
+      - name: Parse Windows native multi-patient synthetic Bundle UIAutomation source
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $path = 'experiments/desktop-d2-native-egui/tests/windows-synthetic-multipatient-bundle-uia.ps1'
+          $tokens = $null
+          $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile(
+            (Resolve-Path $path).Path, [ref]$tokens, [ref]$errors
+          ) | Out-Null
+          if (@($errors).Count -ne 0) { throw 'Multi-patient Windows native UIA QA syntax invalid' }
+          if (-not (Get-Content -LiteralPath $path -Raw).Contains('WINDOWS_NATIVE_EIGHT_RECORD_TWO_PATIENT_STRUCTURAL_FHIR_BUNDLE_GROUP_GRAPH_UIA_PASS_NONCLINICAL')) {
+            throw 'Multi-patient Windows native UIA source marker missing'
+          }
+          Write-Output 'SYNTHETIC_MULTI_PATIENT_WINDOWS_UIA_SYNTAX_ONLY_NOT_HOSTED_GUI_APPROVAL'
+      - name: Verify checks did not alter tracked code or lockfiles
+        shell: pwsh
+        run: |
+          git diff --exit-code
+          if ($LASTEXITCODE -ne 0) { throw 'Tracked source or lockfile changed' }
+          Write-Output 'NATIVE_D2_SYNTHETIC_ONLY_NOT_RELEASED_NOT_PACKET_ISOLATION_OR_ACCESSIBILITY_APPROVAL'

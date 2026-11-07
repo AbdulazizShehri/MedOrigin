@@ -1,0 +1,36 @@
+# Source-only Swift macOS AX qualification. No hosted GUI, VoiceOver,
+# screen recording, signing, patient data, network assertions or publication.
+name: D2 macOS fictional FHIR AX source contract
+on:
+  push:
+    branches:
+      - test/medorigin-d2-macos-fhir-ax-20261102
+  pull_request:
+    paths:
+      - 'experiments/desktop-d2-native-egui/tests/macos-native-fhir-ax-qualification.swift'
+      - '.github/workflows/medorigin-d2-macos-fhir-ax-source.yml'
+permissions:
+  contents: read
+jobs:
+  swift-accessibility-source:
+    runs-on: macos-15
+    timeout-minutes: 8
+    steps:
+      - name: Checkout exact source SHA without persisted credentials
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - name: Validate native Swift AX test source without launching app
+        shell: bash
+        run: |
+          set -euo pipefail
+          script=experiments/desktop-d2-native-egui/tests/macos-native-fhir-ax-qualification.swift
+          swift format lint --strict "$script"
+          swiftc -typecheck "$script"
+          test "$(grep -c '^    "bundle-' "$script")" -eq 6
+          test "$(grep -c '^    "observation-' "$script")" -eq 2
+          grep -Fq 'AXIsProcessTrusted()' "$script"
+          grep -Fq 'SHA256.hash(data: bytes)' "$script"
+          grep -Fq 'MACOS_D2_FHIR_AX_8_OF_8_PASS_NONPUBLISHING' "$script"
+          echo 'SWIFT_AX_SOURCE_ONLY_PASS_NOT_HOSTED_GUI_OR_VOICEOVER'
