@@ -3560,7 +3560,7 @@ impl MedOriginNativePreview {
                         "Search and filter by patient and resource type",
                         "Light and dark appearance",
                     ] {
-                        ui.label(format!("\u{2713} {item}"));
+                        ui.label(format!("\u{2022} {item}"));
                     }
                 });
                 card(&mut cols[1], &p, |ui| {
@@ -3644,12 +3644,6 @@ impl MedOriginNativePreview {
                     );
                 });
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    let settings = ui
-                        .selectable_label(self.settings_open, "Settings & help")
-                        .on_hover_text("Appearance, privacy, version and Report an issue (F1)");
-                    if settings.clicked() {
-                        self.settings_open = !self.settings_open;
-                    }
                     if ui
                         .button("Clear local session")
                         .on_hover_text("Remove all loaded fictional data from memory (Esc)")
