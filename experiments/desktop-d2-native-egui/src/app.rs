@@ -728,6 +728,10 @@ pub struct MedOriginNativePreview {
     fictional_workspace_back: Option<usize>,
     fictional_workspace_detail: Option<FictionalWorkspaceDetail>,
     fictional_workspace_notice: Option<&'static str>,
+    // UI preferences and help surfaces. Never cleared with session data and
+    // never persisted; they hold no workspace or patient content.
+    settings_open: bool,
+    diagnostics_copied: bool,
 }
 
 impl MedOriginNativePreview {
@@ -3337,54 +3341,144 @@ impl MedOriginNativePreview {
     /// external assets, telemetry, patient files or sidecar processes.
     fn medorigin_chrome(&mut self, ui: &mut egui::Ui) {
         let status = self.local_source_status();
+        let p = *crate::theme::palette(ui.ctx().theme());
         let mut clear = false;
         egui::Panel::top("medorigin-native-product-header").show(ui, |ui| {
+            ui.add_space(crate::theme::space::XS);
             ui.horizontal(|ui| {
-                let (mark, _) =
-                    ui.allocate_exact_size(egui::vec2(42.0, 42.0), egui::Sense::hover());
-                let center = mark.center();
-                let painter = ui.painter();
-                painter.circle_filled(center, 19.0, egui::Color32::from_rgb(236, 112, 69));
-                // The accepted Minaret-family identity: warm circular
-                // MedOrigin mark with three dark internal pillars.
-                for (dx, length) in [(-9.0, 17.0), (0.0, 23.0), (9.0, 17.0)] {
-                    painter.rect_filled(
-                        egui::Rect::from_center_size(
-                            egui::pos2(center.x + dx, center.y),
-                            egui::vec2(5.5, length),
-                        ),
-                        2.0,
-                        egui::Color32::from_rgb(17, 19, 22),
-                    );
-                }
+                crate::theme::paint_mark(ui, 36.0);
                 ui.vertical(|ui| {
-                    ui.label(egui::RichText::new("MedOrigin").size(21.0).strong());
                     ui.label(
-                        egui::RichText::new("Local workspace · private by design")
-                            .size(12.0)
-                            .color(egui::Color32::from_rgb(171, 175, 181)),
+                        egui::RichText::new("MedOrigin")
+                            .size(crate::theme::size::TITLE + 2.0)
+                            .strong(),
+                    );
+                    ui.label(
+                        egui::RichText::new(format!("Local workspace · {status}"))
+                            .size(crate::theme::size::CAPTION)
+                            .color(p.text_muted),
                     );
                 });
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    if ui.button("Clear local session").clicked() {
+                    let settings = ui
+                        .selectable_label(self.settings_open, "Settings & help")
+                        .on_hover_text("Appearance, privacy, version and Report an issue (F1)");
+                    if settings.clicked() {
+                        self.settings_open = !self.settings_open;
+                    }
+                    if ui
+                        .button("Clear local session")
+                        .on_hover_text("Remove all loaded fictional data from memory (Esc)")
+                        .clicked()
+                    {
                         clear = true;
                     }
-                    ui.label(
-                        egui::RichText::new("Fictional demo · no clinical use")
-                            .size(12.0)
-                            .color(egui::Color32::from_rgb(244, 163, 112)),
-                    );
+                    crate::theme::chip(ui, "Fictional data only · not for clinical use", p.warning);
                 });
             });
-            ui.label(
-                egui::RichText::new(format!("Core status: {status}"))
-                    .size(12.0)
-                    .color(egui::Color32::from_rgb(179, 184, 191)),
-            );
+            ui.add_space(crate::theme::space::XS);
         });
+        if ui.input(|input| input.key_pressed(egui::Key::F1)) {
+            self.settings_open = !self.settings_open;
+        }
+        if self.settings_open {
+            egui::Panel::right("medorigin-settings-help")
+                .resizable(false)
+                .exact_size(330.0)
+                .show(ui, |ui| self.settings_help_ui(ui, status));
+        }
         if clear {
             self.clear_fictional_output();
         }
+    }
+
+    /// Settings, privacy facts, version and Report an issue. Nothing here
+    /// reads files, opens a connection or persists anything.
+    fn settings_help_ui(&mut self, ui: &mut egui::Ui, status: &'static str) {
+        let p = *crate::theme::palette(ui.ctx().theme());
+        egui::ScrollArea::vertical().show(ui, |ui| {
+            ui.add_space(crate::theme::space::SM);
+            ui.horizontal(|ui| {
+                ui.heading("Settings & help");
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    if ui.button("Close").clicked() {
+                        self.settings_open = false;
+                    }
+                });
+            });
+            ui.separator();
+            ui.label(egui::RichText::new("Appearance").strong());
+            let mut pref = ui.ctx().options(|o| o.theme_preference);
+            let before = pref;
+            ui.horizontal(|ui| {
+                ui.radio_value(&mut pref, egui::ThemePreference::System, "System");
+                ui.radio_value(&mut pref, egui::ThemePreference::Light, "Light");
+                ui.radio_value(&mut pref, egui::ThemePreference::Dark, "Dark");
+            });
+            if pref != before {
+                ui.ctx().set_theme(pref);
+            }
+            ui.add_space(crate::theme::space::MD);
+            ui.label(egui::RichText::new("Privacy").strong());
+            for fact in [
+                "Runs entirely on this computer. The app makes no network connections.",
+                "Loaded data stays in memory for this session only and is not saved.",
+                "Only fictional, source-verified test records are accepted in this build.",
+                "No telemetry, analytics or automatic crash upload.",
+            ] {
+                ui.label(egui::RichText::new(format!("• {fact}")).color(p.text_muted));
+            }
+            ui.add_space(crate::theme::space::MD);
+            ui.label(egui::RichText::new("About").strong());
+            ui.label(format!("MedOrigin Desktop {}", crate::support::APP_VERSION));
+            ui.label(egui::RichText::new(crate::support::CHANNEL).color(p.text_muted));
+            ui.label(egui::RichText::new("Open source · Apache-2.0").color(p.text_muted));
+            ui.add_space(crate::theme::space::MD);
+            ui.label(egui::RichText::new("Report an issue").strong());
+            ui.label(
+                egui::RichText::new(
+                    "Review the summary below. It contains no file paths, names or \
+                     health data. Nothing is sent automatically: copy it and paste it \
+                     into a new issue yourself.",
+                )
+                .color(p.text_muted),
+            );
+            let appearance = match ui.ctx().theme() {
+                egui::Theme::Dark => "Dark",
+                egui::Theme::Light => "Light",
+            };
+            let mut summary = crate::support::diagnostics_summary(status, appearance);
+            ui.add(
+                egui::TextEdit::multiline(&mut summary)
+                    .font(egui::TextStyle::Monospace)
+                    .desired_rows(7)
+                    .desired_width(f32::INFINITY)
+                    .interactive(false),
+            );
+            ui.horizontal(|ui| {
+                if ui.button("Copy diagnostics").clicked() {
+                    ui.ctx().copy_text(summary.clone());
+                    self.diagnostics_copied = true;
+                }
+                if self.diagnostics_copied {
+                    ui.label(egui::RichText::new("Copied").color(p.success));
+                }
+            });
+            ui.label("Then open this address in your browser:");
+            let mut url = crate::support::ISSUE_FORM.to_owned();
+            ui.add(
+                egui::TextEdit::singleline(&mut url)
+                    .font(egui::TextStyle::Monospace)
+                    .desired_width(f32::INFINITY),
+            );
+            ui.label(
+                egui::RichText::new(
+                    "Never include real patient information, screenshots of health \
+                     records or workspace files in a public issue.",
+                )
+                .color(p.warning),
+            );
+        });
     }
 }
 

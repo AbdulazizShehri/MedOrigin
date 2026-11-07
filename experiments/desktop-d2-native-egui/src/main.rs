@@ -238,27 +238,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         "MedOrigin Native Rust — Private Local Workspace (Nonclinical Preview)",
         options,
         Box::new(move |cc| {
-            // Theme is strictly local presentation: no OS theme calls,
-            // telemetry, font download, WebView or Core process launch.
-            cc.egui_ctx.set_theme(eframe::egui::Theme::Dark);
-            let mut style = (*cc.egui_ctx.style_of(eframe::egui::Theme::Dark)).clone();
-            style.visuals = eframe::egui::Visuals::dark();
-            style.visuals.panel_fill = eframe::egui::Color32::from_rgb(16, 18, 23);
-            style.visuals.window_fill = eframe::egui::Color32::from_rgb(20, 23, 29);
-            style.visuals.extreme_bg_color = eframe::egui::Color32::from_rgb(25, 29, 36);
-            style.visuals.widgets.inactive.bg_fill = eframe::egui::Color32::from_rgb(35, 39, 46);
-            style.visuals.widgets.hovered.bg_fill = eframe::egui::Color32::from_rgb(54, 55, 62);
-            style.visuals.widgets.active.bg_fill = eframe::egui::Color32::from_rgb(68, 53, 47);
-            style.visuals.selection.bg_fill = eframe::egui::Color32::from_rgb(133, 71, 49);
-            style.visuals.override_text_color =
-                Some(eframe::egui::Color32::from_rgb(232, 232, 233));
-            style.spacing.item_spacing = eframe::egui::vec2(9.0, 9.0);
-            style.spacing.button_padding = eframe::egui::vec2(12.0, 8.0);
-            style.text_styles.insert(
-                eframe::egui::TextStyle::Heading,
-                eframe::egui::FontId::proportional(24.0),
+            // Theme is strictly local presentation: tokens live in theme.rs.
+            // No remote fonts, telemetry, WebView or Core process launch.
+            medorigin_desktop_d2_native_egui::theme::install(
+                &cc.egui_ctx,
+                eframe::egui::ThemePreference::Dark,
             );
-            cc.egui_ctx.set_style_of(eframe::egui::Theme::Dark, style);
             Ok(Box::new(app))
         }),
     )?;
