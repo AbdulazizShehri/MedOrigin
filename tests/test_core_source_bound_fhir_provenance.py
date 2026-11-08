@@ -373,7 +373,16 @@ def test_rejects_overstated_or_ambiguous_core_fhir_receipt(
         "blocked",
         "false_publication",
         "mixed_profiles",
-        "vendor_record_false",
+        # The pip RECORD binding exists only for the Windows .exe launcher
+        # (b57af20d); Linux launchers are pinned text scripts that always
+        # report record_bound False, so the gate requires it on win32 only.
+        pytest.param(
+            "vendor_record_false",
+            marks=pytest.mark.skipif(
+                sys.platform != "win32",
+                reason="pip RECORD launcher binding is a Windows-only gate",
+            ),
+        ),
         "false_vendor_authenticity",
         "false_signature",
     ],
