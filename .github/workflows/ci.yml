@@ -127,6 +127,13 @@ jobs:
       - name: Install the CW-002 Workspace AEAD dependency
         run: uv pip install --python .venv "cryptography==50.0.1"
 
+      # The official FHIR R4 structural check (src/medscale/fhirkit/r4_schema.py)
+      # requires exactly jsonschema 4.25.1 and refuses any other version. It is an
+      # optional Core dependency outside the frozen lock, installed the same way as
+      # the AEAD dependency above so its tests run here instead of being skipped.
+      - name: Install the optional FHIR R4 structural-check dependency
+        run: uv pip install --python .venv "jsonschema==4.25.1"
+
       - name: Build deterministic test-node shard
         env:
           SHARD_INDEX: ${{ matrix.shard }}

@@ -162,7 +162,10 @@ def test_legacy_full_beta_remains_nonrelease_and_separate_from_new_core_mode() -
     assert "core_negative_truth_preview: bool = False" in source
     assert "if core_negative_truth_preview is True:" in source
     assert "TECHNICAL_CORE_NEGATIVE_TRUTH_PREVIEW_ONLY" in source
-    assert "TECHNICAL_PREPUBLICATION_REHEARSAL_PASS" in source
+    # 4edd4b9c replaced the legacy "...REHEARSAL_PASS" status with an explicit
+    # rehearsal-only status; a release-sounding PASS must not come back.
+    assert "TECHNICAL_TRUTHFUL_SYNTHETIC_BETA_REHEARSAL_ONLY" in source
+    assert "TECHNICAL_PREPUBLICATION_REHEARSAL_PASS" not in source
     assert "synthetic installed-CLI demonstration failed" in source
     assert "prepublication_rehearsal_qualified" in source
     for prohibited in ("twine upload", "gh release create", "git push", "hf upload"):

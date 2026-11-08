@@ -14,6 +14,24 @@ import pytest
 DIR = Path(__file__).resolve().parents[1] / "examples" / "synthetic_fhir_developer_beta"
 GOOD_SHA = "a" * 64
 OTHER_SHA = "b" * 64
+# The only Core provenance status the export admits: truthful negative truth.
+ADMITTED_STATUS = "NOT_VALIDATED"
+# The historical false-positive status that earlier exports wrongly accepted.
+HISTORICAL_VALID_STATUS = "VALID"
+RECEIPT_KEYS = {
+    "schema",
+    "project",
+    "distribution",
+    "data_class",
+    "validation_kind",
+    "fhir_conformance_validated",
+    "full_beta_preview_qualified",
+    "fhir",
+    "workspace",
+    "clinical_use_authorized",
+    "publication_authorized",
+    "independent_review_completed",
+}
 
 
 @pytest.fixture
@@ -23,10 +41,11 @@ def exported(monkeypatch: pytest.MonkeyPatch) -> Any:
     return importlib.import_module("evidence_export")
 
 
-def admitted(*, workspace: bool = False) -> dict[str, object]:
+def admitted(*, workspace: bool = False, status: str = ADMITTED_STATUS) -> dict[str, object]:
+    """Build the desktop worker's admitted negative-truth result shape."""
     return {
         "fhir": {
-            "status": "VALID",
+            "status": status,
             "report_sha256": GOOD_SHA,
             "fixture_sha256": OTHER_SHA,
         },
@@ -38,19 +57,50 @@ def admitted(*, workspace: bool = False) -> dict[str, object]:
 
 def test_receipt_contains_only_safe_evidence(exported: Any) -> None:
     receipt = exported.build_receipt(admitted())
+    assert set(receipt) == RECEIPT_KEYS
+    assert receipt["schema"] == "medorigin-synthetic-desktop-evidence/v2"
     assert receipt["data_class"] == "SYNTHETIC"
-    assert receipt["fhir"]["report_sha256"] == GOOD_SHA
-    assert receipt["fhir"]["synthetic_fixture_sha256"] == OTHER_SHA
+    assert receipt["fhir"] == {
+        "status": "NOT_VALIDATED",
+        "report_sha256": GOOD_SHA,
+        "synthetic_fixture_sha256": OTHER_SHA,
+    }
+    assert receipt["fhir_conformance_validated"] is False
+    assert receipt["full_beta_preview_qualified"] is False
     assert receipt["clinical_use_authorized"] is False
     assert receipt["publication_authorized"] is False
     assert receipt["independent_review_completed"] is False
-    assert receipt["workspace"]["installed_synthetic_shell"] is False
-    assert receipt["workspace"]["synthetic_case_preview_verified"] is False
-    assert "patient" not in json.dumps(receipt).lower()
+    assert receipt["workspace"] == {
+        "installed_synthetic_shell": False,
+        "synthetic_case_preview_verified": False,
+    }
+    rendered = json.dumps(receipt)
+    assert "patient" not in rendered.lower()
+    assert '"VALID"' not in rendered
+    assert str(DIR) not in rendered
+    assert "\\\\" not in rendered and "/home/" not in rendered and ":/" not in rendered
+
+
+@pytest.mark.parametrize("workspace", [False, True])
+def test_historical_valid_provenance_is_refused(
+    exported: Any, tmp_path: Path, workspace: bool
+) -> None:
+    historical = admitted(workspace=workspace, status=HISTORICAL_VALID_STATUS)
+    with pytest.raises(
+        ValueError, match="synthetic Core provenance is not an admitted negative-truth result"
+    ):
+        exported.build_receipt(historical)
+    dest = tmp_path / "historical.json"
+    with pytest.raises(ValueError):
+        exported.save_receipt_new(dest, historical)
+    assert not dest.exists()
+    assert not list(tmp_path.iterdir())
 
 
 def test_workspace_case_attestation_is_boolean_not_identity(exported: Any) -> None:
     receipt = exported.build_receipt(admitted(workspace=True), case_verified=True)
+    assert receipt["fhir"]["status"] == "NOT_VALIDATED"
+    assert type(receipt["workspace"]["synthetic_case_preview_verified"]) is bool
     assert receipt["workspace"] == {
         "installed_synthetic_shell": True,
         "synthetic_case_preview_verified": True,
@@ -94,7 +144,10 @@ def test_exclusive_save_is_reproducible_and_does_not_overwrite(
     result = admitted(workspace=True)
     assert exported.save_receipt_new(dest, result) == "SYNTHETIC_EVIDENCE_EXPORTED"
     original = dest.read_bytes()
-    assert json.loads(original)["schema"] == "medorigin-synthetic-desktop-evidence/v1"
+    saved = json.loads(original)
+    assert saved["schema"] == "medorigin-synthetic-desktop-evidence/v2"
+    assert saved["fhir"]["status"] == "NOT_VALIDATED"
+    assert saved == exported.build_receipt(result)
     assert b"SECRET" not in original
     with pytest.raises(FileExistsError):
         exported.save_receipt_new(dest, result)

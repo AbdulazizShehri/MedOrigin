@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 import hashlib
 import importlib.util
 import json
@@ -70,32 +71,56 @@ def _preview_module() -> Any:
     return module
 
 
+# v2 contract: the only admissible receipt is the truthful NOT VALIDATED Core
+# receipt (no FHIR validator ran). Historical "valid" receipts are refused.
+_RENDER_REFUSAL = "only the checked NOT VALIDATED Core receipt may be previewed"
+# Pinned in scripts/qualify_medorigin_developer_beta.py (EXPECTED_REPORT_SHA256).
+_V2_REPORT_SHA256 = "165b41acdc416617e8f207366d454ac6a713ecf4c9a5efd740d14a0af882bd08"
+_V2_WARNING = (
+    "FHIR R4 schema, terminology, and profile validation were not performed; "
+    "this local report records deterministic provenance only."
+)
+
+
+def _v2_render_row(**overrides: object) -> dict[str, object]:
+    """A render()-level run row matching the v2 NOT VALIDATED contract."""
+    row: dict[str, object] = {
+        "label": "run_1",
+        "provenance_status": "not_validated",
+        "validation_exit": 2,
+        "malformed_exit": 1,
+    }
+    row.update(overrides)
+    return row
+
+
 def test_static_preview_escapes_untrusted_receipt_fields() -> None:
     renderer = _preview_module()
     receipt = {
         "runs": [
-            {
-                "label": '<img src=x onerror="alert(1)">',
-                "report_sha256": "</code><script>alert(2)</script>",
-                "fixture_sha256": '"><iframe src="https://example.org/">',
-                "structural_status": "valid",
-                "malformed_exit": 1,
-            }
+            _v2_render_row(
+                label='<img src=x onerror="alert(1)">',
+                report_sha256="</code><script>alert(2)</script>",
+                fixture_sha256='"><iframe src="https://example.org/">',
+            )
         ]
     }
     html = renderer.render(receipt)
+    assert "NOT VALIDATED" in html
     assert "<script" not in html and "<iframe" not in html and "<img" not in html
     assert "&lt;script&gt;" in html and "&lt;img " in html
+    assert "&quot;&gt;&lt;iframe" in html
     assert "script-src 'none'" in html and "connect-src 'none'" in html
     assert "<link " not in html and "fetch(" not in html
 
 
 def test_preview_refuses_failed_validation_and_rejected_negative_control() -> None:
     renderer = _preview_module()
-    with pytest.raises(ValueError):
-        renderer.render({"runs": [{"structural_status": "invalid", "malformed_exit": 1}]})
-    with pytest.raises(ValueError):
-        renderer.render({"runs": [{"structural_status": "valid", "malformed_exit": 0}]})
+    renderer.render({"runs": [_v2_render_row()]})  # control: baseline is admitted
+    with pytest.raises(ValueError, match=_RENDER_REFUSAL):
+        renderer.render({"runs": [_v2_render_row(provenance_status="invalid")]})
+    with pytest.raises(ValueError, match=_RENDER_REFUSAL):
+        renderer.render({"runs": [_v2_render_row(malformed_exit=0)]})
 
 
 @pytest.mark.parametrize("bad_exit", [True, 1.0, "1"])
@@ -103,30 +128,37 @@ def test_preview_renderer_refuses_ambiguous_boolean_or_coerced_exit(
     bad_exit: object,
 ) -> None:
     renderer = _preview_module()
-    row = {"structural_status": "valid", "malformed_exit": bad_exit}
-    with pytest.raises(ValueError, match="only verified valid"):
+    renderer.render({"runs": [_v2_render_row()]})  # control: only malformed_exit differs
+    row = _v2_render_row(malformed_exit=bad_exit)
+    with pytest.raises(ValueError, match=_RENDER_REFUSAL):
         renderer.render({"runs": [row]})
 
 
-@pytest.mark.parametrize("bad_exit", [True, 1, 0.0])
+@pytest.mark.parametrize("bad_exit", [True, 1, 0.0, 0, 2.0, "2"])
 def test_preview_renderer_refuses_failed_or_coerced_valid_exit(
-    bad_exit: object,
+    tmp_path: Path, bad_exit: object
 ) -> None:
+    """v2 successor of the legacy valid_exit check: validation_exit must be int 2."""
     renderer = _preview_module()
-    row = {"structural_status": "valid", "malformed_exit": 1, "valid_exit": bad_exit}
-    with pytest.raises(ValueError, match="only verified valid"):
+    renderer.render({"runs": [_v2_render_row()]})  # control: only validation_exit differs
+    row = _v2_render_row(validation_exit=bad_exit)
+    with pytest.raises(ValueError, match=_RENDER_REFUSAL):
         renderer.render({"runs": [row]})
+    # The file-backed admission gate refuses the same coercion independently.
+    receipt = _synthetic_receipt_with_report(tmp_path)
+    renderer.admit_receipt(copy.deepcopy(receipt), directory=tmp_path)  # control
+    receipt["runs"][0]["validation_exit"] = bad_exit
+    with pytest.raises(ValueError, match="synthetic run identity or validation outcome invalid"):
+        renderer.admit_receipt(receipt, directory=tmp_path)
 
 
 def test_preview_never_overwrites_existing_html(tmp_path: Path) -> None:
     renderer = _preview_module()
     receipt = tmp_path / "evidence.json"
-    receipt.write_text(
-        json.dumps(
-            {"runs": [{"label": "synthetic", "structural_status": "valid", "malformed_exit": 1}]}
-        ),
-        encoding="utf-8",
-    )
+    # An otherwise admissible v2 receipt, so refusal is due to the existing output.
+    data = _synthetic_receipt_with_report(tmp_path)
+    renderer.admit_receipt(copy.deepcopy(data), directory=tmp_path)
+    receipt.write_text(json.dumps(data), encoding="utf-8")
     output = tmp_path / "preview.html"
     output.write_text("existing unchanged", encoding="utf-8")
     with pytest.raises(SystemExit) as error:
@@ -246,13 +278,7 @@ def test_workspace_version_mismatch_fails_closed_before_shell(
 def test_static_preview_optional_workspace_card_has_no_extra_fields() -> None:
     preview = _preview_module()
     receipt = {
-        "runs": [
-            {
-                "structural_status": "valid",
-                "malformed_exit": 1,
-                "label": "run_1",
-            }
-        ],
+        "runs": [_v2_render_row()],
         "workspace": {
             "application": "medscale-workspace",
             "version": "0.1.0.dev1",
@@ -268,10 +294,11 @@ def test_static_preview_optional_workspace_card_has_no_extra_fields() -> None:
     assert "clinical access" in page
 
     receipt["workspace"]["patient_name"] = "PRIVATE-SENTINEL"  # type: ignore[index]
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="synthetic-safe contract") as raised:
         preview.render(receipt)
+    assert "PRIVATE-SENTINEL" not in str(raised.value)
     numeric_ready = {
-        "runs": [{"structural_status": "valid", "malformed_exit": 1}],
+        "runs": [_v2_render_row()],
         "workspace": {
             "application": "medscale-workspace",
             "version": "0.1.0.dev1",
@@ -306,11 +333,9 @@ def test_static_preview_long_labels_have_narrow_viewport_wrap_contract() -> None
     renderer = _preview_module()
     receipt = {
         "runs": [
-            {
-                "label": "test <img src=x onerror=window.__medoriginInjected=true>" * 12,
-                "structural_status": "valid",
-                "malformed_exit": 1,
-            }
+            _v2_render_row(
+                label="test <img src=x onerror=window.__medoriginInjected=true>" * 12,
+            )
         ]
     }
     html = renderer.render(receipt)
@@ -338,20 +363,25 @@ def _synthetic_receipt_with_report(tmp_path: Path) -> dict[str, Any]:
         "format_version": "fhirkit-validation-report/v1",
         "input_hash": input_hash,
         "report_id": "",
-        "status": "valid",
+        "status": "not_validated",
         "validator_name": "medscale-fhirkit-local",
         "validator_version": "0.1.0",
-        "warnings": [],
+        "warnings": [_V2_WARNING],
     }
-    report.write_text(
-        json.dumps(payload, sort_keys=True, separators=(",", ":")) + "\n", encoding="utf-8"
+    report.write_bytes(
+        (json.dumps(payload, sort_keys=True, separators=(",", ":")) + "\n").encode("utf-8")
     )
+    report_sha256 = hashlib.sha256(report.read_bytes()).hexdigest()
+    # Anchor the fixture to the pinned truthful Core report, not a local guess.
+    assert report_sha256 == _V2_REPORT_SHA256
     return {
-        "schema": "medorigin-local-synthetic-fhir-example/v1",
-        "scope": "synthetic structural validation, not full HL7 conformance",
+        "schema": "medorigin-local-synthetic-fhir-example/v2",
+        "scope": "fictional Core provenance only, not FHIR validation",
         "publication_authorized": False,
         "clinical_authorized": False,
         "independent_review_completed": False,
+        "fhir_conformance_validated": False,
+        "full_beta_preview_qualified": False,
         "runs": [
             {
                 "label": "run_1",
@@ -359,10 +389,10 @@ def _synthetic_receipt_with_report(tmp_path: Path) -> dict[str, Any]:
                 "fixture_sha256": hashlib.sha256(
                     (EXAMPLE / "synthetic_structure_definition.json").read_bytes()
                 ).hexdigest(),
-                "report_sha256": hashlib.sha256(report.read_bytes()).hexdigest(),
+                "report_sha256": report_sha256,
                 "report_path": "reports_run_1/sha/report.json",
-                "structural_status": "valid",
-                "valid_exit": 0,
+                "provenance_status": "not_validated",
+                "validation_exit": 2,
                 "malformed_exit": 1,
             }
         ],
@@ -403,6 +433,7 @@ def test_preview_cli_admits_exact_synthetic_receipt(tmp_path: Path) -> None:
 def test_preview_cli_fail_closed_on_fake_synthetic_evidence(tmp_path: Path, tamper: str) -> None:
     preview = _preview_module()
     data = _synthetic_receipt_with_report(tmp_path)
+    preview.admit_receipt(copy.deepcopy(data), directory=tmp_path)  # control: untampered admits
     row = data["runs"][0]
     if tamper == "publication_true":
         data["publication_authorized"] = True
@@ -431,7 +462,8 @@ def test_preview_cli_fail_closed_on_fake_synthetic_evidence(tmp_path: Path, tamp
     elif tamper == "wrong_scope":
         data["scope"] = "clinical"
     elif tamper == "invalid_structural_status":
-        row["structural_status"] = "unknown"
+        # v2 successor of the legacy structural_status field.
+        row["provenance_status"] = "unknown"
 
     source = tmp_path / "evidence.json"
     source.write_text(json.dumps(data), encoding="utf-8")
@@ -464,8 +496,17 @@ def test_preview_cli_refuses_duplicate_json_keys(tmp_path: Path, source_json: st
 def test_preview_cli_refuses_report_bytes_changed_after_receipt(tmp_path: Path) -> None:
     preview = _preview_module()
     receipt = _synthetic_receipt_with_report(tmp_path)
+    preview.admit_receipt(copy.deepcopy(receipt), directory=tmp_path)  # control
     report = tmp_path / receipt["runs"][0]["report_path"]
-    report.write_text('{"status":"invalid"}\n', encoding="utf-8")
+    # Same-length rewrite (only the status value differs) so the size gate and
+    # every receipt field stay unchanged; only the bytes behind the digest move.
+    original = report.read_bytes()
+    changed = original.replace(b'"status":"not_validated"', b'"status":"NOT_validated"')
+    assert changed != original and len(changed) == len(original)
+    report.write_bytes(changed)
+    with pytest.raises(ValueError, match="digest mismatch"):
+        preview.admit_receipt(receipt, directory=tmp_path)
+    report.write_bytes(b'{"status":"invalid"}\n')
     with pytest.raises(ValueError, match="digest mismatch"):
         preview.admit_receipt(receipt, directory=tmp_path)
 
@@ -474,7 +515,14 @@ def test_preview_cli_refuses_ambiguous_report_json(tmp_path: Path) -> None:
     preview = _preview_module()
     receipt = _synthetic_receipt_with_report(tmp_path)
     report = tmp_path / receipt["runs"][0]["report_path"]
-    report.write_text('{"status":"invalid","status":"valid"}', encoding="utf-8")
+    original = report.read_bytes()
+    expected = json.loads(original)
+    # A hidden earlier "valid" status shadowed by the truthful one: a last-wins
+    # parser would see exactly the admitted report, so only duplicate-key
+    # rejection can refuse it.
+    ambiguous = b'{"status":"valid",' + original[1:]
+    assert json.loads(ambiguous) == expected
+    report.write_bytes(ambiguous)
     receipt["runs"][0]["report_sha256"] = hashlib.sha256(report.read_bytes()).hexdigest()
     with pytest.raises(ValueError, match="duplicate key"):
         preview.admit_receipt(receipt, directory=tmp_path)
@@ -488,6 +536,8 @@ def test_preview_cli_refuses_ambiguous_report_json(tmp_path: Path) -> None:
         ("validator_name", "untrusted-fhir-validator"),
         ("errors", ["hidden error"]),
         ("patient_name", "FICTIONAL-SENTINEL-NOT-ALLOWED"),
+        ("status", "valid"),
+        ("warnings", []),
     ],
 )
 def test_preview_rejects_rehashed_forged_report(
@@ -496,6 +546,7 @@ def test_preview_rejects_rehashed_forged_report(
     """Both report and receipt digests can be forged without report-schema validation."""
     preview = _preview_module()
     receipt = _synthetic_receipt_with_report(tmp_path)
+    preview.admit_receipt(copy.deepcopy(receipt), directory=tmp_path)  # control
     report = tmp_path / receipt["runs"][0]["report_path"]
     payload = json.loads(report.read_text(encoding="utf-8"))
     payload[field] = tampered_value
@@ -503,3 +554,50 @@ def test_preview_rejects_rehashed_forged_report(
     receipt["runs"][0]["report_sha256"] = hashlib.sha256(report.read_bytes()).hexdigest()
     with pytest.raises(ValueError, match="synthetic report identity or content invalid"):
         preview.admit_receipt(receipt, directory=tmp_path)
+
+
+def _historical_valid_receipt(tmp_path: Path) -> dict[str, Any]:
+    """The pre-v2 false "valid" receipt shape, with a matching rehashed report."""
+    receipt = _synthetic_receipt_with_report(tmp_path)
+    report = tmp_path / receipt["runs"][0]["report_path"]
+    payload = json.loads(report.read_bytes())
+    payload["status"] = "valid"
+    payload["warnings"] = []
+    report.write_bytes(
+        (json.dumps(payload, sort_keys=True, separators=(",", ":")) + "\n").encode("utf-8")
+    )
+    row = receipt["runs"][0]
+    row["report_sha256"] = hashlib.sha256(report.read_bytes()).hexdigest()
+    return receipt
+
+
+def test_historical_valid_receipt_is_refused(tmp_path: Path) -> None:
+    preview = _preview_module()
+    # Legacy v1 receipt exactly as previously emitted: wrong root fields.
+    legacy = _historical_valid_receipt(tmp_path)
+    row = legacy["runs"][0]
+    for key in ("provenance_status", "validation_exit"):
+        del row[key]
+    row["structural_status"] = "valid"
+    row["valid_exit"] = 0
+    del legacy["fhir_conformance_validated"], legacy["full_beta_preview_qualified"]
+    legacy["schema"] = "medorigin-local-synthetic-fhir-example/v1"
+    legacy["scope"] = "synthetic structural validation, not full HL7 conformance"
+    with pytest.raises(ValueError, match="unexpected synthetic receipt fields"):
+        preview.admit_receipt(legacy, directory=tmp_path)
+    with pytest.raises(ValueError, match=_RENDER_REFUSAL):
+        preview.render(legacy)
+
+    # A v2-shaped receipt claiming a "valid" outcome is refused at the run gate.
+    claimed = _historical_valid_receipt(tmp_path / "claimed")
+    claimed["runs"][0]["provenance_status"] = "valid"
+    claimed["runs"][0]["validation_exit"] = 0
+    with pytest.raises(ValueError, match="synthetic run identity or validation outcome invalid"):
+        preview.admit_receipt(claimed, directory=tmp_path / "claimed")
+    with pytest.raises(ValueError, match=_RENDER_REFUSAL):
+        preview.render(claimed)
+
+    # Even with truthful row fields, a rehashed "valid" report is refused.
+    hidden = _historical_valid_receipt(tmp_path / "hidden")
+    with pytest.raises(ValueError, match="synthetic report identity or content invalid"):
+        preview.admit_receipt(hidden, directory=tmp_path / "hidden")
