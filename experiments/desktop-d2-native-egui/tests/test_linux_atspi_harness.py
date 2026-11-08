@@ -45,9 +45,9 @@ class LinuxATSPITestHarness(unittest.TestCase):
             "",
             "frame",
             [
-                FakeAccessible("MedOrigin — Native Rust Experiment", "label"),
-                FakeAccessible("patient-minimal (57 bytes)", "toggle button"),
-                FakeAccessible("Verify synthetic SHA-256", "push button"),
+                # A plain launch opens Home; fixtures sit behind this nav item.
+                FakeAccessible("Welcome to MedOrigin", "label"),
+                FakeAccessible("FHIR fixture inspector  Exp ", "push button"),
             ],
         )
         app = FakeAccessible("medorigin-desktop-d2-native-egui", "application", [frame])
@@ -60,9 +60,8 @@ class LinuxATSPITestHarness(unittest.TestCase):
                 "",
                 "frame",
                 [
-                    FakeAccessible("MedOrigin — Native Rust Experiment", "label"),
-                    FakeAccessible("patient-minimal (57 bytes)", "toggle button"),
-                    FakeAccessible("Verify synthetic SHA-256", "push button"),
+                    FakeAccessible("Welcome to MedOrigin", "label"),
+                    FakeAccessible("FHIR fixture inspector  Exp ", "push button"),
                 ],
             )
 
@@ -73,11 +72,7 @@ class LinuxATSPITestHarness(unittest.TestCase):
         untrusted = FakeAccessible(
             "medorigin-desktop-d2-native-egui",
             "application",
-            [
-                FakeAccessible(
-                    "", "frame", [FakeAccessible("patient-minimal (57 bytes)", "toggle button")]
-                )
-            ],
+            [FakeAccessible("", "frame", [FakeAccessible("Welcome to MedOrigin", "label")])],
         )
         self.assertIsNone(
             APP.find_native_frame(FakeAccessible("main", "desktop frame", [untrusted]))
