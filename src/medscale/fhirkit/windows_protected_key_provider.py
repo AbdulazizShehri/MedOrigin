@@ -105,8 +105,10 @@ class _WinApis:
 
 def _win_apis() -> _WinApis:
     try:
-        advapi = ctypes.WinDLL("Advapi32.dll", use_last_error=True)
-        kernel = ctypes.WinDLL("Kernel32.dll", use_last_error=True)
+        # Windows-only ctypes APIs: absent from non-Windows typeshed stubs, so CI's
+        # Linux mypy needs the ignore while Windows mypy does not (unused-ignore).
+        advapi = ctypes.WinDLL("Advapi32.dll", use_last_error=True)  # type: ignore[attr-defined,unused-ignore]
+        kernel = ctypes.WinDLL("Kernel32.dll", use_last_error=True)  # type: ignore[attr-defined,unused-ignore]
 
         read = advapi.CredReadW
         read.argtypes = [
@@ -163,7 +165,8 @@ def _win_apis() -> _WinApis:
 def _read_root(target: str, api: _WinApis) -> bytes | None:
     pointer = ctypes.POINTER(_CREDENTIAL)()
     if not api.read(target, _CRED_TYPE_GENERIC, 0, ctypes.byref(pointer)):
-        if ctypes.get_last_error() == _CRED_MISSING:
+        # Windows-only ctypes API (see _win_apis).
+        if ctypes.get_last_error() == _CRED_MISSING:  # type: ignore[attr-defined,unused-ignore]
             return None
         raise WindowsCredentialPreviewError("windows_protected_credential_read_refused")
     try:

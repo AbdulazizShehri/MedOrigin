@@ -123,9 +123,15 @@ def _reject_venv_loader_shadow_files(venv: Path, scripts: Path) -> None:
             raise QualificationError("Python executable search directory unreadable") from exc
 
 
+def _running_on_windows() -> bool:
+    """Runtime platform check that mypy does not narrow, so the Windows-only
+    qualification below type-checks on every CI platform."""
+    return sys.platform == "win32"
+
+
 def qualify(python: Path, minor: int) -> dict[str, object]:
     """Verify the installed venv launcher, canonical source and pyvenv.cfg."""
-    if sys.platform != "win32" or minor not in WINDOWS_PINNED:
+    if not _running_on_windows() or minor not in WINDOWS_PINNED:
         raise QualificationError("Python executable platform or version unreviewed")
     if python.name.casefold() != "python.exe" or python.parent.name.casefold() != "scripts":
         raise QualificationError("Python venv executable location unqualified")
