@@ -9,6 +9,10 @@ OperationOutcome is atomically committed with provenance and audit.
 
 from __future__ import annotations
 
+# mypy: disable-error-code="import-not-found"
+# The Workspace package under apps/workspace is deliberately outside strict mypy's
+# file set while Issue #464 item 1 is open; it is imported at runtime. Declaring
+# the missing import here keeps that deferral explicit.
 from pathlib import Path
 
 from medscale.fhirkit.r4_outcome import structural_outcome_for_report

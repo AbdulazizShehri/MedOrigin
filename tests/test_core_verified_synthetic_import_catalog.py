@@ -6,9 +6,14 @@ file input is permitted by the catalog. All test fixtures are fictional.
 
 from __future__ import annotations
 
+# mypy: disable-error-code="import-not-found"
+# The Workspace package under apps/workspace is deliberately outside strict mypy's
+# file set while Issue #464 item 1 is open; it is imported at runtime. Declaring
+# the missing import here keeps that deferral explicit.
 import json
 import sys
 from pathlib import Path
+from typing import Any
 from uuid import UUID
 
 import pytest
@@ -69,7 +74,13 @@ def _one_patient(index: int, text: str = SENTINEL) -> dict[str, object]:
     }
 
 
-def _ingest(store, provider, bundle, *, actor=ACTOR):
+def _ingest(
+    store: WorkspaceStore,
+    provider: InMemoryTestKeyProvider,
+    bundle: dict[str, Any],
+    *,
+    actor: str = ACTOR,
+) -> dict[str, Any]:
     return ingest_synthetic_bundle_atomic(
         bundle,
         store,
@@ -80,8 +91,15 @@ def _ingest(store, provider, bundle, *, actor=ACTOR):
     )
 
 
-def _catalog(store, provider, head, *, actor=ACTOR, **kwargs):
-    args = {
+def _catalog(
+    store: WorkspaceStore,
+    provider: InMemoryTestKeyProvider,
+    head: str,
+    *,
+    actor: str = ACTOR,
+    **kwargs: Any,
+) -> dict[str, Any]:
+    args: dict[str, Any] = {
         "test_key_provider": provider,
         "actor_id": actor,
         "expected_current_audit_head_digest": head,
@@ -178,7 +196,7 @@ def test_catalog_scope_to_actor_is_empty_not_an_authentication_claim(tmp_path: P
     ],
 )
 def test_catalog_refuses_invalid_permissions_anchors_and_silent_truncation(
-    tmp_path: Path, overrides: dict[str, object], reason: str
+    tmp_path: Path, overrides: dict[str, Any], reason: str
 ) -> None:
     provider = InMemoryTestKeyProvider(new_root_secret())
     with _open(tmp_path, provider) as store:

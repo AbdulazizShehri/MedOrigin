@@ -13,10 +13,20 @@ import json
 import os
 import sys
 from pathlib import Path
+from typing import TypedDict
 
 STATUS = "LOCAL_WINDOWS_VENV_PYTHON_SOURCE_BYTES_ONLY"
 PROFILE = "windows-cpython-3.11.15-3.12.13-local-pinned"
-WINDOWS_PINNED = {
+
+
+class _PinnedRuntime(TypedDict):
+    version: str
+    venv_sha256: str
+    base_sha256: str
+    runtime_dlls: dict[str, tuple[int, str]]
+
+
+WINDOWS_PINNED: dict[int, _PinnedRuntime] = {
     11: {
         "version": "3.11.15",
         "venv_sha256": "4cca2027319c08dca5cc4b64c9ba415cc89205152202cb6805081277c43b610f",

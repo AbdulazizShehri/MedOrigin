@@ -7,7 +7,9 @@ from __future__ import annotations
 
 import copy
 import json
+from collections.abc import Callable
 from pathlib import Path
+from typing import Any, NoReturn
 
 import pytest
 
@@ -24,15 +26,15 @@ from medscale.fhirkit.workspace_multi_timeline_demo import (
 _SECRET = "INVENTED_PRIVATE_NAME_DO_NOT_ECHO"
 
 
-def _two() -> list[dict]:
-    one = _fictional_bundle()
+def _two() -> list[dict[str, Any]]:
+    one: dict[str, Any] = _fictional_bundle()
     one["entry"][1]["resource"]["name"][0]["text"] = _SECRET
-    two = _second_fictional_timeline_bundle()
+    two: dict[str, Any] = _second_fictional_timeline_bundle()
     two["entry"][1]["resource"]["name"][0]["text"] = _SECRET + "_SECOND"
     return [one, two]
 
 
-def _files(tmp_path: Path, bundle_list: list[dict]) -> list[Path]:
+def _files(tmp_path: Path, bundle_list: list[dict[str, Any]]) -> list[Path]:
     outputs = []
     for index, bundle in enumerate(bundle_list, 1):
         filepath = tmp_path / f"{_SECRET}-{index}.json"
@@ -123,7 +125,10 @@ def test_second_patient_only_bundle_cold_reopen_does_not_invent_activity(
     ],
 )
 def test_second_unqualified_bundle_cannot_trigger_any_encrypted_write(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch, mutator
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+    mutator: Callable[[list[dict[str, Any]]], object],
 ) -> None:
     import medscale.fhirkit.workspace_file_batch_demo as module
 
@@ -131,7 +136,7 @@ def test_second_unqualified_bundle_cannot_trigger_any_encrypted_write(
     mutator(sources)
     paths = _files(tmp_path, sources)
 
-    def no_workspace_create(*_a, **_kw):
+    def no_workspace_create(*_a: object, **_kw: object) -> NoReturn:
         raise AssertionError("should never allocate a Workspace on bad preflight")
 
     monkeypatch.setattr(module, "TemporaryDirectory", no_workspace_create)
@@ -149,7 +154,7 @@ def test_exact_duplicate_source_is_refused_before_allocation(
 
     first = _two()[0]
 
-    def no_workspace_create(*_a, **_kw):
+    def no_workspace_create(*_a: object, **_kw: object) -> NoReturn:
         raise AssertionError("should refuse duplicate before allocating Workspace")
 
     monkeypatch.setattr(module, "TemporaryDirectory", no_workspace_create)
@@ -174,7 +179,7 @@ def test_api_requires_two_explicit_demo_permissions() -> None:
         [_fictional_bundle(), None],
     ],
 )
-def test_api_refuses_invalid_batch_before_workspace(payloads) -> None:
+def test_api_refuses_invalid_batch_before_workspace(payloads: list[Any]) -> None:
     with pytest.raises(SyntheticFileImportDemoError):
         run_fictional_file_batch_encrypted_demo(payloads, synthetic_only=True, ephemeral_demo=True)
 
@@ -218,7 +223,7 @@ def test_fake_downstream_catalog_content_cannot_escape_into_output(
 ) -> None:
     from medscale.fhirkit import workspace_catalog
 
-    def poison(*_args, **_kwargs):
+    def poison(*_args: object, **_kwargs: object) -> dict[str, str]:
         return {"status": _SECRET, "patient_name": _SECRET}
 
     monkeypatch.setattr(workspace_catalog, "list_synthetic_bundle_imports", poison)

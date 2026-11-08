@@ -110,9 +110,12 @@ def _events(
                 if "end" in period and "start" not in period:
                     raise SyntheticTimelineError("timeline_encounter_period_start_required")
                 if "start" in period:
-                    moment = _instant(period["start"], "encounter")
-                if "end" in period and _instant(period["end"], "encounter") < moment:
-                    raise SyntheticTimelineError("timeline_encounter_period_reversed")
+                    # "end" without "start" was refused above, so an end bound
+                    # is only ever compared against an admitted start instant.
+                    start = _instant(period["start"], "encounter")
+                    moment = start
+                    if "end" in period and _instant(period["end"], "encounter") < start:
+                        raise SyntheticTimelineError("timeline_encounter_period_reversed")
         elif "effectiveDateTime" in resource:
             moment = _instant(resource["effectiveDateTime"], "observation")
         events.append((moment, kind))
@@ -125,7 +128,7 @@ def _events(
     events.sort(
         key=lambda item: (item[0] is None, item[0] or datetime.max.replace(tzinfo=UTC), item[1])
     )
-    timeline = [
+    timeline: list[dict[str, object]] = [
         {
             "ordinal": i + 1,
             "resource_type": kind,
@@ -161,7 +164,9 @@ def read_verified_synthetic_patient_timeline(
     if type(expected_current_audit_head_digest) is not str:
         raise SyntheticTimelineError("timeline_current_audit_anchor_refused")
     try:
-        checked = read_synthetic_bundle_in_memory(
+        # Any: every field below is checked here; a wrong runtime type raises
+        # inside this try and is refused by the generic handler, as before.
+        checked: dict[str, Any] = read_synthetic_bundle_in_memory(
             store,
             test_key_provider=test_key_provider,
             source_content_sha256=source_content_sha256,

@@ -192,7 +192,7 @@ def test_native_export_receipt_stays_not_validated_and_never_overwrites(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     exporter = _module("evidence_export.py", monkeypatch)
-    value = {
+    value: dict[str, Any] = {
         "fhir": {
             "status": "NOT_VALIDATED",
             "report_sha256": "a" * 64,

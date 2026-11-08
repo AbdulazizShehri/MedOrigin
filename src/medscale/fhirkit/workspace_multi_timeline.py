@@ -9,6 +9,7 @@ clinical decision support, data export, network, or release permission.
 from __future__ import annotations
 
 import re
+from typing import Any, cast
 
 from medscale.fhirkit.workspace_catalog import list_synthetic_bundle_imports
 from medscale.fhirkit.workspace_timeline import read_verified_synthetic_patient_timeline
@@ -94,7 +95,7 @@ def list_verified_synthetic_import_timelines(
         or catalog.get("current_audit_head_digest") != expected_current_audit_head_digest
         or type(catalog.get("import_count")) is not int
         or type(catalog.get("imports")) is not list
-        or catalog["import_count"] != len(catalog["imports"])
+        or catalog["import_count"] != len(cast(list[Any], catalog["imports"]))
         or catalog["import_count"] > max_imports
         or any(
             catalog.get(flag) is not False
@@ -109,8 +110,10 @@ def list_verified_synthetic_import_timelines(
     ):
         raise SyntheticMultiImportTimelineError("multi_timeline_catalog_contract_refused")
 
+    # The list type of "imports" was checked above; entries are checked below.
+    imports = cast(list[Any], catalog["imports"])
     selected = patient_selections or {}
-    known = {record["source_content_sha256"] for record in catalog["imports"]}
+    known = {record["source_content_sha256"] for record in imports}
     if set(selected) - known:
         raise SyntheticMultiImportTimelineError("multi_timeline_unknown_patient_selection")
 
@@ -119,7 +122,7 @@ def list_verified_synthetic_import_timelines(
     total_events = 0
     total_undated = 0
     prior_sequence = 0
-    for record in catalog["imports"]:
+    for record in imports:
         source = record["source_content_sha256"]
         original_audit = record["import_audit_event_digest"]
         sequence = record["audit_sequence"]
@@ -319,7 +322,8 @@ def list_filtered_verified_synthetic_import_timelines(
     results: list[dict[str, object]] = []
     visible_total = 0
     hidden_total = 0
-    for original in verified["imports"]:
+    # "imports" is the aggregated list of per-import dicts built in this module.
+    for original in cast(list[dict[str, Any]], verified["imports"]):
         included: list[dict[str, object]] = []
         for event in original["events"]:
             day = event["day_utc"]

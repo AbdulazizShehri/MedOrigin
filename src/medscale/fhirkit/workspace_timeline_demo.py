@@ -7,9 +7,14 @@ before returning metadata. Never patient data or clinical release.
 
 from __future__ import annotations
 
+# mypy: disable-error-code="import-not-found"
+# The Workspace package under apps/workspace is deliberately outside strict mypy's
+# file set while Issue #464 item 1 is open; it is imported at runtime. Declaring
+# the missing import here keeps that deferral explicit.
 import json
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from typing import Any
 from uuid import UUID
 
 from medscale.fhirkit.workspace_demo import _fictional_bundle
@@ -29,7 +34,8 @@ def run_fictional_encrypted_timeline_demo() -> dict[str, object]:
     from medscale.fhirkit.workspace_ingest import ingest_synthetic_bundle_atomic
     from medscale.fhirkit.workspace_timeline import read_verified_synthetic_patient_timeline
 
-    source = _fictional_bundle()
+    # Any: hardcoded invented fixture of a known nested shape.
+    source: dict[str, Any] = _fictional_bundle()
     source["entry"][0]["resource"]["effectiveDateTime"] = "2026-11-02T22:10:00-05:00"
     source["entry"][2]["resource"]["period"] = {
         "start": "2026-11-03T02:20:00Z",
@@ -43,7 +49,7 @@ def run_fictional_encrypted_timeline_demo() -> dict[str, object]:
             key_provider=provider,
             application_version="0.1.0.dev1",
         ) as store:
-            imported = ingest_synthetic_bundle_atomic(
+            imported: dict[str, Any] = ingest_synthetic_bundle_atomic(
                 source,
                 store,
                 test_key_provider=provider,
@@ -71,7 +77,7 @@ def run_fictional_encrypted_timeline_demo() -> dict[str, object]:
             key_provider=provider,
             application_version="0.1.0.dev1",
         ) as reopened:
-            timeline = read_verified_synthetic_patient_timeline(
+            timeline: dict[str, Any] = read_verified_synthetic_patient_timeline(
                 store=reopened,
                 test_key_provider=provider,
                 source_content_sha256=imported["source_content_sha256"],

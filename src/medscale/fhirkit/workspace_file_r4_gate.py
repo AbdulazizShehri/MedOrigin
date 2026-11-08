@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from medscale.fhirkit.bundle_batch_assessment import assess_synthetic_bundle_batch_offline
 from medscale.fhirkit.r4_outcome import _WARNING
@@ -56,7 +56,7 @@ class FictionalFileR4GateError(ValueError):
 
 def require_official_r4_structural_preflight(
     snapshots: list[dict[str, Any]],
-    preflights: list[dict[str, object]],
+    preflights: list[dict[str, Any]],
     archive: Path,
 ) -> dict[str, object]:
     """Verify ALL original source hashes against exact official R4 structure.
@@ -93,7 +93,7 @@ def require_official_r4_structural_preflight(
         or type(result.get("structural_not_validated_count")) is not int
         or result["structural_not_validated_count"] != len(snapshots)
         or type(result.get("documents")) is not list
-        or len(result["documents"]) != len(snapshots)
+        or len(cast(list[Any], result["documents"])) != len(snapshots)
         or type(result.get("total_resource_count")) is not int
         or result["total_resource_count"]
         != sum(p.get("resource_count", 0) if type(p) is dict else 0 for p in preflights)
@@ -114,7 +114,9 @@ def require_official_r4_structural_preflight(
         raise FictionalFileR4GateError("fictional_r4_structural_contract_refused")
 
     checked: set[str] = set()
-    for ordinal, (source, bound) in enumerate(zip(result["documents"], preflights, strict=True), 1):
+    for ordinal, (source, bound) in enumerate(
+        zip(cast(list[Any], result["documents"]), preflights, strict=True), 1
+    ):
         if type(source) is not dict or type(bound) is not dict or set(source) != _DOC_KEYS:
             raise FictionalFileR4GateError("fictional_r4_structural_source_refused")
         sha = bound.get("source_content_sha256")

@@ -130,11 +130,11 @@ def _verify_installed_package_inventory(wheel: Path, python: Path, minor: int) -
                     raise QualificationError("unsafe installed Core Wheel inventory")
                 for depth in range(1, len(parts)):
                     expected_dirs.add("/".join(parts[:depth]))
-                digest = hashlib.sha256()
+                member_digest = hashlib.sha256()
                 with archive.open(member) as archive_file:
                     while chunk := archive_file.read(65536):
-                        digest.update(chunk)
-                expected[relative] = member.file_size, digest.hexdigest()
+                        member_digest.update(chunk)
+                expected[relative] = member.file_size, member_digest.hexdigest()
     except (OSError, ValueError, zipfile.BadZipFile) as exc:
         raise QualificationError("installed Core Wheel inventory unreadable") from exc
     if not expected:

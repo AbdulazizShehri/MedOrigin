@@ -6,9 +6,14 @@ accepted. Both resources are hardcoded invented fixtures, not clinical cases.
 
 from __future__ import annotations
 
+# mypy: disable-error-code="import-not-found"
+# The Workspace package under apps/workspace is deliberately outside strict mypy's
+# file set while Issue #464 item 1 is open; it is imported at runtime. Declaring
+# the missing import here keeps that deferral explicit.
 import json
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from typing import Any
 from uuid import UUID
 
 from medscale.fhirkit.workspace_demo import _fictional_bundle
@@ -90,7 +95,8 @@ def run_fictional_catalog_demo() -> dict[str, object]:
             )
             if report.events_verified != 3 or reopened.object_count() != 13:
                 raise ValueError("fictional_catalog_reopen_refused")
-            catalog = list_synthetic_bundle_imports(
+            # Any: hardcoded-fixture demo; every field read is compared below.
+            catalog: dict[str, Any] = list_synthetic_bundle_imports(
                 reopened,
                 test_key_provider=provider,
                 actor_id=_ACTOR,

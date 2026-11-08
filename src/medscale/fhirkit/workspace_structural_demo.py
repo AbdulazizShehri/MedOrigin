@@ -7,9 +7,14 @@ schema ZIP is caller-supplied and checked against an immutable HL7 SHA.
 
 from __future__ import annotations
 
+# mypy: disable-error-code="import-not-found"
+# The Workspace package under apps/workspace is deliberately outside strict mypy's
+# file set while Issue #464 item 1 is open; it is imported at runtime. Declaring
+# the missing import here keeps that deferral explicit.
 import json
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from typing import Any
 from uuid import UUID
 
 from medscale.fhirkit.workspace_demo import _fictional_bundle
@@ -74,7 +79,8 @@ def run_ephemeral_encrypted_structural_demo(archive: Path) -> dict[str, object]:
             checked = AuditTrail(reopened).verify(
                 expected_head_event_digest=str(receipt["audit_head_digest"])
             )
-            recovered = read_imported_synthetic_structural_result(
+            # Any: nested OperationOutcome fields are compared below.
+            recovered: dict[str, Any] = read_imported_synthetic_structural_result(
                 store=reopened,
                 test_key_provider=provider,
                 source_content_sha256=str(imported["source_content_sha256"]),

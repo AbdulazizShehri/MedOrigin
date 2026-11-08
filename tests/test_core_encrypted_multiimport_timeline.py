@@ -6,9 +6,14 @@ anchors must qualify independently; no cross-import Patient identity joining.
 
 from __future__ import annotations
 
+# mypy: disable-error-code="import-not-found"
+# The Workspace package under apps/workspace is deliberately outside strict mypy's
+# file set while Issue #464 item 1 is open; it is imported at runtime. Declaring
+# the missing import here keeps that deferral explicit.
 import json
 import sys
 from pathlib import Path
+from typing import Any, cast
 from uuid import UUID
 
 import pytest
@@ -37,7 +42,7 @@ _NOW = "2026-11-04T10:00:00+03:00"
 _SECRET = "PRIVATE_FAKE_PERSON_NAME_NEVER_EXPOSED"
 
 
-def _open(root: Path, provider: InMemoryTestKeyProvider):
+def _open(root: Path, provider: InMemoryTestKeyProvider) -> WorkspaceStore:
     root.mkdir(parents=True, exist_ok=True)
     return WorkspaceStore.open(
         store_root=str(root),
@@ -47,8 +52,8 @@ def _open(root: Path, provider: InMemoryTestKeyProvider):
     )
 
 
-def _first() -> dict:
-    source = _fictional_bundle()
+def _first() -> dict[str, Any]:
+    source = cast(dict[str, Any], _fictional_bundle())
     source["entry"][1]["resource"]["name"][0]["text"] = _SECRET
     source["entry"][0]["resource"]["effectiveDateTime"] = "2026-11-03T05:00:00Z"
     source["entry"][2]["resource"]["period"] = {
@@ -58,11 +63,13 @@ def _first() -> dict:
     return source
 
 
-def _second() -> dict:
+def _second() -> dict[str, Any]:
     return _second_fictional_timeline_bundle()
 
 
-def _ingest(store, provider, bundle):
+def _ingest(
+    store: WorkspaceStore, provider: InMemoryTestKeyProvider, bundle: dict[str, Any]
+) -> dict[str, Any]:
     return ingest_synthetic_bundle_atomic(
         bundle,
         store,
@@ -73,8 +80,10 @@ def _ingest(store, provider, bundle):
     )
 
 
-def _read(store, provider, head, **kwargs):
-    args = {
+def _read(
+    store: WorkspaceStore, provider: object, head: object, **kwargs: object
+) -> dict[str, Any]:
+    args: dict[str, Any] = {
         "store": store,
         "test_key_provider": provider,
         "actor_id": _ACTOR,
@@ -87,7 +96,9 @@ def _read(store, provider, head, **kwargs):
     return list_verified_synthetic_import_timelines(**args)
 
 
-def _two_imports(root: Path, provider):
+def _two_imports(
+    root: Path, provider: InMemoryTestKeyProvider
+) -> tuple[dict[str, Any], dict[str, Any]]:
     with _open(root, provider) as store:
         original = _ingest(store, provider, _first())
         AuditTrail(store).append(
@@ -188,7 +199,7 @@ def test_actual_encrypted_two_imports_reopen_grouped_timeline_without_patient_me
     ],
 )
 def test_fail_closed_wrong_permissions_audit_keys_caps_or_selection(
-    tmp_path: Path, overrides: dict, reason: str
+    tmp_path: Path, overrides: dict[str, Any], reason: str
 ) -> None:
     provider = InMemoryTestKeyProvider(new_root_secret())
     root = tmp_path / "encrypted"
@@ -321,14 +332,15 @@ def test_filter_cannot_skip_source_verification_on_hidden_import(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     import medscale.fhirkit.workspace_multi_timeline as timeline_module
+    import medscale.fhirkit.workspace_timeline as single_timeline_module
 
     provider = InMemoryTestKeyProvider(new_root_secret())
     root = tmp_path / "encrypted-hidden-proof"
     first, latest = _two_imports(root, provider)
-    original = timeline_module.read_verified_synthetic_patient_timeline
+    original = single_timeline_module.read_verified_synthetic_patient_timeline
     calls: list[str] = []
 
-    def checked_read(**kwargs):
+    def checked_read(**kwargs: Any) -> Any:
         calls.append(kwargs["source_content_sha256"])
         if kwargs["source_content_sha256"] == first["source_content_sha256"]:
             raise ValueError("SYNTHETIC_PRIVATE_SOURCE_MUST_NOT_LEAK")
@@ -377,7 +389,7 @@ def test_filtered_multiimport_view_real_encrypted_reopen_and_independent_identit
             "allow_in_memory_listing": True,
             "allow_in_memory_timeline": True,
         }
-        chosen = list_filtered_verified_synthetic_import_timelines(
+        chosen: Any = list_filtered_verified_synthetic_import_timelines(
             **args,
             from_day_utc="2026-11-04",
             through_day_utc="2026-11-04",
@@ -407,7 +419,7 @@ def test_filtered_multiimport_view_real_encrypted_reopen_and_independent_identit
         )
         assert no_matches["visible_total_event_count"] == 0
         assert no_matches["import_count"] == 2  # still verify original imports
-        all_observations = list_filtered_verified_synthetic_import_timelines(
+        all_observations: Any = list_filtered_verified_synthetic_import_timelines(
             **args, resource_type="Observation"
         )
         assert all_observations["visible_total_event_count"] == 2
@@ -447,7 +459,7 @@ def test_filtered_multiimport_view_real_encrypted_reopen_and_independent_identit
     ],
 )
 def test_filtered_view_rejects_forged_filters_and_refuses_unverified_original(
-    tmp_path: Path, filters: dict, reason: str
+    tmp_path: Path, filters: dict[str, Any], reason: str
 ) -> None:
     from medscale.fhirkit.workspace_multi_timeline import (
         list_filtered_verified_synthetic_import_timelines,

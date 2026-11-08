@@ -8,8 +8,10 @@ import importlib.util
 import json
 import os
 import zipfile
+from collections.abc import Callable
 from importlib.metadata import version
 from pathlib import Path
+from typing import Any, cast
 
 import pytest
 
@@ -26,8 +28,8 @@ _SECRET = "PRIVATE_FICTIONAL_PERSON_NAME_NEVER_OUTPUT"
 _SHA = r4_schema.OFFICIAL_R4_SCHEMA_ZIP_SHA256
 
 
-def _cases() -> list[dict]:
-    first = _fictional_bundle()
+def _cases() -> list[dict[str, Any]]:
+    first = cast(dict[str, Any], _fictional_bundle())
     first["entry"][1]["resource"]["name"][0]["text"] = _SECRET
     second = copy.deepcopy(first)
     second["entry"][0]["resource"]["valueString"] = "Other invented observation"
@@ -68,7 +70,9 @@ def _schema(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, *, reject: bool = F
     return archive
 
 
-def _cli(tmp_path: Path, archive: Path, sources: list[dict]) -> tuple[list[str], list[Path]]:
+def _cli(
+    tmp_path: Path, archive: Path, sources: list[dict[str, Any]]
+) -> tuple[list[str], list[Path]]:
     paths = []
     for i, source in enumerate(sources, 1):
         item = tmp_path / f"{_SECRET}-{i}.json"
@@ -159,7 +163,7 @@ def test_no_partial_success_or_patient_leak_when_later_source_refused(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
-    edit,
+    edit: Callable[[dict[str, Any]], object],
 ) -> None:
     archive = _schema(tmp_path, monkeypatch)
     sources = _cases()
@@ -194,7 +198,7 @@ def test_repeated_source_never_admitted_as_two_independent_bundles(
     ],
 )
 def test_api_explicit_admission_before_schema(
-    sources,
+    sources: list[Any],
     marker: str,
 ) -> None:
     with pytest.raises(SyntheticBatchAssessmentError, match=marker):
@@ -280,13 +284,14 @@ def test_help_is_explicit_about_partial_conformance_and_fictional_only(
 def test_forged_diagnostic_cannot_escape_through_batch_even_if_prefix_looks_safe(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    import medscale.fhirkit.bundle_assessment as assessment
     import medscale.fhirkit.bundle_batch_assessment as batch
 
     archive = _schema(tmp_path, monkeypatch)
-    original = batch.assess_synthetic_bundle_offline
+    original = assessment.assess_synthetic_bundle_offline
 
-    def fake_one(*args, **kwargs):
-        document = original(*args, **kwargs)
+    def fake_one(*args: Any, **kwargs: Any) -> Any:
+        document: Any = original(*args, **kwargs)
         document["r4_operation_outcome"]["issue"][-1]["details"]["text"] += _SECRET
         return document
 
@@ -299,18 +304,19 @@ def test_forged_diagnostic_cannot_escape_through_batch_even_if_prefix_looks_safe
 def test_forged_extra_downstream_payload_key_is_never_passed_through(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    import medscale.fhirkit.bundle_assessment as assessment
     import medscale.fhirkit.bundle_batch_assessment as batch
 
     archive = _schema(tmp_path, monkeypatch)
-    original = batch.assess_synthetic_bundle_offline
+    original = assessment.assess_synthetic_bundle_offline
 
-    def fake_one(*args, **kwargs):
-        report = original(*args, **kwargs)
+    def fake_one(*args: Any, **kwargs: Any) -> Any:
+        report: Any = original(*args, **kwargs)
         report["source_patient_payload"] = _SECRET
         return report
 
     monkeypatch.setattr(batch, "assess_synthetic_bundle_offline", fake_one)
-    safe = batch.assess_synthetic_bundle_batch_offline(_cases(), archive, synthetic_only=True)
+    safe: Any = batch.assess_synthetic_bundle_batch_offline(_cases(), archive, synthetic_only=True)
     assert _SECRET not in json.dumps(safe)
     assert all("source_patient_payload" not in item for item in safe["documents"])
 
@@ -325,7 +331,9 @@ def test_official_hl7_r4_401_schema_mixed_structural_result_when_opted_in() -> N
     assert version("jsonschema") == r4_schema.PINNED_JSONSCHEMA_VERSION
     first, second = _cases()
     second["entry"][0]["resource"]["valueString"] = 12345
-    report = assess_synthetic_bundle_batch_offline([first, second], archive, synthetic_only=True)
+    report: Any = assess_synthetic_bundle_batch_offline(
+        [first, second], archive, synthetic_only=True
+    )
     assert report["document_count"] == 2
     assert report["structural_not_validated_count"] == 1
     assert report["structural_invalid_count"] == 1

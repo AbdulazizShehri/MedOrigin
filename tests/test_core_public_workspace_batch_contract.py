@@ -6,9 +6,14 @@ All records are invented; in-memory test keys, no PHI or cloud activity.
 
 from __future__ import annotations
 
+# mypy: disable-error-code="import-not-found"
+# The Workspace package under apps/workspace is deliberately outside strict mypy's
+# file set while Issue #464 item 1 is open; it is imported at runtime. Declaring
+# the missing import here keeps that deferral explicit.
 import json
 import sys
 from pathlib import Path
+from typing import Any
 from uuid import UUID
 
 import pytest
@@ -67,8 +72,13 @@ def _items() -> tuple[dict[str, object], ...]:
     )
 
 
-def _commit(store, provider, resources, **changes):
-    params = {
+def _commit(
+    store: WorkspaceStore,
+    provider: InMemoryTestKeyProvider,
+    resources: tuple[dict[str, object], ...],
+    **changes: object,
+) -> Any:
+    params: dict[str, object] = {
         "store": store,
         "test_key_provider": provider,
         "resources": resources,
@@ -136,7 +146,9 @@ def test_duplicate_resource_identity_refused_before_write(tmp_path: Path) -> Non
         ((_items()[2],), "not-a-digest", "invalid_synthetic_source_digest"),
     ],
 )
-def test_public_batch_rejects_out_of_contract(data, digest, reason: str, tmp_path: Path) -> None:
+def test_public_batch_rejects_out_of_contract(
+    data: tuple[dict[str, object], ...], digest: str, reason: str, tmp_path: Path
+) -> None:
     provider = InMemoryTestKeyProvider(new_root_secret())
     with _store(tmp_path, provider) as store:
         with pytest.raises(SyntheticFhirBatchError, match=reason):
@@ -145,7 +157,8 @@ def test_public_batch_rejects_out_of_contract(data, digest, reason: str, tmp_pat
 
 
 def test_reject_subclassed_test_provider_even_when_same_store_instance(tmp_path: Path) -> None:
-    class UnapprovedTestProvider(InMemoryTestKeyProvider):
+    # The base is Any while apps/workspace is outside strict mypy (Issue #464).
+    class UnapprovedTestProvider(InMemoryTestKeyProvider):  # type: ignore[misc]
         pass
 
     provider = UnapprovedTestProvider(new_root_secret())

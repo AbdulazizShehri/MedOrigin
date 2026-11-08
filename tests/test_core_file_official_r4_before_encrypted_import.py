@@ -8,7 +8,9 @@ from __future__ import annotations
 
 import json
 import os
+from collections.abc import Callable
 from pathlib import Path
+from typing import Any, NoReturn
 
 import pytest
 
@@ -26,10 +28,10 @@ from medscale.fhirkit.workspace_multi_timeline_demo import _second_fictional_tim
 _SECRET = "INVENTED_PATIENT_NAME_DO_NOT_LEAK"
 
 
-def _two() -> list[dict]:
-    first = _fictional_bundle()
+def _two() -> list[dict[str, Any]]:
+    first: dict[str, Any] = _fictional_bundle()
     first["entry"][1]["resource"]["name"][0]["text"] = _SECRET
-    second = _second_fictional_timeline_bundle()
+    second: dict[str, Any] = _second_fictional_timeline_bundle()
     second["entry"][1]["resource"]["name"][0]["text"] = _SECRET + "_SECOND"
     return [first, second]
 
@@ -43,7 +45,9 @@ def _source_files(tmp_path: Path) -> list[Path]:
     return output
 
 
-def _qualified_fake_batch(sources, *_args, **_kwargs):
+def _qualified_fake_batch(
+    sources: list[dict[str, Any]], *_args: object, **_kwargs: object
+) -> dict[str, Any]:
     """Explicit CONTRACT DOUBLE, never proof of an actual schema check."""
     _, preflights = _freeze_and_preflight(sources)
     return {
@@ -143,17 +147,17 @@ def test_contract_double_proves_optional_wiring_before_encrypted_reopen(
     ],
 )
 def test_forged_downstream_report_blocks_all_storage_before_allocation(
-    monkeypatch: pytest.MonkeyPatch, mutation
+    monkeypatch: pytest.MonkeyPatch, mutation: Callable[[dict[str, Any]], object]
 ) -> None:
     import medscale.fhirkit.workspace_file_batch_demo as importer
     import medscale.fhirkit.workspace_file_r4_gate as gate
 
-    def poisoned(*args, **kwargs):
+    def poisoned(*args: Any, **kwargs: Any) -> dict[str, Any]:
         result = _qualified_fake_batch(*args, **kwargs)
         mutation(result)
         return result
 
-    def forbid_storage(*_args, **_kwargs):
+    def forbid_storage(*_args: object, **_kwargs: object) -> NoReturn:
         raise AssertionError("MUST refuse before allocating any temporary Workspace")
 
     monkeypatch.setattr(gate, "assess_synthetic_bundle_batch_offline", poisoned)
@@ -175,7 +179,7 @@ def test_missing_exact_archive_refuses_before_workspace_allocation(
 ) -> None:
     import medscale.fhirkit.workspace_file_batch_demo as importer
 
-    def forbid_storage(*_args, **_kwargs):
+    def forbid_storage(*_args: object, **_kwargs: object) -> NoReturn:
         raise AssertionError("MUST refuse before allocating")
 
     monkeypatch.setattr(importer, "TemporaryDirectory", forbid_storage)
@@ -199,7 +203,7 @@ def test_wrong_archive_even_if_it_is_zip_refuses_before_storage(
     with zipfile.ZipFile(archive, "w") as members:
         members.writestr("fhir.schema.json", json.dumps({"definitions": {}}))
 
-    def forbid_storage(*_args, **_kwargs):
+    def forbid_storage(*_args: object, **_kwargs: object) -> NoReturn:
         raise AssertionError("MUST refuse before allocating")
 
     monkeypatch.setattr(importer, "TemporaryDirectory", forbid_storage)
@@ -269,7 +273,7 @@ def test_real_official_hl7_r4_zip_required_for_actual_validator(
     assert hashlib.sha256(archive.read_bytes()).hexdigest() == OFFICIAL_R4_SCHEMA_ZIP_SHA256
     assert version("jsonschema") == PINNED_JSONSCHEMA_VERSION
 
-    report = run_fictional_file_batch_encrypted_demo(
+    report: dict[str, Any] = run_fictional_file_batch_encrypted_demo(
         _two(),
         synthetic_only=True,
         ephemeral_demo=True,
@@ -285,7 +289,7 @@ def test_real_official_hl7_r4_zip_required_for_actual_validator(
     changed[1]["entry"][0]["resource"]["valueString"] = 57
     import medscale.fhirkit.workspace_file_batch_demo as importer
 
-    def forbid_storage(*_args, **_kwargs):
+    def forbid_storage(*_args: object, **_kwargs: object) -> NoReturn:
         raise AssertionError("Must refuse malformed official schema document first")
 
     monkeypatch.setattr(importer, "TemporaryDirectory", forbid_storage)

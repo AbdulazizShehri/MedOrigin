@@ -7,8 +7,12 @@ one narrow, independently validating public test-only function.
 
 from __future__ import annotations
 
+# mypy: disable-error-code="import-not-found"
+# The Workspace package under apps/workspace is deliberately outside strict mypy's
+# file set while Issue #464 item 1 is open; it is imported at runtime. Declaring
+# the missing import here keeps that deferral explicit.
 import json
-from typing import Any
+from typing import Any, cast
 
 from medscale.fhirkit.bundle import inspect_synthetic_bundle
 from medscale.fhirkit.input import MAX_FHIR_INPUT_BYTES
@@ -86,7 +90,8 @@ def ingest_synthetic_bundle_atomic(
         preflight = inspect_synthetic_bundle(admitted_bundle)
     except ValueError as exc:
         raise SyntheticWorkspaceImportError("synthetic_bundle_preflight_refused") from exc
-    if preflight["resource_count"] > 16:
+    # inspect_synthetic_bundle always reports resource_count as len(resources).
+    if cast(int, preflight["resource_count"]) > 16:
         raise SyntheticWorkspaceImportError("atomic_test_batch_exceeds_16_resources")
 
     full_url_types: dict[str, tuple[str, str]] = {

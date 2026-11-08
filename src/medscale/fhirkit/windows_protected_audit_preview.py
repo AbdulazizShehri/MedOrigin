@@ -7,6 +7,10 @@ CW-002 guarded Workspace sources and the unavailable production resolver alone.
 
 from __future__ import annotations
 
+# mypy: disable-error-code="import-not-found"
+# The Workspace package under apps/workspace is deliberately outside strict mypy's
+# file set while Issue #464 item 1 is open; it is imported at runtime. Declaring
+# the missing import here keeps that deferral explicit.
 import re
 from datetime import UTC, datetime
 from pathlib import Path

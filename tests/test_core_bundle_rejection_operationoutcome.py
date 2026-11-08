@@ -8,7 +8,9 @@ from __future__ import annotations
 
 import json
 import os
+from collections.abc import Callable
 from pathlib import Path
+from typing import Any, cast
 
 import pytest
 
@@ -31,10 +33,10 @@ MARKER = "urn:medorigin:fixture-classification"
 def test_every_fixed_relationship_failure_yields_only_redacted_fhir_issues(
     error_code: str,
 ) -> None:
-    source = _fictional_bundle()
+    source: dict[str, Any] = _fictional_bundle()
     source["entry"][1]["resource"]["name"][0]["text"] = SECRET
     reason = BundlePreflightError(error_code)
-    outcome = rejected_synthetic_bundle_operation_outcome(source, reason)
+    outcome: dict[str, Any] = rejected_synthetic_bundle_operation_outcome(source, reason)
     serialized = rejected_synthetic_bundle_outcome_json(source, reason)
     assert json.loads(serialized) == outcome
     assert outcome["resourceType"] == "OperationOutcome"
@@ -59,7 +61,10 @@ def test_every_fixed_relationship_failure_yields_only_redacted_fhir_issues(
 )
 def test_unknown_or_forged_refusal_cannot_be_serialized(reason: Exception) -> None:
     with pytest.raises(NegativeBundleOutcomeError, match="unqualified_bundle_failure_refused"):
-        rejected_synthetic_bundle_operation_outcome(_fictional_bundle(), reason)
+        # The forged ValueError refusal is deliberately outside the declared type.
+        rejected_synthetic_bundle_operation_outcome(
+            _fictional_bundle(), cast(BundlePreflightError, reason)
+        )
 
 
 @pytest.mark.parametrize(
@@ -71,7 +76,9 @@ def test_unknown_or_forged_refusal_cannot_be_serialized(reason: Exception) -> No
         lambda source: source["meta"].update(tag=[{"system": MARKER, "code": SECRET}]),
     ],
 )
-def test_no_exact_synthetic_marker_means_no_fhir_shaped_result(mutate) -> None:
+def test_no_exact_synthetic_marker_means_no_fhir_shaped_result(
+    mutate: Callable[[dict[str, Any]], object],
+) -> None:
     source = _fictional_bundle()
     mutate(source)
     with pytest.raises(
@@ -102,9 +109,9 @@ def test_no_exact_synthetic_marker_means_no_fhir_shaped_result(mutate) -> None:
 def test_installed_style_public_dispatcher_gives_rejected_outcome_not_success(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
-    mutate,
+    mutate: Callable[[dict[str, Any]], object],
 ) -> None:
-    source = _fictional_bundle()
+    source: dict[str, Any] = _fictional_bundle()
     source["entry"][1]["resource"]["name"][0]["text"] = SECRET
     mutate(source)
     path = tmp_path / "invented-fhir-input.json"

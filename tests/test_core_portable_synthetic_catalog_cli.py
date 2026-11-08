@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import sys
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -95,8 +96,8 @@ def test_internal_failure_is_fixed_redacted_and_not_false_success(
 
 
 def test_two_fictional_bundles_are_fresh_and_no_path_is_used() -> None:
-    first = workspace_catalog_demo._other_fictional_bundle()
-    second = workspace_catalog_demo._other_fictional_bundle()
+    first: dict[str, Any] = workspace_catalog_demo._other_fictional_bundle()
+    second: dict[str, Any] = workspace_catalog_demo._other_fictional_bundle()
     first["entry"][0]["resource"]["name"][0]["text"] = PRIVATE
     assert second["entry"][0]["resource"]["name"][0]["text"] != PRIVATE
     assert not any(isinstance(value, Path) for value in second.values())

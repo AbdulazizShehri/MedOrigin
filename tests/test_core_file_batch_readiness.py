@@ -9,7 +9,9 @@ from __future__ import annotations
 import copy
 import json
 import os
+from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -31,15 +33,15 @@ from medscale.fhirkit.workspace_multi_timeline_demo import (
 _SECRET = "NEVER_ECHO_FICTIONAL_PATIENT_NAME"
 
 
-def _two() -> list[dict]:
-    first = _fictional_bundle()
-    second = _second_fictional_timeline_bundle()
+def _two() -> list[dict[str, Any]]:
+    first: dict[str, Any] = _fictional_bundle()
+    second: dict[str, Any] = _second_fictional_timeline_bundle()
     first["entry"][1]["resource"]["name"][0]["text"] = _SECRET
     second["entry"][1]["resource"]["name"][0]["text"] = _SECRET + "_SECOND"
     return [first, second]
 
 
-def _files(tmp_path: Path, sources: list[dict]) -> list[Path]:
+def _files(tmp_path: Path, sources: list[dict[str, Any]]) -> list[Path]:
     files: list[Path] = []
     for i, source in enumerate(sources, 1):
         path = tmp_path / f"{_SECRET}-{i}.json"
@@ -48,7 +50,7 @@ def _files(tmp_path: Path, sources: list[dict]) -> list[Path]:
     return files
 
 
-def _assert_flags_false(receipt: dict) -> None:
+def _assert_flags_false(receipt: dict[str, Any]) -> None:
     for key in (
         "source_filenames_included",
         "patient_identity_included",
@@ -66,7 +68,7 @@ def _assert_flags_false(receipt: dict) -> None:
 
 
 def test_real_readonly_readiness_reports_undated_and_utc_days_before_storage() -> None:
-    receipt = assess_fictional_file_batch_readiness(_two(), synthetic_only=True)
+    receipt: dict[str, Any] = assess_fictional_file_batch_readiness(_two(), synthetic_only=True)
     assert receipt["schema"] == "medorigin-core-fictional-file-batch-readiness/v1"
     assert receipt["status"] == "SYNTHETIC_READ_ONLY_IMPORT_READINESS_NOT_VALIDATED"
     assert receipt["source_count"] == 2
@@ -142,7 +144,7 @@ def test_real_public_cli_readiness_is_readonly_and_reports_no_filepath(
     ],
 )
 def test_invalid_second_source_dates_fail_before_any_encrypted_allocation(
-    change, kind: str, monkeypatch: pytest.MonkeyPatch
+    change: Callable[[dict[str, Any]], object], kind: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     import medscale.fhirkit.workspace_file_batch_demo as importer
 
@@ -255,7 +257,7 @@ def test_fictional_single_patient_only_and_no_implicit_cross_source_merge() -> N
     sources[1]["entry"] = [
         row for row in sources[1]["entry"] if row["resource"]["resourceType"] == "Patient"
     ]
-    ready = assess_fictional_file_batch_readiness(sources, synthetic_only=True)
+    ready: dict[str, Any] = assess_fictional_file_batch_readiness(sources, synthetic_only=True)
     assert ready["sources"][1]["timeline_event_count"] == 0
     assert ready["sources"][1]["first_day_utc"] is None
     assert ready["cross_source_patient_join_performed"] is False

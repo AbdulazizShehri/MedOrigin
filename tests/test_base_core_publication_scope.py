@@ -569,7 +569,9 @@ def test_sdist_rejects_unsafe_non_metadata_members(
             file.size = 1
             archive.addfile(file, io.BytesIO(b"x"))
     with tarfile.open(archive_path, "r:gz") as archive:
-        assert archive.extractfile("medscale-0.3.0/PKG-INFO").read() == metadata()
+        extracted = archive.extractfile("medscale-0.3.0/PKG-INFO")
+        assert extracted is not None
+        assert extracted.read() == metadata()
     result = checker.inspect(folder)
     assert result["status"] == "BLOCKED"
     assert message in result["issues"]

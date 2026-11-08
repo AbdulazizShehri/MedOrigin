@@ -7,6 +7,7 @@ import importlib.util
 import json
 import zipfile
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -111,7 +112,7 @@ def test_truncation_stays_bounded_to_12_plus_warning() -> None:
         errors=("r4_json_schema_structural_error:type",) * 12
         + ("r4_json_schema_additional_errors_not_reported",),
     )
-    outcome = structural_outcome_for_report(report)
+    outcome: dict[str, Any] = structural_outcome_for_report(report)
     assert len(outcome["issue"]) == 14
     assert outcome["issue"][-2]["details"]["text"] == (
         "Further structural errors were omitted after the fixed limit."
@@ -159,7 +160,7 @@ def test_real_cli_dispatcher_fake_offline_schema_exit_nonzero_and_source_redacte
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
-    source: dict,
+    source: dict[str, Any],
     expected_severities: list[str],
 ) -> None:
     archive = _fake_offline_archive(tmp_path, monkeypatch)
@@ -283,8 +284,9 @@ def test_optional_actual_official_r4_archive_and_derived_outcome() -> None:
         ({"resourceType": "StructureDefinition", "id": "fictional"}, ["warning"]),
     ):
         report = r4_schema.validate_offline_r4_json_structure(source, archive)
-        outcome = structural_outcome_for_report(report)
+        outcome: dict[str, Any] = structural_outcome_for_report(report)
         assert [item["severity"] for item in outcome["issue"]] == severities
+        assert isinstance(source["id"], str)
         assert source["id"] not in json.dumps(outcome)
         # Even the generated *OperationOutcome* must pass the same official
         # structural-only check; this does NOT establish full FHIR conformance.

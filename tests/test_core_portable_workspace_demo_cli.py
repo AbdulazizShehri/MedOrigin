@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import sys
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -87,7 +88,7 @@ def test_demo_handles_internal_failure_with_fixed_redacted_token(
 
 
 def test_fictional_fixture_is_fresh_per_invocation() -> None:
-    one = workspace_demo._fictional_bundle()
-    two = workspace_demo._fictional_bundle()
+    one: Any = workspace_demo._fictional_bundle()
+    two: Any = workspace_demo._fictional_bundle()
     one["entry"][1]["resource"]["name"][0]["text"] = "changed"
     assert two["entry"][1]["resource"]["name"][0]["text"] == "Fictional Example Only"

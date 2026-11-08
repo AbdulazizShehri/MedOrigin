@@ -11,6 +11,7 @@ from __future__ import annotations
 import copy
 import json
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -31,7 +32,7 @@ _ENCOUNTER = "urn:uuid:00000000-0000-4000-8000-000000000003"
 _FAILURE = "observation_multiple_r4_choice_values_refused"
 
 
-def _bundle() -> dict:
+def _bundle() -> dict[str, Any]:
     return {
         "resourceType": "Bundle",
         "type": "collection",
@@ -89,7 +90,9 @@ def _bundle() -> dict:
     ],
 )
 @pytest.mark.parametrize("status", ["registered", "preliminary", "final"])
-def test_r4_zero_or_one_choice_value_admitted_locally(admitted: dict, status: str) -> None:
+def test_r4_zero_or_one_choice_value_admitted_locally(
+    admitted: dict[str, Any], status: str
+) -> None:
     bundle = _bundle()
     bundle["entry"][0]["resource"].update(admitted)
     bundle["entry"][0]["resource"]["status"] = status
@@ -143,7 +146,7 @@ def test_choice_error_has_only_fixed_redacted_fhir_operation_outcome() -> None:
     obs["valueQuantity"] = {"text": _SECRET}
     with pytest.raises(BundlePreflightError, match=_FAILURE) as exc:
         inspect_synthetic_bundle(bundle)
-    result = rejected_synthetic_bundle_operation_outcome(bundle, exc.value)
+    result: Any = rejected_synthetic_bundle_operation_outcome(bundle, exc.value)
     assert result["resourceType"] == "OperationOutcome"
     assert len(result["issue"]) == 2
     assert result["issue"][0]["severity"] == "error"

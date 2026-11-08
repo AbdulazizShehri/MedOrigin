@@ -6,10 +6,15 @@ patient identity, user-supplied key or production clinical authorization.
 
 from __future__ import annotations
 
+# mypy: disable-error-code="import-not-found"
+# The Workspace package under apps/workspace is deliberately outside strict mypy's
+# file set while Issue #464 item 1 is open; it is imported at runtime. Declaring
+# the missing import here keeps that deferral explicit.
 import copy
 import json
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from typing import Any
 from uuid import UUID
 
 from medscale.fhirkit.workspace_demo import _fictional_bundle
@@ -20,7 +25,8 @@ _TIME = "2026-11-04T08:00:00+03:00"
 
 
 def _second_fictional_timeline_bundle() -> dict[str, object]:
-    source = copy.deepcopy(_fictional_bundle())
+    # Any: hardcoded invented fixture of a known nested shape.
+    source: dict[str, Any] = copy.deepcopy(_fictional_bundle())
     mapping = {
         f"urn:uuid:00000000-0000-4000-8000-{n:012d}": (
             f"urn:uuid:00000000-0000-4000-8000-{n + 3:012d}"
@@ -70,9 +76,9 @@ def run_fictional_multiimport_timeline_demo(
         type(resource_type) is not str or resource_type not in ("Encounter", "Observation")
     ):
         raise SyntheticMultiImportTimelineError("multi_timeline_filter_type_refused")
-    filtered = None
+    filtered: dict[str, Any] | None = None
 
-    first_bundle = _fictional_bundle()
+    first_bundle: dict[str, Any] = _fictional_bundle()
     first_bundle["entry"][0]["resource"]["effectiveDateTime"] = "2026-11-02T22:10:00-05:00"
     first_bundle["entry"][2]["resource"]["period"] = {
         "start": "2026-11-03T02:20:00Z",
@@ -123,7 +129,8 @@ def run_fictional_multiimport_timeline_demo(
             key_provider=provider,
             application_version="0.1.0.dev1",
         ) as store:
-            timeline = list_verified_synthetic_import_timelines(
+            # Any: nested import/event fields are compared below.
+            timeline: dict[str, Any] = list_verified_synthetic_import_timelines(
                 store=store,
                 test_key_provider=provider,
                 actor_id=_ACTOR,
@@ -145,7 +152,8 @@ def run_fictional_multiimport_timeline_demo(
             ):
                 raise ValueError("fictional_multi_timeline_source_contract_refused")
             if start is not None or end is not None or resource_type is not None:
-                filtered = list_filtered_verified_synthetic_import_timelines(
+                # Any: the view's count fields are compared below.
+                filtered_view: dict[str, Any] = list_filtered_verified_synthetic_import_timelines(
                     store=store,
                     test_key_provider=provider,
                     actor_id=_ACTOR,
@@ -157,12 +165,14 @@ def run_fictional_multiimport_timeline_demo(
                     through_day_utc=end,
                     resource_type=resource_type,
                 )
+                filtered = filtered_view
                 if (
-                    filtered["import_count"] != 2
-                    or filtered["source_total_event_count"] != 4
-                    or filtered["source_total_event_count"]
-                    != filtered["visible_total_event_count"] + filtered["hidden_total_event_count"]
-                    or filtered["cross_import_patient_identity_join_performed"] is not False
+                    filtered_view["import_count"] != 2
+                    or filtered_view["source_total_event_count"] != 4
+                    or filtered_view["source_total_event_count"]
+                    != filtered_view["visible_total_event_count"]
+                    + filtered_view["hidden_total_event_count"]
+                    or filtered_view["cross_import_patient_identity_join_performed"] is not False
                 ):
                     raise ValueError("fictional_multi_timeline_filter_contract_refused")
     if Path(directory).exists():

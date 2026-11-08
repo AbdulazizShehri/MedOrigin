@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Any, NoReturn
 
 import pytest
 
@@ -23,15 +24,15 @@ from medscale.fhirkit.workspace_multi_timeline_demo import (
 _PRIVATE = "INVENTED_PRIVATE_PERSON_DO_NOT_ECHO"
 
 
-def _fictional_two() -> list[dict]:
-    first = _fictional_bundle()
+def _fictional_two() -> list[dict[str, Any]]:
+    first: dict[str, Any] = _fictional_bundle()
     first["entry"][0]["resource"]["effectiveDateTime"] = "2026-11-02T22:10:00-05:00"
     first["entry"][2]["resource"]["period"] = {
         "start": "2026-11-03T02:20:00Z",
         "end": "2026-11-03T03:00:00Z",
     }
     first["entry"][1]["resource"]["name"][0]["text"] = _PRIVATE
-    second = _second_fictional_timeline_bundle()
+    second: dict[str, Any] = _second_fictional_timeline_bundle()
     second["entry"][1]["resource"]["name"][0]["text"] = _PRIVATE + "_SECOND"
     return [first, second]
 
@@ -222,11 +223,11 @@ def test_invalid_filter_is_redacted_and_nonzero_no_partial_json(
 )
 def test_bad_api_filter_is_rejected_before_workspace_allocation(
     monkeypatch: pytest.MonkeyPatch,
-    bad: dict,
+    bad: dict[str, Any],
 ) -> None:
     import medscale.fhirkit.workspace_file_batch_demo as module
 
-    def refuse_allocation(*_args, **_kw):
+    def refuse_allocation(*_args: object, **_kw: object) -> NoReturn:
         raise AssertionError("must not allocate if filter is invalid")
 
     monkeypatch.setattr(module, "TemporaryDirectory", refuse_allocation)
@@ -243,8 +244,8 @@ def test_filtered_result_with_forged_patient_field_refused_no_leak(
 
     original = module.list_filtered_verified_synthetic_import_timelines
 
-    def poisoned(*args, **kwargs):
-        result = original(*args, **kwargs)
+    def poisoned(*args: Any, **kwargs: Any) -> dict[str, Any]:
+        result: dict[str, Any] = original(*args, **kwargs)
         result["imports"][0]["private_patient_identity"] = _PRIVATE
         return result
 
@@ -266,8 +267,8 @@ def test_forged_extra_visible_event_refused_even_when_dates_match(
 
     original = module.list_filtered_verified_synthetic_import_timelines
 
-    def poisoned(*args, **kwargs):
-        result = original(*args, **kwargs)
+    def poisoned(*args: Any, **kwargs: Any) -> dict[str, Any]:
+        result: dict[str, Any] = original(*args, **kwargs)
         result["imports"][0]["events"][0]["patient_name"] = _PRIVATE
         return result
 
@@ -289,7 +290,7 @@ def test_hidden_corrupt_source_invalidates_entire_filtered_view(
     original = module.list_verified_synthetic_import_timelines
     hits = [0]
 
-    def corrupt_second_independent_verification(*args, **kwargs):
+    def corrupt_second_independent_verification(*args: Any, **kwargs: Any) -> dict[str, object]:
         hits[0] += 1
         if hits[0] == 2:
             raise RuntimeError(_PRIVATE)

@@ -111,6 +111,7 @@ def test_truthful_browser_handoff_requires_identical_attested_hashes(
     qa, seen = _harness(tmp_path, monkeypatch)
     assert qa.main() == 0
     assert [part[0] for part in seen] == ["browser", "sentry"]
+    assert isinstance(seen[0][1], str)
     assert "Not validated" in seen[0][1]
     assert "script-src 'none'" in seen[0][1]
     assert "connect-src 'none'" in seen[0][1]

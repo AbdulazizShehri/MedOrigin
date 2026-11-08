@@ -2,9 +2,14 @@
 
 from __future__ import annotations
 
+# mypy: disable-error-code="import-not-found"
+# The Workspace package under apps/workspace is deliberately outside strict mypy's
+# file set while Issue #464 item 1 is open; it is imported at runtime. Declaring
+# the missing import here keeps that deferral explicit.
 import json
 import sys
 from pathlib import Path
+from typing import Any, cast
 from uuid import UUID
 
 import pytest
@@ -50,8 +55,8 @@ def _open(path: Path, provider: InMemoryTestKeyProvider) -> WorkspaceStore:
     )
 
 
-def _source() -> dict:
-    source = _fictional_bundle()
+def _source() -> dict[str, Any]:
+    source = cast(dict[str, Any], _fictional_bundle())
     source["entry"][1]["resource"]["name"][0]["text"] = SECRET
     source["entry"][0]["resource"]["effectiveDateTime"] = "2026-11-02T22:10:00-05:00"
     source["entry"][2]["resource"]["period"] = {
@@ -61,7 +66,9 @@ def _source() -> dict:
     return source
 
 
-def _import(store: WorkspaceStore, provider: InMemoryTestKeyProvider, source: dict):
+def _import(
+    store: WorkspaceStore, provider: InMemoryTestKeyProvider, source: dict[str, Any]
+) -> dict[str, Any]:
     return ingest_synthetic_bundle_atomic(
         source,
         store,
@@ -72,8 +79,14 @@ def _import(store: WorkspaceStore, provider: InMemoryTestKeyProvider, source: di
     )
 
 
-def _read(store, provider, imported, current_head=None, **overrides):
-    args = {
+def _read(
+    store: WorkspaceStore,
+    provider: object,
+    imported: dict[str, Any],
+    current_head: str | None = None,
+    **overrides: object,
+) -> dict[str, Any]:
+    args: dict[str, Any] = {
         "store": store,
         "test_key_provider": provider,
         "source_content_sha256": imported["source_content_sha256"],
@@ -164,7 +177,7 @@ def test_real_encrypted_source_reopen_historical_audit_timeline_and_no_plaintext
     ],
 )
 def test_wrong_key_source_audit_actor_selection_or_permission_fail_closed(
-    tmp_path: Path, overrides: dict, reason: str
+    tmp_path: Path, overrides: dict[str, Any], reason: str
 ) -> None:
     provider = InMemoryTestKeyProvider(new_root_secret())
     with _open(tmp_path / "encrypted", provider) as store:
@@ -252,7 +265,7 @@ def test_invalid_encounter_intervals_refuse(period: object, reason: str) -> None
     assert SECRET not in str(err.value)
 
 
-def _second_patient() -> dict:
+def _second_patient() -> dict[str, Any]:
     source = _source()
     source["entry"].append(
         {

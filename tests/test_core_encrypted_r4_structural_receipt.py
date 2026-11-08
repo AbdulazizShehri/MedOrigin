@@ -7,12 +7,17 @@ All FHIR data is fictional and no plaintext report export is permitted.
 
 from __future__ import annotations
 
+# mypy: disable-error-code="import-not-found"
+# The Workspace package under apps/workspace is deliberately outside strict mypy's
+# file set while Issue #464 item 1 is open; it is imported at runtime. Declaring
+# the missing import here keeps that deferral explicit.
 import hashlib
 import json
 import os
 import sys
 import zipfile
 from pathlib import Path
+from typing import Any
 from uuid import UUID
 
 import pytest
@@ -63,7 +68,7 @@ def _source() -> dict[str, object]:
     return _fictional_bundle()
 
 
-def _import(store, provider):
+def _import(store: WorkspaceStore, provider: InMemoryTestKeyProvider) -> dict[str, Any]:
     return ingest_synthetic_bundle_atomic(
         _source(),
         store,
@@ -74,8 +79,14 @@ def _import(store, provider):
     )
 
 
-def _report(store, provider, receipt, archive, **kwargs):
-    args = {
+def _report(
+    store: WorkspaceStore,
+    provider: InMemoryTestKeyProvider,
+    receipt: dict[str, Any],
+    archive: Path,
+    **kwargs: Any,
+) -> dict[str, Any]:
+    args: dict[str, Any] = {
         "store": store,
         "test_key_provider": provider,
         "source_content_sha256": receipt["source_content_sha256"],
@@ -91,8 +102,14 @@ def _report(store, provider, receipt, archive, **kwargs):
     return validate_and_store_imported_synthetic_bundle_structure(**args)
 
 
-def _read(store, provider, imported, saved, **kwargs):
-    args = {
+def _read(
+    store: WorkspaceStore,
+    provider: InMemoryTestKeyProvider,
+    imported: dict[str, Any],
+    saved: dict[str, Any],
+    **kwargs: Any,
+) -> dict[str, Any]:
+    args: dict[str, Any] = {
         "store": store,
         "test_key_provider": provider,
         "source_content_sha256": imported["source_content_sha256"],
@@ -107,7 +124,9 @@ def _read(store, provider, imported, saved, **kwargs):
     return read_imported_synthetic_structural_result(**args)
 
 
-def _fake_official_schema(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, *, invalid=False):
+def _fake_official_schema(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, *, invalid: bool = False
+) -> Path:
     schema = {
         "$schema": r4_schema.OFFICIAL_R4_DRAFT,
         "id": r4_schema.OFFICIAL_R4_SCHEMA_ID,
@@ -195,7 +214,7 @@ def test_actual_encrypted_import_source_verified_r4_outcome_atomic_and_readback(
     ],
 )
 def test_bad_attestations_and_unapproved_schema_never_create_receipt(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, overrides: dict, reason: str
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, overrides: dict[str, Any], reason: str
 ) -> None:
     archive = _fake_official_schema(tmp_path, monkeypatch)
     provider = InMemoryTestKeyProvider(new_root_secret())
@@ -257,7 +276,7 @@ def test_wrong_sha_wrong_head_and_wrong_test_key_refuse_stored_readback(
         assert store.object_count() == 11
 
 
-def test_forged_outcome_extra_field_or_false_valid_rejected_before_write(tmp_path: Path):
+def test_forged_outcome_extra_field_or_false_valid_rejected_before_write(tmp_path: Path) -> None:
     provider = InMemoryTestKeyProvider(new_root_secret())
     with _open(tmp_path / "workspace", provider) as store:
         imported = _import(store, provider)

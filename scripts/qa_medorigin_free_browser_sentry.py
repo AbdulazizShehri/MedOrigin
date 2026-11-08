@@ -22,7 +22,7 @@ DEMO = ROOT / "examples" / "synthetic_fhir_developer_beta"
 sys.path.insert(0, str(ROOT / "scripts"))
 sys.path.insert(0, str(DEMO))
 
-import check_installed_core_fhir_provenance as core_gate  # type: ignore[import-not-found]  # noqa: E402
+import check_installed_core_fhir_provenance as core_gate  # noqa: E402
 import core_truth_preview  # type: ignore[import-not-found]  # noqa: E402
 import preview  # type: ignore[import-not-found]  # noqa: E402
 from qualify_medorigin_developer_beta import qualify  # noqa: E402

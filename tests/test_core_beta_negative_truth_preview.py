@@ -10,6 +10,8 @@ import importlib.util
 import json
 import re
 from pathlib import Path
+from types import ModuleType
+from typing import Any
 
 import pytest
 
@@ -19,7 +21,7 @@ QUALIFIER = ROOT / "scripts" / "qualify_medorigin_developer_beta.py"
 SECRET = 'PRIVATE_FICTIONAL_PATIENT_<img src=x onerror="alert(1)">'
 
 
-def _load(source: Path):
+def _load(source: Path) -> ModuleType:
     spec = importlib.util.spec_from_file_location("medorigin_core_negative_truth_test", source)
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
@@ -27,7 +29,7 @@ def _load(source: Path):
     return module
 
 
-def _proof() -> dict:
+def _proof() -> dict[str, Any]:
     return {
         "status": "LOCAL_FHIR_PROVENANCE_ONLY",
         "installed_cli_count": 2,

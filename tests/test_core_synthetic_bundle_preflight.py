@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import copy
 import json
+from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -19,7 +21,7 @@ MARKER = {
 }
 
 
-def _bundle() -> dict:
+def _bundle() -> dict[str, Any]:
     return {
         "resourceType": "Bundle",
         "type": "collection",
@@ -62,14 +64,14 @@ def _bundle() -> dict:
     }
 
 
-def _write(tmp_path: Path, payload: dict) -> Path:
+def _write(tmp_path: Path, payload: dict[str, Any]) -> Path:
     path = tmp_path / "synthetic-bundle.json"
     path.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
     return path
 
 
 def test_forward_reference_multi_resource_core_preflight() -> None:
-    summary = inspect_synthetic_bundle(_bundle())
+    summary: dict[str, Any] = inspect_synthetic_bundle(_bundle())
     assert summary["status"] == "local_relationship_preflight_only"
     assert summary["resource_count"] == 3
     assert summary["resource_counts"] == {"Encounter": 1, "Observation": 1, "Patient": 1}
@@ -160,7 +162,9 @@ def test_preflight_is_deterministic_under_object_key_reordering() -> None:
         ),
     ],
 )
-def test_fail_closed_on_unreviewed_or_broken_bundle(mutate, expected_error: str) -> None:
+def test_fail_closed_on_unreviewed_or_broken_bundle(
+    mutate: Callable[[dict[str, Any]], object], expected_error: str
+) -> None:
     b = _bundle()
     mutate(b)
     with pytest.raises(BundlePreflightError, match=expected_error):

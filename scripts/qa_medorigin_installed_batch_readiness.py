@@ -72,7 +72,7 @@ def _call(cli: Path, root: Path, args: list[str]) -> subprocess.CompletedProcess
     return result
 
 
-def _positive(result: subprocess.CompletedProcess[str], *, official: bool) -> dict:
+def _positive(result: subprocess.CompletedProcess[str], *, official: bool) -> dict[str, Any]:
     if result.returncode != 2 or result.stderr:
         raise AssertionError("installed Core did not return truthful read-only readiness")
     try:
@@ -135,7 +135,7 @@ def _triage(
     *,
     stage: str | None = None,
     reason: str | None = None,
-) -> dict:
+) -> dict[str, Any]:
     if result.returncode != 2 or result.stderr:
         raise AssertionError("installed Core failed truthful read-only file triage")
     try:

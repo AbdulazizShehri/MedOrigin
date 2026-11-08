@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from medscale.fhirkit.workspace_file_batch_demo import _freeze_and_preflight
 from medscale.fhirkit.workspace_timeline import SyntheticTimelineError, _events
@@ -100,7 +100,7 @@ def assess_fictional_file_batch_readiness(
         count = preflight["resource_count"]
         if type(count) is not int or count != len(snapshot["entry"]):
             raise SyntheticFileBatchReadinessError("fictional_readiness_resource_contract_refused")
-        day_range = sorted(days)
+        day_range = sorted(cast(list[str], days))  # each checked str above
         source_summaries.append(
             {
                 "source_ordinal": ordinal,

@@ -7,11 +7,15 @@ Only bounded invented and explicitly tagged synthetic fixtures are admitted.
 
 from __future__ import annotations
 
+# mypy: disable-error-code="import-not-found"
+# The Workspace package under apps/workspace is deliberately outside strict mypy's
+# file set while Issue #464 item 1 is open; it is imported at runtime. Declaring
+# the missing import here keeps that deferral explicit.
 import json
 import re
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from typing import Any
+from typing import Any, cast
 from uuid import UUID
 
 from medscale.fhirkit.bundle import BundlePreflightError, inspect_synthetic_bundle
@@ -224,7 +228,7 @@ def run_fictional_file_batch_encrypted_demo(
                         or receipt.get("source_content_sha256") != original["source_content_sha256"]
                         or receipt.get("resource_count") != original["resource_count"]
                         or type(receipt.get("audit_head_digest")) is not str
-                        or _SHA.fullmatch(receipt["audit_head_digest"]) is None
+                        or _SHA.fullmatch(cast(str, receipt["audit_head_digest"])) is None
                         or receipt.get("payload_included") is not False
                         or receipt.get("production_key_provider_used") is not False
                         or receipt.get("clinical_use_authorized") is not False
@@ -301,11 +305,18 @@ def run_fictional_file_batch_encrypted_demo(
                     raise SyntheticFileImportDemoError(
                         "fictional_import_cold_reopen_contract_refused"
                     )
-                source_total = sum(x["resource_count"] for x in imported)
+                # Each resource_count equals its int preflight count (checked above).
+                source_total = sum(cast(int, x["resource_count"]) for x in imported)
                 safe: list[dict[str, object]] = []
                 total_events = 0
                 for index, (original, record, view) in enumerate(
-                    zip(imported, catalog["imports"], timeline["imports"], strict=True), 1
+                    zip(
+                        imported,
+                        cast(list[Any], catalog["imports"]),
+                        cast(list[Any], timeline["imports"]),
+                        strict=True,
+                    ),
+                    1,
                 ):
                     if (
                         type(record) is not dict
@@ -340,7 +351,7 @@ def run_fictional_file_batch_encrypted_demo(
                         }
                     )
                 if total_events != timeline.get("total_event_count") or source_total != sum(
-                    x["resource_count"] for x in safe
+                    cast(int, x["resource_count"]) for x in safe
                 ):
                     raise SyntheticFileImportDemoError("fictional_import_reopen_totals_refused")
 

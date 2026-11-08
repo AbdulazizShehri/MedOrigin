@@ -6,10 +6,15 @@ conformance or production access is authorized by this test fixture.
 
 from __future__ import annotations
 
+# mypy: disable-error-code="import-not-found"
+# The Workspace package under apps/workspace is deliberately outside strict mypy's
+# file set while Issue #464 item 1 is open; it is imported at runtime. Declaring
+# the missing import here keeps that deferral explicit.
 import json
 import sys
 from dataclasses import replace
 from pathlib import Path
+from typing import Any
 from uuid import UUID
 
 import pytest
@@ -48,11 +53,14 @@ def _open(root: Path, provider: InMemoryTestKeyProvider) -> WorkspaceStore:
     )
 
 
-def _initial_bundle() -> dict[str, object]:
-    return json.loads(ORIGINAL.read_text(encoding="utf-8"))
+def _initial_bundle() -> dict[str, Any]:
+    bundle: dict[str, Any] = json.loads(ORIGINAL.read_text(encoding="utf-8"))
+    return bundle
 
 
-def _ingest(store: WorkspaceStore, provider: InMemoryTestKeyProvider, bundle: dict):
+def _ingest(
+    store: WorkspaceStore, provider: InMemoryTestKeyProvider, bundle: dict[str, Any]
+) -> dict[str, Any]:
     return ingest_synthetic_bundle_atomic(
         bundle,
         store,
@@ -63,8 +71,13 @@ def _ingest(store: WorkspaceStore, provider: InMemoryTestKeyProvider, bundle: di
     )
 
 
-def _read(store, provider, receipt, **extra):
-    args = {
+def _read(
+    store: WorkspaceStore,
+    provider: InMemoryTestKeyProvider,
+    receipt: dict[str, Any],
+    **extra: Any,
+) -> dict[str, Any]:
+    args: dict[str, Any] = {
         "test_key_provider": provider,
         "source_content_sha256": receipt["source_content_sha256"],
         "expected_audit_head_digest": receipt["audit_head_digest"],
@@ -76,7 +89,11 @@ def _read(store, provider, receipt, **extra):
     return read_synthetic_bundle_in_memory(store, **args)
 
 
-def _append(store, event_type=AuditEventType.WORKSPACE_OPEN, refs=()):
+def _append(
+    store: WorkspaceStore,
+    event_type: AuditEventType = AuditEventType.WORKSPACE_OPEN,
+    refs: tuple[AuditObjectRef, ...] = (),
+) -> Any:
     return AuditTrail(store).append(
         event_type=event_type,
         actor_id="fictional-workspace-operator",

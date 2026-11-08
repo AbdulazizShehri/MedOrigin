@@ -6,9 +6,15 @@ This is a narrow, not-full-R4 relationship check on admitted local UUIDs.
 
 from __future__ import annotations
 
+# mypy: disable-error-code="import-not-found"
+# The Workspace package under apps/workspace is deliberately outside strict mypy's
+# file set while Issue #464 item 1 is open; it is imported at runtime. Declaring
+# the missing import here keeps that deferral explicit.
 import copy
 import json
+from collections.abc import Callable
 from pathlib import Path
+from typing import Any, NoReturn, cast
 
 import pytest
 
@@ -24,9 +30,9 @@ from medscale.fhirkit.workspace_ingest import (
 _SENSITIVE = "INVENTED_PATIENT_IDENTITY_NEVER_OUTPUT"
 
 
-def _two_patients() -> dict:
+def _two_patients() -> dict[str, Any]:
     """A valid, patient-separated 6-resource local synthetic FHIR Bundle."""
-    result = _fictional_bundle()
+    result = cast(dict[str, Any], _fictional_bundle())
     patient2 = copy.deepcopy(result["entry"][1])
     patient2["fullUrl"] = "urn:uuid:00000000-0000-4000-8000-000000000004"
     patient2["resource"]["id"] = "fictional-patient-002"
@@ -47,7 +53,7 @@ def _two_patients() -> dict:
     return result
 
 
-def _mismatched() -> dict:
+def _mismatched() -> dict[str, Any]:
     bundle = _two_patients()
     # The Observation belongs to patient #1 but refers to patient #2's
     # Encounter. Both resources exist; type-only reference checking passes.
@@ -96,7 +102,9 @@ def test_local_forward_reference_order_does_not_change_patient_invariant() -> No
         },
     ],
 )
-def test_multi_patient_mismatch_is_fixed_redacted_error(transform) -> None:
+def test_multi_patient_mismatch_is_fixed_redacted_error(
+    transform: Callable[[dict[str, Any]], dict[str, Any]],
+) -> None:
     bad = transform(_mismatched())
     with pytest.raises(
         BundlePreflightError, match=r"^observation_encounter_patient_mismatch$"
@@ -124,7 +132,7 @@ def test_no_encounter_reference_remains_a_supported_narrow_subset() -> None:
 def test_rejected_operation_outcome_has_fixed_text_without_patient_identity() -> None:
     source = _mismatched()
     failure = BundlePreflightError("observation_encounter_patient_mismatch")
-    outcome = rejected_synthetic_bundle_operation_outcome(source, failure)
+    outcome: Any = rejected_synthetic_bundle_operation_outcome(source, failure)
     assert outcome["resourceType"] == "OperationOutcome"
     assert [x["severity"] for x in outcome["issue"]] == ["error", "warning"]
     assert "different local Patients" in outcome["issue"][0]["details"]["text"]
@@ -183,7 +191,7 @@ def test_dual_official_r4_assessment_never_runs_schema_on_wrong_patient(
 ) -> None:
     from medscale.fhirkit import bundle_assessment as assessment
 
-    def must_not_validate(*_args, **_kwargs):
+    def must_not_validate(*_args: object, **_kwargs: object) -> NoReturn:
         raise AssertionError("official schema must NOT run before local patient matching")
 
     monkeypatch.setattr(assessment, "validate_offline_r4_json_structure", must_not_validate)
@@ -200,7 +208,7 @@ def test_atomic_encrypted_import_never_calls_commit_on_cross_patient_link(
 ) -> None:
     from medscale_workspace import fhir_batch
 
-    def commit_should_not_run(*_args, **_kwargs):
+    def commit_should_not_run(*_args: object, **_kwargs: object) -> NoReturn:
         raise AssertionError("never call encrypted commit on a mismatched local patient")
 
     monkeypatch.setattr(fhir_batch, "commit_synthetic_fhir_batch_atomic", commit_should_not_run)

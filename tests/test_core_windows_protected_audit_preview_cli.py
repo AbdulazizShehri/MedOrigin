@@ -7,12 +7,16 @@ destroyed in a finally block, while a task-only temp dir holds the store.
 
 from __future__ import annotations
 
+# mypy: disable-error-code="import-not-found"
+# The Workspace package under apps/workspace is deliberately outside strict mypy's
+# file set while Issue #464 item 1 is open; it is imported at runtime. Declaring
+# the missing import here keeps that deferral explicit.
 import json
 import os
 import subprocess
 import sys
 from pathlib import Path
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 from medscale_workspace.keyprovider import resolve_platform_key_provider
@@ -36,7 +40,7 @@ def _root(tmp_path: Path) -> Path:
     return root
 
 
-def _tokens(op: str, root: Path, wid, sha: str | None = None) -> list[str]:
+def _tokens(op: str, root: Path, wid: UUID, sha: str | None = None) -> list[str]:
     tokens = [
         "fhir",
         "windows-audit-preview",
@@ -55,7 +59,7 @@ def _tokens(op: str, root: Path, wid, sha: str | None = None) -> list[str]:
     return tokens
 
 
-def _cleanup_key(wid) -> None:
+def _cleanup_key(wid: UUID) -> None:
     """Delete only this random test UUID target if still present."""
     try:
         provider = WindowsProtectedSyntheticKeyProvider(

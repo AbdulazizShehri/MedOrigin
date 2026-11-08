@@ -12,7 +12,9 @@ import importlib.util
 import json
 import os
 import zipfile
+from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -65,7 +67,7 @@ def _test_schema(
     return archive
 
 
-def _source(tmp_path: Path, obj: dict | None = None) -> Path:
+def _source(tmp_path: Path, obj: dict[str, Any] | None = None) -> Path:
     path = tmp_path / "synthetic-case.json"
     path.write_text(json.dumps(obj if obj is not None else _fictional_bundle()), encoding="utf-8")
     return path
@@ -92,7 +94,7 @@ def test_real_partial_dual_result_is_source_bound_and_never_valid(
 ) -> None:
     archive = _test_schema(tmp_path, monkeypatch, impossible=impossible)
     payload = _fictional_bundle()
-    receipt = assess_synthetic_bundle_offline(payload, archive, synthetic_only=True)
+    receipt: dict[str, Any] = assess_synthetic_bundle_offline(payload, archive, synthetic_only=True)
     assert receipt["schema"] == "medorigin-synthetic-fhir-bundle-dual-assessment/v1"
     assert receipt["status"] == "SYNTHETIC_R4_BUNDLE_PRECHECK_ONLY"
     assert receipt["resource_count"] == 3
@@ -207,7 +209,9 @@ def test_missing_or_unreadable_input_refuses_no_output(
     ],
 )
 def test_failed_relationship_check_never_runs_fake_validator_or_reports_patient(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str], mutate
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    mutate: Callable[[dict[str, Any]], object],
 ) -> None:
     payload = _fictional_bundle()
     mutate(payload)
@@ -284,7 +288,9 @@ def test_official_hl7_schema_opt_in_with_hardcoded_fictional_bundle() -> None:
     if not path:
         pytest.skip("official offline R4 schema must be explicitly supplied")
     archive = Path(path)
-    result = assess_synthetic_bundle_offline(_fictional_bundle(), archive, synthetic_only=True)
+    result: dict[str, Any] = assess_synthetic_bundle_offline(
+        _fictional_bundle(), archive, synthetic_only=True
+    )
     assert result["r4_structural_status"] == "not_validated"
     assert result["r4_operation_outcome"]["issue"][-1]["severity"] == "warning"
     assert result["fhir_r4_conformance_validated"] is False
@@ -292,9 +298,11 @@ def test_official_hl7_schema_opt_in_with_hardcoded_fictional_bundle() -> None:
     # A FHIR field that the narrow relationship preflight deliberately does
     # not type-check must still be caught by the independently qualified
     # official R4 Bundle JSON Schema. No false preflight equivalence.
-    structurally_wrong = copy.deepcopy(_fictional_bundle())
+    structurally_wrong: dict[str, Any] = copy.deepcopy(_fictional_bundle())
     structurally_wrong["entry"][1]["resource"]["active"] = "true"
-    failed = assess_synthetic_bundle_offline(structurally_wrong, archive, synthetic_only=True)
+    failed: dict[str, Any] = assess_synthetic_bundle_offline(
+        structurally_wrong, archive, synthetic_only=True
+    )
     assert failed["relationship_status"] == "local_relationship_preflight_only"
     assert failed["r4_structural_status"] == "invalid"
     assert failed["r4_operation_outcome"]["issue"][0]["severity"] == "error"

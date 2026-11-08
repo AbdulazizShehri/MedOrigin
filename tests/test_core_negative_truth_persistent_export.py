@@ -10,10 +10,16 @@ from __future__ import annotations
 import hashlib
 import json
 import shutil
+import sys
 from pathlib import Path
+from typing import Any
 
 import pytest
-from scripts import qualify_medorigin_developer_beta as qualifier
+
+# Import the script under the same top-level name the other scripts use, so
+# strict mypy sees one module (not also "scripts.qualify_...").
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
+import qualify_medorigin_developer_beta as qualifier
 
 
 def _synthetic_checkout(root: Path, *, forged_success: bool = False) -> Path:
@@ -56,7 +62,7 @@ def qualify(clis, *, interpreters):
     return checkout
 
 
-def _execute_export(checkout: Path, destination: Path) -> dict:
+def _execute_export(checkout: Path, destination: Path) -> dict[str, Any]:
     return qualifier.source_qualified_core_negative_truth_preview(
         checkout,
         Path("fictional-cli311"),

@@ -11,6 +11,10 @@ This is NOT an approved production key-custody implementation.
 
 from __future__ import annotations
 
+# mypy: disable-error-code="import-not-found"
+# The Workspace package under apps/workspace is deliberately outside strict mypy's
+# file set while Issue #464 item 1 is open; it is imported at runtime. Declaring
+# the missing import here keeps that deferral explicit.
 import ctypes
 import hashlib
 import sys
@@ -20,16 +24,16 @@ from dataclasses import dataclass
 from typing import Any
 from uuid import UUID
 
-from medscale_workspace.errors import (  # type: ignore[import-untyped]
+from medscale_workspace.errors import (
     KeyMaterialUnavailableError,
     KeyProviderUnavailableError,
 )
-from medscale_workspace.keyderive import (  # type: ignore[import-untyped]
+from medscale_workspace.keyderive import (
     derive_backup_key,
     derive_seal_key,
     derive_workspace_key,
 )
-from medscale_workspace.keyprovider import (  # type: ignore[import-untyped]
+from medscale_workspace.keyprovider import (
     KeyProvider,
     KeyProviderCapabilities,
     new_root_secret,
@@ -184,7 +188,7 @@ def _read_root(target: str, api: _WinApis) -> bytes | None:
 class _CreateMutex:
     def __init__(self, workspace_id: UUID, api: _WinApis) -> None:
         self.api = api
-        self.handle = None
+        self.handle: int | None = None
         self.id = workspace_id
 
     def __enter__(self) -> None:

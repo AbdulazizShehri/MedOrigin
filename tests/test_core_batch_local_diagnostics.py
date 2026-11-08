@@ -5,6 +5,7 @@ from __future__ import annotations
 import copy
 import json
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -18,15 +19,15 @@ from medscale.fhirkit.workspace_demo import _fictional_bundle
 _PRIVATE = "VERY_PRIVATE_FICTIONAL_NAME_NOT_FOR_LOGS"
 
 
-def _pair() -> list[dict]:
-    first = _fictional_bundle()
+def _pair() -> list[dict[str, Any]]:
+    first: Any = _fictional_bundle()
     first["entry"][1]["resource"]["name"][0]["text"] = _PRIVATE
     second = copy.deepcopy(first)
     second["entry"][0]["resource"]["valueString"] = "An entirely fictional second value"
     return [first, second]
 
 
-def _sources(tmp_path: Path, pair: list[dict]) -> list[Path]:
+def _sources(tmp_path: Path, pair: list[dict[str, Any]]) -> list[Path]:
     paths: list[Path] = []
     for index, bundle in enumerate(pair):
         filename = tmp_path / f"{_PRIVATE}_{index}.json"
@@ -134,7 +135,7 @@ def test_duplicate_source_refused_even_when_both_marked() -> None:
         ([{}, None], "batch_diagnostics_marker_refused"),
     ],
 )
-def test_bad_shape_is_refused_without_echo(payloads, reason: str) -> None:
+def test_bad_shape_is_refused_without_echo(payloads: list[Any], reason: str) -> None:
     with pytest.raises(SyntheticBatchDiagnosticsError, match=reason):
         diagnose_synthetic_bundle_batch_local(payloads, synthetic_only=True)
 
@@ -190,7 +191,7 @@ def test_adversarial_spoofed_downstream_fhir_diagnostic_text_is_never_relayed(
         "https://untrusted.example/patient/" + _PRIVATE
     )
 
-    def poisoned_outcome(*_args, **_kwargs):
+    def poisoned_outcome(*_args: object, **_kwargs: object) -> dict[str, Any]:
         return {
             "resourceType": "OperationOutcome",
             "issue": [

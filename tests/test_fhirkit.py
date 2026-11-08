@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -184,19 +185,20 @@ def test_external_validator_never_clobbers_cwd_file(
 def test_external_validator_scratch_file_is_isolated_and_cleaned(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    import tempfile
+
     from medscale.fhirkit import report_to_json, validate_fhir_with_validator
-    from medscale.fhirkit import validate as validation_module
 
     monkeypatch.chdir(tmp_path)
     roots: list[Path] = []
-    original_mkdtemp = validation_module.tempfile.mkdtemp
+    original_mkdtemp = tempfile.mkdtemp
 
-    def captured_mkdtemp(*args: object, **kwargs: object) -> str:
+    def captured_mkdtemp(*args: Any, **kwargs: Any) -> str:
         root = Path(original_mkdtemp(*args, **kwargs))
         roots.append(root)
         return str(root)
 
-    monkeypatch.setattr(validation_module.tempfile, "mkdtemp", captured_mkdtemp)
+    monkeypatch.setattr(tempfile, "mkdtemp", captured_mkdtemp)
     report = validate_fhir_with_validator(_rule_input(), command=_echo_input_path_command())
 
     assert report.status == "not_validated"

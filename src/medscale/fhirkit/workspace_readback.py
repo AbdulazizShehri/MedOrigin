@@ -7,6 +7,10 @@ and deliberately does not assert full HL7 FHIR R4 or clinical conformance.
 
 from __future__ import annotations
 
+# mypy: disable-error-code="import-not-found"
+# The Workspace package under apps/workspace is deliberately outside strict mypy's
+# file set while Issue #464 item 1 is open; it is imported at runtime. Declaring
+# the missing import here keeps that deferral explicit.
 import json
 
 from medscale.fhirkit.bundle import inspect_synthetic_bundle

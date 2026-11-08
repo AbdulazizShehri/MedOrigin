@@ -208,7 +208,8 @@ def test_refuses_failed_source_artifact_verifier(
     def failing(name: str, *args: object) -> dict[str, Any]:
         if name == script:
             raise gate.artifact_gate.QualificationError("fictional private upstream payload")
-        return original(name, *args)
+        result: dict[str, Any] = original(name, *args)
+        return result
 
     monkeypatch.setattr(gate.artifact_gate, "tool_receipt", failing)
     with pytest.raises(gate.QualificationError) as error:
@@ -294,7 +295,7 @@ def test_rejects_wrong_wheel_origin_or_metadata(
     original = gate.artifact_gate.tool_receipt
 
     def fake(script: str, *args: object) -> dict[str, Any]:
-        out = original(script, *args)
+        out: dict[str, Any] = original(script, *args)
         if bad == "wheel_commit" and script == "check_core_wheel_source_identity.py":
             out["source_git_commit"] = "b" * 40
         if script == "inspect_release_wheel_metadata.py":
@@ -357,7 +358,7 @@ def test_rejects_overstated_or_ambiguous_core_fhir_receipt(
     original = gate.fhir_gate.qualify
 
     def fake(clis: list[Path], **kwargs: Any) -> dict[str, Any]:
-        out = original(clis, **kwargs)
+        out: dict[str, Any] = original(clis, **kwargs)
         out[field] = value
         return out
 
@@ -612,7 +613,8 @@ def test_source_bound_fhir_invokes_attested_python_not_console_shims(
 
     def spy(clis: list[Path], *, interpreters: list[Path]) -> dict[str, Any]:
         observed.append((clis, interpreters))
-        return original(clis, interpreters=interpreters)
+        result: dict[str, Any] = original(clis, interpreters=interpreters)
+        return result
 
     monkeypatch.setattr(gate.fhir_gate, "qualify", spy)
     receipt = gate.qualify(*paths)

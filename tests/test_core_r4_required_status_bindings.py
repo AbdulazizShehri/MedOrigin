@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -48,7 +49,7 @@ _P = "urn:uuid:00000000-0000-4000-8000-000000000002"
 _E = "urn:uuid:00000000-0000-4000-8000-000000000003"
 
 
-def _fixture() -> dict:
+def _fixture() -> dict[str, Any]:
     return {
         "resourceType": "Bundle",
         "type": "collection",
@@ -97,7 +98,7 @@ def _fixture() -> dict:
     }
 
 
-def _change(kind: str, new_status: object) -> dict:
+def _change(kind: str, new_status: object) -> dict[str, Any]:
     source = _fixture()
     index = {"Encounter": 2, "Observation": 0}[kind]
     source["entry"][index]["resource"]["status"] = new_status
@@ -173,7 +174,9 @@ def test_unknown_status_has_fixed_redacted_operation_outcome(kind: str) -> None:
         "Encounter": "encounter_status_not_in_r4_required_codes",
         "Observation": "observation_status_not_in_r4_required_codes",
     }[kind]
-    outcome = rejected_synthetic_bundle_operation_outcome(invalid, BundlePreflightError(expected))
+    outcome: dict[str, Any] = rejected_synthetic_bundle_operation_outcome(
+        invalid, BundlePreflightError(expected)
+    )
     assert outcome["resourceType"] == "OperationOutcome"
     assert [issue["severity"] for issue in outcome["issue"]] == ["error", "warning"]
     assert "FHIR R4 v4.0.1" in outcome["issue"][0]["details"]["text"]

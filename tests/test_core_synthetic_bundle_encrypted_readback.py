@@ -6,11 +6,16 @@ no clinical data, external destination, network, or full FHIR-R4 claims.
 
 from __future__ import annotations
 
+# mypy: disable-error-code="import-not-found"
+# The Workspace package under apps/workspace is deliberately outside strict mypy's
+# file set while Issue #464 item 1 is open; it is imported at runtime. Declaring
+# the missing import here keeps that deferral explicit.
 import hashlib
 import json
 import sys
 from dataclasses import replace
 from pathlib import Path
+from typing import Any, cast
 from uuid import UUID
 
 import pytest
@@ -42,8 +47,8 @@ ACTOR = "fictional-actor"
 FIXTURE = ROOT / "examples" / "synthetic_fhir_bundle_preflight" / "fictional_bundle.json"
 
 
-def _fixture() -> dict[str, object]:
-    return json.loads(FIXTURE.read_text(encoding="utf-8"))
+def _fixture() -> dict[str, Any]:
+    return cast(dict[str, Any], json.loads(FIXTURE.read_text(encoding="utf-8")))
 
 
 def _canonical(value: object) -> bytes:
@@ -61,7 +66,9 @@ def _store(root: Path, provider: InMemoryTestKeyProvider) -> WorkspaceStore:
     )
 
 
-def _ingest(store: WorkspaceStore, provider: InMemoryTestKeyProvider, value: dict):
+def _ingest(
+    store: WorkspaceStore, provider: InMemoryTestKeyProvider, value: dict[str, Any]
+) -> dict[str, Any]:
     return ingest_synthetic_bundle_atomic(
         value,
         store,
@@ -77,8 +84,8 @@ def _read(
     provider: object,
     receipt: dict[str, object],
     **overrides: object,
-):
-    args = {
+) -> dict[str, Any]:
+    args: dict[str, Any] = {
         "test_key_provider": provider,
         "source_content_sha256": receipt["source_content_sha256"],
         "expected_audit_head_digest": receipt["audit_head_digest"],

@@ -5,9 +5,14 @@ No production protected root-key provider, patient data, EHR or network I/O.
 
 from __future__ import annotations
 
+# mypy: disable-error-code="import-not-found"
+# The Workspace package under apps/workspace is deliberately outside strict mypy's
+# file set while Issue #464 item 1 is open; it is imported at runtime. Declaring
+# the missing import here keeps that deferral explicit.
 import json
 import sys
 from pathlib import Path
+from typing import Any, cast
 from uuid import UUID
 
 import pytest
@@ -27,6 +32,7 @@ from medscale_workspace.keyprovider import (  # noqa: E402
 from medscale_workspace.provenance import read_provenance, verify_provenance  # noqa: E402
 from medscale_workspace.storage import WorkspaceStore  # noqa: E402
 
+from medscale.fhirkit.bundle import inspect_synthetic_bundle  # noqa: E402
 from medscale.fhirkit.workspace_ingest import (  # noqa: E402
     SyntheticWorkspaceImportError,
     ingest_synthetic_bundle_atomic,
@@ -41,8 +47,8 @@ ENC_ID = "synthetic-encounter-001"
 FIXTURE = ROOT / "examples" / "synthetic_fhir_bundle_preflight" / "fictional_bundle.json"
 
 
-def _bundle() -> dict:
-    return json.loads(FIXTURE.read_text(encoding="utf-8"))
+def _bundle() -> dict[str, Any]:
+    return cast(dict[str, Any], json.loads(FIXTURE.read_text(encoding="utf-8")))
 
 
 def _store(tmp_path: Path, provider: InMemoryTestKeyProvider) -> WorkspaceStore:
@@ -54,7 +60,12 @@ def _store(tmp_path: Path, provider: InMemoryTestKeyProvider) -> WorkspaceStore:
     )
 
 
-def _ingest(payload: dict, store: WorkspaceStore, provider, **kw):
+def _ingest(
+    payload: dict[str, Any],
+    store: WorkspaceStore,
+    provider: InMemoryTestKeyProvider,
+    **kw: Any,
+) -> dict[str, Any]:
     return ingest_synthetic_bundle_atomic(
         payload,
         store,
@@ -187,7 +198,7 @@ def test_explicit_synthetic_attestation_and_exact_test_provider_required(
 
 def test_production_platform_key_resolver_fails_closed(tmp_path: Path) -> None:
     with pytest.raises(KeyProviderUnavailableError):
-        _store(tmp_path, resolve_platform_key_provider())  # type: ignore[arg-type]
+        _store(tmp_path, resolve_platform_key_provider())
     assert not list(tmp_path.rglob("*.db"))
 
 
@@ -231,7 +242,7 @@ def test_fault_during_third_encrypted_write_rolls_back_everything(
         original_insert = store._insert_object
         calls = 0
 
-        def simulated_insert(binding, envelope):
+        def simulated_insert(binding: Any, envelope: Any) -> None:
             nonlocal calls
             calls += 1
             if calls == 3:
@@ -330,10 +341,10 @@ def test_source_dict_mutation_after_preflight_does_not_change_committed_content(
 
     provider = InMemoryTestKeyProvider(new_root_secret())
     payload = _bundle()
-    original_inspect = import_module.inspect_synthetic_bundle
+    original_inspect = inspect_synthetic_bundle
     original_sha = original_inspect(payload)["source_content_sha256"]
 
-    def mutate_caller_after_preflight(snapshot):
+    def mutate_caller_after_preflight(snapshot: dict[str, Any]) -> dict[str, object]:
         inspected = original_inspect(snapshot)
         payload["entry"][1]["resource"]["id"] = "synthetic-poisoned-after-preflight"
         return inspected
