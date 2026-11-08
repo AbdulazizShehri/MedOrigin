@@ -180,10 +180,10 @@ def commit_synthetic_fhir_batch_atomic(
             identities.add(key)
 
             version = fhir_mod._resource_version(payload)
-            identity = fhir_mod.resource_id_for(store.workspace_id, kind, fhir_id, version)
+            resource_uuid = fhir_mod.resource_id_for(store.workspace_id, kind, fhir_id, version)
             resource = fhir_mod.FhirResource(
                 workspace_id=store.workspace_id,
-                resource_id=identity,
+                resource_id=resource_uuid,
                 resource_type=kind,
                 fhir_id=fhir_id,
                 resource_version=version,
