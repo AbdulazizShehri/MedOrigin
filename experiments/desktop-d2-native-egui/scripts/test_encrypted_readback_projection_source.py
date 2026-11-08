@@ -1,0 +1,210 @@
+"""Strict nonclinical Core encrypted readback -> native D2 source checks."""
+
+import hashlib
+import json
+import subprocess
+import sys
+import unittest
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent
+SOURCE = ROOT / "fixtures/core/encrypted-readback-projection.json"
+EXPORTER = ROOT / "scripts/synthetic_encrypted_readback_projection.py"
+GUI = ROOT / "src/main.rs"
+ACCEPTOR = ROOT / "src/encrypted_readback.rs"
+DIGEST = "c99af04367aeaedeecb29b7fccc8a8fb58f2a85753eeae874eae5ad363307a49"
+
+
+class SourcePinnedEncryptedReadbackTests(unittest.TestCase):
+    def test_exact_nonclinical_decrypted_source_projection_is_bounded(self):
+        raw = SOURCE.read_bytes()
+        self.assertEqual(len(raw), 1164)
+        self.assertEqual(hashlib.sha256(raw).hexdigest(), DIGEST)
+        projection = json.loads(raw)
+        self.assertEqual(
+            raw, json.dumps(projection, sort_keys=True, separators=(",", ":")).encode()
+        )
+        self.assertEqual(projection["resource_count"], 3)
+        self.assertEqual(
+            [r["resource_type"] for r in projection["resources"]],
+            ["Observation", "Patient", "Encounter"],
+        )
+        self.assertEqual([len(r["links"]) for r in projection["resources"]], [2, 0, 1])
+        for marker in (
+            "clinical_use_authorized",
+            "release_authorized",
+            "production_key_provider_used",
+            "full_fhir_r4_conformance_established",
+            "payload_included",
+            "transport_sender_authenticated",
+        ):
+            self.assertIs(projection[marker], False)
+        self.assertIs(projection["audit_chain_verified"], True)
+        self.assertIs(projection["encrypted_reopen_verified"], True)
+        self.assertIs(projection["ephemeral_store_removed"], True)
+        self.assertNotIn("Fictional Example Only", raw.decode())
+        for resource in projection["resources"]:
+            self.assertEqual(set(resource), {"id", "resource_type", "full_url", "links"})
+            self.assertTrue(resource["id"].startswith("fictional-"))
+
+    def test_actual_decrypted_bundle_is_used_and_caller_fields_not_output(self):
+        source = EXPORTER.read_text(encoding="utf-8")
+        self.assertIn('entries = readback["bundle"]["entry"]', source)
+        self.assertIn("read_synthetic_bundle_in_memory(", source)
+        self.assertIn("allow_in_memory_readback=True", source)
+        self.assertIn("expected_head_event_digest=source_receipt", source)
+        self.assertIn('readback["bundle"] != fictional', source)
+        self.assertIn("InMemoryTestKeyProvider(new_root_secret())", source)
+        self.assertIn("TemporaryDirectory(", source)
+        self.assertIn("Path(directory).exists()", source)
+        self.assertIn("sys.argv[1:]", source)
+        self.assertNotIn("json.dump(", source)
+        self.assertNotIn("urllib.request", source)
+        self.assertNotIn("requests.", source)
+        self.assertNotIn("subprocess.", source)
+
+    def test_unknown_patient_path_argument_is_refused_before_import_or_echo(self):
+        attempt = subprocess.run(
+            [sys.executable, "-I", "-B", str(EXPORTER), "--patient-file=/fake/secret"],
+            capture_output=True,
+            timeout=10,
+            check=False,
+        )
+        self.assertEqual(attempt.returncode, 2)
+        self.assertEqual(attempt.stdout, b"")
+        self.assertIn(b"arguments_refused", attempt.stderr)
+        self.assertNotIn(b"/fake/secret", attempt.stderr)
+
+    def test_windows_live_core_harness_has_fixed_source_and_no_patient_inputs(self):
+        from unittest.mock import patch
+
+        import qualify_windows_encrypted_readback_native_gui as windows_qa
+
+        self.assertEqual(windows_qa.CORE_SHA, "8e5ed5430f4ab2ebc8981c52c67234023382954b")
+        self.assertEqual(windows_qa.PROJECTION_SHA, DIGEST)
+        text = Path(windows_qa.__file__).read_text()
+        self.assertIn("ignored_python_bytecode_cache_refused", text)
+        self.assertIn("source_bound_core(core)", text)
+        self.assertIn("execute_encrypted_source_under_job(", text)
+        self.assertIn("raw != fixture.read_bytes()", text)
+        self.assertIn("LiveReceiptPath", text)
+        self.assertNotIn("FIXED_CODE", text)
+        self.assertNotIn("shell=True", text)
+        self.assertNotIn("requests.", text)
+        job = (
+            Path(windows_qa.__file__)
+            .with_name("supervise_windows_encrypted_core_job.py")
+            .read_text()
+        )
+        self.assertIn("sys.path[:0]=[sys.argv[1],sys.argv[2],sys.argv[3]]", job)
+        self.assertIn("module=runpy.run_path(source", job)
+        self.assertIn("CREATE_SUSPENDED | CREATE_NO_WINDOW | CREATE_UNICODE_ENVIRONMENT", job)
+        self.assertIn("AssignProcessToJobObject(job, info.hProcess)", job)
+        self.assertIn("real_core_job_membership_not_confirmed_before_resume", job)
+        self.assertIn("api.ResumeThread(info.hThread)", job)
+        self.assertLess(
+            job.index("api.AssignProcessToJobObject(job, info.hProcess)"),
+            job.index("api.ResumeThread(info.hThread)"),
+        )
+        self.assertIn("JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE", job)
+        self.assertIn("GetExitCodeProcess(info.hProcess", job)
+        self.assertIn("api.TerminateJobObject(job, 1)", job)
+        self.assertNotIn("shell=True", job)
+        self.assertNotIn("requests.", job)
+        with patch.object(windows_qa.sys, "platform", "darwin"):  # noqa: SIM117
+            with self.assertRaisesRegex(ValueError, "real_windows_native_ui_qa_required"):
+                windows_qa.qualify(None)
+
+    def test_interactive_windows_developer_launcher_has_only_fixed_core_source(self):
+        from argparse import Namespace
+        from unittest.mock import patch
+
+        import launch_windows_encrypted_fictional_preview as launcher
+
+        self.assertEqual(launcher.PROJECTION_SHA, DIGEST)
+        self.assertEqual(launcher.READBACK_SOURCE_MAX_BYTES, 2048)
+        self.assertEqual(launcher.GUI_FLAG, "--synthetic-encrypted-readback-stdin")
+        source = Path(launcher.__file__).read_text(encoding="utf-8")
+        for fixed_guard in (
+            "source_bound_core(core)",
+            "execute_encrypted_source_under_job(",
+            "raw != fixture.read_bytes()",
+            "hashlib.sha256(raw).hexdigest() != PROJECTION_SHA",
+            "sha(gui) != args.native_sha.lower()",
+            "stdin=subprocess.PIPE",
+            "input=raw",
+            "close_fds=True",
+            "source_bound_core(core)",
+            "process.kill()",
+            'TemporaryDirectory(prefix="medorigin-private-core-fictional-live-")',
+        ):
+            self.assertIn(fixed_guard, source)
+        self.assertNotIn("shell=True", source)
+        self.assertNotIn("requests.", source)
+        self.assertNotIn("urllib.", source)
+        self.assertNotIn("patient-file", source)
+        self.assertNotIn("patient_path", source)
+        with patch.object(launcher.sys, "platform", "darwin"):  # noqa: SIM117
+            with self.assertRaisesRegex(ValueError, "windows_only"):
+                launcher._attest_input_paths(Namespace())
+
+    def test_interactive_launcher_rejects_forged_binary_hash_before_core_work(self):
+        import tempfile
+        from argparse import Namespace
+        from unittest.mock import patch
+
+        import launch_windows_encrypted_fictional_preview as launcher
+
+        if sys.platform != "win32":
+            self.skipTest("actual Windows host required for input path identity")
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            native = root / "medorigin-desktop-d2-native-egui.exe"
+            native.write_bytes(b"unapproved-executable")
+            core = root / "core"
+            core.mkdir()
+            site = root / "site"
+            site.mkdir()
+            args = Namespace(
+                core_source=core,
+                python=Path(sys.executable),
+                site=site,
+                native_gui=native,
+                python_sha="0" * 64,
+                native_sha="0" * 64,
+            )
+            with (
+                patch.object(
+                    launcher,
+                    "source_bound_core",
+                    side_effect=AssertionError("must not invoke Core"),
+                ),
+                patch.object(
+                    launcher,
+                    "execute_encrypted_source_under_job",
+                    side_effect=AssertionError("must not execute Core"),
+                ),
+                self.assertRaisesRegex(ValueError, "unreviewed_python_site_or_gui"),
+            ):
+                launcher._attest_input_paths(args)
+
+    def test_native_rust_stdin_only_and_forgery_refusals_remain(self):
+        main = GUI.read_text(encoding="utf-8")
+        admitted = ACCEPTOR.read_text(encoding="utf-8")
+        self.assertIn("--synthetic-encrypted-readback-stdin", main)
+        self.assertIn("recv_timeout(deadline)", main)
+        self.assertIn("admit_exact_encrypted_readback_projection", admitted)
+        self.assertIn("raw == SOURCE", admitted)
+        self.assertIn("raw == SOURCE_PERSISTENT", admitted)
+        self.assertIn("fictional_encrypted_readback_unreviewed_bytes", admitted)
+        self.assertIn("SOURCE_PERSISTENT_SHA256", admitted)
+        self.assertIn("persistent_test_vault_reopened", admitted)
+        self.assertIn(DIGEST, admitted)
+        self.assertIn("transport_sender_authenticated", admitted)
+        self.assertIn("clinical_use_authorized", admitted)
+        self.assertNotIn("std::process::Command", main)
+        self.assertNotIn("std::net::", main)
+
+
+if __name__ == "__main__":
+    unittest.main()

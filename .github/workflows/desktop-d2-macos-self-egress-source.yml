@@ -1,0 +1,53 @@
+# Source-only opt-in D2 GUI wrapper: test network denial outside product src.
+name: D2 macOS native example and zero-network product boundary (nonpublishing)
+
+on:
+  push:
+    branches:
+      - test/medorigin-d2-macos-self-egress-example-20261030
+  pull_request:
+    branches:
+      - test/medorigin-d2-macos-sandbox-negative-20261030
+    paths:
+      - '.github/workflows/desktop-d2-macos-self-egress-source.yml'
+      - 'experiments/desktop-d2-native-egui/**'
+      - 'experiments/desktop-d0-rust/**'
+
+permissions:
+  contents: read
+
+jobs:
+  native-mac-source-and-helper:
+    name: macOS product no-network guard + separate test wrapper + signed helper denial
+    runs-on: macos-latest
+    timeout-minutes: 30
+    steps:
+      - name: Read-only checkout of triggering source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+          fetch-tags: false
+      - name: Install pinned Rust compiler on hosted macOS
+        run: rustup toolchain install 1.97.1 --profile minimal --component rustfmt --component clippy
+      - name: Check Rust format
+        run: cargo +1.97.1 fmt --all -- --check
+        working-directory: experiments/desktop-d2-native-egui
+      - name: Test unchanged production networking boundary and synthetic D2
+        run: cargo +1.97.1 test --locked --all-targets
+        working-directory: experiments/desktop-d2-native-egui
+      - name: Compile separate opt-in example, never the product
+        run: cargo +1.97.1 build --locked --example medorigin_d2_self_sandbox_probe
+        working-directory: experiments/desktop-d2-native-egui
+      - name: Lint native Swift inspector and validate standalone harness
+        shell: bash
+        run: |
+          swift format lint --strict experiments/desktop-d2-native-egui/tests/macos-native-d2-self-egress-qualification.swift
+          swiftc -typecheck experiments/desktop-d2-native-egui/tests/macos-native-d2-self-egress-qualification.swift
+          bash -n experiments/desktop-d2-native-egui/tests/macos-d2-self-process-network-negative.sh
+      - name: Prove OS denial with separately signed local-only helper
+        shell: bash
+        run: bash experiments/desktop-d2-native-egui/tests/macos-native-sandbox-network-negative.sh
+      - name: Explicitly refuse hosted GUI and publisher equivalence
+        run: |
+          echo "SOURCE_AND_LOCAL_HELPER_ONLY_NOT_INTERACTIVE_D2_OR_RELEASE_AUTHORITY"

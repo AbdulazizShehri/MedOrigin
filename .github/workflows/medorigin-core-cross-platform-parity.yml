@@ -1,0 +1,109 @@
+# Read-only evidence of cross-OS source/member identity, not a release or a publisher.
+name: MedOrigin Core-only cross-platform parity
+
+on:
+  pull_request:
+    paths:
+      - "scripts/qualify_medorigin_cross_platform_parity.py"
+      - "scripts/stage_medorigin_base_only_proposal.py"
+      - "scripts/stage_medorigin_core_projection.py"
+      - "scripts/verify_medorigin_base_only_proposal.py"
+      - "scripts/check_base_core_publication_scope.py"
+      - "tests/test_medorigin_cross_platform_parity.py"
+      - ".github/workflows/medorigin-core-cross-platform-parity.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: medorigin-crossos-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  produce-source-bound-inventory:
+    name: Source-bound Core inventory (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 35
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-24.04
+            label: linux
+          - os: windows-2025
+            label: windows
+          - os: macos-15
+            label: darwin
+    steps:
+      - name: Checkout exact PR-head revision
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Install pinned uv action
+        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        with:
+          version: "0.12.19"
+          enable-cache: false
+      - name: Install Python 3.11 and 3.12 for offline installed-runtime checks
+        shell: bash
+        run: uv python install 3.11 3.12
+      - name: Build, source-attest, offline-install both Pythons and exercise synthetic FHIR
+        shell: bash
+        run: |
+          set -euo pipefail
+          uv run --no-project --python 3.11 --with hatchling==1.32.4 python \
+            scripts/qualify_medorigin_cross_platform_parity.py build \
+            --output "${{ runner.temp }}/manifest-${{ matrix.label }}.json"
+      - name: Preserve metadata-only evidence, no Wheel/sdist distribution
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: medorigin-parity-${{ matrix.label }}
+          path: ${{ runner.temp }}/manifest-${{ matrix.label }}.json
+          if-no-files-found: error
+          retention-days: 2
+
+  compare-cross-platform:
+    name: Compare verified executable/source bytes
+    runs-on: ubuntu-24.04
+    needs: produce-source-bound-inventory
+    timeout-minutes: 10
+    steps:
+      - name: Checkout exact PR-head comparator
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Download manifests only
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: medorigin-parity-*
+          merge-multiple: true
+          path: parity-manifests
+      - name: Set up pinned uv action
+        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        with:
+          version: "0.12.19"
+          enable-cache: false
+      - name: Compare Windows, Linux and macOS source-bound member inventories
+        shell: bash
+        run: |
+          set -euo pipefail
+          for pair in "windows linux" "windows darwin" "linux darwin"; do
+            read -r first second <<< "$pair"
+            uv run --no-project --python 3.11 python \
+              scripts/qualify_medorigin_cross_platform_parity.py compare \
+              --left "parity-manifests/manifest-${first}.json" \
+              --right "parity-manifests/manifest-${second}.json" \
+              --output "${{ runner.temp }}/medorigin-${first}-${second}.json"
+          done
+      - name: Preserve nonpublishing comparison evidence
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: medorigin-crossos-comparison
+          path: ${{ runner.temp }}/medorigin-*.json
+          if-no-files-found: error
+          retention-days: 2

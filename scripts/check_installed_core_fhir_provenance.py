@@ -1,0 +1,319 @@
+"""Offline, installed-CLI FHIR provenance smoke. Never asserts FHIR conformance.
+
+The previous synthetic release demo requires status=valid/exit 0 and is
+incompatible with the corrected fail-closed Core FHIR boundary. This
+read-only Core-only smoke verifies the new installed behavior without
+approving a release or changing the desktop/static-preview contract.
+"""
+
+from __future__ import annotations
+
+import argparse
+import hashlib
+import json
+import os
+import subprocess
+import sys
+import tempfile
+from pathlib import Path
+from typing import Any
+
+ROOT = Path(__file__).resolve().parents[1]
+FIXTURES = ROOT / "examples" / "synthetic_fhir_developer_beta"
+KNOWN = FIXTURES / "synthetic_structure_definition.json"
+MALFORMED = FIXTURES / "malformed.json"
+TIMESTAMP = "2026-10-24T00:00:00Z"
+WARNING = (
+    "FHIR R4 schema, terminology, and profile validation were not performed; "
+    "this local report records deterministic provenance only."
+)
+VERSION = "medscale 0.3.0"
+MAX_OUTPUT = 64_000
+STATUS = "LOCAL_FHIR_PROVENANCE_ONLY"
+REPORT_KEYS = frozenset(
+    {
+        "created_at",
+        "errors",
+        "format_version",
+        "input_hash",
+        "report_id",
+        "status",
+        "validator_name",
+        "validator_version",
+        "warnings",
+    }
+)
+
+
+class QualificationError(ValueError):
+    """No locally installed CLI result can justify a validation or release claim."""
+
+
+def _unique_object(pairs: list[tuple[str, object]]) -> dict[str, object]:
+    result: dict[str, object] = {}
+    for key, value in pairs:
+        if key in result:
+            raise QualificationError("duplicate JSON member")
+        result[key] = value
+    return result
+
+
+def _object(raw: str) -> dict[str, Any]:
+    try:
+        value = json.loads(raw, object_pairs_hook=_unique_object)
+    except (UnicodeError, ValueError) as exc:
+        raise QualificationError("unreadable or ambiguous JSON") from exc
+    if not isinstance(value, dict):
+        raise QualificationError("expected JSON object")
+    return value
+
+
+def _hash(raw: bytes) -> str:
+    return hashlib.sha256(raw).hexdigest()
+
+
+def _input_hash(payload: dict[str, Any]) -> str:
+    encoded = json.dumps(
+        payload, sort_keys=True, ensure_ascii=False, separators=(",", ":"), allow_nan=False
+    ).encode("utf-8")
+    return _hash(encoded)
+
+
+def call(
+    cli: Path, args: list[str], cwd: Path, *, trusted_python: Path | None = None
+) -> subprocess.CompletedProcess[str]:
+    """Run legacy CLI or the source-verified Python module entry point."""
+    # A source-matched installed Wheel is not sufficient if the CLI launcher
+    # inherits PYTHONPATH/PYTHONHOME/PYTHONUSERBASE/PYTHONWARNINGS, etc. These
+    # can execute attacker-controlled startup code outside the verified Wheel.
+    # Keep only non-Python parent settings and disable user-site startup.
+    offline_env = {
+        key: value
+        for key, value in os.environ.items()
+        if not key.upper().startswith("PYTHON")
+        and key.upper()
+        not in {
+            "LD_PRELOAD",
+            "LD_LIBRARY_PATH",
+            "DYLD_INSERT_LIBRARIES",
+            "DYLD_LIBRARY_PATH",
+            "DYLD_FRAMEWORK_PATH",
+            "DYLD_FALLBACK_LIBRARY_PATH",
+            "DYLD_FALLBACK_FRAMEWORK_PATH",
+        }
+    }
+    offline_env.update(
+        {
+            "PYTHONNOUSERSITE": "1",
+            "PYTHONSAFEPATH": "1",
+            "PYTHONDONTWRITEBYTECODE": "1",
+            "HF_HUB_OFFLINE": "1",
+            "TRANSFORMERS_OFFLINE": "1",
+            "PIP_NO_INDEX": "1",
+        }
+    )
+    # The installation-generated console shim is NOT a Wheel member. An
+    # unchecked medscale.exe or bin/medscale may run arbitrary startup code
+    # even if every installed medscale package file matches the Wheel. The
+    # strict source-bound caller provides the verified venv interpreter and
+    # dispatches the Git-pinned module entry point instead of the shim.
+    command = (
+        [str(cli), *args]
+        if trusted_python is None
+        else [
+            str(trusted_python),
+            "-E",
+            "-s",
+            "-P",
+            "-B",  # -E ignores PYTHONDONTWRITEBYTECODE; never create unqualified caches.
+            "-c",
+            "from medscale.cli import main; raise SystemExit(main())",
+            *args,
+        ]
+    )
+    try:
+        result = subprocess.run(
+            command,
+            cwd=cwd,
+            env=offline_env,
+            capture_output=True,
+            text=True,
+            errors="replace",
+            timeout=30,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        raise QualificationError("installed CLI could not complete") from exc
+    if len(result.stdout) > MAX_OUTPUT or len(result.stderr) > MAX_OUTPUT:
+        raise QualificationError("installed CLI output exceeds bounds")
+    return result
+
+
+def _call_verified(
+    cli: Path, args: list[str], cwd: Path, trusted_python: Path | None
+) -> subprocess.CompletedProcess[str]:
+    # Preserve the existing standalone CLI mock/test contract only when no
+    # independently attested interpreter was provided.
+    if trusted_python is None:
+        return call(cli, args, cwd)
+    return call(cli, args, cwd, trusted_python=trusted_python)
+
+
+def _report_case(
+    cli: Path,
+    fixture: Path,
+    payload: dict[str, Any],
+    parent: Path,
+    label: str,
+    *,
+    trusted_python: Path | None = None,
+) -> str:
+    destination = parent / label
+    completed = _call_verified(
+        cli,
+        [
+            "fhir",
+            "validate",
+            str(fixture),
+            "--created-at",
+            TIMESTAMP,
+            "--output-dir",
+            str(destination),
+        ],
+        parent,
+        trusted_python,
+    )
+    if completed.returncode != 2:
+        raise QualificationError("local FHIR CLI must exit 2 without real validation")
+    data = _object(completed.stdout)
+    if (
+        set(data) != REPORT_KEYS
+        or data["status"] != "not_validated"
+        or data["warnings"] != [WARNING]
+        or data["errors"] != []
+        or data["created_at"] != TIMESTAMP
+        or data["format_version"] != "fhirkit-validation-report/v1"
+        or data["validator_name"] != "medscale-fhirkit-local"
+        or data["validator_version"] != "0.1.0"
+        or data["report_id"] != ""
+        or data["input_hash"] != _input_hash(payload)
+    ):
+        raise QualificationError("FHIR local report claims an unperformed validation")
+    reports = list(destination.rglob("report.json"))
+    if len(reports) != 1 or reports[0].is_symlink():
+        raise QualificationError("one local content-addressed report required")
+    stored = reports[0].read_bytes()
+    # The public CLI prints report_to_json (already newline terminated) via
+    # print(), adding exactly one extra newline to stdout. The stored JSON
+    # has just its canonical trailing newline; compare those exact bytes.
+    if completed.stdout.encode("utf-8") != stored + b"\n":
+        raise QualificationError("saved report differs from installed CLI receipt")
+    return _hash(stored)
+
+
+def _run_one(
+    cli: Path, root: Path, label: str, *, trusted_python: Path | None = None
+) -> dict[str, str]:
+    if not cli.is_file():
+        raise QualificationError("installed CLI executable not found")
+    version = _call_verified(cli, ["--version"], root, trusted_python)
+    if version.returncode != 0 or version.stdout.strip() != VERSION:
+        raise QualificationError("installed CLI version is not qualified")
+    known_payload = _object(KNOWN.read_text(encoding="utf-8"))
+    unknown_payload = {
+        "resourceType": "UnknownFictionalResource",
+        "id": "fictional-negative-control",
+    }
+    unknown = root / ("unknown-" + label + ".json")
+    unknown.write_text(
+        json.dumps(unknown_payload, sort_keys=True) + "\n",
+        encoding="utf-8",
+        newline="\n",
+    )
+    known_sha = _report_case(
+        cli, KNOWN, known_payload, root, label + "-known", trusted_python=trusted_python
+    )
+    unknown_sha = _report_case(
+        cli, unknown, unknown_payload, root, label + "-unknown", trusted_python=trusted_python
+    )
+    if known_sha == unknown_sha:
+        raise QualificationError("different fictional inputs share a report digest")
+
+    summary = _call_verified(
+        cli, ["fhir", "validate", str(KNOWN), "--summary-only"], root, trusted_python
+    )
+    if summary.returncode != 0 or _object(summary.stdout) != known_payload:
+        raise QualificationError("explicit summary-only behavior regressed")
+    malformed = _call_verified(
+        cli, ["fhir", "validate", str(MALFORMED), "--summary-only"], root, trusted_python
+    )
+    if malformed.returncode != 1 or malformed.stdout.strip():
+        raise QualificationError("malformed JSON is not safely rejected")
+    return {"known_report_sha256": known_sha, "unknown_report_sha256": unknown_sha}
+
+
+def qualify(clis: list[Path], *, interpreters: list[Path] | None = None) -> dict[str, Any]:
+    """Check provenance; strict callers bypass unqualified console shims."""
+    if not 1 <= len(clis) <= 2:
+        raise QualificationError("one or two installed CLIs required")
+    if len({cli.resolve() for cli in clis}) != len(clis):
+        raise QualificationError("independent installed CLI paths required")
+    if interpreters is not None:
+        if len(interpreters) != len(clis) or len({str(x.absolute()) for x in interpreters}) != len(
+            clis
+        ):
+            raise QualificationError("independent trusted interpreters required")
+        if any(
+            not python.is_file() or python.parent != cli.parent
+            for cli, python in zip(clis, interpreters, strict=True)
+        ):
+            raise QualificationError("verified interpreter must match installed CLI venv")
+    if not KNOWN.is_file() or not MALFORMED.is_file():
+        raise QualificationError("synthetic fixtures missing")
+    with tempfile.TemporaryDirectory(prefix="medorigin-fhir-local-qa-") as directory:
+        temp = Path(directory)
+        receipts = [
+            (
+                _run_one(cli, temp, f"run_{i + 1}")
+                if interpreters is None
+                else _run_one(cli, temp, f"run_{i + 1}", trusted_python=interpreters[i])
+            )
+            for i, cli in enumerate(clis)
+        ]
+    if len(receipts) == 2 and receipts[0] != receipts[1]:
+        raise QualificationError("installed runtimes disagree on deterministic local receipts")
+    return {
+        "status": STATUS,
+        "installed_cli_count": len(clis),
+        "execution_mode": (
+            "source_verified_python_module"
+            if interpreters is not None
+            else "unattested_installed_console_shim"
+        ),
+        "known_report_sha256": receipts[0]["known_report_sha256"],
+        "unknown_report_sha256": receipts[0]["unknown_report_sha256"],
+        "fhir_conformance_validated": False,
+        "publication_authorized": False,
+        "clinical_use_authorized": False,
+        "independent_security_review_complete": False,
+        "prepublication_rehearsal_qualified": False,
+    }
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--cli", required=True, type=Path)
+    parser.add_argument("--alt-cli", type=Path)
+    args = parser.parse_args(argv)
+    try:
+        result = qualify([args.cli, *([args.alt_cli] if args.alt_cli else [])])
+    except (QualificationError, OSError, ValueError):
+        # Avoid forwarding installed CLI output, report JSON, or filesystem paths.
+        print("CORE_FHIR_PROVENANCE_BLOCKED", file=sys.stderr)
+        return 2
+    print(json.dumps(result, indent=2, sort_keys=True))
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

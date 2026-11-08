@@ -72,6 +72,72 @@ The [Workspace CI qualification](../../.github/workflows/workspace-package-quali
 
 The locally built Windows wheel had a different SHA-256. **No cross-platform reproducible-byte claim** follows from these tests. The two Linux builds only demonstrate byte identity across those tested Linux jobs. Fresh exact-tag release artifact/CI receipts are still required for a public versioned release.
 
+## Reproducible first-run synthetic FHIR example
+
+The [standalone Developer Beta synthetic FHIR demo](../../examples/synthetic_fhir_developer_beta/README.md)
+runs against the **actually installed** `medscale 0.3.0` executable, using
+only committed synthetic JSON fixtures. It exercises the documented and legacy
+FHIR commands, writes a local content-addressed validation report, rejects
+malformed JSON, and produces an inspectable receipt. The demo also supports an
+optional second Python runtime for comparing deterministic report bytes.
+If the separate `medscale-workspace 0.1.0.dev1` distribution is already installed,
+the demo can optionally include its **four-field, synthetic-only local shell
+status** via `--workspace-python /path/to/workspace/bin/python` (use
+`Scripts/python.exe` on Windows). It rejects extra metadata, incompatible
+versions, and missing environments rather than displaying any object data.
+Workspace is **not required** for the Core FHIR example, and this optional
+status does not imply a clinician GUI, real patient support or approved key
+management.
+
+It also generates a **standalone static `preview.html`** for locally
+reviewing the synthetic structural result and SHA-256 hashes in a browser,
+with no web server, external resources, JavaScript or patient data.
+
+The `valid` report status demonstrates this local structural validation
+example, **not** full HL7 FHIR conformance, clinical correctness, or an
+authorized distribution. The example has no publication path and does not
+modify the frozen research root or historical v0.2.0 data.
+
+## Synthetic-only local evidence export from native desktop
+
+The optional native Developer Beta preview also offers an explicit
+**Save synthetic evidence...** action after a successful bundled synthetic
+FHIR validation. It saves a new JSON receipt containing **only the
+structural-check status and SHA-256 digests**, plus tightly whitelisted
+synthetic Workspace flags when applicable. It never writes the source FHIR
+fixture, original patient/encounter objects, arbitrary medical records,
+machine paths, or any existing output file. The GUI export is **disabled**
+before a verified run or after failure. This is a private local developer
+artifact, not a clinical report or authorization to publish the package.
+
+## Optional pinned synthetic case exploration
+
+The [native developer-only desktop example](../../examples/synthetic_fhir_developer_beta/README.md)
+also offers a **Synthetic cases** page when an already-installed,
+synthetic-only `medscale-workspace 0.1.0.dev1` runtime is supplied via
+`--workspace-python`. It reads precisely the bundled fictional patient and
+encounter fixtures by calling the installed Workspace snapshot, then
+presents only a pinned non-PHI label set. Unknown or changed object fields
+fail closed. The **Run FHIR validation** action transitions to the
+existing installed-Core validation workflow; no patient import, clinical
+functionality, network server or historical v0.2.0 dataset migration is
+introduced.
+
+## Optional interactive native Developer Beta preview
+
+After installing the Core Wheel into a supported Python 3.11/3.12 environment,
+developers may run the [synthetic-only Tkinter desktop preview](../../examples/synthetic_fhir_developer_beta/README.md)
+via `python examples/synthetic_fhir_developer_beta/desktop.py --cli
+/path/to/installed/medscale` (Windows uses `Scripts/medscale.exe`).
+This example is a **repository-only tool**, not a packaged installer or
+general-purpose clinician GUI. It provides an actual interactive validation
+button, report SHA-256 display and clipboard action, using **only bundled
+synthetic FHIR data** with temporary local reports. An optional separately
+installed Workspace Python environment can supply *strictly non-object*
+SYNTHETIC shell status; Tkinter may not be available on every Python install.
+No additional public release, PHI access or persistent production store is
+authorized by this preview.
+
 ## Hard stop boundaries
 
 - Use synthetic data only. There is **no authorization** to enter, import or process PHI or real-patient records; no production EHR writes or autonomous diagnosis.

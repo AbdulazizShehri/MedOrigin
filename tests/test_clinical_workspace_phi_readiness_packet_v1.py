@@ -208,14 +208,34 @@ def test_residual_risk_severities_match_the_cw019_review_record() -> None:
     assert "R2 | MEDIUM" in _read(PACKET) and "ARCHITECTURE_BLOCKED" in _read(PACKET)
 
 
+def _membership_allowlist_nodes(tree: ast.AST) -> set[int]:
+    """ids of nodes inside `x in (...)` / `x not in (...)` comparators.
+
+    Readback code may *accept* later events via an allowlist such as
+    `event.event_type not in (AuditEventType.LOGIN, ...)`; naming a type there
+    does not emit it, so it must not count as an emission.
+    """
+    inside: set[int] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Compare) and any(
+            isinstance(op, (ast.In, ast.NotIn)) for op in node.ops
+        ):
+            for comparator in node.comparators:
+                inside.update(id(child) for child in ast.walk(comparator))
+    return inside
+
+
 def test_declared_but_unemitted_audit_event_types_match_the_packet() -> None:
     referenced: set[str] = set()
     for path in WORKSPACE_MODULES.glob("*.py"):
-        for node in ast.walk(ast.parse(_read(path))):
+        tree = ast.parse(_read(path))
+        allowlisted = _membership_allowlist_nodes(tree)
+        for node in ast.walk(tree):
             if (
                 isinstance(node, ast.Attribute)
                 and isinstance(node.value, ast.Name)
                 and node.value.id == "AuditEventType"
+                and id(node) not in allowlisted
             ):
                 referenced.add(node.attr)
     declared = {member.name for member in AuditEventType}

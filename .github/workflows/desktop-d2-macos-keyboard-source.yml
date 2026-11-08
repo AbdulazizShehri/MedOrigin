@@ -1,0 +1,51 @@
+# Source-only Mac qualification; hosted CI cannot emulate a real interactive AX keyboard session.
+# No production build, PHI, signatures, publication, or artifacts uploaded.
+name: D2 macOS keyboard AX source contract (nonpublishing)
+
+on:
+  push:
+    branches:
+      - test/medorigin-d2-macos-keyboard-4of4-20261030
+  pull_request:
+    branches:
+      - test/medorigin-d2-macos-ax-4of4-20261030
+    paths:
+      - 'experiments/desktop-d2-native-egui/tests/macos-native-keyboard-qualification.swift'
+      - 'experiments/desktop-d2-native-egui/README.md'
+      - '.github/workflows/desktop-d2-macos-keyboard-source.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: d2-macos-keyboard-source-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  macos-keyboard-source:
+    name: Swift native keyboard test compiles and lints (not interactive acceptance)
+    runs-on: macos-latest
+    timeout-minutes: 15
+    steps:
+      - name: Read-only checkout at exact triggering source head
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+          fetch-tags: false
+      - name: Check Apple Swift and Xcode selection
+        run: |
+          xcodebuild -version
+          swift --version
+      - name: Swift code style — strict
+        run: >-
+          swift format lint --strict
+          experiments/desktop-d2-native-egui/tests/macos-native-keyboard-qualification.swift
+      - name: Compile test source against native AppKit and ApplicationServices
+        run: >-
+          swiftc -typecheck
+          experiments/desktop-d2-native-egui/tests/macos-native-keyboard-qualification.swift
+      - name: Explicit nonpublishing gate
+        run: |
+          echo "D2_MACOS_KEYBOARD_SOURCE_ONLY_PASS_NOT_INTERACTIVE_OR_RELEASE_AUTHORITY"
+          echo "Real 4/4 keyboard traversal and digest action must run on an interactive authorized Mac."
