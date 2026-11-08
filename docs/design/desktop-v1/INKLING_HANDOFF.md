@@ -9,7 +9,7 @@
 4. `preview.html` — interactive **design-only** UI color/layout study; no real engine.
 5. MedOrigin `README.md`, `apps/workspace/README.md`, `specs/medscale-clinical-workspace-v1/capability_map.md`, `docs/BRAND_TRANSITION.md`.
 6. Recent D1 Tauri and D2 egui PR heads: **do not overwrite or discard their existing evidence**.
-7. Brand draft PR #868 (Overlap Forward v2) is still awaiting optical approval; old PR #866 is rejected. Do not treat a preview logo as automatically approved.
+7. The owner selected the **Lineage** mark on 2026-11-08 ([identity-lineage/README.md](identity-lineage/README.md)); it replaces the Overlap Forward v2 candidate in PR #868. Old PR #866 is rejected. Use the SVGs in `identity-lineage/svg/`; do not redraw the mark.
 
 ## UI direction
 

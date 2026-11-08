@@ -19,20 +19,23 @@ const path=require("path");
    if(light.theme!=="light"||light.accent!=="#C94A05") failures.push([width,"Light",light]);
    if(width===1440){await page.screenshot({path:path.join(base,"design-only-light.png"),fullPage:true});}
    if(width===390){await page.screenshot({path:path.join(base,"design-only-mobile.png"),fullPage:true});}
-   await page.getByRole("button",{name:"Evidence",exact:true}).click();
-   if(await page.locator("#page-title").textContent()!=="Evidence")failures.push([width,"Nav"]);
+   const navCount=await page.locator(".nav-link").count();
+   const capCount=await page.locator(".cap-row").count();
+   if(navCount!==28||capCount!==29)failures.push([width,"Feature coverage",{navCount,capCount}]);
+   await page.getByRole("button",{name:"Clinical evidence",exact:true}).click();
+   if(await page.locator("#page-title").textContent()!=="Clinical evidence")failures.push([width,"Nav"]);
    await page.getByRole("searchbox",{name:"Filter capabilities"}).fill("never-exists-xyz");
    const vis=await page.locator(".cap-row:visible").count();
    if(vis!==0)failures.push([width,"Empty search",vis]);
    await page.getByRole("searchbox",{name:"Filter capabilities"}).fill("fhir");
    const matches=await page.locator(".cap-row:visible").count();
-   if(matches!==1)failures.push([width,"FHIR search",matches]);
+   if(matches!==2)failures.push([width,"FHIR search",matches]);
    await page.getByRole("button",{name:"System",exact:true}).click();
    if(await page.locator("html").getAttribute("data-theme")!==null)failures.push([width,"System not honoring OS"]);
    if(errors.length)failures.push([width,"JS errors",errors]);
    await page.close();
   }
   if(failures.length){console.error(JSON.stringify(failures,null,2));process.exitCode=1;}
-  else console.log("PASS: 6 browser sizes, theme switching, system preference, navigation, filter and empty state. Three screenshots captured.");
+  else console.log("PASS: 6 browser sizes, 28 feature routes + 29 inventory rows, theme switching, system preference, navigation, filter and empty state. Three screenshots captured.");
  } finally {await browser.close();}
 })().catch(err=>{console.error(err);process.exitCode=1;});

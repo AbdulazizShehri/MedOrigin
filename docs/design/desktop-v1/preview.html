@@ -8,11 +8,11 @@
 *{box-sizing:border-box}[hidden]{display:none!important}html,body{margin:0;min-height:100%;font-family:Inter,"Segoe UI",system-ui,sans-serif;background:var(--mo-bg);color:var(--mo-text);font-size:13px;-webkit-font-smoothing:antialiased}
 button,input{font:inherit}button{cursor:pointer}button:disabled{cursor:not-allowed;opacity:.45}button:focus-visible,input:focus-visible{outline:2px solid var(--mo-focus);outline-offset:2px}button{min-height:38px}
 .shell{display:grid;grid-template-columns:244px minmax(0,1fr);min-height:100vh}.sidebar{background:var(--mo-sidebar);border-right:1px solid var(--mo-border);display:flex;flex-direction:column;padding:14px 11px}
-.brand{display:flex;align-items:center;gap:10px;padding:9px 10px 22px;font-size:17px;font-weight:730;letter-spacing:-.055em}.brand-dot{background:#FE681B;width:17px;height:17px;border-radius:50%;display:inline-block;flex:none}
+.brand{display:flex;align-items:center;gap:10px;padding:9px 10px 22px;font-size:17px;font-weight:730;letter-spacing:-.055em}.brand-mark{width:24px;height:24px;flex:none;color:var(--mo-text)}
 .preview-ribbon{border:1px solid var(--mo-border);padding:10px;margin:0 6px 17px;border-radius:7px;color:var(--mo-text-secondary);font-size:11px;line-height:1.5;background:var(--mo-raised)}.preview-ribbon b{color:var(--mo-text);display:block}
 .nav-label{font-size:10px;color:var(--mo-text-muted);font-weight:700;letter-spacing:.11em;text-transform:uppercase;margin:17px 10px 8px}
-.nav-link{display:flex;width:100%;gap:11px;align-items:center;border:1px solid transparent;border-radius:7px;background:transparent;color:var(--mo-text-secondary);text-align:left;padding:0 12px;font-size:13px;height:38px}.nav-link:hover{background:var(--mo-hover)}.nav-link[aria-current="page"]{background:var(--mo-raised);border-color:var(--mo-border);color:var(--mo-text);font-weight:650}.nav-link[aria-current="page"]:before{content:"";width:3px;height:17px;border-radius:2px;background:var(--mo-brand)}
-.glyph{width:16px;font-size:15px;display:inline-grid;place-items:center;color:var(--mo-text-muted)}
+.nav-link{display:flex;width:100%;gap:11px;align-items:center;border:1px solid transparent;border-radius:7px;background:transparent;color:var(--mo-text-secondary);text-align:left;padding:0 12px;font-size:13px;height:34px;min-height:34px}.nav-text{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.nav-tag{font-size:9px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;padding:2px 5px;border-radius:4px;border:1px solid var(--mo-border);color:var(--mo-warning);background:var(--mo-badge)}.nav-tag.off{color:var(--mo-text-muted)}.nav-link:hover{background:var(--mo-hover)}.nav-link[aria-current="page"]{background:var(--mo-raised);border-color:var(--mo-border);color:var(--mo-text);font-weight:650}.nav-link[aria-current="page"]:before{content:"";width:3px;height:17px;border-radius:2px;background:var(--mo-brand)}
+.glyph{width:16px;font-size:15px;display:inline-grid;place-items:center;color:var(--mo-text-muted);font-variant-emoji:text;flex:none}
 .sidebar-bottom{margin-top:auto;padding:20px 8px 8px;color:var(--mo-text-muted);font-size:11px;line-height:1.6}
 .content{display:flex;flex-direction:column;min-width:0}.topbar{height:52px;min-height:52px;display:flex;align-items:center;gap:15px;padding:0 26px;border-bottom:1px solid var(--mo-border);background:var(--mo-surface)}
 .breadcrumb{color:var(--mo-text-secondary);flex:1;white-space:nowrap}.breadcrumbs-strong{color:var(--mo-text);font-weight:650}.key{border:1px solid var(--mo-border);border-radius:5px;padding:4px 7px;font:11px ui-monospace,Consolas,monospace;color:var(--mo-text-muted)}
@@ -34,37 +34,59 @@ button,input{font:inherit}button{cursor:pointer}button:disabled{cursor:not-allow
 .inspector-note b{display:block;color:var(--mo-text);margin-bottom:5px}
 .bottom-note{margin-top:25px;font-size:11px;color:var(--mo-text-muted);line-height:1.6}
 @media(max-width:1150px){.main{grid-template-columns:1fr}.inspector{display:none}}
-@media(max-width:720px){.shell{grid-template-columns:65px 1fr}.sidebar{padding:12px 4px}.brand{justify-content:center;padding:10px 2px 22px;font-size:0}.brand-dot{width:23px;height:23px}.preview-ribbon,.nav-label,.nav-link span:last-child,.sidebar-bottom{display:none}.nav-link{justify-content:center;padding:0;min-height:45px}.topbar{padding:0 12px}.topbar .key{display:none}.work{padding:23px 16px 60px}.metrics{grid-template-columns:1fr}.metric{min-height:98px}.toolbar{align-items:start;flex-direction:column}.search{width:100%}.table-header,.cap-row{grid-template-columns:minmax(0,1fr) 92px;gap:8px;padding:13px}.table-header span:last-child,.cap-row>a{display:none}.cap-row strong{font-size:12px}.chip{font-size:9px}}
+@media(max-width:720px){.shell{grid-template-columns:65px 1fr}.sidebar{padding:12px 4px}.brand{justify-content:center;padding:10px 2px 22px;font-size:0}.brand-mark{width:28px;height:28px}.preview-ribbon,.nav-label,.nav-text,.nav-tag,.sidebar-bottom{display:none}.nav-link{justify-content:center;padding:0;min-height:45px}.topbar{padding:0 12px}.topbar .key{display:none}.work{padding:23px 16px 60px}.metrics{grid-template-columns:1fr}.metric{min-height:98px}.toolbar{align-items:start;flex-direction:column}.search{width:100%}.table-header,.cap-row{grid-template-columns:minmax(0,1fr) 92px;gap:8px;padding:13px}.table-header span:last-child,.cap-row>a{display:none}.cap-row strong{font-size:12px}.chip{font-size:9px}}
 </style>
 </head>
 <body>
 <div class="shell">
 <aside class="sidebar" aria-label="MedOrigin navigation">
-<div class="brand"><span class="brand-dot" aria-hidden="true"></span> MedOrigin</div>
+<div class="brand"><svg class="brand-mark" viewBox="0 0 120 120" aria-hidden="true"><path d="M60 96V62L30 28 M60 62L90 28" fill="none" stroke="currentColor" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/><circle cx="30" cy="28" r="14" fill="#A6DBFF" stroke="currentColor" stroke-width="7"/><circle cx="90" cy="28" r="14" fill="#C3F0BF" stroke="currentColor" stroke-width="7"/><circle cx="60" cy="62" r="9" fill="currentColor"/><circle cx="60" cy="98" r="16" fill="#FE681B"/></svg> MedOrigin</div>
 <div class="preview-ribbon"><b>Synthetic / Developer Preview</b>Design-only. No patient data, models or clinical access.</div>
+<!-- One entry per screen in FEATURE_COVERAGE.md (28). Tags mirror its gate column. -->
 <div class="nav-label">Workspace</div>
-<button class="nav-link" aria-current="page" data-name="Overview" aria-label="Overview"><span class="glyph" aria-hidden="true">◫</span><span>Overview</span></button>
-<button class="nav-link" data-name="Encounters" aria-label="Encounters"><span class="glyph" aria-hidden="true">◷</span><span>Encounters</span></button>
-<button class="nav-link" data-name="Notes" aria-label="Notes"><span class="glyph" aria-hidden="true">▤</span><span>Notes & Drafts</span></button>
-<button class="nav-link" data-name="Evidence" aria-label="Evidence"><span class="glyph" aria-hidden="true">◇</span><span>Evidence</span></button>
-<button class="nav-link" data-name="Patient graph" aria-label="Patient graph"><span class="glyph" aria-hidden="true">⌁</span><span>Patient graph</span></button>
-<button class="nav-link" data-name="FHIR" aria-label="FHIR"><span class="glyph" aria-hidden="true">⟡</span><span>FHIR inspector</span></button>
+<button class="nav-link" aria-current="page" data-name="Home" aria-label="Home"><span class="glyph" aria-hidden="true">⌂</span><span class="nav-text">Home</span></button>
+<button class="nav-link" data-name="Local search" aria-label="Local search"><span class="glyph" aria-hidden="true">⌕</span><span class="nav-text">Local search</span></button>
+<div class="nav-label">Clinical</div>
+<button class="nav-link" data-name="Synthetic patients" aria-label="Synthetic patients"><span class="glyph" aria-hidden="true">◌</span><span class="nav-text">Synthetic patients</span></button>
+<button class="nav-link" data-name="Encounter detail" aria-label="Encounter detail"><span class="glyph" aria-hidden="true">◷</span><span class="nav-text">Encounter detail</span></button>
+<button class="nav-link" data-name="Audio & transcript" aria-label="Audio & transcript"><span class="glyph" aria-hidden="true">◖</span><span class="nav-text">Audio & transcript</span><span class="nav-tag">Gated</span></button>
+<button class="nav-link" data-name="Clinical note drafts" aria-label="Clinical note drafts"><span class="glyph" aria-hidden="true">▤</span><span class="nav-text">Clinical note drafts</span></button>
+<button class="nav-link" data-name="Orders & tasks" aria-label="Orders & tasks"><span class="glyph" aria-hidden="true">☰</span><span class="nav-text">Orders & tasks</span><span class="nav-tag">Gated</span></button>
+<button class="nav-link" data-name="Coding suggestions" aria-label="Coding suggestions"><span class="glyph" aria-hidden="true">‹›</span><span class="nav-text">Coding suggestions</span><span class="nav-tag off">Deferred</span></button>
+<div class="nav-label">Context</div>
+<button class="nav-link" data-name="Patient graph" aria-label="Patient graph"><span class="glyph" aria-hidden="true">⌁</span><span class="nav-text">Patient graph</span></button>
+<button class="nav-link" data-name="Patient timeline" aria-label="Patient timeline"><span class="glyph" aria-hidden="true">┅</span><span class="nav-text">Patient timeline</span></button>
+<button class="nav-link" data-name="Documents & canvas" aria-label="Documents & canvas"><span class="glyph" aria-hidden="true">▭</span><span class="nav-text">Documents & canvas</span></button>
+<div class="nav-label">Evidence</div>
+<button class="nav-link" data-name="Clinical evidence" aria-label="Clinical evidence"><span class="glyph" aria-hidden="true">◇</span><span class="nav-text">Clinical evidence</span></button>
+<button class="nav-link" data-name="Literature screening" aria-label="Literature screening"><span class="glyph" aria-hidden="true">❒</span><span class="nav-text">Literature screening</span></button>
+<div class="nav-label">Data</div>
+<button class="nav-link" data-name="FHIR workspace" aria-label="FHIR workspace"><span class="glyph" aria-hidden="true">⟡</span><span class="nav-text">FHIR workspace</span></button>
+<button class="nav-link" data-name="FHIR fixture inspector" aria-label="FHIR fixture inspector"><span class="glyph" aria-hidden="true">⚗</span><span class="nav-text">FHIR fixture inspector</span><span class="nav-tag off">Exp</span></button>
+<button class="nav-link" data-name="Tables & structured data" aria-label="Tables & structured data"><span class="glyph" aria-hidden="true">▦</span><span class="nav-text">Tables & structured data</span></button>
+<button class="nav-link" data-name="Analytics" aria-label="Analytics"><span class="glyph" aria-hidden="true">▥</span><span class="nav-text">Analytics</span></button>
+<button class="nav-link" data-name="Dataset manager" aria-label="Dataset manager"><span class="glyph" aria-hidden="true">⛁</span><span class="nav-text">Dataset manager</span></button>
+<button class="nav-link" data-name="Export quarantine" aria-label="Export quarantine"><span class="glyph" aria-hidden="true">⊟</span><span class="nav-text">Export quarantine</span></button>
 <div class="nav-label">Research</div>
-<button class="nav-link" data-name="Datasets" aria-label="Datasets"><span class="glyph" aria-hidden="true">▦</span><span>Datasets</span></button>
-<button class="nav-link" data-name="Research" aria-label="Research"><span class="glyph" aria-hidden="true">◉</span><span>Research explorer</span></button>
-<button class="nav-link" data-name="Analytics" aria-label="Analytics"><span class="glyph" aria-hidden="true">▥</span><span>Analytics</span></button>
+<button class="nav-link" data-name="Research explorer" aria-label="Research explorer"><span class="glyph" aria-hidden="true">◉</span><span class="nav-text">Research explorer</span></button>
+<button class="nav-link" data-name="Benchmark & evaluation" aria-label="Benchmark & evaluation"><span class="glyph" aria-hidden="true">◔</span><span class="nav-text">Benchmark & evaluation</span></button>
+<button class="nav-link" data-name="Model catalog & runtime" aria-label="Model catalog & runtime"><span class="glyph" aria-hidden="true">◫</span><span class="nav-text">Model catalog & runtime</span><span class="nav-tag">Gated</span></button>
 <div class="nav-label">Trust</div>
-<button class="nav-link" data-name="Audit" aria-label="Audit"><span class="glyph" aria-hidden="true">⌕</span><span>Audit & provenance</span></button>
-<button class="nav-link" data-name="Storage" aria-label="Storage"><span class="glyph" aria-hidden="true">▣</span><span>Storage & recovery</span></button>
-<button class="nav-link" data-name="Settings" aria-label="Settings"><span class="glyph" aria-hidden="true">⚙</span><span>Settings</span></button>
+<button class="nav-link" data-name="Integrations" aria-label="Integrations"><span class="glyph" aria-hidden="true">⇄</span><span class="nav-text">Integrations</span></button>
+<button class="nav-link" data-name="Audit history" aria-label="Audit history"><span class="glyph" aria-hidden="true">≡</span><span class="nav-text">Audit history</span></button>
+<button class="nav-link" data-name="Storage & recovery" aria-label="Storage & recovery"><span class="glyph" aria-hidden="true">▣</span><span class="nav-text">Storage & recovery</span></button>
+<div class="nav-label">System</div>
+<button class="nav-link" data-name="Settings" aria-label="Settings"><span class="glyph" aria-hidden="true">⚙</span><span class="nav-text">Settings</span></button>
+<button class="nav-link" data-name="About & diagnostics" aria-label="About & diagnostics"><span class="glyph" aria-hidden="true">ⓘ</span><span class="nav-text">About & diagnostics</span></button>
+<button class="nav-link" data-name="Help & safety boundaries" aria-label="Help & safety boundaries"><span class="glyph" aria-hidden="true">⚠</span><span class="nav-text">Help & safety boundaries</span></button>
 <div class="sidebar-bottom">MedOrigin / Design laboratory<br>Local-first. Synthetic only.</div>
 </aside>
 <div class="content">
-<header class="topbar"><div class="breadcrumb">MedOrigin / <span class="breadcrumbs-strong" id="crumb">Overview</span></div><span class="key">⌘ K</span><div class="theme-buttons" aria-label="Appearance"><button type="button" data-theme-set="light" aria-pressed="false">Light</button><button type="button" data-theme-set="dark" aria-pressed="true">Dark</button><button type="button" data-theme-set="system" aria-pressed="false">System</button></div></header>
+<header class="topbar"><div class="breadcrumb">MedOrigin / <span class="breadcrumbs-strong" id="crumb">Home</span></div><span class="key">⌘ K</span><div class="theme-buttons" aria-label="Appearance"><button type="button" data-theme-set="light" aria-pressed="false">Light</button><button type="button" data-theme-set="dark" aria-pressed="true">Dark</button><button type="button" data-theme-set="system" aria-pressed="false">System</button></div></header>
 <div class="main">
 <main class="work" id="content">
 <span class="eyebrow">MEDORIGIN / LOCAL WORKSPACE / DESIGN REVIEW</span>
-<h1 id="page-title">Overview</h1>
+<h1 id="page-title">Home</h1>
 <p class="sub" id="page-description">A calm, precise shell for evidence-native clinical research tools. This is a design preview only; no medical workflows are running.</p>
 <div class="metrics">
 <section class="metric"><span class="metric-title">Architecture</span><div class="counter">2</div><p>Research Core + separate Workspace foundation</p></section>
@@ -75,12 +97,36 @@ button,input{font:inherit}button{cursor:pointer}button:disabled{cursor:not-allow
 <div class="surface">
 <div class="table-header"><span>Capability</span><span>Backend status</span><span>Desktop</span></div>
 <div id="cap-list">
-<div class="cap-row" data-search="synthetic encounters records review"><div><strong>Synthetic encounters</strong><small>Local encounter and revision records</small></div><span class="chip ok">Foundation</span><a class="mini-link" href="#detail">Review</a></div>
-<div class="cap-row" data-search="notes drafts evidence source"><div><strong>Notes & provenance</strong><small>Source-linked draft and review contracts</small></div><span class="chip ok">Foundation</span><a class="mini-link" href="#detail">Review</a></div>
-<div class="cap-row" data-search="fhir validation synthetic"><div><strong>FHIR R4 inspection</strong><small>Deterministic validation and bounded fixtures</small></div><span class="chip ok">Foundation</span><a class="mini-link" href="#detail">Review</a></div>
-<div class="cap-row" data-search="evidence literature retrieval"><div><strong>Evidence retrieval</strong><small>Research evidence, snapshots and citations</small></div><span class="chip ok">Foundation</span><a class="mini-link" href="#detail">Review</a></div>
-<div class="cap-row" data-search="recording live microphone transcript"><div><strong>Live encounter recording</strong><small>Consent, hardware and model gates not qualified</small></div><span class="chip warn">Gated</span><a class="mini-link" href="#detail">Details</a></div>
-<div class="cap-row" data-search="ehr electronic health records writes"><div><strong>EHR writes & patient data</strong><small>Outside authorized developer-preview scope</small></div><span class="chip warn">Blocked</span><a class="mini-link" href="#detail">Details</a></div>
+<!-- Mirrors FEATURE_COVERAGE.md row for row; status is the backend/gate state, not desktop availability. -->
+<div class="cap-row" data-search="home workspace health offline pinned"><div><strong>Home</strong><small>Workspace health, offline state, pinned tasks, recent synthetic work</small></div><span class="chip off">Designed</span><a class="mini-link" href="#detail">Review</a></div>
+<div class="cap-row" data-search="synthetic patients records identity binding"><div><strong>Synthetic patients</strong><small>Synthetic records list, search, provenance, contextual detail</small></div><span class="chip ok">Foundation</span><a class="mini-link" href="#detail">Review</a></div>
+<div class="cap-row" data-search="synthetic encounters records review timeline"><div><strong>Encounter detail</strong><small>Encounter timeline, status, source drilldown, edit history</small></div><span class="chip ok">Foundation</span><a class="mini-link" href="#detail">Review</a></div>
+<div class="cap-row" data-search="audio transcript recording live microphone asr"><div><strong>Audio & transcript</strong><small>Transcript review; live capture needs consent, hardware and model qualification</small></div><span class="chip warn">Capture gated</span><a class="mini-link" href="#detail">Details</a></div>
+<div class="cap-row" data-search="notes drafts clinical source review"><div><strong>Clinical note drafts</strong><small>Source-linked editable draft, missing-information flags, review-only</small></div><span class="chip ok">Foundation</span><a class="mini-link" href="#detail">Review</a></div>
+<div class="cap-row" data-search="orders tasks suggestions manual review"><div><strong>Orders & tasks</strong><small>Suggestion list only; no auto-submit, external write gated</small></div><span class="chip warn">Gated</span><a class="mini-link" href="#detail">Details</a></div>
+<div class="cap-row" data-search="coding suggestions billing"><div><strong>Coding suggestions</strong><small>Rationale and human acknowledgement; no billing submission</small></div><span class="chip off">Deferred</span><a class="mini-link" href="#detail">Details</a></div>
+<div class="cap-row" data-search="evidence retrieval citations contradictions abstention"><div><strong>Clinical evidence</strong><small>Frozen snapshot, citations, contradictions and abstention</small></div><span class="chip ok">Foundation</span><a class="mini-link" href="#detail">Review</a></div>
+<div class="cap-row" data-search="literature screening litdb criteria"><div><strong>Literature screening</strong><small>Screening criteria, provenance, reproducible export preview</small></div><span class="chip ok">Foundation</span><a class="mini-link" href="#detail">Review</a></div>
+<div class="cap-row" data-search="fhir r4 validation synthetic workspace"><div><strong>FHIR workspace</strong><small>Bounded R4 validation with errors, provenance and export preview</small></div><span class="chip ok">Foundation</span><a class="mini-link" href="#detail">Review</a></div>
+<div class="cap-row" data-search="fhir fixture inspector native tauri rust hashes"><div><strong>FHIR fixture inspector</strong><small>D1 Tauri / D2 native examples with verified hashes; not the full validator</small></div><span class="chip off">Experiment</span><a class="mini-link" href="#detail">Details</a></div>
+<div class="cap-row" data-search="patient graph linked edges inferred extracted"><div><strong>Patient graph</strong><small>Source labels, extracted vs inferred edges</small></div><span class="chip ok">Foundation</span><a class="mini-link" href="#detail">Review</a></div>
+<div class="cap-row" data-search="patient timeline chronological events uncertainty"><div><strong>Patient timeline</strong><small>Chronological events, drilldown and visible uncertainty</small></div><span class="chip ok">Foundation</span><a class="mini-link" href="#detail">Review</a></div>
+<div class="cap-row" data-search="documents canvas notes blocks"><div><strong>Documents & canvas</strong><small>Structured notes, source links, local object blocks</small></div><span class="chip off">Partial</span><a class="mini-link" href="#detail">Review</a></div>
+<div class="cap-row" data-search="tables structured data query"><div><strong>Tables & structured data</strong><small>Queryable local tables with export preview and boundaries</small></div><span class="chip ok">Foundation</span><a class="mini-link" href="#detail">Review</a></div>
+<div class="cap-row" data-search="local search retrieval corpus offline"><div><strong>Local search</strong><small>Exact scope, readable provenance, offline errors</small></div><span class="chip ok">Foundation</span><a class="mini-link" href="#detail">Review</a></div>
+<div class="cap-row" data-search="analytics indicators local calculations"><div><strong>Analytics</strong><small>Workspace-only indicators; no telemetry to Research</small></div><span class="chip ok">Foundation</span><a class="mini-link" href="#detail">Review</a></div>
+<div class="cap-row" data-search="dataset manager research workspace staging"><div><strong>Dataset manager</strong><small>Research datasets kept apart from Workspace export staging</small></div><span class="chip ok">Foundation</span><a class="mini-link" href="#detail">Review</a></div>
+<div class="cap-row" data-search="export quarantine manifest nobackflow"><div><strong>Export quarantine</strong><small>Explicit target, residual-risk result, manifest; Research admission gated</small></div><span class="chip ok">Foundation</span><a class="mini-link" href="#detail">Review</a></div>
+<div class="cap-row" data-search="research explorer hypotheses experiments read-only"><div><strong>Research explorer</strong><small>Read-only hypotheses and experiment artifacts</small></div><span class="chip ok">Read-only</span><a class="mini-link" href="#detail">Review</a></div>
+<div class="cap-row" data-search="benchmark evaluation bench frozen evaluator"><div><strong>Benchmark & evaluation</strong><small>Trusted results, frozen evaluator versions; training gated</small></div><span class="chip ok">Foundation</span><a class="mini-link" href="#detail">Review</a></div>
+<div class="cap-row" data-search="model catalog runtime adapters modelkit"><div><strong>Model catalog & runtime</strong><small>Local adapter identity only; execution gated, no installed-model claims</small></div><span class="chip warn">Gated</span><a class="mini-link" href="#detail">Details</a></div>
+<div class="cap-row" data-search="integrations connector consent dry run"><div><strong>Integrations</strong><small>Capability listing, consent and read-only dry run</small></div><span class="chip ok">Foundation</span><a class="mini-link" href="#detail">Review</a></div>
+<div class="cap-row" data-search="ehr electronic health records writes patient data"><div><strong>EHR writes & real patient data</strong><small>Outside authorized developer-preview scope</small></div><span class="chip warn">Blocked</span><a class="mini-link" href="#detail">Details</a></div>
+<div class="cap-row" data-search="audit history provenance events revision"><div><strong>Audit history</strong><small>Append-only events, source identity, revision and failure traces</small></div><span class="chip ok">Foundation</span><a class="mini-link" href="#detail">Review</a></div>
+<div class="cap-row" data-search="storage recovery encrypted backup restore key"><div><strong>Storage & recovery</strong><small>Encrypted store, backup/restore quarantine, key status</small></div><span class="chip ok">Foundation</span><a class="mini-link" href="#detail">Review</a></div>
+<div class="cap-row" data-search="settings theme density shortcuts"><div><strong>Settings</strong><small>System/Light/Dark, density, keyboard shortcuts, offline state</small></div><span class="chip off">Designed</span><a class="mini-link" href="#detail">Review</a></div>
+<div class="cap-row" data-search="about diagnostics version build hashes"><div><strong>About & diagnostics</strong><small>App and engine build hashes, provenance, no PHI in logs</small></div><span class="chip off">Designed</span><a class="mini-link" href="#detail">Review</a></div>
+<div class="cap-row" data-search="help safety boundaries security incident"><div><strong>Help & safety boundaries</strong><small>Research-only, synthetic-only, no EHR writes, incident workflow</small></div><span class="chip warn">Required</span><a class="mini-link" href="#detail">Details</a></div>
 </div></div>
 <div class="bottom-note" id="empty-state">UI preview only. Backend routes must not be represented as connected until runtime IPC validation and synthetic E2E tests pass.</div>
 </main>
