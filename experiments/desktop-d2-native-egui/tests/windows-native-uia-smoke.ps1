@@ -52,8 +52,17 @@ try {
     @{id='patient-over-limit';bytes=32769;sha='b929f15ca4f3fa28f54991ed0cb8ac5f430e388ee08bf401a853d8af91e44538'},
     @{id='patient-exact-limit';bytes=32768;sha='ea711ce560191a81c0722c4a26592e0e2d9abb2186b6fd3af6897cd89d417d4e'}
   )
-  # A plain launch opens Home; fixture checks live under Developer evidence.
-  Click 'Developer evidence'
+  # A plain launch opens Home; fixture checks live under FHIR fixture inspector.
+  # Navigation buttons announce their tag too ("FHIR fixture inspector  Exp").
+  $nav=$null
+  for($attempt=0;$attempt -lt 60 -and -not $nav;$attempt++){
+    foreach($button in $window.FindAll([System.Windows.Automation.TreeScope]::Descendants,$buttons)){
+      if($button.Current.Name -like 'FHIR fixture inspector*'){ $nav=$button; break }
+    }
+    if(-not $nav){ Start-Sleep -Milliseconds 200 }
+  }
+  if(-not $nav){ throw 'Missing accessible D2 navigation: FHIR fixture inspector' }
+  try { $nav.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern).Invoke() } catch { $nav.GetCurrentPattern([System.Windows.Automation.TogglePattern]::Pattern).Toggle() }
   foreach($case in $cases){
     Click ($case.id+' ('+$case.bytes+' bytes)')
     Click 'Verify synthetic SHA-256'

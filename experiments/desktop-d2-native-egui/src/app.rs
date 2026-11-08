@@ -728,69 +728,80 @@ pub struct MedOriginNativePreview {
     fictional_workspace_back: Option<usize>,
     fictional_workspace_detail: Option<FictionalWorkspaceDetail>,
     fictional_workspace_notice: Option<&'static str>,
-    // UI preferences and help surfaces. Never cleared with session data and
-    // never persisted; they hold no workspace or patient content.
-    settings_open: bool,
+    // Help surface state. Never cleared with session data and never
+    // persisted; it holds no workspace or patient content.
     diagnostics_copied: bool,
 }
 
 const NAV_STATE_ID: &str = "medorigin-navigation-state";
+const NAV_QUERY_ID: &str = "medorigin-navigation-query";
 
-/// Top-level destinations. Only screens that do real work are listed;
-/// Timeline, Review and Reports join when they exist.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub enum NavView {
-    #[default]
-    Home,
-    Records,
-    Developer,
-}
+use crate::screens::{self, Route, SCREENS, Tag};
 
-impl NavView {
-    pub fn label(self) -> &'static str {
-        match self {
-            NavView::Home => "Home",
-            NavView::Records => "Records",
-            NavView::Developer => "Developer evidence",
-        }
-    }
-}
-
+/// Which of the 28 screens is showing, plus whether records were open last
+/// frame (so opening records can jump to FHIR workspace exactly once).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 struct NavState {
-    view: NavView,
+    screen: usize,
     records_open: bool,
 }
 
-/// Pure navigation transition: first frame uses the launch view; opening
-/// records jumps to Records; otherwise the user's choice is kept.
-fn next_nav_state(stored: Option<NavState>, records_open: bool, initial: NavView) -> NavState {
+fn is_records_screen(index: usize) -> bool {
+    matches!(SCREENS[index].route, Route::Records { .. })
+}
+
+/// Pure navigation transition: first frame uses the launch screen; newly
+/// opened records jump to FHIR workspace unless a records screen is already
+/// showing; otherwise the user's choice is kept.
+fn next_nav_state(stored: Option<NavState>, records_open: bool, initial: usize) -> NavState {
     match stored {
         None => NavState {
-            view: initial,
+            screen: initial,
             records_open,
         },
         Some(prev) => NavState {
-            view: if records_open && !prev.records_open {
-                NavView::Records
+            screen: if records_open && !prev.records_open && !is_records_screen(prev.screen) {
+                screens::FHIR_WORKSPACE
             } else {
-                prev.view
+                prev.screen
             },
             records_open,
         },
     }
 }
 
-fn card(ui: &mut egui::Ui, p: &crate::theme::Palette, add: impl FnOnce(&mut egui::Ui)) {
-    egui::Frame::new()
-        .fill(p.surface)
-        .stroke(egui::Stroke::new(1.0, p.border))
-        .corner_radius(egui::CornerRadius::same(8))
-        .inner_margin(egui::Margin::same(14))
-        .show(ui, |ui| {
-            ui.set_width(ui.available_width());
-            add(ui);
+/// Lineage provenance row: label, state and dot colour.
+fn lineage_row(ui: &mut egui::Ui, label: &str, state: &str, dot: egui::Color32) {
+    let p = *crate::theme::palette(ui.ctx().theme());
+    ui.horizontal(|ui| {
+        let (rect, _) = ui.allocate_exact_size(egui::vec2(10.0, 10.0), egui::Sense::hover());
+        ui.painter().circle_filled(rect.center(), 5.0, dot);
+        ui.label(egui::RichText::new(label).size(crate::theme::size::SMALL));
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            ui.label(
+                egui::RichText::new(state)
+                    .size(crate::theme::size::CAPTION)
+                    .color(p.text_muted),
+            );
         });
+    });
+}
+
+fn tag_name(tag: Option<Tag>) -> &'static str {
+    match tag {
+        Some(Tag::Gated) => "Gated",
+        Some(Tag::Deferred) => "Deferred",
+        Some(Tag::Experiment) => "Experiment",
+        None => "Available",
+    }
+}
+
+fn section_title(ui: &mut egui::Ui, text: &str) {
+    ui.label(
+        egui::RichText::new(text)
+            .size(crate::theme::size::BODY)
+            .strong(),
+    );
 }
 
 impl MedOriginNativePreview {
@@ -3406,91 +3417,345 @@ impl MedOriginNativePreview {
     }
 
     /// Start where the launch put the user: records if one-shot input opened
-    /// them, developer evidence for developer receipts, otherwise Home.
-    fn initial_nav_view(&self) -> NavView {
+    /// them, the fixture inspector for developer receipts, otherwise Home.
+    fn initial_screen(&self) -> usize {
         if self.has_open_records() {
-            NavView::Records
+            screens::FHIR_WORKSPACE
         } else if self.encrypted_readback.is_some()
             || self.encrypted_workspace_receipt.is_some()
             || self.core_report.is_some()
         {
-            NavView::Developer
+            screens::FIXTURE_INSPECTOR
         } else {
-            NavView::Home
+            screens::HOME
         }
     }
 
-    fn resolve_nav_view(&self, ctx: &egui::Context) -> NavView {
+    fn resolve_screen(&self, ctx: &egui::Context) -> usize {
         let id = egui::Id::new(NAV_STATE_ID);
         let stored = ctx.data(|d| d.get_temp::<NavState>(id));
-        let state = next_nav_state(stored, self.has_open_records(), self.initial_nav_view());
+        let state = next_nav_state(stored, self.has_open_records(), self.initial_screen());
         ctx.data_mut(|d| d.insert_temp(id, state));
-        state.view
+        state.screen
     }
 
-    fn set_nav_view(ctx: &egui::Context, view: NavView) {
+    /// Open a screen. Gated and deferred screens never open.
+    fn open_screen(&mut self, ctx: &egui::Context, index: usize) -> Result<(), &'static str> {
+        let screen = SCREENS.get(index).ok_or("unknown_screen")?;
+        if !screen.enabled() {
+            return Err("screen_gated");
+        }
+        if let Route::Records { facet } = screen.route
+            && self.synthetic_bundle.is_some()
+        {
+            self.bundle_set_type(facet)?;
+        }
         let id = egui::Id::new(NAV_STATE_ID);
         ctx.data_mut(|d| {
             let mut state = d.get_temp::<NavState>(id).unwrap_or_default();
-            state.view = view;
+            state.screen = index;
             d.insert_temp(id, state);
         });
+        Ok(())
     }
 
-    fn navigation_rail(&mut self, ui: &mut egui::Ui, view: NavView) {
+    fn sidebar(&mut self, ui: &mut egui::Ui, current: usize) {
         let p = *crate::theme::palette(ui.ctx().theme());
-        let mut chosen = view;
-        for (key, item) in [
-            (egui::Key::Num1, NavView::Home),
-            (egui::Key::Num2, NavView::Records),
-            (egui::Key::Num3, NavView::Developer),
+        let mut chosen = None;
+        for (key, target) in [
+            (egui::Key::Num1, screens::HOME),
+            (egui::Key::Num2, screens::FHIR_WORKSPACE),
+            (egui::Key::Num3, screens::FIXTURE_INSPECTOR),
         ] {
             if ui.input(|i| i.modifiers.command && i.key_pressed(key)) {
-                chosen = item;
+                chosen = Some(target);
             }
         }
-        egui::Panel::left("medorigin-navigation-rail")
+        if ui.input(|i| i.key_pressed(egui::Key::F1)) {
+            chosen = Some(screens::HELP);
+        }
+        let query_id = egui::Id::new(NAV_QUERY_ID);
+        let mut query = ui
+            .ctx()
+            .data(|d| d.get_temp::<String>(query_id))
+            .unwrap_or_default();
+        egui::Panel::left("medorigin-sidebar")
             .resizable(false)
-            .exact_size(176.0)
+            .exact_size(crate::theme::layout::SIDEBAR)
+            .frame(
+                egui::Frame::new()
+                    .fill(p.sidebar)
+                    .inner_margin(egui::Margin::symmetric(10, 14)),
+            )
             .show(ui, |ui| {
-                ui.add_space(crate::theme::space::MD);
-                for (item, hint) in [
-                    (NavView::Home, "Get started and open records (Ctrl+1)"),
-                    (NavView::Records, "Browse open records (Ctrl+2)"),
-                    (
-                        NavView::Developer,
-                        "Fixture checks and developer receipts (Ctrl+3)",
-                    ),
-                ] {
-                    let label = egui::RichText::new(item.label()).size(crate::theme::size::BODY);
-                    let button = egui::Button::selectable(chosen == item, label)
-                        .min_size(egui::vec2(ui.available_width(), 32.0));
-                    if ui.add(button).on_hover_text(hint).clicked() {
-                        chosen = item;
-                    }
+                ui.horizontal(|ui| {
+                    ui.add_space(6.0);
+                    crate::theme::mark(ui, 28.0);
+                    ui.vertical(|ui| {
+                        ui.spacing_mut().item_spacing.y = 0.0;
+                        ui.label(
+                            egui::RichText::new("MedOrigin")
+                                .size(crate::theme::size::TITLE - 1.0)
+                                .strong(),
+                        );
+                        ui.label(
+                            egui::RichText::new("Synthetic workspace")
+                                .size(crate::theme::size::CAPTION)
+                                .color(p.text_muted),
+                        );
+                    });
+                });
+                ui.add_space(crate::theme::space::SM);
+                let search = ui.add(
+                    egui::TextEdit::singleline(&mut query)
+                        .hint_text("Search screens   Ctrl K")
+                        .char_limit(40)
+                        .desired_width(f32::INFINITY),
+                );
+                if ui.input(|i| i.modifiers.command && i.key_pressed(egui::Key::K)) {
+                    search.request_focus();
+                }
+                let needle = query.trim().to_lowercase();
+                let matches =
+                    |label: &str| needle.is_empty() || label.to_lowercase().contains(&needle);
+                if search.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
+                    chosen = SCREENS
+                        .iter()
+                        .position(|s| s.enabled() && matches(s.label))
+                        .or(chosen);
                 }
                 ui.add_space(crate::theme::space::SM);
-                ui.separator();
-                let settings = egui::Button::selectable(
-                    self.settings_open,
-                    egui::RichText::new("Settings & help").size(crate::theme::size::BODY),
-                )
-                .min_size(egui::vec2(ui.available_width(), 32.0));
-                if ui.add(settings).on_hover_text("F1").clicked() {
-                    self.settings_open = !self.settings_open;
-                }
+                let footer = 64.0;
+                egui::ScrollArea::vertical()
+                    .max_height((ui.available_height() - footer).max(80.0))
+                    .show(ui, |ui| {
+                        ui.spacing_mut().item_spacing.y = 1.0;
+                        ui.spacing_mut().button_padding = egui::vec2(10.0, 4.0);
+                        let mut group = "";
+                        for (index, screen) in SCREENS.iter().enumerate() {
+                            if !matches(screen.label) {
+                                continue;
+                            }
+                            if screen.group != group {
+                                group = screen.group;
+                                ui.add_space(crate::theme::space::SM);
+                                ui.label(
+                                    egui::RichText::new(group.to_uppercase())
+                                        .size(crate::theme::size::CAPTION)
+                                        .strong()
+                                        .color(p.text_muted),
+                                );
+                            }
+                            let selected = index == current;
+                            let label = egui::RichText::new(screen.label)
+                                .size(crate::theme::size::BODY)
+                                .color(if selected { p.text } else { p.text_secondary });
+                            let label = if selected { label.strong() } else { label };
+                            let mut button = egui::Button::selectable(selected, label)
+                                .frame_when_inactive(false)
+                                .min_size(egui::vec2(ui.available_width(), 30.0));
+                            if let Some(tag) = screen.tag {
+                                let (bg, fg) = match tag {
+                                    Tag::Gated => (p.pink_bg, p.pink_text),
+                                    Tag::Deferred => (p.badge, p.text_muted),
+                                    Tag::Experiment => (p.blue_bg, p.blue_text),
+                                };
+                                button = button.right_text(
+                                    egui::RichText::new(format!(" {} ", tag.label()))
+                                        .size(crate::theme::size::CAPTION - 1.0)
+                                        .strong()
+                                        .background_color(bg)
+                                        .color(fg),
+                                );
+                            }
+                            if screen.enabled() {
+                                if ui.add(button).on_hover_text(screen.purpose).clicked() {
+                                    chosen = Some(index);
+                                }
+                            } else {
+                                // Gates are shown, disabled, with their reason.
+                                ui.add_enabled(false, button)
+                                    .on_disabled_hover_text(format!(
+                                        "{}: {}",
+                                        tag_name(screen.tag),
+                                        screen.reason
+                                    ));
+                            }
+                        }
+                    });
                 ui.with_layout(egui::Layout::bottom_up(egui::Align::Min), |ui| {
-                    ui.add_space(crate::theme::space::SM);
-                    ui.label(
-                        egui::RichText::new(format!("v{}", crate::support::APP_VERSION))
-                            .size(crate::theme::size::CAPTION)
-                            .color(p.text_muted),
-                    );
+                    egui::Frame::new()
+                        .fill(p.blue_bg)
+                        .corner_radius(egui::CornerRadius::same(8))
+                        .inner_margin(egui::Margin::same(10))
+                        .show(ui, |ui| {
+                            ui.set_width(ui.available_width());
+                            ui.label(
+                                egui::RichText::new(
+                                    "Local-only. No network features. Synthetic data only.",
+                                )
+                                .size(crate::theme::size::SMALL)
+                                .color(p.blue_text),
+                            );
+                        });
                 });
             });
-        if chosen != view {
-            Self::set_nav_view(ui.ctx(), chosen);
+        ui.ctx().data_mut(|d| d.insert_temp(query_id, query));
+        if let Some(index) = chosen
+            && index != current
+        {
+            let _ = self.open_screen(ui.ctx(), index);
         }
+    }
+
+    fn header(&mut self, ui: &mut egui::Ui, current: usize) {
+        let p = *crate::theme::palette(ui.ctx().theme());
+        let screen = &SCREENS[current];
+        let mut clear = false;
+        egui::Panel::top("medorigin-header")
+            .exact_size(crate::theme::layout::HEADER)
+            .frame(
+                egui::Frame::new()
+                    .fill(p.surface)
+                    .inner_margin(egui::Margin::symmetric(20, 8)),
+            )
+            .show(ui, |ui| {
+                ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
+                    ui.label(egui::RichText::new(screen.group).color(p.text_muted));
+                    ui.label(egui::RichText::new("/").color(p.text_muted));
+                    ui.label(egui::RichText::new(screen.label).strong());
+                    crate::theme::tag(ui, "Synthetic", p.pink_bg, p.pink_text);
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        if is_records_screen(current) {
+                            // Shown as on the design board, disabled with reasons.
+                            ui.add_enabled(false, egui::Button::new("Send for clinician review"))
+                                .on_disabled_hover_text(
+                                    "Gated: clinician review and sign-off are not available in \
+                                     this build.",
+                                );
+                            ui.add_enabled(false, egui::Button::new("Export to quarantine"))
+                                .on_disabled_hover_text(
+                                    "Not connected: export quarantine has no desktop adapter \
+                                     yet, and Research admission is gated.",
+                                );
+                        }
+                        if self.has_open_records()
+                            && ui
+                                .button("Clear session")
+                                .on_hover_text("Remove loaded fictional data from memory (Esc)")
+                                .clicked()
+                        {
+                            clear = true;
+                        }
+                        let dark = ui.ctx().theme() == egui::Theme::Dark;
+                        if ui
+                            .button(if dark { "Light" } else { "Dark" })
+                            .on_hover_text("Switch appearance")
+                            .clicked()
+                        {
+                            ui.ctx().set_theme(if dark {
+                                egui::ThemePreference::Light
+                            } else {
+                                egui::ThemePreference::Dark
+                            });
+                        }
+                    });
+                });
+            });
+        if clear {
+            self.clear_fictional_output();
+        }
+    }
+
+    /// Right-hand inspector on records screens: source, flags and an honest
+    /// provenance chain (no step is shown as done unless it happened).
+    fn inspector(&mut self, ui: &mut egui::Ui) {
+        let p = *crate::theme::palette(ui.ctx().theme());
+        let open = self.has_open_records();
+        let status = self.local_source_status();
+        let notices: Vec<&'static str> = [
+            self.synthetic_bundle_notice,
+            self.local_bundle_drop_notice,
+            self.core_file_batch_notice,
+        ]
+        .into_iter()
+        .flatten()
+        .collect();
+        egui::Panel::right("medorigin-inspector")
+            .resizable(false)
+            .exact_size(crate::theme::layout::INSPECTOR)
+            .frame(
+                egui::Frame::new()
+                    .fill(p.raised)
+                    .inner_margin(egui::Margin::same(20)),
+            )
+            .show(ui, |ui| {
+                egui::ScrollArea::vertical().show(ui, |ui| {
+                    section_title(ui, "Source");
+                    crate::theme::card(ui, |ui| {
+                        ui.label(
+                            egui::RichText::new(status)
+                                .size(crate::theme::size::SMALL)
+                                .strong(),
+                        );
+                        ui.label(
+                            egui::RichText::new("Read from this computer only. Not saved.")
+                                .size(crate::theme::size::CAPTION)
+                                .color(p.text_secondary),
+                        );
+                    });
+                    ui.add_space(crate::theme::space::MD);
+                    section_title(ui, "Needs attention");
+                    if notices.is_empty() {
+                        ui.label(
+                            egui::RichText::new("Nothing flagged in this session.")
+                                .size(crate::theme::size::SMALL)
+                                .color(p.text_secondary),
+                        );
+                    }
+                    for notice in notices {
+                        egui::Frame::new()
+                            .fill(p.pink_bg)
+                            .corner_radius(egui::CornerRadius::same(8))
+                            .inner_margin(egui::Margin::same(12))
+                            .show(ui, |ui| {
+                                ui.set_width(ui.available_width());
+                                ui.label(
+                                    egui::RichText::new(notice)
+                                        .size(crate::theme::size::SMALL)
+                                        .color(p.pink_text),
+                                );
+                            });
+                    }
+                    ui.add_space(crate::theme::space::MD);
+                    section_title(ui, "Provenance");
+                    if open {
+                        lineage_row(ui, "Source admitted", "Local, read-only", p.mint_text);
+                        lineage_row(ui, "Structure checked", "Fictional allowlist", p.mint_text);
+                    } else {
+                        lineage_row(ui, "Source admitted", "Nothing open", p.border_strong);
+                        lineage_row(ui, "Structure checked", "Not run", p.border_strong);
+                    }
+                    lineage_row(
+                        ui,
+                        "FHIR R4 profile validation",
+                        "Not performed",
+                        crate::theme::BRAND_ORANGE,
+                    );
+                    lineage_row(ui, "Clinician sign-off", "Not available", p.border_strong);
+                });
+            });
+    }
+
+    fn page_title(ui: &mut egui::Ui, title: &str, subtitle: &str) {
+        let p = *crate::theme::palette(ui.ctx().theme());
+        ui.label(
+            egui::RichText::new(title)
+                .size(crate::theme::size::HEADING)
+                .strong(),
+        );
+        ui.label(egui::RichText::new(subtitle).color(p.text_secondary));
+        ui.add_space(crate::theme::space::LG);
     }
 
     /// Product home: what this build does, how to open records, and what is
@@ -3499,23 +3764,23 @@ impl MedOriginNativePreview {
         let p = *crate::theme::palette(ui.ctx().theme());
         let mut open_sample = false;
         let mut open_typed = false;
+        let mut go_help = false;
         egui::ScrollArea::vertical().show(ui, |ui| {
-            ui.set_max_width(720.0);
-            ui.add_space(crate::theme::space::LG);
-            ui.heading("Welcome to MedOrigin");
-            ui.label(
-                egui::RichText::new(
-                    "A local-first workspace for reading FHIR health records with their \
-                     source, structure and validation status always visible.",
-                )
-                .color(p.text_muted),
+            ui.set_max_width(760.0);
+            Self::page_title(
+                ui,
+                "Welcome to MedOrigin",
+                "A local-first workspace for reading FHIR health records with their source, \
+                 structure and validation status always visible.",
             );
-            ui.add_space(crate::theme::space::LG);
-            card(ui, &p, |ui| {
-                ui.label(egui::RichText::new("Open records").strong());
+            crate::theme::card(ui, |ui| {
+                section_title(ui, "Open records");
                 ui.label(
-                    "Drag one fictional FHIR Bundle (.json) onto this window, or paste its \
-                     path below. Ctrl+O focuses the path field.",
+                    egui::RichText::new(
+                        "Drag one fictional FHIR Bundle (.json) onto this window, or paste its \
+                         path below. Ctrl+O focuses the path field.",
+                    )
+                    .color(p.text_secondary),
                 );
                 ui.horizontal_wrapped(|ui| {
                     ui.label("Local fictional JSON file path:");
@@ -3523,7 +3788,7 @@ impl MedOriginNativePreview {
                         egui::TextEdit::singleline(&mut self.local_bundle_path_entry)
                             .hint_text("Paste a local synthetic-only .json path")
                             .char_limit(512)
-                            .desired_width(320.0),
+                            .desired_width(300.0),
                     );
                     if ui.input(|i| i.modifiers.command && i.key_pressed(egui::Key::O)) {
                         editor.request_focus();
@@ -3538,11 +3803,19 @@ impl MedOriginNativePreview {
                 if let Some(notice) = self.local_bundle_drop_notice {
                     ui.label(egui::RichText::new(notice).color(p.warning));
                 }
-                ui.add_space(crate::theme::space::XS);
                 ui.horizontal_wrapped(|ui| {
                     ui.label(egui::RichText::new("No file handy?").color(p.text_muted));
                     if ui
-                        .button("Open built-in two-patient fictional demo (NO PHI)")
+                        .add(
+                            egui::Button::new(
+                                egui::RichText::new(
+                                    "Open built-in two-patient fictional demo (NO PHI)",
+                                )
+                                .color(p.on_accent)
+                                .strong(),
+                            )
+                            .fill(p.accent),
+                        )
                         .clicked()
                     {
                         open_sample = true;
@@ -3551,24 +3824,24 @@ impl MedOriginNativePreview {
             });
             ui.add_space(crate::theme::space::MD);
             ui.columns(2, |cols| {
-                card(&mut cols[0], &p, |ui| {
-                    ui.label(egui::RichText::new("In this build").strong());
+                crate::theme::card(&mut cols[0], |ui| {
+                    section_title(ui, "In this build");
                     for item in [
                         "Open fictional FHIR R4 test bundles",
-                        "Browse patients, encounters and observations",
+                        "Browse synthetic patients, encounters and observations",
                         "Follow references in both directions",
                         "Search and filter by patient and resource type",
-                        "Light and dark appearance",
+                        "Check fixture hashes in the FHIR fixture inspector",
                     ] {
                         ui.label(format!("\u{2022} {item}"));
                     }
                 });
-                card(&mut cols[1], &p, |ui| {
-                    ui.label(egui::RichText::new("Not yet supported").strong());
+                crate::theme::card(&mut cols[1], |ui| {
+                    section_title(ui, "Not available yet");
                     for item in [
                         "Real patient data",
                         "Saving workspaces between sessions",
-                        "Timeline, review queue and reports",
+                        "Audio capture, orders and model execution (gated)",
                         "Full FHIR profile validation",
                     ] {
                         ui.label(
@@ -3578,15 +3851,19 @@ impl MedOriginNativePreview {
                 });
             });
             ui.add_space(crate::theme::space::MD);
-            ui.label(
-                egui::RichText::new(
-                    "Everything stays on this computer. Nothing is uploaded and nothing is \
-                     saved after you close the app. Settings & help (F1) has privacy \
-                     details and Report an issue.",
-                )
-                .size(crate::theme::size::CAPTION)
-                .color(p.text_muted),
-            );
+            ui.horizontal_wrapped(|ui| {
+                ui.label(
+                    egui::RichText::new(
+                        "Everything stays on this computer. Nothing is uploaded and nothing is \
+                         saved after you close the app.",
+                    )
+                    .size(crate::theme::size::SMALL)
+                    .color(p.text_muted),
+                );
+                if ui.link("Help & safety (F1)").clicked() {
+                    go_help = true;
+                }
+            });
         });
         if open_typed {
             let _ = self.import_typed_fictional_bundle();
@@ -3594,19 +3871,27 @@ impl MedOriginNativePreview {
         if open_sample {
             let _ = self.open_embedded_fictional_bundle_demo();
         }
+        if go_help {
+            let _ = self.open_screen(ui.ctx(), screens::HELP);
+        }
     }
 
     fn records_empty_ui(&mut self, ui: &mut egui::Ui) {
         let p = *crate::theme::palette(ui.ctx().theme());
+        let mut home = false;
         ui.vertical_centered(|ui| {
             ui.add_space(ui.available_height() * 0.25);
-            ui.heading("No records open");
+            ui.label(
+                egui::RichText::new("No records open")
+                    .size(crate::theme::size::HEADING)
+                    .strong(),
+            );
             ui.label(
                 egui::RichText::new(
                     "Drag a fictional FHIR Bundle onto this window, or open the built-in \
                      sample to explore.",
                 )
-                .color(p.text_muted),
+                .color(p.text_secondary),
             );
             ui.add_space(crate::theme::space::MD);
             if ui
@@ -3616,76 +3901,67 @@ impl MedOriginNativePreview {
                 let _ = self.open_embedded_fictional_bundle_demo();
             }
             if ui.button("Go to Home").clicked() {
-                Self::set_nav_view(ui.ctx(), NavView::Home);
+                home = true;
             }
         });
+        if home {
+            let _ = self.open_screen(ui.ctx(), screens::HOME);
+        }
     }
 
-    /// Consistent native product chrome without browser, remote fonts,
-    /// external assets, telemetry, patient files or sidecar processes.
-    fn medorigin_chrome(&mut self, ui: &mut egui::Ui) {
-        let status = self.local_source_status();
+    /// Screens with no desktop adapter, or gated ones: state the truth,
+    /// offer only actions that really work.
+    fn status_ui(&mut self, ui: &mut egui::Ui, index: usize) {
         let p = *crate::theme::palette(ui.ctx().theme());
-        let mut clear = false;
-        egui::Panel::top("medorigin-native-product-header").show(ui, |ui| {
-            ui.add_space(crate::theme::space::XS);
+        let screen = &SCREENS[index];
+        let mut go = None;
+        Self::page_title(ui, screen.label, screen.purpose);
+        ui.set_max_width(760.0);
+        crate::theme::card(ui, |ui| {
             ui.horizontal(|ui| {
-                crate::theme::paint_mark(ui, 36.0);
-                ui.vertical(|ui| {
-                    ui.label(
-                        egui::RichText::new("MedOrigin")
-                            .size(crate::theme::size::TITLE + 2.0)
-                            .strong(),
-                    );
-                    ui.label(
-                        egui::RichText::new(format!("Local workspace · {status}"))
-                            .size(crate::theme::size::CAPTION)
-                            .color(p.text_muted),
-                    );
-                });
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    if ui
-                        .button("Clear local session")
-                        .on_hover_text("Remove all loaded fictional data from memory (Esc)")
-                        .clicked()
-                    {
-                        clear = true;
-                    }
-                    crate::theme::chip(ui, "Fictional data only · not for clinical use", p.warning);
-                });
+                section_title(ui, "In this desktop build");
+                match screen.tag {
+                    Some(Tag::Gated) => crate::theme::tag(ui, "Gated", p.pink_bg, p.pink_text),
+                    Some(Tag::Deferred) => crate::theme::tag(ui, "Deferred", p.badge, p.text_muted),
+                    _ => crate::theme::tag(ui, "Not connected yet", p.badge, p.text_secondary),
+                };
             });
-            ui.add_space(crate::theme::space::XS);
-        });
-        if ui.input(|input| input.key_pressed(egui::Key::F1)) {
-            self.settings_open = !self.settings_open;
-        }
-        if self.settings_open {
-            egui::Panel::right("medorigin-settings-help")
-                .resizable(false)
-                .exact_size(330.0)
-                .show(ui, |ui| self.settings_help_ui(ui, status));
-        }
-        if clear {
-            self.clear_fictional_output();
-        }
-    }
-
-    /// Settings, privacy facts, version and Report an issue. Nothing here
-    /// reads files, opens a connection or persists anything.
-    fn settings_help_ui(&mut self, ui: &mut egui::Ui, status: &'static str) {
-        let p = *crate::theme::palette(ui.ctx().theme());
-        egui::ScrollArea::vertical().show(ui, |ui| {
+            if screen.enabled() {
+                ui.label(
+                    "This screen has no desktop connection yet, so it shows no data. Nothing \
+                     here is simulated.",
+                );
+            } else {
+                ui.label(egui::RichText::new(screen.reason).color(p.pink_text));
+            }
             ui.add_space(crate::theme::space::SM);
-            ui.horizontal(|ui| {
-                ui.heading("Settings & help");
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    if ui.button("Close").clicked() {
-                        self.settings_open = false;
-                    }
-                });
-            });
-            ui.separator();
-            ui.label(egui::RichText::new("Appearance").strong());
+            ui.label(
+                egui::RichText::new(format!("Design contract: {}", screen.contract))
+                    .color(p.text_secondary),
+            );
+            ui.label(
+                egui::RichText::new(format!("Backed by: {}", screen.sources))
+                    .size(crate::theme::size::SMALL)
+                    .color(p.text_muted),
+            );
+        });
+        if screen.contract.contains("FHIR workspace") {
+            ui.add_space(crate::theme::space::MD);
+            if ui.button("Open FHIR workspace").clicked() {
+                go = Some(screens::FHIR_WORKSPACE);
+            }
+        }
+        if let Some(target) = go {
+            let _ = self.open_screen(ui.ctx(), target);
+        }
+    }
+
+    fn settings_ui(&mut self, ui: &mut egui::Ui) {
+        let p = *crate::theme::palette(ui.ctx().theme());
+        Self::page_title(ui, "Settings", "Appearance, keyboard and offline state.");
+        ui.set_max_width(760.0);
+        crate::theme::card(ui, |ui| {
+            section_title(ui, "Appearance");
             let mut pref = ui.ctx().options(|o| o.theme_preference);
             let before = pref;
             ui.horizontal(|ui| {
@@ -3696,36 +3972,84 @@ impl MedOriginNativePreview {
             if pref != before {
                 ui.ctx().set_theme(pref);
             }
-            ui.add_space(crate::theme::space::MD);
-            ui.label(egui::RichText::new("Privacy").strong());
-            for fact in [
-                "Runs entirely on this computer. The app makes no network connections.",
-                "Loaded data stays in memory for this session only and is not saved.",
-                "Only fictional, source-verified test records are accepted in this build.",
-                "No telemetry, analytics or automatic crash upload.",
-            ] {
-                ui.label(egui::RichText::new(format!("• {fact}")).color(p.text_muted));
-            }
-            ui.add_space(crate::theme::space::MD);
-            ui.label(egui::RichText::new("About").strong());
-            ui.label(format!("MedOrigin Desktop {}", crate::support::APP_VERSION));
-            ui.label(egui::RichText::new(crate::support::CHANNEL).color(p.text_muted));
-            ui.label(egui::RichText::new("Open source · Apache-2.0").color(p.text_muted));
-            ui.add_space(crate::theme::space::MD);
-            ui.label(egui::RichText::new("Report an issue").strong());
+        });
+        ui.add_space(crate::theme::space::MD);
+        crate::theme::card(ui, |ui| {
+            section_title(ui, "Keyboard");
+            egui::Grid::new("medorigin-shortcuts")
+                .num_columns(2)
+                .spacing([24.0, 6.0])
+                .show(ui, |ui| {
+                    for (keys, action) in [
+                        ("Ctrl K", "Search screens"),
+                        (
+                            "Ctrl 1 / 2 / 3",
+                            "Home / FHIR workspace / FHIR fixture inspector",
+                        ),
+                        ("Ctrl O", "Focus the file path on Home"),
+                        ("Esc", "Clear loaded fictional data"),
+                        ("F1", "Help & safety"),
+                        ("Tab / Shift Tab", "Move between controls"),
+                    ] {
+                        ui.label(egui::RichText::new(keys).monospace());
+                        ui.label(egui::RichText::new(action).color(p.text_secondary));
+                        ui.end_row();
+                    }
+                });
+        });
+        ui.add_space(crate::theme::space::MD);
+        crate::theme::card(ui, |ui| {
+            section_title(ui, "Offline state");
             ui.label(
                 egui::RichText::new(
-                    "Review the summary below. It contains no file paths, names or \
-                     health data. Nothing is sent automatically: copy it and paste it \
-                     into a new issue yourself.",
+                    "This build has no network features and saves nothing between sessions.",
                 )
-                .color(p.text_muted),
+                .color(p.text_secondary),
+            );
+        });
+    }
+
+    fn about_ui(&mut self, ui: &mut egui::Ui) {
+        let p = *crate::theme::palette(ui.ctx().theme());
+        Self::page_title(
+            ui,
+            "About & diagnostics",
+            "Build details and a report you can review before sharing.",
+        );
+        ui.set_max_width(760.0);
+        crate::theme::card(ui, |ui| {
+            ui.horizontal(|ui| {
+                crate::theme::mark(ui, 40.0);
+                ui.vertical(|ui| {
+                    ui.label(
+                        egui::RichText::new(format!(
+                            "MedOrigin Desktop {}",
+                            crate::support::APP_VERSION
+                        ))
+                        .strong(),
+                    );
+                    ui.label(egui::RichText::new(crate::support::CHANNEL).color(p.text_secondary));
+                    ui.label(egui::RichText::new("Open source · Apache-2.0").color(p.text_muted));
+                });
+            });
+        });
+        ui.add_space(crate::theme::space::MD);
+        crate::theme::card(ui, |ui| {
+            section_title(ui, "Report an issue");
+            ui.label(
+                egui::RichText::new(
+                    "Review the summary below. It contains no file paths, names or health \
+                     data. Nothing is sent automatically: copy it and paste it into a new \
+                     issue yourself.",
+                )
+                .color(p.text_secondary),
             );
             let appearance = match ui.ctx().theme() {
                 egui::Theme::Dark => "Dark",
                 egui::Theme::Light => "Light",
             };
-            let mut summary = crate::support::diagnostics_summary(status, appearance);
+            let mut summary =
+                crate::support::diagnostics_summary(self.local_source_status(), appearance);
             ui.add(
                 egui::TextEdit::multiline(&mut summary)
                     .font(egui::TextStyle::Monospace)
@@ -3751,12 +4075,60 @@ impl MedOriginNativePreview {
             );
             ui.label(
                 egui::RichText::new(
-                    "Never include real patient information, screenshots of health \
-                     records or workspace files in a public issue.",
+                    "Never include real patient information, screenshots of health records or \
+                     workspace files in a public issue.",
                 )
                 .color(p.warning),
             );
         });
+    }
+
+    fn help_ui(&mut self, ui: &mut egui::Ui) {
+        let p = *crate::theme::palette(ui.ctx().theme());
+        Self::page_title(
+            ui,
+            "Help & safety",
+            "What this build is for, and what it will never do.",
+        );
+        ui.set_max_width(760.0);
+        crate::theme::card(ui, |ui| {
+            section_title(ui, "Safety boundaries");
+            for fact in [
+                "Research and development use only. Not a medical device and not for clinical decisions.",
+                "Only fictional, synthetic records are accepted. Never open real patient data.",
+                "No network features: nothing is uploaded and no EHR is read or written.",
+                "Nothing is saved after you close the app.",
+                "Gated features stay disabled until they are separately qualified and authorized.",
+            ] {
+                ui.label(format!("\u{2022} {fact}"));
+            }
+        });
+        ui.add_space(crate::theme::space::MD);
+        crate::theme::card(ui, |ui| {
+            section_title(ui, "If something goes wrong");
+            ui.label(
+                egui::RichText::new(
+                    "Use About & diagnostics to copy a sanitized report for a GitHub issue. \
+                     Report security problems privately through the repository's security \
+                     advisories, never in a public issue.",
+                )
+                .color(p.text_secondary),
+            );
+        });
+    }
+
+    fn local_records_ui(&mut self, ui: &mut egui::Ui) {
+        if self.protected_audit.is_some() {
+            self.protected_audit_ui(ui);
+        } else if self.core_file_batch.is_some() {
+            self.core_file_batch_ui(ui);
+        } else if self.synthetic_bundle.is_some() {
+            self.synthetic_bundle_ui(ui);
+        } else if self.focused_workspace_visible {
+            self.focused_workspace_ui(ui);
+        } else {
+            self.records_empty_ui(ui);
+        }
     }
 }
 
@@ -3778,31 +4150,55 @@ impl eframe::App for MedOriginNativePreview {
         if ui.input(|input| input.key_pressed(egui::Key::Escape)) {
             self.clear_fictional_output();
         }
-        self.medorigin_chrome(ui);
-        let view = self.resolve_nav_view(ui.ctx());
-        self.navigation_rail(ui, view);
-        match view {
-            NavView::Home => {
-                egui::CentralPanel::default().show(ui, |ui| self.home_ui(ui));
+        let current = self.resolve_screen(ui.ctx());
+        self.sidebar(ui, current);
+        let current = self.resolve_screen(ui.ctx());
+        self.header(ui, current);
+        let route = SCREENS[current].route;
+        if matches!(route, Route::Records { .. }) && ui.ctx().content_rect().width() >= 1100.0 {
+            self.inspector(ui);
+        }
+        let page = egui::Frame::new()
+            .fill(crate::theme::palette(ui.ctx().theme()).canvas)
+            .inner_margin(egui::Margin::symmetric(28, 24));
+        match route {
+            Route::Home => {
+                egui::CentralPanel::default()
+                    .frame(page)
+                    .show(ui, |ui| self.home_ui(ui));
                 return;
             }
-            NavView::Records => {
-                egui::CentralPanel::default().show(ui, |ui| {
-                    if self.protected_audit.is_some() {
-                        self.protected_audit_ui(ui);
-                    } else if self.core_file_batch.is_some() {
-                        self.core_file_batch_ui(ui);
-                    } else if self.synthetic_bundle.is_some() {
-                        self.synthetic_bundle_ui(ui);
-                    } else if self.focused_workspace_visible {
-                        self.focused_workspace_ui(ui);
-                    } else {
-                        self.records_empty_ui(ui);
-                    }
-                });
+            Route::Records { .. } => {
+                egui::CentralPanel::default()
+                    .frame(page)
+                    .show(ui, |ui| self.local_records_ui(ui));
                 return;
             }
-            NavView::Developer => {}
+            Route::Settings => {
+                egui::CentralPanel::default()
+                    .frame(page)
+                    .show(ui, |ui| self.settings_ui(ui));
+                return;
+            }
+            Route::About => {
+                egui::CentralPanel::default()
+                    .frame(page)
+                    .show(ui, |ui| self.about_ui(ui));
+                return;
+            }
+            Route::Help => {
+                egui::CentralPanel::default()
+                    .frame(page)
+                    .show(ui, |ui| self.help_ui(ui));
+                return;
+            }
+            Route::NotConnected | Route::Unavailable => {
+                egui::CentralPanel::default()
+                    .frame(page)
+                    .show(ui, |ui| self.status_ui(ui, current));
+                return;
+            }
+            Route::FixtureInspector => {}
         }
         egui::CentralPanel::default().show(ui, |ui| {
             ui.heading("MedOrigin — Native Rust Experiment");
@@ -4474,43 +4870,88 @@ mod tests {
 
     #[test]
     fn navigation_starts_on_home_and_jumps_to_records_only_when_records_open() {
-        let first = next_nav_state(None, false, NavView::Home);
-        assert_eq!(first.view, NavView::Home);
+        let first = next_nav_state(None, false, screens::HOME);
+        assert_eq!(first.screen, screens::HOME);
         let chosen = NavState {
-            view: NavView::Developer,
+            screen: screens::FIXTURE_INSPECTOR,
             ..first
         };
         assert_eq!(
-            next_nav_state(Some(chosen), false, NavView::Home).view,
-            NavView::Developer
+            next_nav_state(Some(chosen), false, screens::HOME).screen,
+            screens::FIXTURE_INSPECTOR
         );
-        let opened = next_nav_state(Some(chosen), true, NavView::Home);
-        assert_eq!(opened.view, NavView::Records);
+        let opened = next_nav_state(Some(chosen), true, screens::HOME);
+        assert_eq!(opened.screen, screens::FHIR_WORKSPACE);
         let user_left = NavState {
-            view: NavView::Home,
+            screen: screens::HOME,
             ..opened
         };
         assert_eq!(
-            next_nav_state(Some(user_left), true, NavView::Home).view,
-            NavView::Home,
+            next_nav_state(Some(user_left), true, screens::HOME).screen,
+            screens::HOME,
             "records staying open must not pull the user back"
         );
-        let cleared = next_nav_state(Some(opened), false, NavView::Home);
-        assert_eq!(cleared.view, NavView::Records, "empty state, not a jump");
+        let cleared = next_nav_state(Some(opened), false, screens::HOME);
+        assert_eq!(
+            cleared.screen,
+            screens::FHIR_WORKSPACE,
+            "empty state, not a jump"
+        );
+        let encounters = SCREENS
+            .iter()
+            .position(|s| s.label == "Encounters")
+            .unwrap();
+        let on_encounters = NavState {
+            screen: encounters,
+            records_open: false,
+        };
+        assert_eq!(
+            next_nav_state(Some(on_encounters), true, screens::HOME).screen,
+            encounters,
+            "opening records keeps an already chosen records screen"
+        );
     }
 
     #[test]
-    fn launch_mode_selects_the_matching_first_view() {
+    fn launch_mode_selects_the_matching_first_screen() {
         assert_eq!(
-            MedOriginNativePreview::default().initial_nav_view(),
-            NavView::Home
+            MedOriginNativePreview::default().initial_screen(),
+            screens::HOME
         );
         let bundle = include_bytes!("../fixtures/core/synthetic-multipatient-fhir-bundle.json");
         let app = MedOriginNativePreview::from_one_time_synthetic_bundle_stdin(bundle).unwrap();
-        assert_eq!(app.initial_nav_view(), NavView::Records);
+        assert_eq!(app.initial_screen(), screens::FHIR_WORKSPACE);
         let known = include_bytes!("../fixtures/core/known-structure-definition.json");
         let app = MedOriginNativePreview::from_one_time_fictional_core_stdin(known).unwrap();
-        assert_eq!(app.initial_nav_view(), NavView::Developer);
+        assert_eq!(app.initial_screen(), screens::FIXTURE_INSPECTOR);
+    }
+
+    #[test]
+    fn gated_screens_never_open_and_records_screens_apply_their_facet() {
+        let ctx = egui::Context::default();
+        let mut app = MedOriginNativePreview::default();
+        for (index, screen) in SCREENS.iter().enumerate() {
+            if !screen.enabled() {
+                assert_eq!(
+                    app.open_screen(&ctx, index),
+                    Err("screen_gated"),
+                    "{}",
+                    screen.label
+                );
+            }
+        }
+        assert_eq!(app.resolve_screen(&ctx), screens::HOME);
+        app.open_embedded_fictional_bundle_demo().unwrap();
+        let encounters = SCREENS
+            .iter()
+            .position(|s| s.label == "Encounters")
+            .unwrap();
+        app.open_screen(&ctx, encounters).unwrap();
+        assert_eq!(app.synthetic_bundle_type, "Encounter");
+        assert_eq!(app.resolve_screen(&ctx), encounters);
+        app.open_screen(&ctx, screens::FHIR_WORKSPACE).unwrap();
+        assert_eq!(app.synthetic_bundle_type, "All");
+        assert_eq!(app.open_screen(&ctx, 99), Err("unknown_screen"));
     }
 
     #[test]

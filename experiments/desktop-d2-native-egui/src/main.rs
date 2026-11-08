@@ -230,8 +230,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let app = make_app(&args, io::stdin())?;
     let options = eframe::NativeOptions {
         viewport: eframe::egui::ViewportBuilder::default()
-            .with_inner_size([920.0, 600.0])
-            .with_min_inner_size([700.0, 480.0]),
+            .with_inner_size([1280.0, 800.0])
+            .with_min_inner_size([900.0, 560.0])
+            .with_icon(eframe::egui::IconData {
+                rgba: medorigin_desktop_d2_native_egui::theme::APP_ICON_RGBA.to_vec(),
+                width: medorigin_desktop_d2_native_egui::theme::APP_ICON_PX,
+                height: medorigin_desktop_d2_native_egui::theme::APP_ICON_PX,
+            }),
         ..Default::default()
     };
     eframe::run_native(
@@ -242,7 +247,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             // No remote fonts, telemetry, WebView or Core process launch.
             medorigin_desktop_d2_native_egui::theme::install(
                 &cc.egui_ctx,
-                eframe::egui::ThemePreference::Dark,
+                eframe::egui::ThemePreference::System,
             );
             Ok(Box::new(app))
         }),

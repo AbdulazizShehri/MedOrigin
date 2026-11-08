@@ -1,6 +1,7 @@
 """Static, dependency-free verification of the Inkling tooling handoff."""
-from pathlib import Path
+
 import re
+from pathlib import Path
 
 root = Path(__file__).resolve().parent
 required = {
@@ -42,7 +43,11 @@ for filename, terms in required.items():
 for filename in ("README.md", "INKLING_HANDOFF.md"):
     text = (root / filename).read_text(encoding="utf-8")
     for relative in re.findall(r"\]\(([^)]+)\)", text):
-        if relative.startswith("http") or relative.startswith("#") or "/" in relative and relative.startswith("sandbox:"):
+        if (
+            relative.startswith("http")
+            or relative.startswith("#")
+            or ("/" in relative and relative.startswith("sandbox:"))
+        ):
             continue
         candidate = root / relative.split("#", 1)[0]
         assert candidate.is_file(), f"{filename}: missing local link {relative}"

@@ -5,6 +5,7 @@ pub mod core_provenance;
 pub mod encrypted_readback;
 pub mod local_bundle_import;
 pub mod protected_audit;
+pub mod screens;
 pub mod session;
 pub mod support;
 pub mod synthetic_bundle;
