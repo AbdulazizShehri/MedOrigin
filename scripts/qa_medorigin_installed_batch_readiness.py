@@ -26,8 +26,7 @@ def _two() -> list[dict[str, Any]]:
     first["entry"][1]["resource"]["name"] = [{"text": _SECRET}]
     second = copy.deepcopy(first)
     substitutions = {
-        f"urn:uuid:00000000-0000-4000-8000-{i:012d}":
-        f"urn:uuid:00000000-0000-4000-8000-{i+3:012d}"
+        f"urn:uuid:00000000-0000-4000-8000-{i:012d}": f"urn:uuid:00000000-0000-4000-8000-{i + 3:012d}"  # noqa: E501
         for i in (1, 2, 3)
     }
     for entry in second["entry"]:
@@ -60,8 +59,7 @@ def _files(root: Path, docs: list[dict[str, Any]]) -> list[Path]:
 
 def _call(cli: Path, root: Path, args: list[str]) -> subprocess.CompletedProcess[str]:
     result = subprocess.run(
-        [str(cli), "fhir", *args],
-        cwd=root, capture_output=True, text=True, check=False, timeout=75
+        [str(cli), "fhir", *args], cwd=root, capture_output=True, text=True, check=False, timeout=75
     )
     visible = result.stdout + result.stderr
     if (
@@ -98,11 +96,17 @@ def _positive(result: subprocess.CompletedProcess[str], *, official: bool) -> di
     ):
         raise AssertionError("installed Core readiness aggregate inconsistent")
     for key in (
-        "source_filenames_included", "patient_identity_included",
-        "precise_timestamps_included", "cross_source_patient_join_performed",
-        "payload_included", "workspace_allocated", "output_persisted",
-        "network_access_performed", "fhir_r4_conformance_validated",
-        "clinical_use_authorized", "publication_authorized",
+        "source_filenames_included",
+        "patient_identity_included",
+        "precise_timestamps_included",
+        "cross_source_patient_join_performed",
+        "payload_included",
+        "workspace_allocated",
+        "output_persisted",
+        "network_access_performed",
+        "fhir_r4_conformance_validated",
+        "clinical_use_authorized",
+        "publication_authorized",
     ):
         if report.get(key) is not False:
             raise AssertionError("installed Core readiness asserted forbidden authority")
@@ -128,7 +132,9 @@ def _negative(result: subprocess.CompletedProcess[str], message: str) -> None:
 
 def _triage(
     result: subprocess.CompletedProcess[str],
-    *, stage: str | None = None, reason: str | None = None,
+    *,
+    stage: str | None = None,
+    reason: str | None = None,
 ) -> dict:
     if result.returncode != 2 or result.stderr:
         raise AssertionError("installed Core failed truthful read-only file triage")
@@ -146,11 +152,17 @@ def _triage(
     ):
         raise AssertionError("actual installed Core triage contract drifted")
     for flag in (
-        "source_filenames_included", "patient_identity_included",
-        "precise_timestamps_included", "payload_included", "workspace_allocated",
-        "output_persisted", "network_access_performed",
-        "cross_source_patient_join_performed", "official_r4_schema_checked",
-        "fhir_r4_conformance_validated", "clinical_use_authorized",
+        "source_filenames_included",
+        "patient_identity_included",
+        "precise_timestamps_included",
+        "payload_included",
+        "workspace_allocated",
+        "output_persisted",
+        "network_access_performed",
+        "cross_source_patient_join_performed",
+        "official_r4_schema_checked",
+        "fhir_r4_conformance_validated",
+        "clinical_use_authorized",
         "publication_authorized",
     ):
         if report.get(flag) is not False:
@@ -208,8 +220,10 @@ def main(argv: list[str] | None = None) -> int:
         sources = _files(root, _two())
         plain = ["file-batch-readiness", "--synthetic-only", *(str(p) for p in sources)]
         official = [
-            "file-batch-readiness", "--synthetic-only",
-            "--offline-r4-schema", str(args.official_r4_schema),
+            "file-batch-readiness",
+            "--synthetic-only",
+            "--offline-r4-schema",
+            str(args.official_r4_schema),
             *(str(p) for p in sources),
         ]
         first = _positive(_call(clis[0], root, plain), official=False)
@@ -239,25 +253,41 @@ def main(argv: list[str] | None = None) -> int:
         invalid = _files(root, broken)
         for cli in clis:
             _triage(
-                _call(cli, root, [
-                    "file-batch-triage", "--synthetic-only",
-                    *(str(p) for p in invalid),
-                ]),
+                _call(
+                    cli,
+                    root,
+                    [
+                        "file-batch-triage",
+                        "--synthetic-only",
+                        *(str(p) for p in invalid),
+                    ],
+                ),
                 stage="timeline",
                 reason="timeline_encounter_period_reversed",
             )
             _negative(
-                _call(cli, root, [
-                    "file-batch-readiness", "--synthetic-only",
-                    *(str(p) for p in invalid),
-                ]),
+                _call(
+                    cli,
+                    root,
+                    [
+                        "file-batch-readiness",
+                        "--synthetic-only",
+                        *(str(p) for p in invalid),
+                    ],
+                ),
                 _ALLOWED_FAILURE,
             )
             _negative(
-                _call(cli, root, [
-                    "file-batch-encrypted-demo", "--synthetic-only", "--ephemeral-demo",
-                    *(str(p) for p in invalid),
-                ]),
+                _call(
+                    cli,
+                    root,
+                    [
+                        "file-batch-encrypted-demo",
+                        "--synthetic-only",
+                        "--ephemeral-demo",
+                        *(str(p) for p in invalid),
+                    ],
+                ),
                 "file batch demo refused: verified_encrypted_fictional_batch_refused",
             )
             _negative(
@@ -271,10 +301,15 @@ def main(argv: list[str] | None = None) -> int:
         invalid_files = _files(root, invalid_rel)
         for cli in clis:
             _triage(
-                _call(cli, root, [
-                    "file-batch-triage", "--synthetic-only",
-                    *(str(p) for p in invalid_files),
-                ]),
+                _call(
+                    cli,
+                    root,
+                    [
+                        "file-batch-triage",
+                        "--synthetic-only",
+                        *(str(p) for p in invalid_files),
+                    ],
+                ),
                 stage="local_relationship",
                 reason="observation_status_not_in_r4_required_codes",
             )
@@ -282,10 +317,15 @@ def main(argv: list[str] | None = None) -> int:
         unmarked = _files(root, invalid_rel)
         for cli in clis:
             _negative(
-                _call(cli, root, [
-                    "file-batch-triage", "--synthetic-only",
-                    *(str(p) for p in unmarked),
-                ]),
+                _call(
+                    cli,
+                    root,
+                    [
+                        "file-batch-triage",
+                        "--synthetic-only",
+                        *(str(p) for p in unmarked),
+                    ],
+                ),
                 "file triage refused: unqualified_batch_or_marker",
             )
         if {p.name for p in root.iterdir()} != {p.name for p in sources}:

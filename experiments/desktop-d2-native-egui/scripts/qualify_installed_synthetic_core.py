@@ -5,8 +5,11 @@ Fixed two fictional FHIR cases, no arbitrary clinical/user inputs or GUI launch.
 A SOURCE ATTESTATION harness and deprecation-limited local sandbox proof;
 NOT an approved installed Core product launcher or release security boundary.
 """
+
 from __future__ import annotations
 
+# fmt: off
+# Formatting is frozen: tests assert exact argument-list source text in this file.
 import argparse
 import base64
 import csv
@@ -14,14 +17,14 @@ import hashlib
 import io
 import json
 import os
-from pathlib import Path
 import platform
 import re
 import stat
 import subprocess
 import sys
-from tempfile import TemporaryDirectory
 import zipfile
+from pathlib import Path
+from tempfile import TemporaryDirectory
 
 import qualify_sandboxed_synthetic_core as base
 
@@ -159,7 +162,7 @@ def attest_offline_wheel_and_install(
                 raise ValueError("installed_core_source_symlink_refused")
             if not original.is_file() or not installed.is_file():
                 raise ValueError("installed_core_source_file_missing")
-            if original.read_bytes() != archive.read(relative) or installed.read_bytes() != archive.read(relative):
+            if original.read_bytes() != archive.read(relative) or installed.read_bytes() != archive.read(relative):  # noqa: E501
                 raise ValueError("installed_core_wheel_or_installed_source_bytes_changed")
         records = [n for n in names if n.endswith(".dist-info/RECORD")]
         if records != ["medscale-0.3.0.dist-info/RECORD"]:
@@ -230,7 +233,7 @@ def qualify(core: Path, wheel: Path, venv: Path, python: Path,
             report = proc.stdout[:-1]
             base.check_core_report(report, base.PINNED_CASES[label][0])
             artifacts = list(output_dir.rglob("report.json"))
-            if len(artifacts) != 1 or artifacts[0].is_symlink() or artifacts[0].read_bytes() != report:
+            if len(artifacts) != 1 or artifacts[0].is_symlink() or artifacts[0].read_bytes() != report:  # noqa: E501
                 raise ValueError("installed_core_report_persistence_or_provenance_mismatch")
             accepted = base.run_sandboxed(profile, [str(rust)], work, stdin=report)
             expected = (

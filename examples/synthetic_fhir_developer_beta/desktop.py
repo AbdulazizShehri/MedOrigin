@@ -526,8 +526,7 @@ class Desktop:
                     safe = result["fhir"]
                     self.status.set("NOT VALIDATED - PROVENANCE VERIFIED")
                     self.result_line.set(
-                        "Local source provenance reproduced. "
-                        "FHIR R4 validation was not performed."
+                        "Local source provenance reproduced. FHIR R4 validation was not performed."
                     )
                     self.report_hash.set(safe["report_sha256"])
                     self.fixture_hash.set(safe["fixture_sha256"])

@@ -5,14 +5,17 @@ Private nonclinical only. Uses a source-pinned checkout, fixed CLI flags,
 and temporary output with no resource payload. Windows network egress is NOT
 OS-blocked here, and this is NOT an authenticated in-GUI Core worker.
 """
+
 from __future__ import annotations
 
+# fmt: off
+# Formatting is frozen: tests assert exact argument-list source text in this file.
 import argparse
 import hashlib
 import os
-from pathlib import Path
 import subprocess
 import sys
+from pathlib import Path
 from tempfile import TemporaryDirectory
 
 CORE_SHA = "0351b667ec910480fd61c30f18cf3bb0dd0ae842"
@@ -117,10 +120,10 @@ def qualify(args: argparse.Namespace) -> None:
     if not args.site.is_dir() or args.site.is_symlink():
         raise ValueError("system_installed_crypto_site_directory_refused")
     verify_pinned_core(core)
-    source_receipt = Path(__file__).resolve().parent.parent / "fixtures/core/workspace-ephemeral-demo.json"
+    source_receipt = Path(__file__).resolve().parent.parent / "fixtures/core/workspace-ephemeral-demo.json"  # noqa: E501
     if source_receipt.is_symlink() or digest(source_receipt) != RECEIPT_SHA:
         raise ValueError("source_compiled_encrypted_workspace_receipt_modified")
-    observer = Path(__file__).resolve().parent.parent / "tests/windows-encrypted-workspace-native-uia.ps1"
+    observer = Path(__file__).resolve().parent.parent / "tests/windows-encrypted-workspace-native-uia.ps1"  # noqa: E501
     if observer.is_symlink() or not observer.is_file():
         raise ValueError("reviewed_windows_native_uia_observer_missing")
     with TemporaryDirectory(prefix="medorigin-windows-encrypted-core-qa-") as tmp:

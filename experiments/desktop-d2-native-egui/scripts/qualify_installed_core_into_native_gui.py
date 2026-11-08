@@ -4,13 +4,14 @@
 Only two fixed fictional cases. Never enables PHI, live clinical import,
 patient files, D2 subprocess spawning, network access or public signing.
 """
+
 from __future__ import annotations
 
 import argparse
-from pathlib import Path
 import platform
 import subprocess
 import sys
+from pathlib import Path
 from tempfile import TemporaryDirectory
 
 import qualify_installed_synthetic_core as installed
@@ -19,8 +20,9 @@ import qualify_sandboxed_synthetic_core as base
 SUCCESS = "D2_INSTALLED_SANDBOXED_CORE_TO_ACTUAL_NATIVE_GUI_2_OF_2_PASS_NOT_CLINICAL"
 
 
-def qualify_gui(core: Path, wheel: Path, venv: Path, venv_python: Path,
-                python_sha: str, gui: Path, gui_sha: str) -> None:
+def qualify_gui(
+    core: Path, wheel: Path, venv: Path, venv_python: Path, python_sha: str, gui: Path, gui_sha: str
+) -> None:
     if sys.platform != "darwin" or platform.machine().lower() != "arm64":
         raise ValueError("authorized_apple_silicon_native_gui_required")
     site = installed.attest_offline_wheel_and_install(core, wheel, venv)
@@ -47,18 +49,35 @@ def qualify_gui(core: Path, wheel: Path, venv: Path, venv_python: Path,
             inp.write_bytes(source_input)
             output_dir = work / (label + "-output")
             output_dir.mkdir(mode=0o700)
-            real_core = base.run_sandboxed(profile, [
-                str(python), "-I", "-S", "-B", "-c", installed.INSTALLED_CODE,
-                str(site), "validate", str(inp), "--created-at", base.TIMESTAMP,
-                "--output-dir", str(output_dir),
-            ], work)
+            real_core = base.run_sandboxed(
+                profile,
+                [
+                    str(python),
+                    "-I",
+                    "-S",
+                    "-B",
+                    "-c",
+                    installed.INSTALLED_CODE,
+                    str(site),
+                    "validate",
+                    str(inp),
+                    "--created-at",
+                    base.TIMESTAMP,
+                    "--output-dir",
+                    str(output_dir),
+                ],
+                work,
+            )
             if real_core.returncode != 2 or not real_core.stdout.endswith(b"\n\n"):
                 raise ValueError("installed_core_cli_not_provenance_only")
             report = real_core.stdout[:-1]
             base.check_core_report(report, base.PINNED_CASES[label][0])
             source_files = list(output_dir.rglob("report.json"))
-            if (len(source_files) != 1 or source_files[0].is_symlink()
-                    or source_files[0].read_bytes() != report):
+            if (
+                len(source_files) != 1
+                or source_files[0].is_symlink()
+                or source_files[0].read_bytes() != report
+            ):
                 raise ValueError("installed_core_report_persistence_mismatch")
 
             # The GUI is deliberately NOT allowed to spawn a Python worker.
@@ -83,11 +102,14 @@ def qualify_gui(core: Path, wheel: Path, venv: Path, venv_python: Path,
                 receipt_hash = base.sha256(report)
                 observed = subprocess.run(
                     [str(swift), str(ax_test), str(process.pid), receipt_hash],
-                    capture_output=True, timeout=35, check=False,
+                    capture_output=True,
+                    timeout=35,
+                    check=False,
                 )
                 expected = (
                     "MACOS_INSTALLED_CORE_STDIN_GUI_AX_EXACT_SHA_NOT_VALIDATED_PASS "
-                    + receipt_hash + "\n"
+                    + receipt_hash
+                    + "\n"
                 ).encode()
                 if observed.returncode != 0 or observed.stdout != expected:
                     raise ValueError("real_native_gui_source_report_ax_refused")
@@ -122,8 +144,13 @@ if __name__ == "__main__":
     args = parser.parse_args()
     try:
         qualify_gui(
-            args.core_source, args.wheel, args.venv, args.venv_python,
-            args.python_sha256, args.d2_gui, args.d2_gui_sha256,
+            args.core_source,
+            args.wheel,
+            args.venv,
+            args.venv_python,
+            args.python_sha256,
+            args.d2_gui,
+            args.d2_gui_sha256,
         )
     except (OSError, ValueError, subprocess.SubprocessError) as error:
         print("D2_REAL_INSTALLED_CORE_NATIVE_GUI_NO_GO:" + str(error), file=sys.stderr)

@@ -84,14 +84,14 @@ class PrivateWindowsUserSetupTests(unittest.TestCase):
         with (
             patch.object(setup, "_real_path"),
             patch.object(job_contract, "_win32", return_value=api),
-        ):
-            with self.assertRaisesRegex(
+            self.assertRaisesRegex(
                 ValueError, "windows_iexpress_builder_timed_out_subtree_terminated"
-            ):
-                setup._run_iexpress(
-                    self.work / "fictional-only-test.sed",
-                    self.work / "fictional-only-test.exe",
-                )
+            ),
+        ):
+            setup._run_iexpress(
+                self.work / "fictional-only-test.sed",
+                self.work / "fictional-only-test.exe",
+            )
         self.assertEqual(api.WaitForSingleObject.call_args.args[1], 240_000)
         api.CloseHandle.assert_called_once_with(owned_job)
         api.TerminateProcess.assert_not_called()

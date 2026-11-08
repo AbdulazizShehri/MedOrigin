@@ -90,8 +90,11 @@ def run_one(cli: Path, directory: Path, label: str) -> dict[str, Any]:
     expected_input = json.loads(GOOD.read_text(encoding="utf-8"))
     expected_input_hash = hashlib.sha256(
         json.dumps(
-            expected_input, sort_keys=True, ensure_ascii=False,
-            separators=(",", ":"), allow_nan=False
+            expected_input,
+            sort_keys=True,
+            ensure_ascii=False,
+            separators=(",", ":"),
+            allow_nan=False,
         ).encode("utf-8")
     ).hexdigest()
     expected_report = {

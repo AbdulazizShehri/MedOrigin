@@ -1,14 +1,15 @@
 """No-network fail-closed source tests for official HL7 FHIR R4 Schema QA."""
+
 from __future__ import annotations
 
 import json
-from pathlib import Path
 import sys
-from tempfile import TemporaryDirectory
 import types
 import unittest
-from unittest.mock import patch
 import zipfile
+from pathlib import Path
+from tempfile import TemporaryDirectory
+from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import qualify_offline_fhir_r4_schema as r4
@@ -16,10 +17,14 @@ import qualify_offline_fhir_r4_schema as r4
 
 class PinnedFHIRR4SchemaTests(unittest.TestCase):
     def schema_fixture(self) -> bytes:
-        return json.dumps({
-            "$schema": r4.SCHEMA_DRAFT, "id": r4.SCHEMA_ID,
-            "definitions": {"Patient": {"type": "object"}},
-        }, sort_keys=True).encode("utf-8")
+        return json.dumps(
+            {
+                "$schema": r4.SCHEMA_DRAFT,
+                "id": r4.SCHEMA_ID,
+                "definitions": {"Patient": {"type": "object"}},
+            },
+            sort_keys=True,
+        ).encode("utf-8")
 
     def fake_archive(self, folder: Path, *, extra_member: bool = False) -> Path:
         archive = folder / "fixture.zip"
@@ -43,7 +48,7 @@ class PinnedFHIRR4SchemaTests(unittest.TestCase):
     def test_unreviewed_zip_bytes_and_members_are_refused(self):
         with TemporaryDirectory() as tmp:
             path = self.fake_archive(Path(tmp), extra_member=True)
-            with (
+            with (  # noqa: SIM117
                 patch.object(r4, "R4_ZIP_SHA256", r4.hash_bytes(path.read_bytes())),
                 patch.object(r4, "R4_SCHEMA_SIZE", len(self.schema_fixture())),
                 patch.object(r4, "EXPECTED_DEFINITIONS", 1),
@@ -78,8 +83,10 @@ class PinnedFHIRR4SchemaTests(unittest.TestCase):
             @staticmethod
             def check_schema(schema):
                 assert schema == {"synthetic": "schema"}
+
             def __init__(self, schema):
                 self.schema = schema
+
             def iter_errors(self, data):
                 if data in r4.NEGATIVES.values():
                     return iter([ValueError("fictional invalid control")])
@@ -107,13 +114,16 @@ class PinnedFHIRR4SchemaTests(unittest.TestCase):
             @staticmethod
             def check_schema(schema):
                 pass
+
             def __init__(self, schema):
                 pass
+
             def iter_errors(self, data):
                 return iter([])
+
         fake_module = types.ModuleType("jsonschema")
         fake_module.Draft6Validator = BrokenDraft
-        with (
+        with (  # noqa: SIM117
             patch.dict(sys.modules, {"jsonschema": fake_module}),
             patch("importlib.metadata.version", return_value=r4.JSONSCHEMA_VERSION),
         ):
@@ -123,7 +133,7 @@ class PinnedFHIRR4SchemaTests(unittest.TestCase):
     def test_wrong_validator_package_version_fails_closed(self):
         module = types.ModuleType("jsonschema")
         module.Draft6Validator = object
-        with (
+        with (  # noqa: SIM117
             patch.dict(sys.modules, {"jsonschema": module}),
             patch("importlib.metadata.version", return_value="0.0.0"),
         ):

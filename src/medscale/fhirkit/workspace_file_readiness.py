@@ -26,7 +26,7 @@ def assess_fictional_file_batch_readiness(
     synthetic_only: bool = False,
     offline_r4_schema: Path | None = None,
 ) -> dict[str, object]:
-    """Preview 2–4 invented sources using the SAME real import admission gate.
+    """Preview 2-4 invented sources using the SAME real import admission gate.
 
     The time-preview result is per source, never a cross-patient join. The
     optional source-pinned official R4 JSON Schema is structural ONLY.
@@ -34,13 +34,9 @@ def assess_fictional_file_batch_readiness(
     complete terminology, profiles, FHIRPath and clinical use are excluded.
     """
     if synthetic_only is not True:
-        raise SyntheticFileBatchReadinessError(
-            "fictional_readiness_synthetic_attestation_required"
-        )
+        raise SyntheticFileBatchReadinessError("fictional_readiness_synthetic_attestation_required")
     if offline_r4_schema is not None and not isinstance(offline_r4_schema, Path):
-        raise SyntheticFileBatchReadinessError(
-            "fictional_readiness_schema_path_refused"
-        )
+        raise SyntheticFileBatchReadinessError("fictional_readiness_schema_path_refused")
     try:
         snapshots, proofs = _freeze_and_preflight(payloads)
     except Exception as exc:
@@ -57,12 +53,9 @@ def assess_fictional_file_batch_readiness(
                 require_official_r4_structural_preflight,
             )
 
-            gate = require_official_r4_structural_preflight(
-                snapshots, proofs, offline_r4_schema
-            )
+            gate = require_official_r4_structural_preflight(snapshots, proofs, offline_r4_schema)
             if (
-                gate.get("status")
-                != "OFFICIAL_R4_JSON_SCHEMA_STRUCTURE_ONLY_NOT_VALIDATED"
+                gate.get("status") != "OFFICIAL_R4_JSON_SCHEMA_STRUCTURE_ONLY_NOT_VALIDATED"
                 or gate.get("structural_invalid_count") != 0
                 or gate.get("structural_not_validated_count") != len(snapshots)
                 or gate.get("clinical_use_authorized") is not False
@@ -80,23 +73,15 @@ def assess_fictional_file_batch_readiness(
     total_dated = 0
     total_undated = 0
     total_resources = 0
-    for ordinal, (snapshot, preflight) in enumerate(
-        zip(snapshots, proofs, strict=True), 1
-    ):
+    for ordinal, (snapshot, preflight) in enumerate(zip(snapshots, proofs, strict=True), 1):
         try:
             events, patient_count, undated = _events(snapshot, None)
         except SyntheticTimelineError as exc:
             # Also checked in _freeze_and_preflight, but fail closed on any
             # unexpected divergence between the two preview passes.
-            raise SyntheticFileBatchReadinessError(
-                "fictional_readiness_timeline_refused"
-            ) from exc
+            raise SyntheticFileBatchReadinessError("fictional_readiness_timeline_refused") from exc
         dated = len(events) - undated
-        days = [
-            event["day_utc"]
-            for event in events
-            if event["date_available"] is True
-        ]
+        days = [event["day_utc"] for event in events if event["date_available"] is True]
         resource_counts = snapshot["entry"]
         expected_events = sum(
             item["resource"]["resourceType"] in ("Encounter", "Observation")
@@ -111,14 +96,10 @@ def assess_fictional_file_batch_readiness(
             or len(days) != dated
             or any(type(day) is not str or len(day) != 10 for day in days)
         ):
-            raise SyntheticFileBatchReadinessError(
-                "fictional_readiness_event_contract_refused"
-            )
+            raise SyntheticFileBatchReadinessError("fictional_readiness_event_contract_refused")
         count = preflight["resource_count"]
         if type(count) is not int or count != len(snapshot["entry"]):
-            raise SyntheticFileBatchReadinessError(
-                "fictional_readiness_resource_contract_refused"
-            )
+            raise SyntheticFileBatchReadinessError("fictional_readiness_resource_contract_refused")
         day_range = sorted(days)
         source_summaries.append(
             {
@@ -137,9 +118,7 @@ def assess_fictional_file_batch_readiness(
         total_dated += dated
         total_undated += undated
     if total_events != total_dated + total_undated:
-        raise SyntheticFileBatchReadinessError(
-            "fictional_readiness_totals_refused"
-        )
+        raise SyntheticFileBatchReadinessError("fictional_readiness_totals_refused")
     return {
         "schema": "medorigin-core-fictional-file-batch-readiness/v1",
         "status": "SYNTHETIC_READ_ONLY_IMPORT_READINESS_NOT_VALIDATED",
@@ -171,14 +150,17 @@ def fictional_file_batch_readiness_json(
     offline_r4_schema: Path | None = None,
 ) -> str:
     """Machine-readable redacted dry-run result, never original JSON."""
-    return json.dumps(
-        assess_fictional_file_batch_readiness(
-            payloads,
-            synthetic_only=synthetic_only,
-            offline_r4_schema=offline_r4_schema,
-        ),
-        sort_keys=True,
-        separators=(",", ":"),
-        ensure_ascii=True,
-        allow_nan=False,
-    ) + "\n"
+    return (
+        json.dumps(
+            assess_fictional_file_batch_readiness(
+                payloads,
+                synthetic_only=synthetic_only,
+                offline_r4_schema=offline_r4_schema,
+            ),
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=True,
+            allow_nan=False,
+        )
+        + "\n"
+    )

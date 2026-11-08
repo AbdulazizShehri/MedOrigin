@@ -13,7 +13,6 @@ import shutil
 from pathlib import Path
 
 import pytest
-
 from scripts import qualify_medorigin_developer_beta as qualifier
 
 
@@ -32,7 +31,8 @@ def _synthetic_checkout(root: Path, *, forged_success: bool = False) -> Path:
         / "core_truth_preview.py"
     )
     shutil.copyfile(actual, example / "core_truth_preview.py")
-    checker = '''
+    checker = (
+        """
 def qualify(clis, *, interpreters):
     if len(clis) != 2 or len(interpreters) != 2:
         raise ValueError("two independently selected test interpreters required")
@@ -44,14 +44,15 @@ def qualify(clis, *, interpreters):
         "unknown_report_sha256": "b" * 64,
         "fhir_conformance_validated": False,
         "publication_authorized": False,
-        "clinical_use_authorized": ''' + ("True" if forged_success else "False") + ''',
+        "clinical_use_authorized": """
+        + ("True" if forged_success else "False")
+        + """,
         "independent_security_review_complete": False,
         "prepublication_rehearsal_qualified": False,
     }
-'''
-    (scripts / "check_installed_core_fhir_provenance.py").write_text(
-        checker, encoding="utf-8"
+"""
     )
+    (scripts / "check_installed_core_fhir_provenance.py").write_text(checker, encoding="utf-8")
     return checkout
 
 
@@ -205,15 +206,22 @@ def test_old_beta_lane_cannot_silently_export_provenance_only_evidence(
 
 
 def test_public_cli_rejects_export_flag_without_core_negative_truth_opt_in(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str],
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
 ) -> None:
     args = [
-        "--checkout", str(tmp_path),
-        "--wheel", str(tmp_path / "not-built.whl"),
-        "--sdist", str(tmp_path / "not-built.tar.gz"),
-        "--python311", str(tmp_path / "python311"),
-        "--python312", str(tmp_path / "python312"),
-        "--evidence-dir", str(tmp_path / "output"),
+        "--checkout",
+        str(tmp_path),
+        "--wheel",
+        str(tmp_path / "not-built.whl"),
+        "--sdist",
+        str(tmp_path / "not-built.tar.gz"),
+        "--python311",
+        str(tmp_path / "python311"),
+        "--python312",
+        str(tmp_path / "python312"),
+        "--evidence-dir",
+        str(tmp_path / "output"),
     ]
     assert qualifier.main(args) == 2
     output = capsys.readouterr()

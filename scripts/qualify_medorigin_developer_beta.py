@@ -184,12 +184,10 @@ def _promote_core_preview(
         {item.name for item in staged.iterdir()}
         != {"core-negative-truth.json", "core-negative-truth.html"}
         or any(item.is_symlink() or not item.is_file() for item in staged.iterdir())
-        or hashlib.sha256(
-            (staged / "core-negative-truth.json").read_bytes()
-        ).hexdigest() != record_sha256
-        or hashlib.sha256(
-            (staged / "core-negative-truth.html").read_bytes()
-        ).hexdigest() != preview_sha256
+        or hashlib.sha256((staged / "core-negative-truth.json").read_bytes()).hexdigest()
+        != record_sha256
+        or hashlib.sha256((staged / "core-negative-truth.html").read_bytes()).hexdigest()
+        != preview_sha256
     ):
         raise QualificationError("core negative-truth staged evidence mismatch")
     _checked_core_preview_destination(destination)

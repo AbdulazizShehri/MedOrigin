@@ -4,14 +4,15 @@ Task-owned random UUID, one imaginary event, AES-GCM SQLite cold reopen;
 wrong external anchor refusal; *explicit* credential revocation/cleanup.
 Never use real patient files, EHR, protected production key or publication.
 """
+
 from __future__ import annotations
 
 import argparse
 import json
 import os
-from pathlib import Path
 import subprocess
 import sys
+from pathlib import Path
 from tempfile import TemporaryDirectory
 from uuid import UUID, uuid4
 
@@ -27,20 +28,30 @@ raise SystemExit(main(sys.argv[2:]))
 """
 
 
-def core_call(core: Path, operation: str, root: Path, identity: str,
-              head: str | None = None) -> subprocess.CompletedProcess[bytes]:
+def core_call(
+    core: Path, operation: str, root: Path, identity: str, head: str | None = None
+) -> subprocess.CompletedProcess[bytes]:
     tokens = [
-        "fhir", "windows-audit-preview", operation,
-        "--synthetic-only", "--developer-preview",
-        "--store-root", str(root), "--workspace-id", identity,
+        "fhir",
+        "windows-audit-preview",
+        operation,
+        "--synthetic-only",
+        "--developer-preview",
+        "--store-root",
+        str(root),
+        "--workspace-id",
+        identity,
     ]
     if operation != "create":
-        tokens.extend(["--expected-head", head or ("0"*64)])
+        tokens.extend(["--expected-head", head or ("0" * 64)])
     if operation == "forget":
         tokens.append("--acknowledge-irreversible-key-loss")
     return subprocess.run(
         [sys.executable, "-B", "-c", RUN, str(core), *tokens],
-        cwd=root, capture_output=True, timeout=45, check=False,
+        cwd=root,
+        capture_output=True,
+        timeout=45,
+        check=False,
         env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"},
     )
 
@@ -87,8 +98,7 @@ def run(core: Path, exe: Path, sha: str) -> None:
             # reopens the original encrypted database and verifies its
             # independently held head before native startup/HMAC admission.
             bridge.launch(core, root, identity, head, exe, sha, qa_auto_close=True)
-            bridge.launch(core, root, identity, head, exe, sha,
-                          qa_auto_close=False, qa_uia=True)
+            bridge.launch(core, root, identity, head, exe, sha, qa_auto_close=False, qa_uia=True)
             wrong = ("0" if head[0] != "0" else "1") + head[1:]
             try:
                 bridge.launch(core, root, identity, wrong, exe, sha, qa_auto_close=True)
@@ -127,6 +137,7 @@ def run(core: Path, exe: Path, sha: str) -> None:
                         from medscale.fhirkit.windows_protected_key_provider import (
                             WindowsProtectedSyntheticKeyProvider,
                         )
+
                         provider = WindowsProtectedSyntheticKeyProvider(
                             UUID(identity), synthetic_only=True, developer_preview=True
                         )

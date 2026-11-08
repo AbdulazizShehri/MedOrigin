@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import copy
 import importlib.util
-import sys
 from pathlib import Path
 from typing import Any
 
@@ -256,7 +255,6 @@ def test_build_cli_keeps_source_metadata_off_stdout(
 
 
 def test_parity_report_digest_matches_truthful_developer_beta_contract() -> None:
-    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
-    import qualify_medorigin_developer_beta as beta
+    from scripts import qualify_medorigin_developer_beta as beta
 
     assert _load().SYNTHETIC_REPORT_SHA256 == beta.EXPECTED_REPORT_SHA256

@@ -23,12 +23,25 @@ from medscale.fhirkit.workspace_file_batch_demo import (
 )
 
 _R4_ENCOUNTER_STATUSES = (
-    "planned", "arrived", "triaged", "in-progress", "onleave", "finished",
-    "cancelled", "entered-in-error", "unknown",
+    "planned",
+    "arrived",
+    "triaged",
+    "in-progress",
+    "onleave",
+    "finished",
+    "cancelled",
+    "entered-in-error",
+    "unknown",
 )
 _R4_OBSERVATION_STATUSES = (
-    "registered", "preliminary", "final", "amended", "corrected",
-    "cancelled", "entered-in-error", "unknown",
+    "registered",
+    "preliminary",
+    "final",
+    "amended",
+    "corrected",
+    "cancelled",
+    "entered-in-error",
+    "unknown",
 )
 _PRIVATE = "INVENTED_PATIENT_NAME_NEVER_TO_ECHO"
 _P = "urn:uuid:00000000-0000-4000-8000-000000000002"
@@ -40,10 +53,12 @@ def _fixture() -> dict:
         "resourceType": "Bundle",
         "type": "collection",
         "meta": {
-            "tag": [{
-                "system": "urn:medorigin:fixture-classification",
-                "code": "synthetic",
-            }]
+            "tag": [
+                {
+                    "system": "urn:medorigin:fixture-classification",
+                    "code": "synthetic",
+                }
+            ]
         },
         "entry": [
             {
@@ -122,7 +137,7 @@ def test_all_eight_exact_r4_observation_codes_are_admitted_locally(status: str) 
         ("Observation", "final "),
         ("Observation", "unknown-status"),
         ("Observation", "registered\\x00"),
-        ("Observation", "ｆｉｎａｌ"),
+        ("Observation", "ｆｉｎａｌ"),  # noqa: RUF001
         ("Observation", "réel"),
     ],
 )
@@ -153,14 +168,12 @@ def test_missing_or_nontext_status_preserves_existing_subset_error(
 
 @pytest.mark.parametrize("kind", ["Encounter", "Observation"])
 def test_unknown_status_has_fixed_redacted_operation_outcome(kind: str) -> None:
-    invalid = _change(kind, "unsafe-patient-status-"+_PRIVATE)
+    invalid = _change(kind, "unsafe-patient-status-" + _PRIVATE)
     expected = {
         "Encounter": "encounter_status_not_in_r4_required_codes",
         "Observation": "observation_status_not_in_r4_required_codes",
     }[kind]
-    outcome = rejected_synthetic_bundle_operation_outcome(
-        invalid, BundlePreflightError(expected)
-    )
+    outcome = rejected_synthetic_bundle_operation_outcome(invalid, BundlePreflightError(expected))
     assert outcome["resourceType"] == "OperationOutcome"
     assert [issue["severity"] for issue in outcome["issue"]] == ["error", "warning"]
     assert "FHIR R4 v4.0.1" in outcome["issue"][0]["details"]["text"]
@@ -184,7 +197,7 @@ def test_actual_public_file_cli_refuses_bad_r4_status_without_json_or_path(
 
 
 def test_bad_second_file_refuses_entire_encrypted_batch_before_any_storage(
-    monkeypatch: pytest.MonkeyPatch
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     import medscale.fhirkit.workspace_file_batch_demo as importer
 

@@ -71,10 +71,14 @@ def _safe_sed_path(path: Path) -> str:
         codes = sorted({f"U+{ord(ch):04X}" for ch in spelling if ch not in allowed})
         raise ValueError(
             "unreviewed_iexpress_sed_windows_path:characters_refused:"
-            + "codes=" + ",".join(codes[:12])
-            + ";length=" + str(len(spelling))
-            + ";drive=" + str(len(spelling) > 2 and spelling[1] == ":")
-            + ";backslashes=" + str(spelling.count("\\"))
+            + "codes="
+            + ",".join(codes[:12])
+            + ";length="
+            + str(len(spelling))
+            + ";drive="
+            + str(len(spelling) > 2 and spelling[1] == ":")
+            + ";backslashes="
+            + str(spelling.count("\\"))
         )
     return spelling
 

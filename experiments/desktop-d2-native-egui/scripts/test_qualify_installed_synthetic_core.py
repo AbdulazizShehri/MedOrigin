@@ -2,13 +2,13 @@
 
 Never build/install packages, contact GitHub, or use clinical/user content.
 """
+
 from __future__ import annotations
 
-import base64
-from pathlib import Path
 import sys
-from tempfile import TemporaryDirectory
 import unittest
+from pathlib import Path
+from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -19,10 +19,11 @@ class InstalledWheelD2Tests(unittest.TestCase):
     def test_wheel_record_digest_and_self_record_are_exact(self):
         digest = installed._digest_record(b"fake fictional code")
         self.assertEqual(len(digest), 43)
-        result = installed.parse_record((
-            "medscale/fake.py,sha256=" + digest + ",19\n"
-            "medscale-0.3.0.dist-info/RECORD,,\n"
-        ).encode())
+        result = installed.parse_record(
+            (
+                "medscale/fake.py,sha256=" + digest + ",19\nmedscale-0.3.0.dist-info/RECORD,,\n"
+            ).encode()
+        )
         self.assertEqual(result["medscale/fake.py"], (digest, 19))
         self.assertIsNone(result["medscale-0.3.0.dist-info/RECORD"])
 
@@ -37,15 +38,17 @@ class InstalledWheelD2Tests(unittest.TestCase):
             b"medscale/foo.py,sha256=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa,1\n",
             b"medscale/foo.py,sha256=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n",
         ):
-            with self.subTest(malicious=malicious[:33]):
-                with self.assertRaises(ValueError):
-                    installed.parse_record(malicious)
+            with self.subTest(malicious=malicious[:33]), self.assertRaises(ValueError):
+                installed.parse_record(malicious)
 
     def test_record_paths_are_bounded_even_for_generated_venv_launcher(self):
         digest = installed._digest_record(b"one")
         for name in (
-            "../unsafe", "medscale/../../bad.py", "/absolute",
-            "medscale/./bad.py", "../../../bin/malicious",
+            "../unsafe",
+            "medscale/../../bad.py",
+            "/absolute",
+            "medscale/./bad.py",
+            "../../../bin/malicious",
             "medscale\\evil.py",
         ):
             with self.subTest(name=name):
@@ -72,7 +75,9 @@ class InstalledWheelD2Tests(unittest.TestCase):
                     installed.attest_offline_wheel_and_install(root, wheel, root)
                 with self.assertRaisesRegex(ValueError, "wheel_filename_or_file_refused"):
                     installed.attest_offline_wheel_and_install(
-                        root, root / "missing.whl", root,
+                        root,
+                        root / "missing.whl",
+                        root,
                     )
 
     def test_symlinked_wheel_and_extra_startup_hook_are_rejected(self):
@@ -100,16 +105,25 @@ class InstalledWheelD2Tests(unittest.TestCase):
                 site = venv / "lib/python3.11/site-packages"
                 site.mkdir(parents=True)
                 (site / "unreviewed-hook.pth").write_text("import usercode\n")
-                with patch.object(installed, "WHEEL_SHA256", installed.base.sha256(wheel.read_bytes())):
-                    with self.assertRaisesRegex(ValueError, "startup_hook"):
-                        installed.attest_offline_wheel_and_install(root, wheel, venv)
+                with (
+                    patch.object(
+                        installed, "WHEEL_SHA256", installed.base.sha256(wheel.read_bytes())
+                    ),
+                    self.assertRaisesRegex(ValueError, "startup_hook"),
+                ):
+                    installed.attest_offline_wheel_and_install(root, wheel, venv)
 
     def test_non_macos_never_attempts_launch_or_read_fhir(self):
-        with patch.object(installed.sys, "platform", "win32"):
+        with patch.object(installed.sys, "platform", "win32"):  # noqa: SIM117
             with self.assertRaisesRegex(ValueError, "macos_arm64"):
                 installed.qualify(
-                    Path("/invalid"), Path("/invalid"), Path("/invalid"),
-                    Path("/invalid"), "0" * 64, Path("/invalid"), "0" * 64,
+                    Path("/invalid"),
+                    Path("/invalid"),
+                    Path("/invalid"),
+                    Path("/invalid"),
+                    "0" * 64,
+                    Path("/invalid"),
+                    "0" * 64,
                 )
 
     def test_isolated_installed_python_disables_startup_hooks(self):
@@ -118,8 +132,10 @@ class InstalledWheelD2Tests(unittest.TestCase):
         self.assertIn("INSTALLED_CORE_PACKAGED_SOURCE_ONLY", installed.ISOLATED_SOURCE_PROBE)
         self.assertEqual(installed.WHEEL_PACKAGE_FILES, 250)
         self.assertEqual(installed.WHEEL_MEMBERS, 255)
-        self.assertEqual(installed.WHEEL_SHA256,
-            "4f3a66c9657c8040832970fdffcaa0d2bf15c74c79ae76b17566fe573c9536c2")
+        self.assertEqual(
+            installed.WHEEL_SHA256,
+            "4f3a66c9657c8040832970fdffcaa0d2bf15c74c79ae76b17566fe573c9536c2",
+        )
         source = Path(installed.__file__).read_text()
         self.assertIn('"-I", "-S", "-B"', source)
         self.assertIn("prove_restrictive_mac_policy", source)

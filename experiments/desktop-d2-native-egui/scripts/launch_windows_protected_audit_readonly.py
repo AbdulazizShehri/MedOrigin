@@ -4,20 +4,23 @@ Developer-only. A pre-existing invented audit record and externally retained
 head are required. No create/forget action, patient data, EHR, network,
 unreviewed sources, clinical release or production key selection.
 """
+
 from __future__ import annotations
 
+# fmt: off
+# Formatting is frozen: tests assert exact argument-list source text in this file.
 import argparse
 import hashlib
 import hmac
 import json
 import os
-from pathlib import Path
 import re
 import secrets
 import subprocess
 import sys
-from tempfile import TemporaryDirectory
 import time
+from pathlib import Path
+from tempfile import TemporaryDirectory
 from uuid import UUID
 
 CORE981_SHA = "835dfca52858fb0dafa013b90185b47c758f11bb"

@@ -41,7 +41,7 @@ from supervise_windows_encrypted_core_job import (
 
 SCHEMA = "medorigin-d2-private-portable-fictional-core-windows/v1"
 PINNED_COMMIT = "8e5ed5430f4ab2ebc8981c52c67234023382954b"
-EXPORTER_SHA256 = "12e9cdd5def9c794aafa975d232062a456eec6c558728ac119868fb876505a7c"
+EXPORTER_SHA256 = "446db8a83c523dbb74f027dde196db466fb7a2127c6788ec7cd9e095d915dced"
 PERSISTENT_PROJECTION_SHA256 = "3673eb77b2dbef25fd6cb33d9c345d2f37d38a86bcf1652ed9defae4da139243"
 GUI_NAME = "medorigin-desktop-d2-native-egui.exe"
 RUNTIME_FILES = (

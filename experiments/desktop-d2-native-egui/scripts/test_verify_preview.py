@@ -1,18 +1,19 @@
 """Adversarial contract tests for nonclinical preview ZIP and TAR verification."""
+
 from __future__ import annotations
 
-from contextlib import redirect_stdout
 import io
-from pathlib import Path
 import stat
 import struct
 import sys
 import tarfile
-from tempfile import TemporaryDirectory
 import unittest
-from unittest.mock import patch
 import warnings
 import zipfile
+from contextlib import redirect_stdout
+from pathlib import Path
+from tempfile import TemporaryDirectory
+from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import package_preview as p
@@ -51,8 +52,11 @@ class ArchiveAdmissionTests(unittest.TestCase):
 
     def make_files(self, system: str) -> dict[str, tuple[bytes, int]]:
         return p.files_for(
-            binary_for(system), system, "arm64" if system == "macos" else "x86_64",
-            self.commit, (self.repo / "LICENSE").read_bytes(),
+            binary_for(system),
+            system,
+            "arm64" if system == "macos" else "x86_64",
+            self.commit,
+            (self.repo / "LICENSE").read_bytes(),
             (self.repo / "experiments/desktop-d2-native-egui/UPSTREAM-NOTICE.md").read_bytes(),
         )
 
@@ -116,10 +120,14 @@ class ArchiveAdmissionTests(unittest.TestCase):
                 files = self.make_files("windows")
                 name = next(name for name in files if name.endswith(name_suffix))
                 files[name] = (injected, files[name][1])
-                with self.assertRaisesRegex(ValueError, "noncanonical_archive_content_or_permissions"):
+                with self.assertRaisesRegex(
+                    ValueError, "noncanonical_archive_content_or_permissions"
+                ):
                     self.check(self.archive("windows", files), "windows")
-                (self.repo / ("MedOrigin-Synthetic-D2-windows-x86_64-" +
-                              self.commit[:8] + ".zip")).unlink()
+                (
+                    self.repo
+                    / ("MedOrigin-Synthetic-D2-windows-x86_64-" + self.commit[:8] + ".zip")
+                ).unlink()
 
     def test_refuse_modified_mac_bundle_plist(self) -> None:
         files = self.make_files("macos")
@@ -130,8 +138,7 @@ class ArchiveAdmissionTests(unittest.TestCase):
 
     def test_refuse_duplicate_tar_member(self) -> None:
         files = self.make_files("linux")
-        path = self.repo / ("MedOrigin-Synthetic-D2-linux-x86_64-" +
-                            self.commit[:8] + ".tar.gz")
+        path = self.repo / ("MedOrigin-Synthetic-D2-linux-x86_64-" + self.commit[:8] + ".tar.gz")
         with tarfile.open(path, "w:gz") as archive:
             for name, (data, mode) in [*files.items(), next(iter(files.items()))]:
                 member = tarfile.TarInfo(name)

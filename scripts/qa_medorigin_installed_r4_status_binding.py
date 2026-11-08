@@ -20,12 +20,25 @@ _PRIVATE = "NEVER_ECHO_FICTIONAL_PATIENT_SENTINEL"
 _PATIENT = "urn:uuid:00000000-0000-4000-8000-000000000002"
 _ENCOUNTER = "urn:uuid:00000000-0000-4000-8000-000000000003"
 _ENCOUNTER_R4 = (
-    "planned", "arrived", "triaged", "in-progress", "onleave",
-    "finished", "cancelled", "entered-in-error", "unknown",
+    "planned",
+    "arrived",
+    "triaged",
+    "in-progress",
+    "onleave",
+    "finished",
+    "cancelled",
+    "entered-in-error",
+    "unknown",
 )
 _OBSERVATION_R4 = (
-    "registered", "preliminary", "final", "amended", "corrected",
-    "cancelled", "entered-in-error", "unknown",
+    "registered",
+    "preliminary",
+    "final",
+    "amended",
+    "corrected",
+    "cancelled",
+    "entered-in-error",
+    "unknown",
 )
 _NEGATIVE: tuple[tuple[str, str], ...] = (
     ("Encounter", "completed"),  # R5 not R4
@@ -36,7 +49,7 @@ _NEGATIVE: tuple[tuple[str, str], ...] = (
     ("Observation", "completed"),
     ("Observation", "FINAL"),
     ("Observation", "final "),
-    ("Observation", "ｆｉｎａｌ"),
+    ("Observation", "ｆｉｎａｌ"),  # noqa: RUF001
     ("Observation", "unknown-code"),
 )
 
@@ -46,10 +59,12 @@ def _fictional_bundle() -> dict[str, Any]:
         "resourceType": "Bundle",
         "type": "collection",
         "meta": {
-            "tag": [{
-                "system": "urn:medorigin:fixture-classification",
-                "code": "synthetic",
-            }]
+            "tag": [
+                {
+                    "system": "urn:medorigin:fixture-classification",
+                    "code": "synthetic",
+                }
+            ]
         },
         "entry": [
             {
@@ -90,16 +105,19 @@ def _fictional_bundle() -> dict[str, Any]:
 
 def _version(cli: Path, root: Path) -> None:
     response = subprocess.run(
-        [str(cli), "--version"],
-        cwd=root, capture_output=True, text=True, timeout=30, check=False
+        [str(cli), "--version"], cwd=root, capture_output=True, text=True, timeout=30, check=False
     )
     if response.returncode != 0 or response.stdout.strip() != "medscale 0.3.0":
         raise AssertionError("installed Core runtime version identity refused")
 
 
 def _run(
-    cli: Path, root: Path, payload: dict[str, Any], label: str,
-    *, synthetic_flag: bool = True,
+    cli: Path,
+    root: Path,
+    payload: dict[str, Any],
+    label: str,
+    *,
+    synthetic_flag: bool = True,
 ) -> subprocess.CompletedProcess[str]:
     source = root / (label + "-" + _PRIVATE + ".json")
     source.write_text(
@@ -109,9 +127,7 @@ def _run(
     argv = [str(cli), "fhir", "bundle-preflight", str(source)]
     if synthetic_flag:
         argv.append("--synthetic-only")
-    result = subprocess.run(
-        argv, cwd=root, capture_output=True, text=True, timeout=45, check=False
-    )
+    result = subprocess.run(argv, cwd=root, capture_output=True, text=True, timeout=45, check=False)
     # The installed CLI must NEVER include the fictional patient's name,
     # IDs or the caller-selected absolute path in any receipt or refusal.
     visible = result.stdout + result.stderr
@@ -152,8 +168,10 @@ def _assert_positive(result: subprocess.CompletedProcess[str]) -> str:
     if (
         not isinstance(report, dict)
         or set(report) != set(expected) | {"source_content_sha256"}
-        or any(type(report[key]) is not type(value) or report[key] != value
-               for key, value in expected.items())
+        or any(
+            type(report[key]) is not type(value) or report[key] != value
+            for key, value in expected.items()
+        )
         or type(report["source_content_sha256"]) is not str
         or len(report["source_content_sha256"]) != 64
         or any(ch not in "0123456789abcdef" for ch in report["source_content_sha256"])
@@ -162,9 +180,7 @@ def _assert_positive(result: subprocess.CompletedProcess[str]) -> str:
     return json.dumps(report, sort_keys=True, separators=(",", ":"))
 
 
-def _assert_negative(
-    result: subprocess.CompletedProcess[str], code: str
-) -> None:
+def _assert_negative(result: subprocess.CompletedProcess[str], code: str) -> None:
     if (
         result.returncode != 2
         or result.stdout != ""
@@ -195,12 +211,8 @@ def main(argv: list[str] | None = None) -> int:
             for number, status in enumerate(statuses):
                 payload = _fictional_bundle()
                 payload["entry"][index]["resource"]["status"] = status
-                a = _assert_positive(
-                    _run(clis[0], root, payload, f"valid-{kind}-{number}-311")
-                )
-                b = _assert_positive(
-                    _run(clis[1], root, payload, f"valid-{kind}-{number}-312")
-                )
+                a = _assert_positive(_run(clis[0], root, payload, f"valid-{kind}-{number}-311"))
+                b = _assert_positive(_run(clis[1], root, payload, f"valid-{kind}-{number}-312"))
                 if a != b:
                     raise AssertionError("real installed R4 status result differs across runtimes")
                 cases += 1
@@ -222,28 +234,28 @@ def main(argv: list[str] | None = None) -> int:
         # Actual installed EXEs must agree on the R4 Observation.value[x]
         # 0..1 choice, not just required status values.
         choice_cases = 0
-        for number, fields in enumerate((
-            {},
-            {"valueString": "invented-only"},
-            {"valueQuantity": {"value": 2.5, "unit": "mmol/L"}},
-        )):
+        for number, fields in enumerate(
+            (
+                {},
+                {"valueString": "invented-only"},
+                {"valueQuantity": {"value": 2.5, "unit": "mmol/L"}},
+            )
+        ):
             source = _fictional_bundle()
             source["entry"][0]["resource"].update(fields)
-            first = _assert_positive(
-                _run(clis[0], root, source, f"good-choice-{number}-311")
-            )
-            second = _assert_positive(
-                _run(clis[1], root, source, f"good-choice-{number}-312")
-            )
+            first = _assert_positive(_run(clis[0], root, source, f"good-choice-{number}-311"))
+            second = _assert_positive(_run(clis[1], root, source, f"good-choice-{number}-312"))
             if first != second:
                 raise AssertionError("installed Core valid R4 choice differs across runtimes")
             choice_cases += 1
-        for number, (string, quantity) in enumerate((
-            ("invented", {"value": 3.5, "unit": "mmol/L"}),
-            ("", {}),
-            (None, None),
-            ("invented", {"unit": "fake"}),
-        )):
+        for number, (string, quantity) in enumerate(
+            (
+                ("invented", {"value": 3.5, "unit": "mmol/L"}),
+                ("", {}),
+                (None, None),
+                ("invented", {"unit": "fake"}),
+            )
+        ):
             source = _fictional_bundle()
             obs = source["entry"][0]["resource"]
             obs["valueString"] = string
@@ -258,11 +270,15 @@ def main(argv: list[str] | None = None) -> int:
             # Missing caller synthetic assertion has a separately specified
             # refusal prefix, not a resource-validation error.
             denied = _run(
-                cli, root, _fictional_bundle(), f"missing-flag-{label}",
+                cli,
+                root,
+                _fictional_bundle(),
+                f"missing-flag-{label}",
                 synthetic_flag=False,
             )
             if (
-                denied.returncode != 2 or denied.stdout
+                denied.returncode != 2
+                or denied.stdout
                 or denied.stderr.strip()
                 != "bundle preflight refused: synthetic_only_attestation_required"
             ):

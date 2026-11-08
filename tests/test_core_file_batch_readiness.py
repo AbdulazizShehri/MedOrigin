@@ -17,7 +17,6 @@ from medscale.cli import main as public_cli
 from medscale.fhirkit.workspace_demo import _fictional_bundle
 from medscale.fhirkit.workspace_file_batch_demo import (
     SyntheticFileImportDemoError,
-    _freeze_and_preflight,
     run_fictional_file_batch_encrypted_demo,
 )
 from medscale.fhirkit.workspace_file_readiness import (
@@ -51,11 +50,17 @@ def _files(tmp_path: Path, sources: list[dict]) -> list[Path]:
 
 def _assert_flags_false(receipt: dict) -> None:
     for key in (
-        "source_filenames_included", "patient_identity_included",
-        "precise_timestamps_included", "cross_source_patient_join_performed",
-        "payload_included", "workspace_allocated", "output_persisted",
-        "network_access_performed", "fhir_r4_conformance_validated",
-        "clinical_use_authorized", "publication_authorized",
+        "source_filenames_included",
+        "patient_identity_included",
+        "precise_timestamps_included",
+        "cross_source_patient_join_performed",
+        "payload_included",
+        "workspace_allocated",
+        "output_persisted",
+        "network_access_performed",
+        "fhir_r4_conformance_validated",
+        "clinical_use_authorized",
+        "publication_authorized",
     ):
         assert receipt[key] is False
 
@@ -109,24 +114,31 @@ def test_real_public_cli_readiness_is_readonly_and_reports_no_filepath(
 @pytest.mark.parametrize(
     ("change", "kind"),
     [
-        (lambda b: b["entry"][0]["resource"].update(
-            effectiveDateTime="2026-02-30T00:10:00Z"
-        ), "invalid_observation"),
-        (lambda b: b["entry"][0]["resource"].update(
-            effectiveDateTime="2026-11-03"
-        ), "partial_observation"),
-        (lambda b: b["entry"][2]["resource"].update(
-            period={
-                "start": "2026-11-05T05:00:00Z",
-                "end": "2026-11-04T05:00:00Z",
-            }
-        ), "reversed_encounter"),
-        (lambda b: b["entry"][2]["resource"].update(
-            period={"end": "2026-11-04T05:00:00Z"}
-        ), "missing_period_start"),
-        (lambda b: b["entry"][2]["resource"].update(
-            period={"start": "2026-11-03T00:10:00"}
-        ), "timezone_missing"),
+        (
+            lambda b: b["entry"][0]["resource"].update(effectiveDateTime="2026-02-30T00:10:00Z"),
+            "invalid_observation",
+        ),
+        (
+            lambda b: b["entry"][0]["resource"].update(effectiveDateTime="2026-11-03"),
+            "partial_observation",
+        ),
+        (
+            lambda b: b["entry"][2]["resource"].update(
+                period={
+                    "start": "2026-11-05T05:00:00Z",
+                    "end": "2026-11-04T05:00:00Z",
+                }
+            ),
+            "reversed_encounter",
+        ),
+        (
+            lambda b: b["entry"][2]["resource"].update(period={"end": "2026-11-04T05:00:00Z"}),
+            "missing_period_start",
+        ),
+        (
+            lambda b: b["entry"][2]["resource"].update(period={"start": "2026-11-03T00:10:00"}),
+            "timezone_missing",
+        ),
     ],
 )
 def test_invalid_second_source_dates_fail_before_any_encrypted_allocation(
@@ -144,9 +156,7 @@ def test_invalid_second_source_dates_fail_before_any_encrypted_allocation(
     with pytest.raises(
         SyntheticFileImportDemoError, match="fictional_import_timeline_preflight_refused"
     ) as error:
-        run_fictional_file_batch_encrypted_demo(
-            sources, synthetic_only=True, ephemeral_demo=True
-        )
+        run_fictional_file_batch_encrypted_demo(sources, synthetic_only=True, ephemeral_demo=True)
     assert _SECRET not in str(error.value)
     with pytest.raises(
         SyntheticFileBatchReadinessError, match="fictional_readiness_source_preflight_refused"
@@ -157,14 +167,10 @@ def test_invalid_second_source_dates_fail_before_any_encrypted_allocation(
 def test_duplicate_source_is_never_reported_or_joined() -> None:
     source = _two()[0]
     with pytest.raises(SyntheticFileBatchReadinessError, match="source_preflight_refused"):
-        assess_fictional_file_batch_readiness(
-            [source, copy.deepcopy(source)], synthetic_only=True
-        )
+        assess_fictional_file_batch_readiness([source, copy.deepcopy(source)], synthetic_only=True)
 
 
-def test_readiness_never_creates_ephemeral_storage(
-    monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_readiness_never_creates_ephemeral_storage(monkeypatch: pytest.MonkeyPatch) -> None:
     import medscale.fhirkit.workspace_file_batch_demo as importer
 
     def never_allocate(*_args: object, **_kwargs: object) -> None:
@@ -183,11 +189,18 @@ def test_cli_missing_consent_or_bad_source_returns_no_partial_json(
         ["fhir", "file-batch-readiness", *(str(p) for p in sources)],
         ["fhir", "file-batch-readiness", "--synthetic-only", str(sources[0])],
         [
-            "fhir", "file-batch-readiness", "--synthetic-only",
-            "--offline-r4-schema", "--unexpected", *(str(p) for p in sources),
+            "fhir",
+            "file-batch-readiness",
+            "--synthetic-only",
+            "--offline-r4-schema",
+            "--unexpected",
+            *(str(p) for p in sources),
         ],
         [
-            "fhir", "file-batch-readiness", "--synthetic-only", "--insecure",
+            "fhir",
+            "file-batch-readiness",
+            "--synthetic-only",
+            "--insecure",
             *(str(p) for p in sources),
         ],
     ]
@@ -206,10 +219,19 @@ def test_bad_official_r4_archive_never_downgrades_to_partial_success(
     sources = _files(tmp_path, _two())
     fake_zip = tmp_path / "not-the-official.zip"
     fake_zip.write_bytes(b"NOT_OFFICIAL_R4_SCHEMA")
-    assert public_cli([
-        "fhir", "file-batch-readiness", "--synthetic-only",
-        "--offline-r4-schema", str(fake_zip), *(str(p) for p in sources),
-    ]) == 2
+    assert (
+        public_cli(
+            [
+                "fhir",
+                "file-batch-readiness",
+                "--synthetic-only",
+                "--offline-r4-schema",
+                str(fake_zip),
+                *(str(p) for p in sources),
+            ]
+        )
+        == 2
+    )
     capture = capsys.readouterr()
     assert capture.out == ""
     assert capture.err.strip() == "file readiness refused: source_or_timeline_preflight_refused"
@@ -224,17 +246,14 @@ def test_genuine_official_r4_schema_is_structural_only_if_provided() -> None:
         _two(), synthetic_only=True, offline_r4_schema=Path(archive)
     )
     assert result["source_count"] == 2
-    assert result["official_r4_structural_status"] == (
-        "official_r4_structure_only_not_validated"
-    )
+    assert result["official_r4_structural_status"] == ("official_r4_structure_only_not_validated")
     assert result["fhir_r4_conformance_validated"] is False
 
 
 def test_fictional_single_patient_only_and_no_implicit_cross_source_merge() -> None:
     sources = _two()
     sources[1]["entry"] = [
-        row for row in sources[1]["entry"]
-        if row["resource"]["resourceType"] == "Patient"
+        row for row in sources[1]["entry"] if row["resource"]["resourceType"] == "Patient"
     ]
     ready = assess_fictional_file_batch_readiness(sources, synthetic_only=True)
     assert ready["sources"][1]["timeline_event_count"] == 0

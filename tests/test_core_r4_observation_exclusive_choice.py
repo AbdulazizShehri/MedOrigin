@@ -36,10 +36,12 @@ def _bundle() -> dict:
         "resourceType": "Bundle",
         "type": "collection",
         "meta": {
-            "tag": [{
-                "system": "urn:medorigin:fixture-classification",
-                "code": "synthetic",
-            }]
+            "tag": [
+                {
+                    "system": "urn:medorigin:fixture-classification",
+                    "code": "synthetic",
+                }
+            ]
         },
         "entry": [
             {
@@ -87,9 +89,7 @@ def _bundle() -> dict:
     ],
 )
 @pytest.mark.parametrize("status", ["registered", "preliminary", "final"])
-def test_r4_zero_or_one_choice_value_admitted_locally(
-    admitted: dict, status: str
-) -> None:
+def test_r4_zero_or_one_choice_value_admitted_locally(admitted: dict, status: str) -> None:
     bundle = _bundle()
     bundle["entry"][0]["resource"].update(admitted)
     bundle["entry"][0]["resource"]["status"] = status
@@ -132,9 +132,7 @@ def test_r4_status_check_still_precedes_choice_check() -> None:
     obs["status"] = "R5-FICTIONAL-STATUS"
     obs["valueString"] = "fictional"
     obs["valueQuantity"] = {}
-    with pytest.raises(
-        BundlePreflightError, match="observation_status_not_in_r4_required_codes"
-    ):
+    with pytest.raises(BundlePreflightError, match="observation_status_not_in_r4_required_codes"):
         inspect_synthetic_bundle(bundle)
 
 
@@ -175,11 +173,19 @@ def test_real_public_cli_rejects_conflicting_value_before_schema_or_storage(
 
     # Unlike a structurally passed source, this invalid choice cannot reach
     # optional official schema loading, even if no official ZIP exists.
-    assert public_cli([
-        "fhir", "bundle-assess", "--synthetic-only",
-        "--offline-r4-schema", str(tmp_path / "missing-official.zip"),
-        str(source),
-    ]) == 2
+    assert (
+        public_cli(
+            [
+                "fhir",
+                "bundle-assess",
+                "--synthetic-only",
+                "--offline-r4-schema",
+                str(tmp_path / "missing-official.zip"),
+                str(source),
+            ]
+        )
+        == 2
+    )
     outcome = capsys.readouterr()
     assert outcome.err == ""
     assert json.loads(outcome.out)["resourceType"] == "OperationOutcome"
@@ -188,7 +194,7 @@ def test_real_public_cli_rejects_conflicting_value_before_schema_or_storage(
 
 
 def test_bad_second_bundle_blocks_real_encrypted_workspace_allocation(
-    monkeypatch: pytest.MonkeyPatch
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     import medscale.fhirkit.workspace_file_batch_demo as importer
 

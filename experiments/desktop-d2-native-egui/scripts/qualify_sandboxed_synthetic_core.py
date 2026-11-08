@@ -4,19 +4,19 @@
 This is a developer QA harness, never an embedded product Core launcher,
 confidential patient-data workflow, installed Wheel verifier, or release gate.
 """
+
 from __future__ import annotations
 
 import argparse
-import errno
 import hashlib
 import json
 import os
-from pathlib import Path
 import platform
 import re
 import socket
 import subprocess
 import sys
+from pathlib import Path
 from tempfile import TemporaryDirectory
 
 PINNED_CORE_SHA = "ad0c62b4366789f5c7e41fc601bb6d0f9d640873"
@@ -42,9 +42,7 @@ CORE_CODE = (
     "raise SystemExit(main(sys.argv[2:]))"
 )
 NETWORK_CANARY = (
-    "import errno,socket,sys;"
-    "s=socket.socket();"
-    "s.connect(('127.0.0.1',int(sys.argv[1])))"
+    "import errno,socket,sys;s=socket.socket();s.connect(('127.0.0.1',int(sys.argv[1])))"
 )
 READONLY_STATUS = "SYNTHETIC_CORE_SOURCE_TO_D2_SANDBOXED_QA_PASS_NOT_RELEASE"
 MAX_OUTPUT = 4096
@@ -55,9 +53,12 @@ def sha256(raw: bytes) -> str:
 
 
 def canonical(payload: dict) -> bytes:
-    return (json.dumps(
-        payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False
-    ) + "\n").encode("utf-8")
+    return (
+        json.dumps(
+            payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False
+        )
+        + "\n"
+    ).encode("utf-8")
 
 
 def unique_object(pairs: list[tuple[str, object]]) -> dict[str, object]:
@@ -76,16 +77,25 @@ def check_core_report(raw: bytes, expected_input_hash: str) -> None:
     if not isinstance(parsed, dict) or raw != canonical(parsed):
         raise ValueError("noncanonical_core_report")
     if set(parsed) != {
-        "created_at", "errors", "format_version", "input_hash", "report_id",
-        "status", "validator_name", "validator_version", "warnings",
+        "created_at",
+        "errors",
+        "format_version",
+        "input_hash",
+        "report_id",
+        "status",
+        "validator_name",
+        "validator_version",
+        "warnings",
     }:
         raise ValueError("core_report_fields_changed")
     if (
-        parsed["created_at"] != TIMESTAMP or parsed["errors"] != []
+        parsed["created_at"] != TIMESTAMP
+        or parsed["errors"] != []
         or parsed["format_version"] != "fhirkit-validation-report/v1"
-        or parsed["input_hash"] != expected_input_hash or parsed["report_id"] != ""
-        or parsed["status"] != "not_validated" or
-        parsed["validator_name"] != "medscale-fhirkit-local"
+        or parsed["input_hash"] != expected_input_hash
+        or parsed["report_id"] != ""
+        or parsed["status"] != "not_validated"
+        or parsed["validator_name"] != "medscale-fhirkit-local"
         or parsed["validator_version"] != "0.1.0"
         or parsed["warnings"] != [WARNING]
     ):
@@ -97,13 +107,19 @@ def source_commit(core: Path) -> str:
         raise ValueError("core_checkout_not_directory")
     commit = subprocess.run(
         ["/usr/bin/git", "-C", str(core), "rev-parse", "HEAD"],
-        capture_output=True, text=True, timeout=8, check=True,
+        capture_output=True,
+        text=True,
+        timeout=8,
+        check=True,
     ).stdout.strip()
     if commit != PINNED_CORE_SHA:
         raise ValueError("core_source_commit_not_pinned")
     dirty = subprocess.run(
         ["/usr/bin/git", "-C", str(core), "status", "--porcelain", "--untracked-files=all"],
-        capture_output=True, text=True, timeout=8, check=True,
+        capture_output=True,
+        text=True,
+        timeout=8,
+        check=True,
     )
     if dirty.stdout:
         raise ValueError("core_tracked_or_untracked_files_modified")
@@ -112,7 +128,9 @@ def source_commit(core: Path) -> str:
     source_paths = ("src/medscale", "examples/synthetic_fhir_developer_beta")
     listed = subprocess.run(
         ["/usr/bin/git", "-C", str(core), "ls-files", "-z", "--", *source_paths],
-        capture_output=True, timeout=8, check=True,
+        capture_output=True,
+        timeout=8,
+        check=True,
     ).stdout
     approved = {Path(name.decode("utf-8")) for name in listed.split(b"\0") if name}
     actual: set[Path] = set()
@@ -168,12 +186,18 @@ def run_sandboxed(
 ) -> subprocess.CompletedProcess[bytes]:
     result = subprocess.run(
         ["/usr/bin/sandbox-exec", "-p", profile, *cmd],
-        cwd=work, input=stdin, capture_output=True, timeout=20,
+        cwd=work,
+        input=stdin,
+        capture_output=True,
+        timeout=20,
         env={
-            "HOME": str(work), "TMPDIR": str(work),
-            "PATH": "/usr/bin:/bin", "LANG": "C.UTF-8",
+            "HOME": str(work),
+            "TMPDIR": str(work),
+            "PATH": "/usr/bin:/bin",
+            "LANG": "C.UTF-8",
             "PYTHONDONTWRITEBYTECODE": "1",
-        }, check=False,
+        },
+        check=False,
     )
     if len(result.stdout) > MAX_OUTPUT or len(result.stderr) > MAX_OUTPUT:
         raise ValueError("sandbox_subprocess_output_over_limit")
@@ -217,9 +241,7 @@ def prove_restrictive_mac_policy(profile: str, work: Path, python: Path) -> None
 
 
 def expected_inputs(core: Path) -> dict[str, bytes]:
-    fixture = (
-        core / "examples/synthetic_fhir_developer_beta/synthetic_structure_definition.json"
-    )
+    fixture = core / "examples/synthetic_fhir_developer_beta/synthetic_structure_definition.json"
     if fixture.is_symlink() or not fixture.is_file() or fixture.stat().st_size > 2048:
         raise ValueError("pinned_core_synthetic_fixture_missing")
     known = json.loads(fixture.read_text(encoding="utf-8"), object_pairs_hook=unique_object)
@@ -254,9 +276,19 @@ def qualify(core: Path, python: Path, python_sha: str, rust: Path, rust_sha: str
             proc = run_sandboxed(
                 profile,
                 [
-                    str(python), "-I", "-S", "-B", "-c", CORE_CODE,
-                    str(core / "src"), "validate", str(inp),
-                    "--created-at", TIMESTAMP, "--output-dir", str(out),
+                    str(python),
+                    "-I",
+                    "-S",
+                    "-B",
+                    "-c",
+                    CORE_CODE,
+                    str(core / "src"),
+                    "validate",
+                    str(inp),
+                    "--created-at",
+                    TIMESTAMP,
+                    "--output-dir",
+                    str(out),
                 ],
                 work,
             )
@@ -266,8 +298,10 @@ def qualify(core: Path, python: Path, python_sha: str, rust: Path, rust_sha: str
             check_core_report(raw, PINNED_CASES[label][0])
             receipts = list(out.rglob("report.json"))
             if (
-                len(receipts) != 1 or receipts[0].is_symlink()
-                or not receipts[0].is_file() or receipts[0].read_bytes() != raw
+                len(receipts) != 1
+                or receipts[0].is_symlink()
+                or not receipts[0].is_file()
+                or receipts[0].read_bytes() != raw
             ):
                 raise ValueError("core_output_file_report_mismatch")
             accepted = run_sandboxed(profile, [str(rust)], work, stdin=raw)
@@ -300,8 +334,11 @@ if __name__ == "__main__":
     args = parser.parse_args()
     try:
         qualify(
-            args.core_source, args.python, args.python_sha256,
-            args.d2_reader, args.d2_reader_sha256,
+            args.core_source,
+            args.python,
+            args.python_sha256,
+            args.d2_reader,
+            args.d2_reader_sha256,
         )
     except (ValueError, OSError, subprocess.SubprocessError, json.JSONDecodeError) as e:
         print("D2_CORE_SANDBOX_QA_NO_GO: " + str(e), file=sys.stderr)

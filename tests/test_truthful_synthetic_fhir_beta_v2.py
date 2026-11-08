@@ -4,12 +4,12 @@ All input FHIR records are fictional and bundled. The Core CLI fake used in
 the narrow unit test below is intentionally NOT a Wheel/provenance test.
 Installed-Wheel Python3.11/3.12 E2E must run independently in hosted CI.
 """
+
 from __future__ import annotations
 
 import hashlib
 import importlib.util
 import json
-import sys
 from pathlib import Path
 from subprocess import CompletedProcess
 from typing import Any
@@ -32,8 +32,11 @@ def _module(filename: str, monkeypatch: pytest.MonkeyPatch) -> Any:
 def _report(good: dict[str, object], warning: str) -> dict[str, object]:
     h = hashlib.sha256(
         json.dumps(
-            good, sort_keys=True, ensure_ascii=False,
-            separators=(",", ":"), allow_nan=False,
+            good,
+            sort_keys=True,
+            ensure_ascii=False,
+            separators=(",", ":"),
+            allow_nan=False,
         ).encode("utf-8")
     ).hexdigest()
     return {
@@ -50,7 +53,8 @@ def _report(good: dict[str, object], warning: str) -> dict[str, object]:
 
 
 def _sample_receipt(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> tuple[Any, Any, dict[str, object], dict[str, object], Path]:
     reproduce = _module("reproduce.py", monkeypatch)
     preview = _module("preview.py", monkeypatch)
@@ -112,7 +116,7 @@ def test_forged_or_legacy_success_never_reaches_inert_preview(
         forged = json.loads(report_path.read_text(encoding="utf-8"))
         forged["status"] = "valid"
         forged["warnings"] = []
-        report_path.write_text(json.dumps(forged, sort_keys=True)+"\n", encoding="utf-8")
+        report_path.write_text(json.dumps(forged, sort_keys=True) + "\n", encoding="utf-8")
         row["report_sha256"] = hashlib.sha256(report_path.read_bytes()).hexdigest()
         row["provenance_status"] = "valid"
         row["validation_exit"] = 0
@@ -125,7 +129,7 @@ def test_forged_or_legacy_success_never_reaches_inert_preview(
     elif change == "wrong_warning":
         forged = json.loads(report_path.read_text(encoding="utf-8"))
         forged["warnings"] = []
-        report_path.write_text(json.dumps(forged, sort_keys=True)+"\n", encoding="utf-8")
+        report_path.write_text(json.dumps(forged, sort_keys=True) + "\n", encoding="utf-8")
         row["report_sha256"] = hashlib.sha256(report_path.read_bytes()).hexdigest()
     else:
         receipt["schema"] = "medorigin-local-synthetic-fhir-example/v1"
@@ -139,7 +143,7 @@ def test_full_v2_file_backed_run_one_admits_only_exit2_not_exit0(
     reproduce = _module("reproduce.py", monkeypatch)
     fixture = json.loads(reproduce.GOOD.read_text(encoding="utf-8"))
     expected_report = _report(fixture, reproduce.WARNING)
-    payload = json.dumps(expected_report, sort_keys=True, separators=(",", ":"))+"\n"
+    payload = json.dumps(expected_report, sort_keys=True, separators=(",", ":")) + "\n"
     seen: list[str] = []
 
     def fake_call(_cli: Path, args: list[str], cwd: Path) -> CompletedProcess[str]:
@@ -155,7 +159,7 @@ def test_full_v2_file_backed_run_one_admits_only_exit2_not_exit0(
             # Real installed Core emits an untrusted report-path notice
             # on stderr even when it correctly returns NOT VALIDATED/exit2.
             return CompletedProcess(
-                args, 2, payload+"\n", "report stored at: PRIVATE_PATH_NOT_EVIDENCE"
+                args, 2, payload + "\n", "report stored at: PRIVATE_PATH_NOT_EVIDENCE"
             )
         if "--summary-only" in args:
             if str(reproduce.BAD) in args:

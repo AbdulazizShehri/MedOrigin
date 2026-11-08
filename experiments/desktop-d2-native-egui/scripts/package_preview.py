@@ -4,6 +4,7 @@
 No publishing, installer, signature, notarization, medical data, or downloads.
 Windows=ZIP, macOS=unsigned .app in ZIP, Linux=glibc runtime-dependent tar.gz.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -11,7 +12,6 @@ import gzip
 import hashlib
 import io
 import json
-from pathlib import Path
 import platform
 import plistlib
 import re
@@ -20,6 +20,7 @@ import subprocess
 import sys
 import tarfile
 import zipfile
+from pathlib import Path
 
 BINARY = "medorigin-desktop-d2-native-egui"
 APP = "MedOrigin Synthetic Preview"
@@ -50,9 +51,15 @@ def normalize_arch(value: str) -> str:
 
 
 def target_host() -> tuple[str, str]:
-    system = "windows" if sys.platform == "win32" else (
-        "macos" if sys.platform == "darwin" else (
-            "linux" if sys.platform.startswith("linux") else "unknown"))
+    system = (
+        "windows"
+        if sys.platform == "win32"
+        else (
+            "macos"
+            if sys.platform == "darwin"
+            else ("linux" if sys.platform.startswith("linux") else "unknown")
+        )
+    )
     if system == "unknown":
         raise ValueError("unsupported_operating_system")
     return system, normalize_arch(platform.machine())
@@ -76,7 +83,7 @@ def inspect_native_header(data: bytes) -> tuple[str, str]:
         if len(data) < 128:
             raise ValueError("truncated_pe")
         offset = struct.unpack_from("<I", data, 0x3C)[0]
-        if offset + 6 > len(data) or data[offset:offset + 4] != b"PE\x00\x00":
+        if offset + 6 > len(data) or data[offset : offset + 4] != b"PE\x00\x00":
             raise ValueError("invalid_pe")
         cpu = struct.unpack_from("<H", data, offset + 4)[0]
         arch = {0x8664: "x86_64", 0xAA64: "arm64"}.get(cpu)
@@ -107,38 +114,60 @@ def digest(data: bytes) -> str:
 
 
 def commit_of(repo: Path) -> str:
-    commit = subprocess.run(["git", "-C", str(repo), "rev-parse", "HEAD"],
-                            check=True, capture_output=True, text=True).stdout.strip().lower()
+    commit = (
+        subprocess.run(
+            ["git", "-C", str(repo), "rev-parse", "HEAD"],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        .stdout.strip()
+        .lower()
+    )
     if not COMMIT_RE.fullmatch(commit):
         raise ValueError("invalid_source_commit")
     return commit
 
 
-def files_for(binary: bytes, system: str, arch: str, commit: str,
-              license_text: bytes, upstream_text: bytes) -> dict[str, tuple[bytes, int]]:
+def files_for(
+    binary: bytes, system: str, arch: str, commit: str, license_text: bytes, upstream_text: bytes
+) -> dict[str, tuple[bytes, int]]:
     executable = BINARY + (".exe" if system == "windows" else "")
     meta = {
         "schema": "medorigin-d2-synthetic-archive-v1",
-        "name": APP, "source_commit": commit, "platform": system,
-        "architecture": arch, "executable": executable,
-        "binary_sha256": digest(binary), "synthetic_only": True,
-        "release_authorized": False, "clinical_use_authorized": False,
-        "patient_data_supported": False, "zero_egress_qualified": False,
-        "signed_or_notarized": False, "production_installer": False,
+        "name": APP,
+        "source_commit": commit,
+        "platform": system,
+        "architecture": arch,
+        "executable": executable,
+        "binary_sha256": digest(binary),
+        "synthetic_only": True,
+        "release_authorized": False,
+        "clinical_use_authorized": False,
+        "patient_data_supported": False,
+        "zero_egress_qualified": False,
+        "signed_or_notarized": False,
+        "production_installer": False,
     }
     if system == "macos":
         root = APP + ".app/Contents"
         where = root + "/Resources"
         binary_path = root + "/MacOS/" + executable
-        info = plistlib.dumps({
-            "CFBundleDisplayName": APP, "CFBundleExecutable": executable,
-            "CFBundleIdentifier": "si.medorigin.d2.synthetic.preview",
-            "CFBundleInfoDictionaryVersion": "6.0",
-            "CFBundleName": APP, "CFBundlePackageType": "APPL",
-            "CFBundleShortVersionString": "0.0.0", "CFBundleVersion": "0.0.0",
-            "LSMinimumSystemVersion": "12.0",
-            "NSHighResolutionCapable": True,
-        }, sort_keys=True)
+        info = plistlib.dumps(
+            {
+                "CFBundleDisplayName": APP,
+                "CFBundleExecutable": executable,
+                "CFBundleIdentifier": "si.medorigin.d2.synthetic.preview",
+                "CFBundleInfoDictionaryVersion": "6.0",
+                "CFBundleName": APP,
+                "CFBundlePackageType": "APPL",
+                "CFBundleShortVersionString": "0.0.0",
+                "CFBundleVersion": "0.0.0",
+                "LSMinimumSystemVersion": "12.0",
+                "NSHighResolutionCapable": True,
+            },
+            sort_keys=True,
+        )
     else:
         root = "MedOrigin-Synthetic-Preview"
         where = root
@@ -146,7 +175,10 @@ def files_for(binary: bytes, system: str, arch: str, commit: str,
     files = {
         binary_path: (binary, 0o755),
         where + "/README-SYNTHETIC.txt": (NOTICE.encode(), 0o644),
-        where + "/MANIFEST.json": ((json.dumps(meta, indent=2, sort_keys=True) + "\n").encode(), 0o644),
+        where + "/MANIFEST.json": (
+            (json.dumps(meta, indent=2, sort_keys=True) + "\n").encode(),
+            0o644,
+        ),
         where + "/LICENSE": (license_text, 0o644),
         where + "/UPSTREAM-NOTICE.md": (upstream_text, 0o644),
     }
@@ -160,8 +192,10 @@ def write_archive(path: Path, files: dict[str, tuple[bytes, int]], system: str) 
     if path.exists():
         raise ValueError("refuse_to_overwrite_existing_artifact")
     if system == "linux":
-        with path.open("xb") as handle, gzip.GzipFile(fileobj=handle, mode="wb",
-                                                       filename="", mtime=0) as gz:
+        with (  # noqa: SIM117
+            path.open("xb") as handle,
+            gzip.GzipFile(fileobj=handle, mode="wb", filename="", mtime=0) as gz,
+        ):
             with tarfile.open(fileobj=gz, mode="w") as tar:
                 for name, (data, permissions) in sorted(files.items()):
                     entry = tarfile.TarInfo(name)
@@ -172,8 +206,7 @@ def write_archive(path: Path, files: dict[str, tuple[bytes, int]], system: str) 
                     entry.gid = 0
                     tar.addfile(entry, io.BytesIO(data))
     else:
-        with zipfile.ZipFile(path, "x", compression=zipfile.ZIP_DEFLATED,
-                             compresslevel=7) as z:
+        with zipfile.ZipFile(path, "x", compression=zipfile.ZIP_DEFLATED, compresslevel=7) as z:
             for name, (data, permissions) in sorted(files.items()):
                 entry = zipfile.ZipInfo(name, (1980, 1, 1, 0, 0, 0))
                 entry.create_system = 3
@@ -194,20 +227,33 @@ def create(binary_path: Path, output: Path, repo: Path, target: str | None = Non
     if inspect_native_header(binary) != (system, arch):
         raise ValueError("binary_header_does_not_match_host_architecture")
     commit = commit_of(repo)
-    files = files_for(binary, system, arch, commit,
-                      (repo / "LICENSE").read_bytes(),
-                      (repo / "experiments" / "desktop-d2-native-egui" /
-                       "UPSTREAM-NOTICE.md").read_bytes())
+    files = files_for(
+        binary,
+        system,
+        arch,
+        commit,
+        (repo / "LICENSE").read_bytes(),
+        (repo / "experiments" / "desktop-d2-native-egui" / "UPSTREAM-NOTICE.md").read_bytes(),
+    )
     output.mkdir(parents=True, exist_ok=True)
     extension = ".tar.gz" if system == "linux" else ".zip"
-    archive = output / ("MedOrigin-Synthetic-D2-" + system + "-" + arch +
-                        "-" + commit[:8] + extension)
+    archive = output / (
+        "MedOrigin-Synthetic-D2-" + system + "-" + arch + "-" + commit[:8] + extension
+    )
     write_archive(archive, files, system)
-    print(json.dumps({
-        "status": "SYNTHETIC_ONLY_UNRELEASED",
-        "archive": str(archive), "archive_sha256": digest(archive.read_bytes()),
-        "binary_sha256": digest(binary), "source_commit": commit,
-    }, indent=2, sort_keys=True))
+    print(
+        json.dumps(
+            {
+                "status": "SYNTHETIC_ONLY_UNRELEASED",
+                "archive": str(archive),
+                "archive_sha256": digest(archive.read_bytes()),
+                "binary_sha256": digest(binary),
+                "source_commit": commit,
+            },
+            indent=2,
+            sort_keys=True,
+        )
+    )
     return archive
 
 
@@ -215,9 +261,18 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--binary", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
-    parser.add_argument("--target", choices=("linux-x86_64", "linux-arm64", "windows-x86_64",
-                                            "windows-arm64", "macos-arm64", "macos-x86_64"),
-                        help="Optional cross-package target, binary header must match.")
+    parser.add_argument(
+        "--target",
+        choices=(
+            "linux-x86_64",
+            "linux-arm64",
+            "windows-x86_64",
+            "windows-arm64",
+            "macos-arm64",
+            "macos-x86_64",
+        ),
+        help="Optional cross-package target, binary header must match.",
+    )
     args = parser.parse_args()
     try:
         create(args.binary, args.output, Path(__file__).resolve().parents[3], args.target)

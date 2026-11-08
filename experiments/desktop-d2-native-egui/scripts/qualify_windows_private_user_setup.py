@@ -160,7 +160,14 @@ def qualify(
 
         # Qualify actual OS OLE drag/drop on the INSTALLED native binary,
         # not merely the independently compiled developer executable.
-        fixture = source / "experiments" / "desktop-d2-native-egui" / "fixtures" / "core" / "synthetic-multipatient-fhir-bundle.json"
+        fixture = (
+            source
+            / "experiments"
+            / "desktop-d2-native-egui"
+            / "fixtures"
+            / "core"
+            / "synthetic-multipatient-fhir-bundle.json"
+        )
         fixture_sha = "92004ddb54302dd70c899dc5ace1a88147e36d81d101f67616b9ee031365cd10"
         ole_script = scripts / "windows-native-local-fictional-ole-drop-uia.ps1"
         if (
@@ -173,12 +180,22 @@ def qualify(
             raise ValueError("installer_qa_reviewed_fictional_ole_source_refused")
         ole = runner(
             [
-                "powershell.exe", "-NoProfile", "-STA", "-NonInteractive",
-                "-ExecutionPolicy", "Bypass", "-File", str(ole_script),
-                "-ExePath", str(native),
-                "-ExpectedExeSHA256", expected_binary_sha,
-                "-FictionalFixturePath", str(fixture),
-                "-ExpectedFixtureSHA256", fixture_sha,
+                "powershell.exe",
+                "-NoProfile",
+                "-STA",
+                "-NonInteractive",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-File",
+                str(ole_script),
+                "-ExePath",
+                str(native),
+                "-ExpectedExeSHA256",
+                expected_binary_sha,
+                "-FictionalFixturePath",
+                str(fixture),
+                "-ExpectedFixtureSHA256",
+                fixture_sha,
             ],
             env=profile_env,
             capture_output=True,
@@ -201,11 +218,20 @@ def qualify(
             raise ValueError("installer_qa_reviewed_typed_path_source_refused")
         typed = runner(
             [
-                "powershell.exe", "-NoProfile", "-STA", "-NonInteractive",
-                "-ExecutionPolicy", "Bypass", "-File", str(typed_script),
-                "-ExePath", str(native),
-                "-ExpectedExeSha256", expected_binary_sha,
-                "-ExpectedFixtureSha256", fixture_sha,
+                "powershell.exe",
+                "-NoProfile",
+                "-STA",
+                "-NonInteractive",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-File",
+                str(typed_script),
+                "-ExePath",
+                str(native),
+                "-ExpectedExeSha256",
+                expected_binary_sha,
+                "-ExpectedFixtureSha256",
+                fixture_sha,
             ],
             env=profile_env,
             capture_output=True,

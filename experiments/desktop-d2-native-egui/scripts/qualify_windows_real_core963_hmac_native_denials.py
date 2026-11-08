@@ -2,15 +2,16 @@
 No patient data, network, persistent keys, arbitrary file picker or GUI success.
 Run on a reviewed compiled binary with its exact SHA-256.
 """
+
 from __future__ import annotations
 
 import argparse
 import hashlib
 import hmac
 import os
-from pathlib import Path
 import subprocess
 import sys
+from pathlib import Path
 
 import launch_windows_real_core963_fictional_batch as bridge
 
@@ -34,20 +35,32 @@ def qualify(exe: Path, sha256: str) -> None:
     valid = bridge._per_launch_core_frame(raw, nonce, secret)
     legacy_domain = b"MedOrigin-D2-FICTIONAL-SESSION-V1\x00"
     wrong_domain = (
-        legacy_domain + nonce
-        + hmac.new(secret, legacy_domain+nonce+len(raw).to_bytes(4,"big")+raw,hashlib.sha256).digest()
+        legacy_domain
+        + nonce
+        + hmac.new(
+            secret, legacy_domain + nonce + len(raw).to_bytes(4, "big") + raw, hashlib.sha256
+        ).digest()
         + raw
     )
-    env = {**os.environ, bridge.ENV_SESSION_KEY: secret.hex(),
-           bridge.ENV_SESSION_NONCE: nonce.hex()}
+    env = {
+        **os.environ,
+        bridge.ENV_SESSION_KEY: secret.hex(),
+        bridge.ENV_SESSION_NONCE: nonce.hex(),
+    }
     denials = (
         ("raw_unbound", raw, env),
         ("tampered", valid[:-1] + bytes([valid[-1] ^ 1]), env),
-        ("stale_nonce", valid, {**env, bridge.ENV_SESSION_NONCE:(bytes([0x5B])*16).hex()}),
+        ("stale_nonce", valid, {**env, bridge.ENV_SESSION_NONCE: (bytes([0x5B]) * 16).hex()}),
         ("wrong_domain", wrong_domain, env),
-        ("missing_secret", valid,
-         {k: v for k, v in os.environ.items()
-          if k not in (bridge.ENV_SESSION_KEY, bridge.ENV_SESSION_NONCE)}),
+        (
+            "missing_secret",
+            valid,
+            {
+                k: v
+                for k, v in os.environ.items()
+                if k not in (bridge.ENV_SESSION_KEY, bridge.ENV_SESSION_NONCE)
+            },
+        ),
         ("oversize", b"x" * 5000, env),
     )
     for label, framed, vars_for_test in denials:
@@ -63,10 +76,10 @@ def qualify(exe: Path, sha256: str) -> None:
                 check=False,
             )
         except subprocess.TimeoutExpired as exc:
-            raise ValueError("forbidden_gui_started_in_negative_"+label) from exc
+            raise ValueError("forbidden_gui_started_in_negative_" + label) from exc
         if child.returncode == 0:
-            raise ValueError("invalid_hmac_frame_accepted_"+label)
-        print("BOUND_FRAME_DENIAL_"+label.upper()+"_PASS")
+            raise ValueError("invalid_hmac_frame_accepted_" + label)
+        print("BOUND_FRAME_DENIAL_" + label.upper() + "_PASS")
     print("ALL_SIX_REAL_NATIVE_HMAC_NEGATIVES_PASS_NONCLINICAL")
 
 
@@ -78,5 +91,5 @@ if __name__ == "__main__":
         args = parser.parse_args()
         qualify(args.native_exe, args.native_sha256)
     except (ValueError, OSError) as exc:
-        print("CORE963_HMAC_NATIVE_NEGATIVE_NO_GO:"+str(exc), file=sys.stderr)
+        print("CORE963_HMAC_NATIVE_NEGATIVE_NO_GO:" + str(exc), file=sys.stderr)
         raise SystemExit(2) from None

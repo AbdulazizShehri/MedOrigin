@@ -8,20 +8,23 @@ receipt to a native GUI that independently parses the strict schema.
 NOT a signed installed-Core runtime, OS-isolated network sandbox, patient
 authentication, production-key custody, or release-approved application.
 """
+
 from __future__ import annotations
 
+# fmt: off
+# Formatting is frozen: tests assert exact argument-list source text in this file.
 import argparse
 import hashlib
 import hmac
 import json
-import secrets
 import os
-from pathlib import Path
 import re
+import secrets
 import subprocess
 import sys
-from tempfile import TemporaryDirectory
 import time
+from pathlib import Path
+from tempfile import TemporaryDirectory
 
 CORE963_SHA = "e32141c3e4dd28eb03e47149625a86f0ebb2d386"
 # Real source-run qualification on owner Windows 11 also passed the exact
@@ -59,7 +62,7 @@ with TemporaryDirectory(prefix='medorigin-core963-only-imaginary-') as d:
         sources.append(str(source))
     raise SystemExit(main(['fhir','file-batch-encrypted-demo',
                            '--synthetic-only','--ephemeral-demo',*sources]))
-"""
+"""  # noqa: E501
 
 
 def _file_sha(path: Path) -> str:
@@ -148,7 +151,7 @@ def _verified_receipt(raw: bytes) -> dict[str, object]:
     return source
 
 
-def launch(source: Path, exe: Path, expected_sha: str, *, qa_auto_close: bool, qa_uia: bool = False) -> None:
+def launch(source: Path, exe: Path, expected_sha: str, *, qa_auto_close: bool, qa_uia: bool = False) -> None:  # noqa: E501
     if sys.platform != "win32":
         raise ValueError("windows_owner_host_required")
     if qa_auto_close and qa_uia:
@@ -195,7 +198,7 @@ def launch(source: Path, exe: Path, expected_sha: str, *, qa_auto_close: bool, q
         if qa_uia:
             # The LIVE output of this actual Core invocation, never the fixture,
             # is fed to the physical native GUI UIAutomation script.
-            uia = Path(__file__).resolve().parent.parent / "tests" / "windows-real-core963-file-batch-receipt-uia.ps1"
+            uia = Path(__file__).resolve().parent.parent / "tests" / "windows-real-core963-file-batch-receipt-uia.ps1"  # noqa: E501
             if uia.is_symlink() or not uia.is_file():
                 raise ValueError("core963_native_uia_script_missing")
             live = work / "source-owned-redacted-core963-live-receipt.json"

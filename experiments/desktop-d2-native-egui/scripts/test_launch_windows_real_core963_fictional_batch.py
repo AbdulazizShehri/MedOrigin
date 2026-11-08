@@ -1,12 +1,12 @@
 """No-network source tests for the one-command fictitious Core -> D2 opener."""
+
 from __future__ import annotations
 
-import copy
 import json
-from pathlib import Path
 import sys
 import tempfile
 import unittest
+from pathlib import Path
 from unittest.mock import patch
 
 import launch_windows_real_core963_fictional_batch as bridge
@@ -27,25 +27,36 @@ class Core963RealFictionalOneCommandTests(unittest.TestCase):
     def test_bound_session_hmac_domain_nonce_and_fictional_receipt_bytes(self):
         import hashlib
         import hmac
+
         raw = RECEIPT.read_bytes()
         nonce = bytes(range(16))
         key = bytes(range(32))
         result = bridge._per_launch_core_frame(raw, nonce, key)
         tag = b"MedOrigin-D2-FICTIONAL-CORE-BATCH-V1\x00"
-        self.assertEqual(result[:len(tag)], tag)
-        self.assertEqual(result[len(tag):len(tag)+16], nonce)
-        self.assertEqual(result[len(tag)+48:], raw)
+        self.assertEqual(result[: len(tag)], tag)
+        self.assertEqual(result[len(tag) : len(tag) + 16], nonce)
+        self.assertEqual(result[len(tag) + 48 :], raw)
         expected = hmac.new(
             key, tag + nonce + len(raw).to_bytes(4, "big") + raw, hashlib.sha256
         ).digest()
-        self.assertEqual(result[len(tag)+16:len(tag)+48], expected)
+        self.assertEqual(result[len(tag) + 16 : len(tag) + 48], expected)
         self.assertNotEqual(
             expected,
-            hmac.new(key, b"MedOrigin-D2-FICTIONAL-SESSION-V1\x00"
-                     + nonce + len(raw).to_bytes(4, "big") + raw, hashlib.sha256).digest(),
+            hmac.new(
+                key,
+                b"MedOrigin-D2-FICTIONAL-SESSION-V1\x00"
+                + nonce
+                + len(raw).to_bytes(4, "big")
+                + raw,
+                hashlib.sha256,
+            ).digest(),
         )
-        for invalid in ((raw, nonce[:-1], key), (raw, nonce, key[:-1]),
-                        (b"", nonce, key), (b"x" * 4097, nonce, key)):
+        for invalid in (
+            (raw, nonce[:-1], key),
+            (raw, nonce, key[:-1]),
+            (b"", nonce, key),
+            (b"x" * 4097, nonce, key),
+        ):
             with self.assertRaises(ValueError):
                 bridge._per_launch_core_frame(*invalid)
 
@@ -74,7 +85,9 @@ class Core963RealFictionalOneCommandTests(unittest.TestCase):
         altered = json.loads(raw)
         altered["status"] = "CLINICALLY_APPROVED"
         with self.assertRaises(ValueError):
-            bridge._verified_receipt((json.dumps(altered, sort_keys=True, separators=(",", ":")) + "\n").encode())
+            bridge._verified_receipt(
+                (json.dumps(altered, sort_keys=True, separators=(",", ":")) + "\n").encode()
+            )
 
     def test_no_arbitrary_file_arguments_and_untrusted_sender_disclosure(self):
         source = Path(bridge.__file__).read_text(encoding="utf-8")
@@ -86,7 +99,9 @@ class Core963RealFictionalOneCommandTests(unittest.TestCase):
         self.assertIn("--ephemeral-demo", bridge.CHILD)
         self.assertIn("D2_RECEIPT_FLAG", source)
         self.assertIn("D2_SESSION_BATCH_FLAG", source)
-        self.assertIn("signed_frame = _per_launch_core_frame(canonical_receipt, nonce, secret)", source)
+        self.assertIn(
+            "signed_frame = _per_launch_core_frame(canonical_receipt, nonce, secret)", source
+        )
         self.assertIn("gui.stdin.write(signed_frame)", source)
         self.assertIn("env=child_env", source)
         self.assertIn('"-SessionFramePath", str(frame)', source)
@@ -96,20 +111,27 @@ class Core963RealFictionalOneCommandTests(unittest.TestCase):
         self.assertIn("not a signed installed-core runtime", source.lower())
 
     def test_live_source_uia_requires_exact_fixture_and_mutually_exclusive_qa_mode(self):
-        harness = (ROOT / "tests/windows-real-core963-file-batch-receipt-uia.ps1").read_text(encoding="utf-8")
+        harness = (ROOT / "tests/windows-real-core963-file-batch-receipt-uia.ps1").read_text(
+            encoding="utf-8"
+        )
         launcher = Path(bridge.__file__).read_text(encoding="utf-8")
         self.assertIn("LiveReceiptPath", harness)
         self.assertIn("live_core_source_receipt_not_canonical", harness)
         self.assertIn("34beba4dd887ab5e26fb8ceaf91d06f85a6ebaca349359aa0f9ecccb612d2292", harness)
-        self.assertIn("CORE963_LIVE_ENCRYPTED_TWO_FILE_SOURCE_TO_NATIVE_WINDOWS_UIA_PASS_NONCLINICAL", launcher)
+        self.assertIn(
+            "CORE963_LIVE_ENCRYPTED_TWO_FILE_SOURCE_TO_NATIVE_WINDOWS_UIA_PASS_NONCLINICAL",
+            launcher,
+        )
         self.assertIn("live.write_bytes(canonical_receipt)", launcher)
         self.assertIn("qa_auto_close and qa_uia", launcher)
-        with patch.object(sys, "platform", "win32"):
+        with patch.object(sys, "platform", "win32"):  # noqa: SIM117
             with self.assertRaisesRegex(ValueError, "core963_qa_modes_mutually_exclusive"):
-                bridge.launch(Path("no-core"), Path("wrong.exe"), "0" * 64, qa_auto_close=True, qa_uia=True)
+                bridge.launch(
+                    Path("no-core"), Path("wrong.exe"), "0" * 64, qa_auto_close=True, qa_uia=True
+                )
 
     def test_wrong_os_refused_before_python_or_native_process(self):
-        with patch.object(sys, "platform", "linux"):
+        with patch.object(sys, "platform", "linux"):  # noqa: SIM117
             with self.assertRaisesRegex(ValueError, "windows_owner_host_required"):
                 bridge.launch(Path("not-a-core"), Path("no-gui.exe"), "0" * 64, qa_auto_close=True)
 
@@ -133,26 +155,32 @@ class Core963RealFictionalOneCommandTests(unittest.TestCase):
                 path.write_bytes(b"# source-only fake path")
             for qualified in sorted(bridge.QUALIFIED_CORE_COMMITS):
                 with patch.object(
-                    bridge.subprocess, "run",
+                    bridge.subprocess,
+                    "run",
                     side_effect=[
-                        bridge.subprocess.CompletedProcess([], 0, stdout=(qualified+"\n").encode()),
+                        bridge.subprocess.CompletedProcess(
+                            [], 0, stdout=(qualified + "\n").encode()
+                        ),
                         bridge.subprocess.CompletedProcess([], 0, stdout=b""),
                     ],
                 ):
                     bridge._core_source_attested(root)
-            for sha, dirty in (("0"*40, b""), (bridge.CORE973_SHA, b" M source.py")):
-                with patch.object(
-                    bridge.subprocess, "run",
-                    side_effect=[
-                        bridge.subprocess.CompletedProcess([], 0, stdout=(sha+"\n").encode()),
-                        bridge.subprocess.CompletedProcess([], 0, stdout=dirty),
-                    ],
+            for sha, dirty in (("0" * 40, b""), (bridge.CORE973_SHA, b" M source.py")):
+                with (
+                    patch.object(
+                        bridge.subprocess,
+                        "run",
+                        side_effect=[
+                            bridge.subprocess.CompletedProcess([], 0, stdout=(sha + "\n").encode()),
+                            bridge.subprocess.CompletedProcess([], 0, stdout=dirty),
+                        ],
+                    ),
+                    self.assertRaisesRegex(ValueError, "core963_source_head_or_tree_refused"),
                 ):
-                    with self.assertRaisesRegex(ValueError, "core963_source_head_or_tree_refused"):
-                        bridge._core_source_attested(root)
+                    bridge._core_source_attested(root)
 
     def test_source_root_without_exact_reviewed_tree_cannot_launch(self):
-        with tempfile.TemporaryDirectory() as temporary:
+        with tempfile.TemporaryDirectory() as temporary:  # noqa: SIM117
             with self.assertRaisesRegex(ValueError, "core963_source_files_refused"):
                 bridge._core_source_attested(Path(temporary))
 

@@ -1,9 +1,10 @@
 """Strict source-only review for Windows synthetic process-subtree Job Object QA."""
+
 from __future__ import annotations
 
-from pathlib import Path
 import sys
 import unittest
+from pathlib import Path
 from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -12,7 +13,7 @@ import qualify_windows_job_subtree as qa
 
 class WindowsJobObjectSyntheticSafetyTests(unittest.TestCase):
     def test_nonwindows_fails_closed_before_loading_windows_kernel(self):
-        with patch.object(qa.sys, "platform", "darwin"):
+        with patch.object(qa.sys, "platform", "darwin"):  # noqa: SIM117
             with self.assertRaisesRegex(ValueError, "windows_host_required"):
                 qa.qualify()
 
@@ -23,7 +24,7 @@ class WindowsJobObjectSyntheticSafetyTests(unittest.TestCase):
         self.assertIn("api.ResumeThread(parent.hThread)", source)
         self.assertLess(
             source.index("api.AssignProcessToJobObject(job, parent.hProcess)"),
-            source.index("api.ResumeThread(parent.hThread)")
+            source.index("api.ResumeThread(parent.hThread)"),
         )
         self.assertIn("api.IsProcessInJob(parent.hProcess, job", source)
         self.assertIn("api.IsProcessInJob(child_handle, job", source)
@@ -31,7 +32,9 @@ class WindowsJobObjectSyntheticSafetyTests(unittest.TestCase):
     def test_windows_closes_private_job_and_tests_real_child_lifetime(self):
         source = Path(qa.__file__).read_text()
         self.assertEqual(qa.JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE, 0x2000)
-        self.assertIn("limit.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE", source)
+        self.assertIn(
+            "limit.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE", source
+        )
         self.assertIn("api.WaitForSingleObject(parent.hProcess, 0) != WAIT_TIMEOUT", source)
         self.assertIn("api.WaitForSingleObject(child_handle, 0) != WAIT_TIMEOUT", source)
         self.assertIn("api.CloseHandle(job)", source)
@@ -53,8 +56,9 @@ class WindowsJobObjectSyntheticSafetyTests(unittest.TestCase):
         self.assertNotIn("medscale.", source)
         self.assertNotIn("powershell", source.lower())
         self.assertNotIn("firewall", source.lower().split("def _win32")[1])
-        self.assertEqual(qa.SUCCESS,
-            "WINDOWS_D2_SOURCE_ONLY_JOB_OBJECT_PARENT_AND_CHILD_KILLED_ON_CLOSE_PASS")
+        self.assertEqual(
+            qa.SUCCESS, "WINDOWS_D2_SOURCE_ONLY_JOB_OBJECT_PARENT_AND_CHILD_KILLED_ON_CLOSE_PASS"
+        )
 
 
 if __name__ == "__main__":

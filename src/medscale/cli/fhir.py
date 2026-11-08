@@ -176,19 +176,13 @@ def _file_batch_readiness_main(argv: list[str]) -> int:
     cursor = 1
     schema: Path | None = None
     if len(argv) > 2 and argv[1] == "--offline-r4-schema":
-        if (
-            len(argv) < 5
-            or not argv[2]
-            or argv[2].startswith("--")
-        ):
+        if len(argv) < 5 or not argv[2] or argv[2].startswith("--"):
             print(refused, file=sys.stderr)
             return 2
         schema = Path(argv[2])
         cursor = 3
     names = argv[cursor:]
-    if not 2 <= len(names) <= 4 or any(
-        not name or name.startswith("--") for name in names
-    ):
+    if not 2 <= len(names) <= 4 or any(not name or name.startswith("--") for name in names):
         print(refused, file=sys.stderr)
         return 2
     try:

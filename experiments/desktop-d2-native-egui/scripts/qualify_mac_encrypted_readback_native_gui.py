@@ -6,15 +6,15 @@ Python process is restricted by the existing Mac deny-default Seatbelt QA
 policy. Source-pinned 3-record projection only, exact bytes + SHA, no sender
 freshness proof. Source-only and locally cached crypto are NOT trusted Wheels.
 """
+
 from __future__ import annotations
 
 import argparse
 import hashlib
-import os
-from pathlib import Path
 import platform
 import subprocess
 import sys
+from pathlib import Path
 from tempfile import TemporaryDirectory
 
 from qualify_sandboxed_synthetic_core import (
@@ -37,25 +37,29 @@ def pinned_core(core: Path) -> None:
         raise ValueError("source_core_checkout_missing")
     head = subprocess.run(
         ["/usr/bin/git", "-C", str(core), "rev-parse", "HEAD"],
-        capture_output=True, text=True, timeout=10, check=True,
+        capture_output=True,
+        text=True,
+        timeout=10,
+        check=True,
     ).stdout.strip()
     if head != PINNED_CORE_SHA:
         raise ValueError("source_core_sha_mismatch")
     status = subprocess.run(
         ["/usr/bin/git", "-C", str(core), "status", "--porcelain", "--untracked-files=all"],
-        capture_output=True, timeout=10, check=True,
+        capture_output=True,
+        timeout=10,
+        check=True,
     ).stdout
     if status:
         raise ValueError("source_core_git_dirty")
     for pkg in ("src/medscale", "apps/workspace/src/medscale_workspace"):
         tracked = subprocess.run(
             ["/usr/bin/git", "-C", str(core), "ls-files", "-z", "--", pkg],
-            capture_output=True, timeout=10, check=True,
+            capture_output=True,
+            timeout=10,
+            check=True,
         ).stdout
-        approved = {
-            (core / path.decode()).resolve()
-            for path in tracked.split(b"\x00") if path
-        }
+        approved = {(core / path.decode()).resolve() for path in tracked.split(b"\x00") if path}
         if not 25 <= len(approved) <= 400:
             raise ValueError("source_core_expected_inventory_missing")
         actual = set()
@@ -108,9 +112,17 @@ def qualify(args: argparse.Namespace) -> None:
             "runpy.run_path(script,run_name='__main__')"
         )
         cmd = [
-            str(python), "-I", "-S", "-B", "-c", fixed,
-            str(core / "src"), str(core / "apps/workspace/src"),
-            str(caches[0]), str(caches[1]), str(script),
+            str(python),
+            "-I",
+            "-S",
+            "-B",
+            "-c",
+            fixed,
+            str(core / "src"),
+            str(core / "apps/workspace/src"),
+            str(caches[0]),
+            str(caches[1]),
+            str(script),
         ]
         executed = run_sandboxed(policy, cmd, work)
         if executed.returncode != 0 or executed.stderr:
@@ -122,8 +134,10 @@ def qualify(args: argparse.Namespace) -> None:
         print("MACOS_REAL_ENCRYPTED_CORE_THREE_RESOURCE_READBACK_SOURCE_VERIFIED")
         process = subprocess.Popen(
             [str(app), "--synthetic-encrypted-readback-stdin"],
-            stdin=subprocess.PIPE, stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL, cwd=work,
+            stdin=subprocess.PIPE,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            cwd=work,
             env={"HOME": str(work), "PATH": "/usr/bin:/bin"},
         )
         try:
@@ -132,13 +146,17 @@ def qualify(args: argparse.Namespace) -> None:
             process.stdin.close()
             observed = subprocess.run(
                 ["/usr/bin/swift", str(observer), str(process.pid)],
-                capture_output=True, timeout=60, check=False,
+                capture_output=True,
+                timeout=60,
+                check=False,
             )
-            token = (
-                "MACOS_REAL_ENCRYPTED_CORE_READBACK_NATIVE_THREE_FICTIONAL_RESOURCE_NAV_AX_PASS_NOT_CLINICAL"
-            ).encode()
-            if observed.returncode != 0 or token not in observed.stdout or process.poll() is not None:
-                detail = observed.stderr.decode('utf-8', errors='replace')[:600]
+            token = b"MACOS_REAL_ENCRYPTED_CORE_READBACK_NATIVE_THREE_FICTIONAL_RESOURCE_NAV_AX_PASS_NOT_CLINICAL"  # noqa: E501
+            if (
+                observed.returncode != 0
+                or token not in observed.stdout
+                or process.poll() is not None
+            ):
+                detail = observed.stderr.decode("utf-8", errors="replace")[:600]
                 raise ValueError("mac_real_encrypted_readback_native_gui_AX_refused:" + detail)
             print(token.decode())
         finally:
@@ -158,10 +176,9 @@ def qualify(args: argparse.Namespace) -> None:
 if __name__ == "__main__":
     p = argparse.ArgumentParser(description=__doc__)
     for name in ("core-source", "python", "native-gui", "native-sha", "crypto-cache", "cffi-cache"):
-        p.add_argument("--" + name, required=True,
-                       type=str if name == "native-sha" else Path)
+        p.add_argument("--" + name, required=True, type=str if name == "native-sha" else Path)
     try:
         qualify(p.parse_args())
     except (ValueError, OSError, subprocess.SubprocessError) as error:
         print("MACOS_LIVE_ENCRYPTED_CORE_READBACK_NATIVE_GUI_NO_GO:" + str(error), file=sys.stderr)
-        raise SystemExit(2)
+        raise SystemExit(2) from None

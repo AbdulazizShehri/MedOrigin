@@ -1,16 +1,16 @@
 """Source-bound tests for the real macOS preview-archive GUI harness."""
+
 from __future__ import annotations
 
 import io
-from contextlib import redirect_stdout
-from pathlib import Path
-import stat
 import struct
 import sys
-from tempfile import TemporaryDirectory
 import unittest
-from unittest.mock import patch
 import zipfile
+from contextlib import redirect_stdout
+from pathlib import Path
+from tempfile import TemporaryDirectory
+from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import macos_archive_gui_preview as m
@@ -42,15 +42,19 @@ class MacPreviewArchiveLiveHarnessTests(unittest.TestCase):
         binary[:4] = b"\xcf\xfa\xed\xfe"
         struct.pack_into("<I", binary, 4, 0x0100000C)
         files = p.files_for(
-            bytes(binary), "macos", "arm64", self.source_commit,
+            bytes(binary),
+            "macos",
+            "arm64",
+            self.source_commit,
             (self.repo / "LICENSE").read_bytes(),
             (self.repo / "experiments/desktop-d2-native-egui/UPSTREAM-NOTICE.md").read_bytes(),
         )
         if replace is not None:
             key = next(key for key in files if key.endswith(replace))
             files[key] = (b"tampered bundle payload", files[key][1])
-        archive = self.repo / ("MedOrigin-Synthetic-D2-macos-arm64-" +
-                               self.source_commit[:8] + ".zip")
+        archive = self.repo / (
+            "MedOrigin-Synthetic-D2-macos-arm64-" + self.source_commit[:8] + ".zip"
+        )
         p.write_archive(archive, files, "macos")
         return archive
 
@@ -75,8 +79,12 @@ class MacPreviewArchiveLiveHarnessTests(unittest.TestCase):
 
     def test_recheck_extracted_resource_even_if_first_admission_were_stale(self) -> None:
         import json
+
         files = p.files_for(
-            fake_macho(), "macos", "arm64", self.source_commit,
+            fake_macho(),
+            "macos",
+            "arm64",
+            self.source_commit,
             (self.repo / "LICENSE").read_bytes(),
             (self.repo / "experiments/desktop-d2-native-egui/UPSTREAM-NOTICE.md").read_bytes(),
         )
@@ -86,10 +94,9 @@ class MacPreviewArchiveLiveHarnessTests(unittest.TestCase):
         self.assertEqual(canonical_manifest["binary_sha256"], p.digest(files[binary_name][0]))
         resource_name = next(n for n in files if n.endswith("LICENSE"))
         files[resource_name] = (b"unexpected replaced license", 0o644)
-        path = self.repo / ("MedOrigin-Synthetic-D2-macos-arm64-" +
-                            self.source_commit[:8] + ".zip")
+        path = self.repo / ("MedOrigin-Synthetic-D2-macos-arm64-" + self.source_commit[:8] + ".zip")
         p.write_archive(path, files, "macos")
-        with patch.object(m, "verify_archive", return_value=canonical_manifest):
+        with patch.object(m, "verify_archive", return_value=canonical_manifest):  # noqa: SIM117
             with self.assertRaisesRegex(ValueError, "extracted_bundle_source_contract_changed"):
                 self.extract(path)
 
@@ -121,14 +128,15 @@ class MacPreviewArchiveLiveHarnessTests(unittest.TestCase):
             self.extract(archive)
 
     def test_refuse_nonarchive_without_native_launch(self) -> None:
-        archive = self.repo / ("MedOrigin-Synthetic-D2-macos-arm64-" +
-                               self.source_commit[:8] + ".zip")
+        archive = self.repo / (
+            "MedOrigin-Synthetic-D2-macos-arm64-" + self.source_commit[:8] + ".zip"
+        )
         archive.write_bytes(b"not a zip")
         with self.assertRaises(zipfile.BadZipFile):
             self.extract(archive)
 
     def test_refuse_live_qualification_on_non_mac_host(self) -> None:
-        with patch.object(m.sys, "platform", "linux"):
+        with patch.object(m.sys, "platform", "linux"):  # noqa: SIM117
             with self.assertRaisesRegex(ValueError, "real_interactive_apple_silicon_mac_required"):
                 m.qualify(Path("no-such-preview.zip"), self.repo)
 

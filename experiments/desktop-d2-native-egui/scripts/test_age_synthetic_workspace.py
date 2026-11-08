@@ -1,11 +1,12 @@
 """Fail-closed source-level checks for fictional age workspace QA, no PHI."""
+
 from __future__ import annotations
 
 import os
-from pathlib import Path
 import sys
-from tempfile import TemporaryDirectory
 import unittest
+from pathlib import Path
+from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -14,12 +15,12 @@ import qualify_age_synthetic_workspace as ageqa
 
 class SyntheticAgeWorkspaceTests(unittest.TestCase):
     def test_pinned_fixture_is_only_authorized_bytes(self):
-        self.assertEqual(
-            ageqa.hash_bytes(ageqa.FIXTURE.rstrip(b"\n")), ageqa.FIXTURE_SHA256
-        )
+        self.assertEqual(ageqa.hash_bytes(ageqa.FIXTURE.rstrip(b"\n")), ageqa.FIXTURE_SHA256)
         ageqa.authorize_fixed_synthetic_only(
             ageqa.FIXTURE,
-            role="synthetic_test_owner", consent=True, purpose="synthetic_workspace_qa",
+            role="synthetic_test_owner",
+            consent=True,
+            purpose="synthetic_workspace_qa",
         )
 
     def test_roles_consent_and_purpose_must_be_exact(self):
@@ -31,22 +32,30 @@ class SyntheticAgeWorkspaceTests(unittest.TestCase):
             ("synthetic_test_owner", True, "clinical_workspace"),
             ("owner", True, "synthetic_workspace_qa"),
         ):
-            with self.subTest(role=role, consent=consent, purpose=purpose):
+            with self.subTest(role=role, consent=consent, purpose=purpose):  # noqa: SIM117
                 with self.assertRaisesRegex(ValueError, "intent_not_authorized"):
                     ageqa.authorize_fixed_synthetic_only(
-                        ageqa.FIXTURE, role=role, consent=consent, purpose=purpose,
+                        ageqa.FIXTURE,
+                        role=role,
+                        consent=consent,
+                        purpose=purpose,
                     )
 
     def test_noncanonical_and_clinical_looking_payloads_are_refused(self):
         for data in (
-            b"", b"{}", ageqa.FIXTURE.rstrip(b"\n"), ageqa.FIXTURE + b"\n",
+            b"",
+            b"{}",
+            ageqa.FIXTURE.rstrip(b"\n"),
+            ageqa.FIXTURE + b"\n",
             b'{"resourceType":"Patient","name":"fake-test-data"}\n',
         ):
-            with self.subTest(data=data[:18]):
+            with self.subTest(data=data[:18]):  # noqa: SIM117
                 with self.assertRaisesRegex(ValueError, "payload_refused"):
                     ageqa.authorize_fixed_synthetic_only(
-                        data, role="synthetic_test_owner",
-                        consent=True, purpose="synthetic_workspace_qa",
+                        data,
+                        role="synthetic_test_owner",
+                        consent=True,
+                        purpose="synthetic_workspace_qa",
                     )
 
     def test_source_bound_ciphertext_file_has_private_mode_and_refuses_overwrite(self):
@@ -69,10 +78,14 @@ class SyntheticAgeWorkspaceTests(unittest.TestCase):
             vault.mkdir(mode=0o700)
             vault.chmod(0o700)
             for name in (
-                "../escape.age", "UPPER.age", "patient.json", ".age",
-                "synthetic/../../evil.age", "multi unicode 😃.age",
+                "../escape.age",
+                "UPPER.age",
+                "patient.json",
+                ".age",
+                "synthetic/../../evil.age",
+                "multi unicode 😃.age",
             ):
-                with self.subTest(name=name):
+                with self.subTest(name=name):  # noqa: SIM117
                     with self.assertRaisesRegex(ValueError, "filename_unapproved"):
                         ageqa.stage_ciphertext_exclusively(vault, name, b"x" * 350)
 
@@ -84,9 +97,7 @@ class SyntheticAgeWorkspaceTests(unittest.TestCase):
             staging = vault / "synthetic.age.staging"
             staging.write_bytes(b"unreviewed")
             with self.assertRaisesRegex(ValueError, "staging_conflict"):
-                ageqa.stage_ciphertext_exclusively(
-                    vault, "synthetic.age", b"x" * 350
-                )
+                ageqa.stage_ciphertext_exclusively(vault, "synthetic.age", b"x" * 350)
             self.assertEqual(staging.read_bytes(), b"unreviewed")
 
     @unittest.skipUnless(os.name == "posix", "POSIX access mode boundary")
@@ -115,10 +126,13 @@ class SyntheticAgeWorkspaceTests(unittest.TestCase):
                 ageqa.prove_binary(binary, "bad", "age")
 
     def test_real_crypto_host_non_mac_is_refused_before_any_process(self):
-        with patch.object(ageqa.sys, "platform", "win32"):
+        with patch.object(ageqa.sys, "platform", "win32"):  # noqa: SIM117
             with self.assertRaisesRegex(ValueError, "real_macos"):
                 ageqa.qualify(
-                    Path("/x"), "0" * 64, Path("/y"), "0" * 64,
+                    Path("/x"),
+                    "0" * 64,
+                    Path("/y"),
+                    "0" * 64,
                 )
 
 

@@ -1,12 +1,13 @@
 """Portable denial tests for the source-pinned Mac-only Core→D2 QA runner."""
+
 from __future__ import annotations
 
 import os
-from pathlib import Path
 import subprocess
 import sys
-from tempfile import TemporaryDirectory
 import unittest
+from pathlib import Path
+from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -48,23 +49,17 @@ class SandboxedCoreBridgeContractTests(unittest.TestCase):
             packet = self.sample()
             packet["warnings"] = warning
             with self.assertRaises(ValueError):
-                bridge.check_core_report(
-                    bridge.canonical(packet), bridge.PINNED_CASES["known"][0]
-                )
+                bridge.check_core_report(bridge.canonical(packet), bridge.PINNED_CASES["known"][0])
 
     def test_patient_payload_or_unknown_resource_hash_refused(self):
         packet = self.sample()
         packet["patient"] = {"name": "not permitted"}
         with self.assertRaises(ValueError):
-            bridge.check_core_report(
-                bridge.canonical(packet), bridge.PINNED_CASES["known"][0]
-            )
+            bridge.check_core_report(bridge.canonical(packet), bridge.PINNED_CASES["known"][0])
         packet = self.sample()
         packet["input_hash"] = "0" * 64
         with self.assertRaises(ValueError):
-            bridge.check_core_report(
-                bridge.canonical(packet), bridge.PINNED_CASES["known"][0]
-            )
+            bridge.check_core_report(bridge.canonical(packet), bridge.PINNED_CASES["known"][0])
 
     def test_duplicate_and_noncanonical_json_refused(self):
         packet = self.sample()
@@ -73,11 +68,11 @@ class SandboxedCoreBridgeContractTests(unittest.TestCase):
             raw.rstrip(b"\n"),
             b"  " + raw,
             raw + b"{}",
-            b"{\"status\":\"valid\",\"status\":\"not_validated\"}\n",
-            raw.replace(b'\"errors\":[]', b'\"errors\":[],\"errors\":[]'),
+            b'{"status":"valid","status":"not_validated"}\n',
+            raw.replace(b'"errors":[]', b'"errors":[],"errors":[]'),
         ]
         for data in variants:
-            with self.subTest(data=data[:20]):
+            with self.subTest(data=data[:20]):  # noqa: SIM117
                 with self.assertRaises((ValueError, TypeError)):
                     bridge.check_core_report(data, packet["input_hash"])
 
@@ -95,7 +90,7 @@ class SandboxedCoreBridgeContractTests(unittest.TestCase):
                 bridge.verify_program(fake, "bad", "fake")
 
     def test_real_qa_refuses_non_mac_before_any_execution(self):
-        with patch.object(bridge.sys, "platform", "win32"):
+        with patch.object(bridge.sys, "platform", "win32"):  # noqa: SIM117
             with self.assertRaisesRegex(ValueError, "real_apple_silicon"):
                 bridge.qualify(Path("/no"), Path("/no"), "0" * 64, Path("/no"), "0" * 64)
 
@@ -113,13 +108,25 @@ class SandboxedCoreBridgeContractTests(unittest.TestCase):
             for cmd in (
                 ["/usr/bin/git", "init", "-q", str(root)],
                 ["/usr/bin/git", "-C", str(root), "add", "."],
-                ["/usr/bin/git", "-C", str(root), "-c", "user.name=synthetic",
-                 "-c", "user.email=synthetic@example.invalid", "commit", "-qm", "fixture"],
+                [
+                    "/usr/bin/git",
+                    "-C",
+                    str(root),
+                    "-c",
+                    "user.name=synthetic",
+                    "-c",
+                    "user.email=synthetic@example.invalid",
+                    "commit",
+                    "-qm",
+                    "fixture",
+                ],
             ):
                 subprocess.run(cmd, check=True, capture_output=True)
             head = subprocess.run(
                 ["/usr/bin/git", "-C", str(root), "rev-parse", "HEAD"],
-                capture_output=True, text=True, check=True,
+                capture_output=True,
+                text=True,
+                check=True,
             ).stdout.strip()
             with patch.object(bridge, "PINNED_CORE_SHA", head):
                 self.assertEqual(bridge.source_commit(root), head)
@@ -129,7 +136,8 @@ class SandboxedCoreBridgeContractTests(unittest.TestCase):
                 # Git status ignores this bytecode; explicit file inventory must not.
                 status = subprocess.run(
                     ["/usr/bin/git", "-C", str(root), "status", "--porcelain"],
-                    capture_output=True, check=True,
+                    capture_output=True,
+                    check=True,
                 )
                 self.assertFalse(status.stdout)
                 with self.assertRaisesRegex(ValueError, "core_source_unreviewed"):
