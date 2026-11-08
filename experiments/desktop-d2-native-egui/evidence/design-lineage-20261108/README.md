@@ -26,6 +26,6 @@
 - **Fonts:** Inter and Instrument Sans are not bundled, so egui's default font is used. Bundling them needs a font-file and licence review.
 - **Icons:** the board's per-item stroke icons are not drawn yet.
 - **Note-draft content:** the board's encounter note draft (Subjective/Objective/…, citations, contradiction card) is illustrative. No draft generation exists in the desktop app, so that content is not reproduced as if it worked.
-- **Records view:** its inner screens still use the older developer wording ("Bundle: …").
+- **Records view:** the bundle view was restyled afterwards (see `evidence/records-restyle-20261108/`). The Core batch, audit and focused-workspace views still use the older developer layout.
 - **Not run:** the Linux AT-SPI script was updated (new label, wider Tab bound) but is verified only in CI.
 - **Scope:** fictional data only. This is not evidence of clinical, PHI or network-isolation readiness.

@@ -87,7 +87,15 @@ try {
             [System.Windows.Automation.InvokePattern]::Pattern
           )
           $invoke.Invoke()
-        }catch{throw ('bundle_native_press_refused: '+$wanted)}
+        }catch{
+          # Selectable segments and records expose Toggle (with selected state).
+          try{
+            $toggle=[System.Windows.Automation.TogglePattern]$matches[0].GetCurrentPattern(
+              [System.Windows.Automation.TogglePattern]::Pattern
+            )
+            $toggle.Toggle()
+          }catch{throw ('bundle_native_press_refused: '+$wanted)}
+        }
         Start-Sleep -Milliseconds 250
         return
       }
@@ -100,7 +108,7 @@ try {
   Expect 'Fictional demo'
   if($EmbeddedDemo){
     Expect 'Core status: No connected production Core'
-    Expect 'Native Rust Experiment'
+    Expect 'Welcome to MedOrigin'
     Press 'Open built-in two-patient fictional demo (NO PHI)'
   }
   Expect 'Core status: Local fictional FHIR Bundle (read-only)'
@@ -132,7 +140,8 @@ try {
       }
       $edits=@(Nodes|Where-Object{
         try{$_.Current.ControlType.ProgrammaticName -eq 'ControlType.Edit' -and
-          $_.Current.IsEnabled}catch{$false}
+          $_.Current.IsEnabled -and
+          $_.Current.HelpText -notlike 'Search screens*'}catch{$false}
       })
       if($edits.Count -ne 1){throw 'native_fictional_worklist_search_field_not_unique'}
       $edits[0].SetFocus()
@@ -154,7 +163,7 @@ try {
       Write-Output 'WINDOWS_REAL_48_RECORD_SOURCE_SCOPED_SEARCH_AND_FACET_UIA_PASS_NONCLINICAL'
     }
     Press 'Bundle: Clear fictional records'
-    Expect 'Native Rust Experiment'
+    Expect 'Welcome to MedOrigin'
     Write-Output 'WINDOWS_REAL_48_RECORD_16_PATIENT_GROUP_SWITCH_UIA_PASS_NONCLINICAL'
     return
   }
@@ -220,7 +229,7 @@ try {
     Press 'Bundle: Clear fictional records'
   }
   Expect 'Core status: No connected production Core'
-  Expect 'Native Rust Experiment'
+  Expect 'Welcome to MedOrigin'
   if(Has 'Bundle record: Observation/fictional-observation-003') {
     throw 'fictional_bundle_record_leaked_after_clear'
   }

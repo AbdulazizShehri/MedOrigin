@@ -68,6 +68,7 @@ try {
       $_ -like 'Drop refused:*' -or
       $_ -like 'Local synthetic-only FHIR Bundle admitted*' -or
       $_ -like 'Native Rust Experiment*' -or
+      $_ -like 'Welcome to MedOrigin*' -or
       $_ -like 'Fictional Multi-Patient Workspace*'
     })
     Write-Output ('SAFE_LOCAL_IMPORT_SCREEN_STATE='+($safe -join '; '))
@@ -96,7 +97,8 @@ try {
   for($i=0;$i -lt 40;$i++){
     $edits=@(Nodes|Where-Object{
       try{$_.Current.ControlType.ProgrammaticName -eq 'ControlType.Edit' -and
-          $_.Current.IsEnabled}catch{$false}
+          $_.Current.IsEnabled -and
+          $_.Current.HelpText -notlike 'Search screens*'}catch{$false}
     })
     if($edits.Count -eq 1){$edit=$edits[0];break}
     if($edits.Count -gt 1){throw 'native_path_entry_not_unique'}
@@ -123,7 +125,8 @@ try {
   Expect 'Local fictional JSON file path:'
   $edits=@(Nodes|Where-Object{
     try{$_.Current.ControlType.ProgrammaticName -eq 'ControlType.Edit' -and
-      $_.Current.IsEnabled}catch{$false}
+      $_.Current.IsEnabled -and
+      $_.Current.HelpText -notlike 'Search screens*'}catch{$false}
   })
   if($edits.Count -ne 1){throw 'typed_path_edit_not_unique_after_clear'}
   try {

@@ -118,7 +118,7 @@ expect("Bundle: 8 of 8 fictional resources visible")
 press("Bundle: Type Patient")
 expect("Bundle: 2 of 8 fictional resources visible")
 press("Bundle: Clear fictional records")
-expect("Native Rust Experiment")
+expect("Welcome to MedOrigin")
 if present("Bundle record: Observation/fictional-observation-003") {
   noGo("cleared fictional source remained accessible")
 }

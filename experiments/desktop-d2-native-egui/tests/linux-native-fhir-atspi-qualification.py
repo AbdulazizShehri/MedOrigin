@@ -152,10 +152,10 @@ def find_native_frame(desktop: object) -> object | None:
     for frame in frames:
         descendants = tree(frame)
         names = {name(node) for node in descendants}
-        if (
-            "MedOrigin — Native Rust Experiment" in names
-            and "patient-minimal (57 bytes)" in names
-            and "Verify synthetic SHA-256" in names
+        # A plain launch opens Home; the fixture controls are one navigation
+        # step away under "FHIR fixture inspector".
+        if "Welcome to MedOrigin" in names and any(
+            n.startswith("FHIR fixture inspector") for n in names
         ):
             identified.append(frame)
     return identified[0] if len(identified) == 1 else None

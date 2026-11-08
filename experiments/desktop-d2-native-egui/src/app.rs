@@ -752,7 +752,8 @@ fn is_records_screen(index: usize) -> bool {
 
 /// Pure navigation transition: first frame uses the launch screen; newly
 /// opened records jump to FHIR workspace unless a records screen is already
-/// showing; otherwise the user's choice is kept.
+/// showing; closing records on a records screen returns Home; otherwise the
+/// user's choice is kept.
 fn next_nav_state(stored: Option<NavState>, records_open: bool, initial: usize) -> NavState {
     match stored {
         None => NavState {
@@ -762,6 +763,8 @@ fn next_nav_state(stored: Option<NavState>, records_open: bool, initial: usize) 
         Some(prev) => NavState {
             screen: if records_open && !prev.records_open && !is_records_screen(prev.screen) {
                 screens::FHIR_WORKSPACE
+            } else if !records_open && prev.records_open && is_records_screen(prev.screen) {
+                screens::HOME
             } else {
                 prev.screen
             },
@@ -794,6 +797,22 @@ fn tag_name(tag: Option<Tag>) -> &'static str {
         Some(Tag::Experiment) => "Experiment",
         None => "Available",
     }
+}
+
+/// Keep a reviewed accessible name (the UIA/AX/AT-SPI QA contract) while the
+/// visible copy follows the design board.
+fn named(response: egui::Response, typ: egui::WidgetType, name: &str) -> egui::Response {
+    let enabled = response.enabled();
+    response.widget_info(|| egui::WidgetInfo::labeled(typ, enabled, name));
+    response
+}
+
+fn named_selected(response: egui::Response, name: &str, selected: bool) -> egui::Response {
+    let enabled = response.enabled();
+    response.widget_info(|| {
+        egui::WidgetInfo::selected(egui::WidgetType::Button, enabled, selected, name)
+    });
+    response
 }
 
 fn section_title(ui: &mut egui::Ui, text: &str) {
@@ -2844,228 +2863,420 @@ impl MedOriginNativePreview {
             Incoming(usize, usize),
             Back,
         }
+        let p = *crate::theme::palette(ui.ctx().theme());
+        let small = crate::theme::size::SMALL;
         let mut next: Option<Action> = None;
+        let total = bundle.resources.len();
+        let visible = (0..total).filter(|i| self.bundle_visible(*i)).count();
+        let visited_visible = (0..total)
+            .filter(|i| self.bundle_visible(*i) && self.synthetic_bundle_visited[*i])
+            .count();
+        let group_label = self
+            .synthetic_bundle_patient
+            .and_then(|index| bundle.resources.get(index))
+            .map_or("All imaginary patients", |patient| {
+                patient.resource_id.as_str()
+            });
         egui::ScrollArea::vertical().show(ui, |ui| {
-            ui.heading("MedOrigin — Fictional Multi-Patient Workspace");
-            ui.strong("STRUCTURAL DEMO ONLY — no clinical content, patient identity, EHR or PHI.");
-            ui.label(format!(
-                "{} imaginary source-only records across {} fictional patients",
-                bundle.resources.len(), bundle.patient_count
-            ));
-            ui.label("Read-only FHIR-shaped Bundle. No encrypted Core connection or authenticated sender.");
+            // Visible copy follows the design board; accessible names keep the
+            // reviewed QA contract ("Bundle: …") used by UIA/AX/AT-SPI scripts.
+            ui.horizontal(|ui| {
+                named(
+                    ui.label(
+                        egui::RichText::new("Fictional FHIR bundle")
+                            .size(crate::theme::size::HEADING)
+                            .strong(),
+                    ),
+                    egui::WidgetType::Label,
+                    "MedOrigin — Fictional Multi-Patient Workspace",
+                );
+                crate::theme::tag(ui, "Not reviewed", p.badge, p.text_secondary);
+            });
+            named(
+                ui.label(
+                    egui::RichText::new(format!(
+                        "{total} records · {} synthetic patients · read-only · structure only, no clinical content",
+                        bundle.patient_count
+                    ))
+                    .color(p.text_secondary),
+                ),
+                egui::WidgetType::Label,
+                &format!(
+                    "{total} imaginary source-only records across {} fictional patients",
+                    bundle.patient_count
+                ),
+            );
             if self.local_bundle_dragged_source {
-                ui.strong("Bundle: Opened local synthetic-only JSON (no PHI, session-only)");
+                named(
+                    ui.label(
+                        egui::RichText::new("Opened from a local file for this session only")
+                            .size(small)
+                            .color(p.blue_text),
+                    ),
+                    egui::WidgetType::Label,
+                    "Bundle: Opened local synthetic-only JSON (no PHI, session-only)",
+                );
             }
             if let Some(notice) = self.local_bundle_drop_notice {
-                ui.label(notice);
+                ui.label(egui::RichText::new(notice).color(p.warning));
             }
-            if ui.button("Bundle: Clear fictional records").clicked() {
-                next = Some(Action::Clear);
-            }
-            ui.separator();
-            ui.strong("Fictional patient groups");
-            let group_label = self
-                .synthetic_bundle_patient
-                .and_then(|index| bundle.resources.get(index))
-                .map_or("All imaginary patients", |patient| patient.resource_id.as_str());
-            ui.label(format!("Bundle: Active fictional patient group: {group_label}"));
-            ui.horizontal_wrapped(|ui| {
-                if ui.button("Bundle: Previous patient group").clicked() {
-                    next = Some(Action::PatientStep(false));
+            ui.add_space(crate::theme::space::MD);
+
+            crate::theme::card(ui, |ui| {
+                egui::Grid::new("medorigin-bundle-filters")
+                    .num_columns(2)
+                    .spacing([16.0, 10.0])
+                    .show(ui, |ui| {
+                        ui.label(egui::RichText::new("Patient").size(small).color(p.text_muted));
+                        ui.horizontal_wrapped(|ui| {
+                            let all = self.synthetic_bundle_patient.is_none();
+                            let r = ui.add(egui::Button::selectable(all, "All patients"));
+                            if named_selected(r, "Bundle: All patients", all).clicked() {
+                                next = Some(Action::Patient(None));
+                            }
+                            if bundle.patient_count <= 4 {
+                                for (index, record) in bundle.resources.iter().enumerate() {
+                                    if record.resource_type != "Patient" {
+                                        continue;
+                                    }
+                                    let on = self.synthetic_bundle_patient == Some(index);
+                                    let r = ui.add(egui::Button::selectable(on, &record.resource_id));
+                                    let name = format!("Bundle: Patient {}", record.resource_id);
+                                    if named_selected(r, &name, on).clicked() {
+                                        next = Some(Action::Patient(Some(index)));
+                                    }
+                                }
+                            }
+                            let r = ui.button("\u{2039} Previous").on_hover_text("Previous patient group");
+                            if named(r, egui::WidgetType::Button, "Bundle: Previous patient group").clicked() {
+                                next = Some(Action::PatientStep(false));
+                            }
+                            let r = ui.button("Next \u{203A}").on_hover_text("Next patient group");
+                            if named(r, egui::WidgetType::Button, "Bundle: Next patient group").clicked() {
+                                next = Some(Action::PatientStep(true));
+                            }
+                        });
+                        ui.end_row();
+                        ui.label("");
+                        named(
+                            ui.label(
+                                egui::RichText::new(format!("Showing {group_label}"))
+                                    .size(small)
+                                    .color(p.text_secondary),
+                            ),
+                            egui::WidgetType::Label,
+                            &format!("Bundle: Active fictional patient group: {group_label}"),
+                        );
+                        ui.end_row();
+                        ui.label(egui::RichText::new("Type").size(small).color(p.text_muted));
+                        ui.horizontal(|ui| {
+                            for kind in ["All", "Patient", "Encounter", "Observation"] {
+                                let on = self.synthetic_bundle_type == kind
+                                    || (kind == "All" && self.synthetic_bundle_type.is_empty());
+                                let r = ui.add(egui::Button::selectable(on, kind));
+                                if named_selected(r, &format!("Bundle: Type {kind}"), on).clicked() {
+                                    next = Some(Action::Type(kind));
+                                }
+                            }
+                        });
+                        ui.end_row();
+                        ui.label(egui::RichText::new("Search").size(small).color(p.text_muted));
+                        ui.horizontal(|ui| {
+                            let mut query = self.synthetic_bundle_query.clone();
+                            let response = ui.add(
+                                egui::TextEdit::singleline(&mut query)
+                                    .hint_text("Type or ID, e.g. fictional-observation-016   Ctrl F")
+                                    .char_limit(64)
+                                    .desired_width(320.0),
+                            );
+                            if ui.input(|i| i.modifiers.command && i.key_pressed(egui::Key::F)) {
+                                response.request_focus();
+                            }
+                            if response.changed() {
+                                next = Some(Action::Search(query));
+                            }
+                            let r = ui.button("Clear");
+                            if named(r, egui::WidgetType::Button, "Bundle: Clear fictional search").clicked() {
+                                next = Some(Action::Search(String::new()));
+                            }
+                        });
+                        ui.end_row();
+                    });
+                if !self.synthetic_bundle_query.is_empty() {
+                    named(
+                        ui.label(
+                            egui::RichText::new(format!("Matching \u{201C}{}\u{201D}", self.synthetic_bundle_query))
+                                .size(small)
+                                .color(p.text_secondary),
+                        ),
+                        egui::WidgetType::Label,
+                        &format!("Bundle: Active fictional search: {}", self.synthetic_bundle_query),
+                    );
                 }
-                if ui.button("Bundle: Next patient group").clicked() {
-                    next = Some(Action::PatientStep(true));
-                }
-                if ui.button("Bundle: All patients").clicked() {
-                    next = Some(Action::Patient(None));
-                }
-                if bundle.patient_count <= 4 {
-                    for (index, record) in bundle.resources.iter().enumerate() {
-                        if record.resource_type == "Patient"
-                            && ui
-                                .button(format!("Bundle: Patient {}", record.resource_id))
-                                .clicked()
-                        {
-                            next = Some(Action::Patient(Some(index)));
-                        }
-                    }
+                if bundle.patient_count > 4 {
+                    ui.collapsing("Choose a patient by ID", |ui| {
+                        ui.horizontal_wrapped(|ui| {
+                            for (index, record) in bundle.resources.iter().enumerate() {
+                                if record.resource_type == "Patient" {
+                                    let on = self.synthetic_bundle_patient == Some(index);
+                                    let r = ui.add(egui::Button::selectable(on, &record.resource_id));
+                                    let name = format!("Bundle: Patient {}", record.resource_id);
+                                    if named_selected(r, &name, on).clicked() {
+                                        next = Some(Action::Patient(Some(index)));
+                                    }
+                                }
+                            }
+                        });
+                    });
                 }
             });
-            // Avoid rendering sixteen patient buttons in the primary toolbar.
-            // All source-derived groups remain available on demand.
-            if bundle.patient_count > 4 {
-                ui.collapsing("Bundle: Choose fictional patient by ID", |ui| {
+            ui.add_space(crate::theme::space::MD);
+
+            let list = |ui: &mut egui::Ui, next: &mut Option<Action>| {
+                crate::theme::card(ui, |ui| {
+                    ui.horizontal(|ui| {
+                        ui.label(egui::RichText::new("Records").strong());
+                        named(
+                            ui.label(
+                                egui::RichText::new(format!("{visible} of {total} shown"))
+                                    .size(small)
+                                    .color(p.text_muted),
+                            ),
+                            egui::WidgetType::Label,
+                            &format!("Bundle: {visible} of {total} fictional resources visible"),
+                        );
+                    });
+                    named(
+                        ui.label(
+                            egui::RichText::new(format!(
+                                "{visited_visible} of {visible} opened this session (not a review)"
+                            ))
+                            .size(small)
+                            .color(p.text_secondary),
+                        ),
+                        egui::WidgetType::Label,
+                        &format!(
+                            "Bundle exploration: {visited_visible} of {visible} visible fictional records opened (session only, NOT review)"
+                        ),
+                    );
                     ui.horizontal_wrapped(|ui| {
-                        for (index, record) in bundle.resources.iter().enumerate() {
-                            if record.resource_type == "Patient"
-                                && ui
-                                    .button(format!("Bundle: Patient {}", record.resource_id))
-                                    .clicked()
-                            {
-                                next = Some(Action::Patient(Some(index)));
-                            }
+                        let r = ui.add_enabled(visible > visited_visible, egui::Button::new("Open next unopened"));
+                        if named(r, egui::WidgetType::Button, "Bundle: Open next unexplored visible record").clicked() {
+                            *next = Some(Action::NextUnexplored);
+                        }
+                        let r = ui.add_enabled(visible > 0, egui::Button::new("\u{2039}")).on_hover_text("Previous record");
+                        if named(r, egui::WidgetType::Button, "Bundle: Previous visible record").clicked() {
+                            *next = Some(Action::Step(false));
+                        }
+                        let r = ui.add_enabled(visible > 0, egui::Button::new("\u{203A}")).on_hover_text("Next record");
+                        if named(r, egui::WidgetType::Button, "Bundle: Next visible record").clicked() {
+                            *next = Some(Action::Step(true));
+                        }
+                        let r = ui.add_enabled(
+                            self.synthetic_bundle_visited.iter().any(|v| *v),
+                            egui::Button::new("Reset progress"),
+                        );
+                        if named(r, egui::WidgetType::Button, "Bundle: Reset session exploration").clicked() {
+                            *next = Some(Action::ResetExploration);
                         }
                     });
-                });
-            }
-            ui.strong("Fictional resource worklist");
-            ui.horizontal_wrapped(|ui| {
-                ui.label("Bundle: Find fictional type or resource ID (NO PHI):");
-                let mut query = self.synthetic_bundle_query.clone();
-                let response = ui.add(
-                    egui::TextEdit::singleline(&mut query)
-                        .hint_text("fictional-observation-016")
-                        .char_limit(64)
-                        .desired_width(265.0),
-                );
-                if ui.input(|input| input.modifiers.command && input.key_pressed(egui::Key::F)) {
-                    response.request_focus();
-                }
-                if response.changed() {
-                    next = Some(Action::Search(query));
-                }
-                if ui.button("Bundle: Clear fictional search").clicked() {
-                    next = Some(Action::Search(String::new()));
-                }
-            });
-            ui.label(format!(
-                "Bundle: Active fictional search: {}",
-                if self.synthetic_bundle_query.is_empty() {
-                    "All fictional resource IDs"
-                } else {
-                    self.synthetic_bundle_query.as_str()
-                }
-            ));
-            ui.strong("Resource types");
-            ui.horizontal_wrapped(|ui| {
-                for kind in ["All", "Patient", "Encounter", "Observation"] {
-                    if ui.button(format!("Bundle: Type {kind}")).clicked() {
-                        next = Some(Action::Type(kind));
-                    }
-                }
-            });
-            let visible = (0..bundle.resources.len())
-                .filter(|index| self.bundle_visible(*index))
-                .count();
-            ui.strong(format!(
-                "Bundle: {} of {} fictional resources visible",
-                visible, bundle.resources.len()
-            ));
-            let visited_visible = (0..bundle.resources.len())
-                .filter(|index| self.bundle_visible(*index) && self.synthetic_bundle_visited[*index])
-                .count();
-            ui.label(format!(
-                "Bundle exploration: {} of {} visible fictional records opened (session only, NOT review)",
-                visited_visible, visible
-            ));
-            ui.horizontal(|ui| {
-                if ui
-                    .add_enabled(
-                        visible > visited_visible,
-                        egui::Button::new("Bundle: Open next unexplored visible record"),
-                    )
-                    .clicked()
-                {
-                    next = Some(Action::NextUnexplored);
-                }
-                if ui
-                    .add_enabled(
-                        self.synthetic_bundle_visited.iter().any(|was_opened| *was_opened),
-                        egui::Button::new("Bundle: Reset session exploration"),
-                    )
-                    .clicked()
-                {
-                    next = Some(Action::ResetExploration);
-                }
-            });
-            if visible > 0 {
-                ui.horizontal(|ui| {
-                    if ui.button("Bundle: Previous visible record").clicked() {
-                        next = Some(Action::Step(false));
-                    }
-                    if ui.button("Bundle: Next visible record").clicked() {
-                        next = Some(Action::Step(true));
-                    }
-                });
-            }
-            for (index, resource) in bundle.resources.iter().enumerate() {
-                if self.bundle_visible(index)
-                    && ui
-                        .button(format!(
-                            "Bundle: Open {}/{}",
-                            resource.resource_type, resource.resource_id
-                        ))
-                        .clicked()
-                {
-                    next = Some(Action::Select(index));
-                }
-            }
-            if visible == 0 {
-                ui.label("No fictional resources for this patient group and type.");
-            }
-            ui.separator();
-            if let Some(index) = self.synthetic_bundle_selected
-                && let Some(current) = bundle.resources.get(index)
-            {
-                ui.strong(format!(
-                    "Bundle record: {}/{}",
-                    current.resource_type, current.resource_id
-                ));
-                ui.monospace(format!("Verified fictional URN: {}", current.full_url));
-                let incoming = bundle.resources.iter()
-                    .flat_map(|resource| resource.links.iter())
-                    .filter(|link| link.target == current.full_url)
-                    .count();
-                ui.label(format!(
-                    "Bundle: {} outgoing and {} incoming local references",
-                    current.links.len(), incoming
-                ));
-                for (link_index, link) in current.links.iter().enumerate() {
-                    if let Some(target) = bundle.index_for(&link.target)
-                        && let Some(resource) = bundle.resources.get(target)
-                        && ui
-                            .button(format!(
-                                "Bundle: Follow {} to {}/{}",
-                                link.field, resource.resource_type, resource.resource_id
-                            ))
-                            .clicked()
-                    {
-                        next = Some(Action::Follow(link_index));
-                    }
-                }
-                for (source_index, source) in bundle.resources.iter().enumerate() {
-                    for (link_index, link) in source.links.iter().enumerate() {
-                        if link.target == current.full_url
-                            && ui
-                                .button(format!(
-                                    "Bundle: Incoming {}/{} via {}",
-                                    source.resource_type, source.resource_id, link.field
-                                ))
-                                .clicked()
-                        {
-                            next = Some(Action::Incoming(source_index, link_index));
+                    ui.add_space(crate::theme::space::XS);
+                    ui.spacing_mut().item_spacing.y = 2.0;
+                    for (index, resource) in bundle.resources.iter().enumerate() {
+                        if !self.bundle_visible(index) {
+                            continue;
+                        }
+                        let selected = self.synthetic_bundle_selected == Some(index);
+                        let (bg, fg) = match resource.resource_type.as_str() {
+                            "Patient" => (p.blue_bg, p.blue_text),
+                            "Encounter" => (p.mint_bg, p.mint_text),
+                            _ => (p.badge, p.text_secondary),
+                        };
+                        let mut text = egui::text::LayoutJob::default();
+                        text.append(
+                            &format!(" {} ", resource.resource_type),
+                            0.0,
+                            egui::TextFormat {
+                                font_id: egui::FontId::proportional(crate::theme::size::CAPTION),
+                                color: fg,
+                                background: bg,
+                                ..Default::default()
+                            },
+                        );
+                        text.append(
+                            &resource.resource_id,
+                            8.0,
+                            egui::TextFormat {
+                                font_id: egui::FontId::proportional(crate::theme::size::BODY),
+                                color: p.text,
+                                ..Default::default()
+                            },
+                        );
+                        let mut button = egui::Button::selectable(selected, text)
+                            .min_size(egui::vec2(ui.available_width(), 30.0));
+                        if self.synthetic_bundle_visited[index] {
+                            button = button.right_text(
+                                egui::RichText::new("opened").size(crate::theme::size::CAPTION).color(p.text_muted),
+                            );
+                        }
+                        let name = format!("Bundle: Open {}/{}", resource.resource_type, resource.resource_id);
+                        if named_selected(ui.add(button), &name, selected).clicked() {
+                            *next = Some(Action::Select(index));
                         }
                     }
-                }
-                if !self.synthetic_bundle_history.is_empty() {
-                    ui.label(format!(
-                        "Bundle: {} of 24 navigation steps",
-                        self.synthetic_bundle_history.len()
-                    ));
-                    if ui.button("Bundle: Back to previous resource").clicked() {
-                        next = Some(Action::Back);
+                    if visible == 0 {
+                        ui.label(
+                            egui::RichText::new("No records match these filters.").color(p.text_secondary),
+                        );
                     }
-                }
-                ui.label("No clinical values, names, dates, codes or notes accepted in this preview.");
+                });
+            };
+
+            let detail = |ui: &mut egui::Ui, next: &mut Option<Action>| {
+                crate::theme::card(ui, |ui| {
+                    let Some(current) = self
+                        .synthetic_bundle_selected
+                        .and_then(|index| bundle.resources.get(index))
+                    else {
+                        ui.label(egui::RichText::new("Record").strong());
+                        ui.label(
+                            egui::RichText::new("Select a record to see its identity and references.")
+                                .color(p.text_secondary),
+                        );
+                        return;
+                    };
+                    named(
+                        ui.label(
+                            egui::RichText::new(format!("{} \u{00B7} {}", current.resource_type, current.resource_id))
+                                .size(crate::theme::size::TITLE)
+                                .strong(),
+                        ),
+                        egui::WidgetType::Label,
+                        &format!("Bundle record: {}/{}", current.resource_type, current.resource_id),
+                    );
+                    ui.label(egui::RichText::new("Verified fictional URN").size(small).color(p.text_muted));
+                    ui.label(egui::RichText::new(&current.full_url).monospace().size(small));
+                    ui.add_space(crate::theme::space::SM);
+                    let incoming = bundle
+                        .resources
+                        .iter()
+                        .flat_map(|resource| resource.links.iter())
+                        .filter(|link| link.target == current.full_url)
+                        .count();
+                    ui.horizontal(|ui| {
+                        ui.label(egui::RichText::new("References").strong());
+                        named(
+                            ui.label(
+                                egui::RichText::new(format!("{} out \u{00B7} {incoming} in", current.links.len()))
+                                    .size(small)
+                                    .color(p.text_muted),
+                            ),
+                            egui::WidgetType::Label,
+                            &format!(
+                                "Bundle: {} outgoing and {incoming} incoming local references",
+                                current.links.len()
+                            ),
+                        );
+                    });
+                    for (link_index, link) in current.links.iter().enumerate() {
+                        if let Some(target) = bundle.index_for(&link.target)
+                            && let Some(resource) = bundle.resources.get(target)
+                        {
+                            let r = ui.button(format!(
+                                "{}: {}/{}",
+                                link.field, resource.resource_type, resource.resource_id
+                            ));
+                            let name = format!(
+                                "Bundle: Follow {} to {}/{}",
+                                link.field, resource.resource_type, resource.resource_id
+                            );
+                            if named(r, egui::WidgetType::Button, &name).clicked() {
+                                *next = Some(Action::Follow(link_index));
+                            }
+                        }
+                    }
+                    for (source_index, source) in bundle.resources.iter().enumerate() {
+                        for (link_index, link) in source.links.iter().enumerate() {
+                            if link.target != current.full_url {
+                                continue;
+                            }
+                            let r = ui.button(format!(
+                                "{}/{} via {}",
+                                source.resource_type, source.resource_id, link.field
+                            ));
+                            let name = format!(
+                                "Bundle: Incoming {}/{} via {}",
+                                source.resource_type, source.resource_id, link.field
+                            );
+                            if named(r, egui::WidgetType::Button, &name).clicked() {
+                                *next = Some(Action::Incoming(source_index, link_index));
+                            }
+                        }
+                    }
+                    if !self.synthetic_bundle_history.is_empty() {
+                        ui.add_space(crate::theme::space::SM);
+                        ui.horizontal(|ui| {
+                            let r = ui.button("Back");
+                            if named(r, egui::WidgetType::Button, "Bundle: Back to previous resource").clicked() {
+                                *next = Some(Action::Back);
+                            }
+                            let steps = self.synthetic_bundle_history.len();
+                            named(
+                                ui.label(
+                                    egui::RichText::new(format!("Step {steps} of 24"))
+                                        .size(small)
+                                        .color(p.text_muted),
+                                ),
+                                egui::WidgetType::Label,
+                                &format!("Bundle: {steps} of 24 navigation steps"),
+                            );
+                        });
+                    }
+                    ui.add_space(crate::theme::space::SM);
+                    ui.label(
+                        egui::RichText::new(
+                            "No clinical values, names, dates, codes or notes are accepted in this preview.",
+                        )
+                        .size(crate::theme::size::CAPTION)
+                        .color(p.text_muted),
+                    );
+                });
+            };
+
+            if ui.available_width() >= 720.0 {
+                ui.columns(2, |cols| {
+                    list(&mut cols[0], &mut next);
+                    detail(&mut cols[1], &mut next);
+                });
             } else {
-                ui.label("Choose a fictional resource from the reviewed patient group.");
+                list(ui, &mut next);
+                ui.add_space(crate::theme::space::MD);
+                detail(ui, &mut next);
             }
             if let Some(notice) = self.synthetic_bundle_notice {
-                ui.label(notice);
+                ui.add_space(crate::theme::space::SM);
+                ui.label(egui::RichText::new(notice).color(p.warning));
             }
-            ui.collapsing("Structural source evidence (not identity proof)", |ui| {
-                ui.monospace(format!("Canonical synthetic Bundle SHA-256: {}", bundle.sha256));
-                ui.label("Source input is untrusted and no FHIR R4 profile conformance is asserted.");
+            ui.add_space(crate::theme::space::MD);
+            ui.horizontal(|ui| {
+                let r = ui.button("Close bundle");
+                if named(r, egui::WidgetType::Button, "Bundle: Clear fictional records").clicked() {
+                    next = Some(Action::Clear);
+                }
+                ui.collapsing("Source evidence (not identity proof)", |ui| {
+                    ui.label(
+                        egui::RichText::new(format!("Canonical synthetic Bundle SHA-256: {}", bundle.sha256))
+                            .monospace()
+                            .size(small),
+                    );
+                    ui.label(
+                        egui::RichText::new(
+                            "Source input is untrusted and no FHIR R4 profile conformance is asserted.",
+                        )
+                        .size(small)
+                        .color(p.text_muted),
+                    );
+                });
             });
         });
         match next {
@@ -3461,6 +3672,7 @@ impl MedOriginNativePreview {
 
     fn sidebar(&mut self, ui: &mut egui::Ui, current: usize) {
         let p = *crate::theme::palette(ui.ctx().theme());
+        let status = self.local_source_status();
         let mut chosen = None;
         for (key, target) in [
             (egui::Key::Num1, screens::HOME),
@@ -3525,7 +3737,7 @@ impl MedOriginNativePreview {
                         .or(chosen);
                 }
                 ui.add_space(crate::theme::space::SM);
-                let footer = 64.0;
+                let footer = 84.0;
                 egui::ScrollArea::vertical()
                     .max_height((ui.available_height() - footer).max(80.0))
                     .show(ui, |ui| {
@@ -3597,6 +3809,15 @@ impl MedOriginNativePreview {
                                 .size(crate::theme::size::SMALL)
                                 .color(p.blue_text),
                             );
+                            named(
+                                ui.label(
+                                    egui::RichText::new(format!("Source: {status}"))
+                                        .size(crate::theme::size::CAPTION)
+                                        .color(p.blue_text),
+                                ),
+                                egui::WidgetType::Label,
+                                &format!("Core status: {status}"),
+                            );
                         });
                 });
             });
@@ -3624,7 +3845,11 @@ impl MedOriginNativePreview {
                     ui.label(egui::RichText::new(screen.group).color(p.text_muted));
                     ui.label(egui::RichText::new("/").color(p.text_muted));
                     ui.label(egui::RichText::new(screen.label).strong());
-                    crate::theme::tag(ui, "Synthetic", p.pink_bg, p.pink_text);
+                    named(
+                        crate::theme::tag(ui, "Synthetic", p.pink_bg, p.pink_text),
+                        egui::WidgetType::Label,
+                        "Synthetic data: fictional demo, not for clinical use",
+                    );
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                         if is_records_screen(current) {
                             // Shown as on the design board, disabled with reasons.
@@ -3641,7 +3866,7 @@ impl MedOriginNativePreview {
                         }
                         if self.has_open_records()
                             && ui
-                                .button("Clear session")
+                                .button("Clear local session")
                                 .on_hover_text("Remove loaded fictional data from memory (Esc)")
                                 .clicked()
                         {
@@ -4894,8 +5119,17 @@ mod tests {
         let cleared = next_nav_state(Some(opened), false, screens::HOME);
         assert_eq!(
             cleared.screen,
+            screens::HOME,
+            "closing records returns Home"
+        );
+        let empty_records = NavState {
+            screen: screens::FHIR_WORKSPACE,
+            records_open: false,
+        };
+        assert_eq!(
+            next_nav_state(Some(empty_records), false, screens::HOME).screen,
             screens::FHIR_WORKSPACE,
-            "empty state, not a jump"
+            "an empty records screen chosen by the user stays"
         );
         let encounters = SCREENS
             .iter()
