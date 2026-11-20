@@ -2,12 +2,12 @@
 
 ## MedOrigin v0.3.1 — Corrective Software & Desktop Release
 
-**Release date:** 2026-11-20  
-**Tag:** `v0.3.1`  
-**Python:** 3.11, 3.12  
-**Governance Track:** Lane A (Synthetic-Only Developer Software Track — QUALIFIED)  
-**Scientific Invariants:** Lane B (MRL-0809/0899 `SCIENTIFIC_NOT_QUALIFIED`, frozen root intact)  
-**Clinical Boundaries:** Lane C (CW-021 `CLINICAL_NOT_AUTHORIZED`, zero PHI, zero live EHR)
+- **Release date:** 2026-11-20
+- **Tag:** `v0.3.1`
+- **Python:** 3.11, 3.12
+- **Governance Track:** Lane A (Synthetic-Only Developer Software Track — QUALIFIED)
+- **Scientific Invariants:** Lane B (MRL-0809/0899 `SCIENTIFIC_NOT_QUALIFIED`, frozen root intact)
+- **Clinical Boundaries:** Lane C (CW-021 `CLINICAL_NOT_AUTHORIZED`, zero PHI, zero live EHR)
 
 ### Highlights
 - **Canonical `medorigin` CLI**: Added `medorigin` command dispatcher alongside `medscale` for brand alignment.
@@ -21,7 +21,7 @@
 ## MedOrigin v0.3.0 — RETRACTED / SUPERSEDED by v0.3.1
 
 > [!WARNING]
-> **Status: RETRACTED / SUPERSEDED by v0.3.1**  
+> **Status: RETRACTED / SUPERSEDED by v0.3.1**
 > Tag `v0.3.0` was published manually following an incomplete CI workflow run (`44780707812`) where test collection failed due to missing test dependencies in `release.yml`. Uploaded artifacts prematurely included `medscale_workspace-0.1.0.dev1-py3-none-any.whl` (outside approved base Core candidate qualification) and omitted native desktop installers. Per ADR-0010 (`docs/releases/artifact_lifecycle.md`), assets and Git tag remain preserved immutably for citation integrity (R7), with `v0.3.0` formally superseded by corrective release `v0.3.1`. Full incident report: `docs/releases/v0_3_0_incident_containment.md`.
 
 - **Release date:** 2026-11-20

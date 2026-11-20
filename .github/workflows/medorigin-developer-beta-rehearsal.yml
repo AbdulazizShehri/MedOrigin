@@ -86,8 +86,9 @@ jobs:
           uv build --sdist --wheel $stage --out-dir $dist
           if ($LASTEXITCODE -ne 0) { throw 'Package build failed' }
 
-          $wheel = Join-Path $dist 'medscale-0.3.0-py3-none-any.whl'
-          $sdist = Join-Path $dist 'medscale-0.3.0.tar.gz'
+          $version = (& $pythonBuild -c 'from medscale.__about__ import __version__; print(__version__)').Trim()
+          $wheel = Join-Path $dist "medscale-${version}-py3-none-any.whl"
+          $sdist = Join-Path $dist "medscale-${version}.tar.gz"
           if (!(Test-Path $wheel) -or !(Test-Path $sdist)) {
             throw 'Expected exact package artifacts missing'
           }
