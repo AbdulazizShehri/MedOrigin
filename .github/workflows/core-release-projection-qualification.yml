@@ -42,7 +42,7 @@ jobs:
         run: |
           set -euo pipefail
           python_exe="$(uv python find "${{ matrix.python }}")"
-          version="$("$python_exe" -c 'from medscale.__about__ import __version__; print(__version__)')"
+          version="$("$python_exe" -c "import sys; sys.path.insert(0, 'src'); from medscale.__about__ import __version__; print(__version__)")"
           scratch="$(mktemp -d)"
           "$python_exe" scripts/stage_medorigin_core_projection.py --out "$scratch/projected"
           uv build --sdist --wheel "$scratch/projected" --out-dir "$scratch/dist"
