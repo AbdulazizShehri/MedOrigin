@@ -1,6 +1,27 @@
 # MedOrigin Release History
 
-## MedOrigin v0.3.2 — Corrective Release & Native Desktop Distribution
+## MedOrigin v0.3.3 — Corrective Release & Native Desktop Distribution
+
+- **Release date:** 2026-11-20
+- **Tag:** `v0.3.3`
+- **Python:** 3.11, 3.12
+- **Governance Track:** Lane A (Synthetic-Only Developer Software Track — QUALIFIED)
+- **Scientific Invariants:** Lane B (MRL-0809/0899 `SCIENTIFIC_NOT_QUALIFIED`, frozen root intact)
+- **Clinical Boundaries:** Lane C (CW-021 `CLINICAL_NOT_AUTHORIZED`, zero PHI, zero live EHR)
+
+### Highlights
+- **Full Release CI/CD Workflow & Dependency Parity**: Added `jsonschema==4.25.1` test dependency and `fetch-depth: 0` in `.github/workflows/release.yml`, enabling automated end-to-end `quality gate` and `build artifacts` qualification on tag push.
+- **Canonical `medorigin` CLI**: Added `medorigin` command dispatcher alongside `medscale` for forward brand alignment.
+- **Desktop D2 Native Packaging**: Native 64-bit Windows setup installer (`MedOrigin-Synthetic-Private-Setup-windows-x86_64.exe`) and portable ZIP archive (`MedOrigin-Synthetic-D2-windows-x86_64-<hash>.zip`).
+- **Complete 28-Screen Functional Audit**: Comprehensive verification across all 28 clinical feature screens with WCAG AAA accessibility, dark/light themes, and fail-closed process supervision.
+- **ADR-0045 Base Core Projection**: Releases clean base Core wheel and sdist with zero optional research extras and zero runtime third-party dependencies.
+
+---
+
+## MedOrigin v0.3.2 — SUPERSEDED by v0.3.3
+
+> [!NOTE]
+> Tag `v0.3.2` was created on canonical `main` at commit `2e8c9df744a750940ce7f31fa16a4686a535da99`. Tag admission and full git-history checkout (`fetch-depth: 0`) succeeded. During the automated tag release run (`44825285788`), 7,917 tests passed; 13 synthetic structural tests failed due to `release.yml` omitting `jsonschema==4.25.1`. In accordance with ADR-0010, tag `v0.3.2` is preserved immutably and superseded by `v0.3.3`. Full incident documentation in `docs/releases/v0_3_2_workflow_parity_incident.md`.
 
 - **Release date:** 2026-11-20
 - **Tag:** `v0.3.2`
@@ -8,13 +29,6 @@
 - **Governance Track:** Lane A (Synthetic-Only Developer Software Track — QUALIFIED)
 - **Scientific Invariants:** Lane B (MRL-0809/0899 `SCIENTIFIC_NOT_QUALIFIED`, frozen root intact)
 - **Clinical Boundaries:** Lane C (CW-021 `CLINICAL_NOT_AUTHORIZED`, zero PHI, zero live EHR)
-
-### Highlights
-- **Full Release CI/CD Workflow Qualification**: Fixed shallow clone checkout in `.github/workflows/release.yml` with `fetch-depth: 0`, enabling automated end-to-end `quality gate` and `build artifacts` qualification on tag push.
-- **Canonical `medorigin` CLI**: Added `medorigin` command dispatcher alongside `medscale` for forward brand alignment.
-- **Desktop D2 Native Packaging**: Native 64-bit Windows setup installer (`MedOrigin-Synthetic-Private-Setup-windows-x86_64.exe`) and portable ZIP archive (`MedOrigin-Synthetic-D2-windows-x86_64-<hash>.zip`).
-- **Complete 28-Screen Functional Audit**: Comprehensive verification across all 28 clinical feature screens with WCAG AAA accessibility, dark/light themes, and fail-closed process supervision.
-- **ADR-0045 Base Core Projection**: Releases clean base Core wheel and sdist with zero optional research extras and zero runtime third-party dependencies.
 
 ---
 

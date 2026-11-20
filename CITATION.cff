@@ -14,7 +14,7 @@ url: "https://github.com/AbdulazizShehri/MedOrigin"
 license: Apache-2.0
 # Developer package version is not a claim of a published release; see RELEASES.md.
 # Historical v0.2.0 date and tag remain preserved in RELEASES.md.
-version: 0.3.2
+version: 0.3.3
 
 keywords:
   - healthcare
