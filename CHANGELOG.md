@@ -6,7 +6,27 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
-### Planned MedOrigin developer package v0.3.0 — CANDIDATE, NOT RELEASED
+## [0.3.1] — 2026-11-20
+
+### Added
+- **Canonical `medorigin` CLI entrypoint**: Added `medorigin` console dispatcher in `src/medscale/cli/__init__.py` and top-level `__main__.py` entrypoints for forward brand alignment alongside backward-compatible `medscale`.
+- **Desktop D2 Native Distribution**: Qualified and packaged native 64-bit Windows standalone installer (`MedOrigin-Synthetic-Private-Setup-windows-x86_64.exe`) and portable application archive (`MedOrigin-Synthetic-D2-windows-x86_64-<hash>.zip`).
+- **28-Screen Functional Audit**: Completed audit of all 28 feature coverage screens from `FEATURE_COVERAGE.md` with dark/light theme support, WCAG AAA contrast >= 4.5:1, and fail-closed process supervision.
+- **Base Core Packaging (ADR-0045)**: Integrated base Core projection in `scripts/stage_medorigin_core_projection.py` ensuring zero optional extras and zero runtime third-party dependencies in release wheels.
+
+### Changed
+- Version metadata bumped to `0.3.1` across `src/medscale/__about__.py`, `CITATION.cff`, and release tooling.
+- CI/CD workflow hardening: Updated `.github/workflows/release.yml` quality gate to install `cryptography==50.0.1` and `fhir.resources==7.1.0`, eliminating collection failures.
+- Pinned Actions dependencies upgraded: `softprops/action-gh-release` to `v3.0.4` and `astral-sh/setup-uv` to `v10.3.3` across all workflows.
+
+### Retracted / Superseded
+- **[0.3.0] — 2026-11-20 (RETRACTED / SUPERSEDED by 0.3.1)**:
+  - Tag `v0.3.0` was published manually following an incomplete CI workflow run (`44780707812`) where test collection failed due to missing test dependencies in the release workflow.
+  - Uploaded artifacts prematurely included `medscale_workspace-0.1.0.dev1-py3-none-any.whl` (outside approved base Core candidate qualification) and omitted native desktop installers.
+  - In accordance with ADR-0010 (`docs/releases/artifact_lifecycle.md`), assets and Git tag are preserved immutably for citation integrity (R7), with `v0.3.0` formally superseded by corrective release `v0.3.1`. Full incident report recorded in `docs/releases/v0_3_0_incident_containment.md`.
+
+### Planned MedOrigin developer package v0.3.0 — HISTORICAL CANDIDATE (SUPERSEDED)
+
 
 - Source package metadata and `medscale --version` are staged as `0.3.0`
   in a review branch only; the historical `v0.2.0` tag is immutable.

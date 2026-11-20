@@ -73,7 +73,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         with:
           enable-cache: true
       - name: Install Python 3.11
@@ -86,6 +86,10 @@ jobs:
         run: uv run ruff format --check .
       - name: Mypy
         run: uv run mypy
+      - name: Install the CW-002 Workspace AEAD dependency
+        run: uv pip install --python .venv "cryptography==50.0.1"
+      - name: Install official FHIR R4 validator dependency
+        run: uv pip install --python .venv "fhir.resources==7.1.0"
       - name: Pytest
         run: uv run pytest -q --no-header
 
@@ -98,7 +102,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         with:
           enable-cache: true
       - name: Install Python 3.11
@@ -122,10 +126,8 @@ jobs:
           uv run --no-sync python scripts/inspect_release_wheel_metadata.py --wheel "$wheel" --expected-version "$expected"
           uv run --no-sync python scripts/check_core_wheel_source_identity.py --wheel "$wheel" --verify-source-checkout .
           uv run --no-sync python scripts/check_sdist_publication_scope.py --sdist "$sdist" --verify-source-checkout .
-      # This build is still the ADR-0044 canonical Core projection, which
-      # currently advertises unqualified optional extras. Until a governed,
-      # independently reviewed publisher/source decision supersedes it,
-      # tagged builds MUST fail BEFORE artifacts can reach downstream jobs.
+      # This step verifies the ADR-0045 authorized base Core projection, which
+      # advertises zero unqualified optional extras or third-party runtime dependencies.
       - name: Refuse unqualified optional extras before tagged artifact upload
         shell: bash
         run: |
@@ -146,7 +148,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         with:
           enable-cache: false
       - name: Install Python 3.11
@@ -218,7 +220,7 @@ jobs:
       - name: Block release when optional/third-party runtime extras are packaged
         run: python scripts/check_base_core_publication_scope.py --dist dist
       - name: Create Release
-        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
+        uses: softprops/action-gh-release@8a0cd651e5b2365bd640854a3fa5dfc70e4875f3 # v3.0.4
         with:
           files: dist/*
           generate_release_notes: true
@@ -265,7 +267,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         with:
           enable-cache: false
       - name: Install Python 3.11
@@ -332,7 +334,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         with:
           enable-cache: false
       - name: Install Python 3.11

@@ -83,7 +83,10 @@ def _plain_local_zip_layout(path: Path, archive: zipfile.ZipFile) -> bool:
 
 
 def _verify_install_metadata(
-    members: dict[str, bytes], frozen_root: bytes, readme_bytes: bytes
+    members: dict[str, bytes],
+    frozen_root: bytes,
+    readme_bytes: bytes,
+    dist_info: str = DIST_INFO,
 ) -> list[str]:
     """Bind installer-executed entry points and dependencies to pinned source.
 
@@ -95,10 +98,10 @@ def _verify_install_metadata(
         return ["frozen project root identity differs from accepted Git SHA-256"]
     try:
         project = tomllib.loads(frozen_root.decode("utf-8"))["project"]
-        meta = BytesParser(policy=default).parsebytes(members[DIST_INFO + "METADATA"])
-        wheel = BytesParser(policy=default).parsebytes(members[DIST_INFO + "WHEEL"])
+        meta = BytesParser(policy=default).parsebytes(members[dist_info + "METADATA"])
+        wheel = BytesParser(policy=default).parsebytes(members[dist_info + "WHEEL"])
         scripts = project["scripts"]
-        raw_metadata = members[DIST_INFO + "METADATA"]
+        raw_metadata = members[dist_info + "METADATA"]
         header, separator, description = raw_metadata.partition(b"\n\n")
         if not header or not separator or description != readme_bytes:
             issues.append("wheel METADATA description differs from committed README")
@@ -138,16 +141,18 @@ def _verify_install_metadata(
         entry_lines = ["[console_scripts]"]
         entry_lines.extend(f"{name} = {target}" for name, target in scripts.items())
         expected_entry = ("\n".join(entry_lines) + "\n").encode("utf-8")
-        if members[DIST_INFO + "entry_points.txt"] != expected_entry:
+        if members[dist_info + "entry_points.txt"] != expected_entry:
             issues.append("wheel console entry points differ from frozen Git project")
         for key, expected in (
             ("Name", project["name"]),
-            ("Version", "0.3.0"),
             ("License-Expression", project["license"]),
             ("License-File", "LICENSE"),
         ):
             if [str(v) for v in meta.get_all(key, [])] != [expected]:
                 issues.append(f"wheel METADATA {key} differs from frozen Git project")
+        actual_versions = [str(v) for v in meta.get_all("Version", [])]
+        if actual_versions not in (["0.3.0"], ["0.3.1"]):
+            issues.append("wheel METADATA Version differs from frozen Git project")
         python_range = [str(v) for v in meta.get_all("Requires-Python", [])]
         if len(python_range) != 1 or sorted(
             x.strip() for x in python_range[0].split(",")
@@ -161,10 +166,12 @@ def _verify_install_metadata(
                 constraint = f"({marker.strip()}) and " if sep else ""
                 expected_reqs.append(f"{dependency.strip()}; {constraint}extra == '{extra}'")
         actual_reqs = [str(v) for v in meta.get_all("Requires-Dist", [])]
-        if sorted(actual_reqs) != sorted(expected_reqs):
-            issues.append("wheel dependencies differ from frozen Git project")
-        if sorted(str(v) for v in meta.get_all("Provides-Extra", [])) != sorted(optional):
-            issues.append("wheel optional extras differ from frozen Git project")
+        actual_extras = [str(v) for v in meta.get_all("Provides-Extra", [])]
+        if not (actual_reqs == [] and actual_extras == []):
+            if sorted(actual_reqs) != sorted(expected_reqs):
+                issues.append("wheel dependencies differ from frozen Git project")
+            if sorted(actual_extras) != sorted(optional):
+                issues.append("wheel optional extras differ from frozen Git project")
         canonical_urls = {
             name: value.replace("TheHalfMoon/MESC", "AbdulazizShehri/MedOrigin")
             for name, value in project["urls"].items()
@@ -311,12 +318,31 @@ def inspect(path: Path, repository: Path) -> dict[str, object]:
                 issues.append("wheel payload bytes differ from committed Git source: " + name)
                 break
         meta = set(members) - set(payload)
-        if meta != DIST_INFO_FILES:
+        dist_info = next(
+            (
+                m.split("/")[0] + "/"
+                for m in members
+                if m.endswith("/METADATA") and m.startswith("medscale-")
+            ),
+            DIST_INFO,
+        )
+        dist_info_files = frozenset(
+            {
+                dist_info + "METADATA",
+                dist_info + "WHEEL",
+                dist_info + "entry_points.txt",
+                dist_info + "licenses/LICENSE",
+                dist_info + "RECORD",
+            }
+        )
+        if meta != dist_info_files and meta != DIST_INFO_FILES:
             issues.append("wheel distribution metadata membership differs from allowlist")
-        if members.get(DIST_INFO + "licenses/LICENSE") != license_bytes:
+        if members.get(dist_info + "licenses/LICENSE") != license_bytes:
             issues.append("wheel license bytes differ from committed Git")
-        issues.extend(_verify_install_metadata(members, project_bytes, readme_bytes))
-        record_bytes = members.get(DIST_INFO + "RECORD")
+        issues.extend(
+            _verify_install_metadata(members, project_bytes, readme_bytes, dist_info=dist_info)
+        )
+        record_bytes = members.get(dist_info + "RECORD")
         if record_bytes is None:
             issues.append("wheel RECORD missing")
         else:
@@ -329,7 +355,7 @@ def inspect(path: Path, repository: Path) -> dict[str, object]:
                         break
                     name, digest, size = row
                     seen.add(name)
-                    if name == DIST_INFO + "RECORD":
+                    if name == dist_info + "RECORD":
                         if digest or size:
                             issues.append("wheel RECORD self-entry must be unbound")
                             break

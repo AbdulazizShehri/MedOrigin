@@ -40,6 +40,11 @@ RELEASE_METADATA: Final = {
 }
 
 
+_OPTIONAL_HEADER: Final = "[project.optional-dependencies]\n"
+_NEXT_HEADER: Final = "[dependency-groups]"
+_OPTIONAL_BLOCK_SHA256: Final = "8c0db866843e15ec75b764dfff4b4d983856d1e2c6f95f4427f576427e54378a"
+
+
 class ProjectionError(ValueError):
     """Source identity or package projection violates the declared contract."""
 
@@ -57,7 +62,7 @@ def _source_bytes(commit: str, path: str) -> bytes:
     return _git("show", f"{commit}:{path}")
 
 
-def stage(target: Path) -> dict[str, object]:
+def stage(target: Path, base_only: bool = True) -> dict[str, object]:
     """Stage exact committed source into a new directory; no root mutation."""
     target = target.resolve()
     if target.exists():
@@ -112,7 +117,17 @@ def stage(target: Path) -> dict[str, object]:
         + "]"
         + newline,
     )
+    if base_only:
+        if _OPTIONAL_HEADER not in successor or _NEXT_HEADER not in successor:
+            raise ProjectionError("missing expected optional dependencies block")
+        begin = successor.index(_OPTIONAL_HEADER)
+        end = successor.index(_NEXT_HEADER, begin)
+        removed = successor[begin:end]
+        if _sha(removed.encode("utf-8")) != _OPTIONAL_BLOCK_SHA256:
+            raise ProjectionError("optional research-extras metadata drift")
+        successor = successor[:begin] + successor[end:]
     archive = _git("archive", "--format=zip", commit, "--", *SOURCE_PATHS)
+
     files: dict[str, bytes] = {}
     with zipfile.ZipFile(io.BytesIO(archive)) as z:
         for info in z.infolist():
@@ -151,6 +166,11 @@ def stage(target: Path) -> dict[str, object]:
         "source_file_count": len(files),
         "publication_authorized": False,
     }
+    if base_only:
+        manifest_doc["removed_optional_section_sha256"] = _OPTIONAL_BLOCK_SHA256
+        manifest_doc["scope"] = "synthetic_only_base_core"
+        manifest_doc["staged_vcs_ignore_sha256"] = _sha(b"")
+
     record = (json.dumps(manifest_doc, sort_keys=True, indent=2) + "\n").encode("utf-8")
     # The final rename must stay on one filesystem. On Windows, an arbitrary
     # user TEMP on C: cannot be renamed atomically into an output on D:.
@@ -165,6 +185,8 @@ def stage(target: Path) -> dict[str, object]:
             dst.parent.mkdir(parents=True, exist_ok=True)
             dst.write_bytes(value)
         (work / "pyproject.toml").write_bytes(successor.encode("utf-8"))
+        if base_only:
+            (work / ".gitignore").write_bytes(b"")
         (work / "MEDORIGIN_SOURCE_PROVENANCE.json").write_bytes(record)
         if target.exists():
             raise ProjectionError("destination created during staging")
@@ -181,9 +203,14 @@ def stage(target: Path) -> dict[str, object]:
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--out", type=Path, required=True)
+    p.add_argument(
+        "--full",
+        action="store_true",
+        help="Retain optional research extras instead of base-only projection",
+    )
     args = p.parse_args(argv)
     try:
-        result = stage(args.out)
+        result = stage(args.out, base_only=not args.full)
     except (OSError, subprocess.CalledProcessError, ProjectionError) as ex:
         sys.stderr.write(f"PROJECTION_BLOCKED: {ex}\n")
         return 2
