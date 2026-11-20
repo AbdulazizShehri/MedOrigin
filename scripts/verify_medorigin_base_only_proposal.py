@@ -269,6 +269,8 @@ def check_record(wheel: dict[str, bytes], di: str = DI) -> None:
 def verify(repository: Path, dist: Path) -> dict[str, object]:
     commit, sources, original, _lock, _mrl = trusted_source(repository)
     parent, changed = exact_removed_projected_root(original)
+    if not dist.is_dir():
+        raise ProposalVerificationError(f"dist directory missing or not a directory: {dist}")
     wheel_candidates = [
         x for x in dist.iterdir() if x.suffix == ".whl" and x.name.startswith("medscale-")
     ]
