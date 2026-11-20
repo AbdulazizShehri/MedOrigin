@@ -29,12 +29,16 @@ HEX = re.compile(r"[0-9a-f]{64}\Z")
 # Re-baselined +2 (wheel 281->283, sdist 284->286) for v0.3.1 CLI entrypoints.
 EXPECTED: dict[str, tuple[int, ...]] = {"wheel": (281, 283), "sdist": (284, 286)}
 VALID_EXPECTED_FILES = {
-    "wheel": {"medscale-0.3.0-py3-none-any.whl", "medscale-0.3.1-py3-none-any.whl"},
-    "sdist": {"medscale-0.3.0.tar.gz", "medscale-0.3.1.tar.gz"},
+    "wheel": {
+        "medscale-0.3.0-py3-none-any.whl",
+        "medscale-0.3.1-py3-none-any.whl",
+        "medscale-0.3.2-py3-none-any.whl",
+    },
+    "sdist": {"medscale-0.3.0.tar.gz", "medscale-0.3.1.tar.gz", "medscale-0.3.2.tar.gz"},
 }
 EXPECTED_FILES = {
-    "wheel": "medscale-0.3.1-py3-none-any.whl",
-    "sdist": "medscale-0.3.1.tar.gz",
+    "wheel": "medscale-0.3.2-py3-none-any.whl",
+    "sdist": "medscale-0.3.2.tar.gz",
 }
 
 
