@@ -1,11 +1,11 @@
 # MedOrigin Release Incident Report — v0.3.1 Workflow Parity & Git Fetch-Depth
 
-**Date:** 2026-11-20  
-**Affected Tag:** `v0.3.1`  
-**Failed CI Run:** `44814588191`  
-**Root Cause:** Missing `fetch-depth: 0` in `.github/workflows/release.yml` jobs  
-**Resolution:** Explicit `fetch-depth: 0` on all checkout steps; version progression to `v0.3.2`  
-**Status:** **CONTAINED & SUPERSEDED**  
+**Date:** 2026-11-20
+**Affected Tag:** `v0.3.1`
+**Failed CI Run:** `44814588191`
+**Root Cause:** Missing `fetch-depth: 0` in `.github/workflows/release.yml` jobs
+**Resolution:** Explicit `fetch-depth: 0` on all checkout steps; version progression to `v0.3.2`
+**Status:** **CONTAINED & SUPERSEDED**
 
 ---
 
