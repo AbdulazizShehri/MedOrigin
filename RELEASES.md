@@ -1,6 +1,40 @@
-# MedOrigin Release History — MedScale v0.2.0
+# MedOrigin Release History
+
+## MedOrigin v0.3.1 — Corrective Software & Desktop Release
+
+- **Release date:** 2026-11-20
+- **Tag:** `v0.3.1`
+- **Python:** 3.11, 3.12
+- **Governance Track:** Lane A (Synthetic-Only Developer Software Track — QUALIFIED)
+- **Scientific Invariants:** Lane B (MRL-0809/0899 `SCIENTIFIC_NOT_QUALIFIED`, frozen root intact)
+- **Clinical Boundaries:** Lane C (CW-021 `CLINICAL_NOT_AUTHORIZED`, zero PHI, zero live EHR)
+
+### Highlights
+- **Canonical `medorigin` CLI**: Added `medorigin` command dispatcher alongside `medscale` for brand alignment.
+- **Desktop D2 Native Packaging**: Native 64-bit Windows setup installer (`MedOrigin-Synthetic-Private-Setup-windows-x86_64.exe`) and portable ZIP archive (`MedOrigin-Synthetic-D2-windows-x86_64-<hash>.zip`).
+- **Complete 28-Screen Functional Audit**: Comprehensive verification across all 28 clinical feature screens with WCAG AAA accessibility, dark/light themes, and fail-closed process supervision.
+- **ADR-0045 Base Core Projection**: Releases clean base Core wheel and sdist with zero optional research extras (`pillow`, `accelerate`) and zero runtime third-party dependencies.
+- **CI/CD Hardening**: Resolved pytest collection errors in release workflow by provisioning workspace dependencies, and upgraded Actions to pinned versions (`setup-uv@v10.3.3`, `action-gh-release@v3.0.4`).
+
+---
+
+## MedOrigin v0.3.0 — RETRACTED / SUPERSEDED by v0.3.1
+
+> [!WARNING]
+> **Status: RETRACTED / SUPERSEDED by v0.3.1**
+> Tag `v0.3.0` was published manually following an incomplete CI workflow run (`44780707812`) where test collection failed due to missing test dependencies in `release.yml`. Uploaded artifacts prematurely included `medscale_workspace-0.1.0.dev1-py3-none-any.whl` (outside approved base Core candidate qualification) and omitted native desktop installers. Per ADR-0010 (`docs/releases/artifact_lifecycle.md`), assets and Git tag remain preserved immutably for citation integrity (R7), with `v0.3.0` formally superseded by corrective release `v0.3.1`. Full incident report: `docs/releases/v0_3_0_incident_containment.md`.
+
+- **Release date:** 2026-11-20
+- **Tag:** `v0.3.0`
+- **Tagged commit:** `88f5fc1f4749694ff99548ae69a9f9478655424c`
+- **Successor:** `v0.3.1`
+
+---
+
+## MedScale v0.2.0 (Historical)
 
 This is an **historical MedScale v0.2.0 release**, before the MedOrigin repository rename. Existing tag names, built artifacts and original source provenance are preserved. See [MedOrigin identity policy](docs/BRAND_TRANSITION.md).
+
 
 - **Release date:** 2026-07-13
 - **Tag:** `v0.2.0` (existing annotated tag)

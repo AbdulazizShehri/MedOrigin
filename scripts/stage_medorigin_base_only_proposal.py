@@ -73,7 +73,7 @@ def propose(target: Path) -> dict[str, object]:
     # first build on the system temp volume to preserve that contract.
     with tempfile.TemporaryDirectory(prefix="medorigin-base-only-proposal-") as scratch:
         temp = Path(scratch) / "source"
-        upstream = stage(temp)
+        upstream = stage(temp, base_only=False)
         original = (temp / "pyproject.toml").read_bytes()
         modified, removed_sha = strip_exact_optional_section(original)
         receipt_file = temp / "MEDORIGIN_SOURCE_PROVENANCE.json"

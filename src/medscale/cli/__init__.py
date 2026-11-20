@@ -86,5 +86,44 @@ def main(argv: Sequence[str] | None = None) -> int:
     return handler(rest)
 
 
+def medorigin_main(argv: Sequence[str] | None = None) -> int:
+    """The canonical `medorigin` command-line entry point."""
+    _never_crash_on_console_encoding()
+    args = list(sys.argv[1:] if argv is None else argv)
+    if args and args[0] in ("--version", "-V"):
+        print(f"medorigin {__version__}")
+        return 0
+    if not args or args[0] in ("-h", "--help"):
+        print("usage: medorigin <command> [options]")
+        print("\ncommands:\n  screen   human literature screening (status/duplicates/next/amend)")
+        print("  extract  turn INCLUDED records into verified Evidence Objects")
+        print("  check    verify corpus/log/evidence referential integrity")
+        print("  stats    machine-readable corpus/screening/evidence statistics")
+        print("  snapshot capture or --verify a citable knowledge-state identity")
+        print("  bench    list/validate/run snapshot-bound evidence benchmarks")
+        print("  dataset  init/preview/validate/freeze deterministic dataset artifacts")
+        print("  fhir     provenance, offline structural outcome, encrypted demos")
+        print("  mesc-eval deterministic B0 zero-shot evaluation (research baseline)")
+        print("  mesc-b1-eval deterministic B1 evidence-cued baseline (research)")
+        print("  mesc-b1-evidence deterministic B1 evidence tooling: subset/annotate/cues")
+        print("  mesc-machine-state generate/check deterministic MRL state projections")
+        print("  mesc-fixture-smoke deterministic offline fixture-only plumbing smoke")
+        print("\nrun `medorigin <command> --help` for options and examples;")
+        print("new here? start with docs/guides/research_quickstart.md")
+        return 0 if args else 1
+    command, rest = args[0], args[1:]
+    handler = _SUBCOMMANDS.get(command)
+    if handler is None:
+        print(
+            f"unknown command {command!r}; known: {', '.join(sorted(_SUBCOMMANDS))}",
+            file=sys.stderr,
+        )
+        return 2
+    return handler(rest)
+
+
+__all__ = ["main", "medorigin_main"]
+
+
 if __name__ == "__main__":
     raise SystemExit(main())

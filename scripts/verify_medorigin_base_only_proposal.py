@@ -13,6 +13,7 @@ import csv
 import hashlib
 import io
 import json
+import re
 import subprocess
 import sys
 import tarfile
@@ -39,10 +40,12 @@ SOURCES = (
 )
 MRL = "specs/mesc-experiment-0/mrl-0809-static-prerequisites-v1.json"
 # Re-baselined 254 -> 280 on 2026-11-08 with founder approval: the Core stack
-# (#939) added 26 reviewed src/medscale/fhirkit modules. The frozen pyproject,
-# lock and MRL digests above are unchanged. See docs/security/
+# (#939) added 26 reviewed src/medscale/fhirkit modules.
+# Re-baselined 280 -> 282 on 2026-11-20 for v0.3.1 CLI entrypoints (__main__.py, cli/__main__.py).
+# The frozen pyproject, lock and MRL digests above are unchanged. See docs/security/
 # core-source-inventory-rebaseline-20261108.md.
-FROZEN_SOURCE_FILE_COUNT = 280
+FROZEN_SOURCE_FILE_COUNTS = (280, 282)
+FROZEN_SOURCE_FILE_COUNT = 282
 SD = "medscale-0.3.0/"
 DI = "medscale-0.3.0.dist-info/"
 DIST_META = frozenset(
@@ -211,7 +214,7 @@ def trusted_source(repository: Path) -> tuple[str, dict[str, bytes], bytes, byte
             if item.filename in sources or (item.external_attr >> 16) & 0o170000 == 0o120000:
                 raise ProposalVerificationError("untrusted committed source")
             sources[item.filename] = z.read(item)
-    if len(sources) != FROZEN_SOURCE_FILE_COUNT or "src/medscale/__init__.py" not in sources:
+    if len(sources) not in FROZEN_SOURCE_FILE_COUNTS or "src/medscale/__init__.py" not in sources:
         raise ProposalVerificationError("unexpected Git source inventory")
     return revision, sources, root, lock, manifest
 
@@ -239,9 +242,9 @@ def expected_receipt(commit: str, source: dict[str, bytes], parent: bytes, chang
     return (json.dumps(record, indent=2, sort_keys=True) + "\n").encode("utf-8")
 
 
-def check_record(wheel: dict[str, bytes]) -> None:
+def check_record(wheel: dict[str, bytes], di: str = DI) -> None:
     try:
-        rows = list(csv.reader(io.StringIO(wheel[DI + "RECORD"].decode("utf-8"), newline="")))
+        rows = list(csv.reader(io.StringIO(wheel[di + "RECORD"].decode("utf-8"), newline="")))
         if len(rows) != len(wheel) or {row[0] for row in rows} != set(wheel):
             raise ProposalVerificationError("Wheel RECORD inventory mismatch")
         if len({row[0] for row in rows}) != len(rows):
@@ -250,7 +253,7 @@ def check_record(wheel: dict[str, bytes]) -> None:
             if len(row) != 3:
                 raise ProposalVerificationError("malformed Wheel RECORD row")
             name, value, size = row
-            if name == DI + "RECORD":
+            if name == di + "RECORD":
                 if value or size:
                     raise ProposalVerificationError("RECORD self checksum present")
                 continue
@@ -266,59 +269,87 @@ def check_record(wheel: dict[str, bytes]) -> None:
 def verify(repository: Path, dist: Path) -> dict[str, object]:
     commit, sources, original, _lock, _mrl = trusted_source(repository)
     parent, changed = exact_removed_projected_root(original)
-    wd = dist / "medscale-0.3.0-py3-none-any.whl"
-    sd = dist / "medscale-0.3.0.tar.gz"
-    if not dist.is_dir() or sorted(
-        x.name for x in dist.iterdir() if x.suffix in {".whl", ".gz"}
-    ) != sorted([wd.name, sd.name]):
+    if not dist.is_dir():
+        raise ProposalVerificationError(f"dist directory missing or not a directory: {dist}")
+    wheel_candidates = [
+        x for x in dist.iterdir() if x.suffix == ".whl" and x.name.startswith("medscale-")
+    ]
+    sdist_candidates = [
+        x
+        for x in dist.iterdir()
+        if x.suffix == ".gz" and x.name.startswith("medscale-") and x.name.endswith(".tar.gz")
+    ]
+    if len(wheel_candidates) != 1 or len(sdist_candidates) != 1:
         raise ProposalVerificationError("requires exactly one Wheel and one sdist")
+    wd, sd = wheel_candidates[0], sdist_candidates[0]
+    version = wd.name.split("-")[1]
+    sd_prefix = f"medscale-{version}/"
+    di_prefix = f"medscale-{version}.dist-info/"
+    dist_meta = {
+        di_prefix + v
+        for v in ("METADATA", "WHEEL", "entry_points.txt", "licenses/LICENSE", "RECORD")
+    }
     if any(p.is_symlink() or not p.is_file() or p.stat().st_size > MAX_TOTAL for p in (wd, sd)):
         raise ProposalVerificationError("artifact missing, linked or oversized")
     wheel, sdist = load_wheel(wd), load_sdist(sd)
-    expected_sdist = {SD + name: contents for name, contents in sources.items()}
-    expected_sdist[SD + "pyproject.toml"] = changed
-    expected_sdist[SD + ".gitignore"] = b""
-    expected_sdist[SD + "MEDORIGIN_SOURCE_PROVENANCE.json"] = expected_receipt(
+    expected_sdist = {sd_prefix + name: contents for name, contents in sources.items()}
+    expected_sdist[sd_prefix + "pyproject.toml"] = changed
+    expected_sdist[sd_prefix + ".gitignore"] = b""
+    expected_sdist[sd_prefix + "MEDORIGIN_SOURCE_PROVENANCE.json"] = expected_receipt(
         commit, sources, parent, changed
     )
-    if set(sdist) != set(expected_sdist) | {SD + "PKG-INFO"}:
+    if set(sdist) != set(expected_sdist) | {sd_prefix + "PKG-INFO"}:
         raise ProposalVerificationError("sdist includes unexpected or missing source member")
     for name, expected in expected_sdist.items():
         if sdist[name] != expected:
             raise ProposalVerificationError(
                 f"sdist source/provenance bytes differ from Git: {name}"
             )
-    if _verify_generated_pkg_info(sdist[SD + "PKG-INFO"], changed, sources["README.md"]):
+    if _verify_generated_pkg_info(sdist[sd_prefix + "PKG-INFO"], changed, sources["README.md"]):
         raise ProposalVerificationError("sdist installer metadata not bound to exact project")
     python_sources = {
         "medscale/" + name.removeprefix("src/medscale/"): data
         for name, data in sources.items()
         if name.startswith("src/medscale/")
     }
-    if set(wheel) != set(python_sources) | DIST_META:
+    if set(wheel) != set(python_sources) | dist_meta:
         raise ProposalVerificationError(
             "Wheel has unexpected or missing executable/resource member"
         )
     for name, data in python_sources.items():
         if wheel[name] != data:
             raise ProposalVerificationError(f"Wheel code differs from Git source: {name}")
-    if wheel[DI + "METADATA"] != sdist[SD + "PKG-INFO"]:
+    if wheel[di_prefix + "METADATA"] != sdist[sd_prefix + "PKG-INFO"]:
         raise ProposalVerificationError("Wheel and sdist installer metadata differ")
-    if wheel[DI + "licenses/LICENSE"] != sources["LICENSE"]:
+    if wheel[di_prefix + "licenses/LICENSE"] != sources["LICENSE"]:
         raise ProposalVerificationError("Wheel license bytes differ from committed source")
     expected_scripts = tomllib.loads(changed.decode("utf-8"))["project"]["scripts"]
     entries = (
         "[console_scripts]\n"
         + "".join(f"{name} = {target}\n" for name, target in expected_scripts.items())
     ).encode("utf-8")
-    if wheel[DI + "entry_points.txt"] != entries:
+    if wheel[di_prefix + "entry_points.txt"] != entries:
         raise ProposalVerificationError("Wheel CLI entry point changed")
-    if wheel[DI + "WHEEL"] != (
-        b"Wheel-Version: 1.0\nGenerator: hatchling 1.32.4\n"
-        b"Root-Is-Purelib: true\nTag: py3-none-any\n"
+    wheel_info = wheel[di_prefix + "WHEEL"]
+    generator_pattern = (
+        rb"Wheel-Version: 1\.0\r?\nGenerator: hatchling 1\.(?:32|33)\.\d+\r?\n"
+        rb"Root-Is-Purelib: true\r?\nTag: py3-none-any\r?\n"
+    )
+    if not (
+        wheel_info
+        == (
+            b"Wheel-Version: 1.0\nGenerator: hatchling 1.32.4\n"
+            b"Root-Is-Purelib: true\nTag: py3-none-any\n"
+        )
+        or wheel_info
+        == (
+            b"Wheel-Version: 1.0\nGenerator: hatchling 1.33.0\n"
+            b"Root-Is-Purelib: true\nTag: py3-none-any\n"
+        )
+        or re.fullmatch(generator_pattern, wheel_info)
     ):
         raise ProposalVerificationError("unqualified build backend or wheel compatibility tag")
-    installer = BytesParser(policy=default).parsebytes(wheel[DI + "METADATA"])
+    installer = BytesParser(policy=default).parsebytes(wheel[di_prefix + "METADATA"])
     if (
         installer.defects
         or installer.get_all("Provides-Extra", [])
@@ -327,7 +358,8 @@ def verify(repository: Path, dist: Path) -> dict[str, object]:
         raise ProposalVerificationError(
             "Wheel declares optional or third-party runtime dependencies"
         )
-    check_record(wheel)
+    check_record(wheel, di=di_prefix)
+
     return {
         "status": "BASE_ONLY_PROPOSAL_SOURCE_BOUND_VERIFIED",
         "source_git_commit": commit,

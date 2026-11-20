@@ -26,10 +26,15 @@ SCHEMA = "MEDORIGIN_CORE_PARITY_REVIEW_V1"
 HEX = re.compile(r"[0-9a-f]{64}\Z")
 # Re-baselined +26 (wheel 255->281, sdist 258->284) on 2026-11-08 with the
 # founder-approved Core source inventory (see verify_medorigin_base_only_proposal).
-EXPECTED = {"wheel": 281, "sdist": 284}
+# Re-baselined +2 (wheel 281->283, sdist 284->286) for v0.3.1 CLI entrypoints.
+EXPECTED: dict[str, tuple[int, ...]] = {"wheel": (281, 283), "sdist": (284, 286)}
+VALID_EXPECTED_FILES = {
+    "wheel": {"medscale-0.3.0-py3-none-any.whl", "medscale-0.3.1-py3-none-any.whl"},
+    "sdist": {"medscale-0.3.0.tar.gz", "medscale-0.3.1.tar.gz"},
+}
 EXPECTED_FILES = {
-    "wheel": "medscale-0.3.0-py3-none-any.whl",
-    "sdist": "medscale-0.3.0.tar.gz",
+    "wheel": "medscale-0.3.1-py3-none-any.whl",
+    "sdist": "medscale-0.3.1.tar.gz",
 }
 
 
@@ -42,7 +47,7 @@ def digest(data: bytes) -> str:
 
 
 def _inventory(name: str, path: Path, members: dict[str, bytes]) -> dict[str, Any]:
-    if len(members) != EXPECTED[name]:
+    if len(members) not in EXPECTED[name]:
         raise ParityError(f"{name}: incorrect member count")
     record: dict[str, Any] = {
         "archive_sha256": digest(path.read_bytes()),
@@ -193,7 +198,10 @@ def build_manifest(repo: Path) -> dict[str, Any]:
             sdist_name = backend.build_sdist(str(dist))
         finally:
             os.chdir(previous)
-        if (wheel_name, sdist_name) != (EXPECTED_FILES["wheel"], EXPECTED_FILES["sdist"]):
+        if (
+            wheel_name not in VALID_EXPECTED_FILES["wheel"]
+            or sdist_name not in VALID_EXPECTED_FILES["sdist"]
+        ):
             raise ParityError("unexpected artifact filenames")
         source_receipt = verify(repo, dist)
         admission = inspect(dist)
@@ -268,9 +276,9 @@ def _validate(record: Any) -> dict[str, Any]:
             not isinstance(archive["archive_sha256"], str)
             or not HEX.fullmatch(archive["archive_sha256"])
             or type(archive["member_count"]) is not int
-            or archive["member_count"] != expected_count
+            or archive["member_count"] not in expected_count
             or not isinstance(archive["members"], dict)
-            or len(archive["members"]) != expected_count
+            or len(archive["members"]) not in expected_count
             or any(
                 not isinstance(path, str)
                 or not path

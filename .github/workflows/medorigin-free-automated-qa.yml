@@ -59,9 +59,10 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Source Core projection failed' }
           uv build --sdist --wheel $stage --out-dir $dist
           if ($LASTEXITCODE -ne 0) { throw 'Core Wheel and sdist build failed' }
-          $wheel = Join-Path $dist 'medscale-0.3.0-py3-none-any.whl'
+          $version = (& $buildPython -c "import sys; sys.path.insert(0, 'src'); from medscale.__about__ import __version__; print(__version__)").Trim()
+          $wheel = Join-Path $dist "medscale-${version}-py3-none-any.whl"
           if (!(Test-Path $wheel)) { throw 'Required exact Core Wheel missing' }
-          $sdist = Join-Path $dist 'medscale-0.3.0.tar.gz'
+          $sdist = Join-Path $dist "medscale-${version}.tar.gz"
           if (!(Test-Path $sdist)) { throw 'Required exact Core sdist missing' }
 
           $core311 = Join-Path $scratch 'core311'

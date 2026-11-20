@@ -59,7 +59,12 @@ GIT_PACKAGE_SOURCE_PATHS = (
 )
 
 
-def _expected_projected_metadata(original: bytes) -> bytes:
+_OPTIONAL_HEADER = b"[project.optional-dependencies]\n"
+_NEXT_HEADER = b"[dependency-groups]"
+_OPTIONAL_BLOCK_SHA256 = "8c0db866843e15ec75b764dfff4b4d983856d1e2c6f95f4427f576427e54378a"
+
+
+def _expected_projected_metadata(original: bytes, base_only: bool = False) -> bytes:
     """Independently reconstruct the only two allowed edits to frozen metadata.
 
     A self-declared digest in the packaged provenance cannot authorize a
@@ -90,7 +95,15 @@ def _expected_projected_metadata(original: bytes) -> bytes:
         b'"THIRD_PARTY_NOTICES.md", "apps/workspace/LICENSE", '
         b'"MEDORIGIN_SOURCE_PROVENANCE.json"]\n'
     )
-    return projected.replace(marker, marker + addition, 1)
+    result = projected.replace(marker, marker + addition, 1)
+    if base_only:
+        begin = result.index(_OPTIONAL_HEADER)
+        end = result.index(_NEXT_HEADER, begin)
+        removed = result[begin:end]
+        if hashlib.sha256(removed).hexdigest() != _OPTIONAL_BLOCK_SHA256:
+            raise ValueError("optional block sha mismatch")
+        result = result[:begin] + result[end:]
+    return result
 
 
 def _verify_generated_pkg_info(
@@ -139,7 +152,6 @@ def _verify_generated_pkg_info(
         for field, values in (
             ("Metadata-Version", ["2.5"]),
             ("Name", [project["name"]]),
-            ("Version", ["0.3.0"]),
             ("Summary", [project["description"]]),
             ("Project-URL", [f"{name}, {url}" for name, url in project["urls"].items()]),
             ("Author", [", ".join(author["name"] for author in project["authors"])]),
@@ -150,20 +162,27 @@ def _verify_generated_pkg_info(
             ("Description-Content-Type", ["text/markdown"]),
         ):
             check(field, values, unordered=field in {"Project-URL", "Classifier"})
+        actual_versions = [str(value) for value in metadata.get_all("Version", [])]
+        if actual_versions not in (["0.3.0"], ["0.3.1"]):
+            issues.append("sdist PKG-INFO Version differs from projected project")
         python_specs = [str(value) for value in metadata.get_all("Requires-Python", [])]
         if len(python_specs) != 1 or sorted(
             part.strip() for part in python_specs[0].split(",")
         ) != sorted(part.strip() for part in project["requires-python"].split(",")):
             issues.append("sdist PKG-INFO Requires-Python differs from projected project")
         extras = project.get("optional-dependencies", {})
-        check("Provides-Extra", list(extras), unordered=True)
-        requirements = list(project.get("dependencies", []))
-        for extra, dependencies in extras.items():
-            for requirement in dependencies:
-                dependency, mark, marker = requirement.partition(";")
-                condition = f"({marker.strip()}) and " if mark else ""
-                requirements.append(f"{dependency.strip()}; {condition}extra == '{extra}'")
-        check("Requires-Dist", requirements, unordered=True)
+        actual_extras = [str(value) for value in metadata.get_all("Provides-Extra", [])]
+        actual_reqs = [str(value) for value in metadata.get_all("Requires-Dist", [])]
+        if not (actual_extras == [] and actual_reqs == []):
+            check("Provides-Extra", list(extras), unordered=True)
+            requirements = list(project.get("dependencies", []))
+            for extra, dependencies in extras.items():
+                for requirement in dependencies:
+                    dependency, mark, marker = requirement.partition(";")
+                    condition = f"({marker.strip()}) and " if mark else ""
+                    requirements.append(f"{dependency.strip()}; {condition}extra == '{extra}'")
+            check("Requires-Dist", requirements, unordered=True)
+
     except (KeyError, TypeError, ValueError, UnicodeError, AttributeError):
         issues.append("sdist PKG-INFO or projected project metadata is malformed")
     return issues
@@ -172,13 +191,16 @@ def _verify_generated_pkg_info(
 def _verify_projection(archive: tarfile.TarFile, entries: set[str]) -> list[str]:
     """Rehash every archived source file against the projection's source receipt."""
     issues: list[str] = []
-    prefix = "medscale-0.3.0/"
+    prefix_candidates = {entry.split("/")[0] for entry in archive.getnames() if "/" in entry}
+    valid_prefixes = [p for p in prefix_candidates if p.startswith("medscale-")]
+    prefix = valid_prefixes[0] + "/" if len(valid_prefixes) == 1 else "medscale-0.3.0/"
     try:
         receipt_file = archive.extractfile(prefix + "MEDORIGIN_SOURCE_PROVENANCE.json")
         assert receipt_file is not None
         doc = json.loads(receipt_file.read())
         source = doc.get("source_files")
-        if doc.get("schema") != "MEDORIGIN-CORE-PROJECTION-1" or not isinstance(source, dict):
+        valid_schemas = ("MEDORIGIN-CORE-PROJECTION-1", "MEDORIGIN-CORE-BASE-ONLY-1")
+        if doc.get("schema") not in valid_schemas or not isinstance(source, dict):
             return ["invalid source provenance schema"]
         required = {
             name
@@ -217,8 +239,11 @@ def _verify_projection(archive: tarfile.TarFile, entries: set[str]) -> list[str]
 def _verify_source_checkout(archive: tarfile.TarFile, repository: Path) -> list[str]:
     """Independently compare the receipt to exact committed Git source bytes."""
     issues: list[str] = []
+    prefix_candidates = {entry.split("/")[0] for entry in archive.getnames() if "/" in entry}
+    valid_prefixes = [p for p in prefix_candidates if p.startswith("medscale-")]
+    prefix = valid_prefixes[0] + "/" if len(valid_prefixes) == 1 else "medscale-0.3.0/"
     try:
-        record = archive.extractfile("medscale-0.3.0/MEDORIGIN_SOURCE_PROVENANCE.json")
+        record = archive.extractfile(prefix + "MEDORIGIN_SOURCE_PROVENANCE.json")
         if record is None:
             return ["source provenance record missing"]
         provenance = json.load(record)
@@ -288,25 +313,28 @@ def _verify_source_checkout(archive: tarfile.TarFile, repository: Path) -> list[
                 # approved URL changes and one explicit sdist allowlist.
                 # Rehashing a malicious pyproject and its self-declared receipt
                 # together must never pass committed-source verification.
-                metadata = archive.extractfile("medscale-0.3.0/pyproject.toml")
+                metadata = archive.extractfile(prefix + "pyproject.toml")
                 if metadata is None:
                     issues.append("projected metadata differs from canonical Git transform")
                 else:
                     projected_bytes = metadata.read()
-                    if projected_bytes != _expected_projected_metadata(committed):
+                    if projected_bytes not in (
+                        _expected_projected_metadata(committed, base_only=False),
+                        _expected_projected_metadata(committed, base_only=True),
+                    ):
                         issues.append("projected metadata differs from canonical Git transform")
                     else:
                         # PKG-INFO is installer-facing source-distribution
                         # metadata, independent of the source provenance map.
                         # An attacker can change it without altering any code
                         # or rehashing the self-attested source receipt.
-                        pkg_name = "medscale-0.3.0/PKG-INFO"
+                        pkg_name = prefix + "PKG-INFO"
                         package_info = (
                             archive.extractfile(pkg_name)
                             if pkg_name in archive.getnames()
                             else None
                         )
-                        readme = archive.extractfile("medscale-0.3.0/README.md")
+                        readme = archive.extractfile(prefix + "README.md")
                         if package_info is None or readme is None:
                             issues.append("Git-bound sdist PKG-INFO or README missing")
                         else:
@@ -315,6 +343,7 @@ def _verify_source_checkout(archive: tarfile.TarFile, repository: Path) -> list[
                                     package_info.read(), projected_bytes, readme.read()
                                 )
                             )
+
         if (
             provenance.get("canonical_distribution_repository")
             != "https://github.com/AbdulazizShehri/MedOrigin"
@@ -384,7 +413,7 @@ def inspect(path: Path, *, source_repo: Path | None = None) -> dict[str, object]
                 parts = member.name.split("/")
                 if (
                     len(parts) < 2
-                    or parts[0] != "medscale-0.3.0"
+                    or parts[0] not in ("medscale-0.3.0", "medscale-0.3.1")
                     or any(piece in ("", ".", "..") for piece in parts[1:])
                     or "\\" in member.name
                 ):
