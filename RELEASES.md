@@ -1,6 +1,27 @@
 # MedOrigin Release History
 
-## MedOrigin v0.3.1 — Corrective Software & Desktop Release
+## MedOrigin v0.3.2 — Corrective Release & Native Desktop Distribution
+
+- **Release date:** 2026-11-20
+- **Tag:** `v0.3.2`
+- **Python:** 3.11, 3.12
+- **Governance Track:** Lane A (Synthetic-Only Developer Software Track — QUALIFIED)
+- **Scientific Invariants:** Lane B (MRL-0809/0899 `SCIENTIFIC_NOT_QUALIFIED`, frozen root intact)
+- **Clinical Boundaries:** Lane C (CW-021 `CLINICAL_NOT_AUTHORIZED`, zero PHI, zero live EHR)
+
+### Highlights
+- **Full Release CI/CD Workflow Qualification**: Fixed shallow clone checkout in `.github/workflows/release.yml` with `fetch-depth: 0`, enabling automated end-to-end `quality gate` and `build artifacts` qualification on tag push.
+- **Canonical `medorigin` CLI**: Added `medorigin` command dispatcher alongside `medscale` for forward brand alignment.
+- **Desktop D2 Native Packaging**: Native 64-bit Windows setup installer (`MedOrigin-Synthetic-Private-Setup-windows-x86_64.exe`) and portable ZIP archive (`MedOrigin-Synthetic-D2-windows-x86_64-<hash>.zip`).
+- **Complete 28-Screen Functional Audit**: Comprehensive verification across all 28 clinical feature screens with WCAG AAA accessibility, dark/light themes, and fail-closed process supervision.
+- **ADR-0045 Base Core Projection**: Releases clean base Core wheel and sdist with zero optional research extras and zero runtime third-party dependencies.
+
+---
+
+## MedOrigin v0.3.1 — SUPERSEDED by v0.3.2
+
+> [!NOTE]
+> Tag `v0.3.1` was created on canonical `main` at commit `4d2a3d30b68577a78b863094e869b70724164b81`. During the automated tag release run (`44814588191`), the `quality gate` job failed because `actions/checkout` used default shallow clone (`fetch-depth: 1`), causing git-based machine state admission tests to fail on missing `refs/remotes/origin/main`. In accordance with ADR-0010 and founder directives prohibiting tag reassignment or binary replacement, tag `v0.3.1` is preserved immutably and superseded by `v0.3.2`. Full incident documentation in `docs/releases/v0_3_1_workflow_parity_incident.md`.
 
 - **Release date:** 2026-11-20
 - **Tag:** `v0.3.1`

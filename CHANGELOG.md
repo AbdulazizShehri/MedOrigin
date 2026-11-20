@@ -6,7 +6,18 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
-## [0.3.1] — 2026-11-20
+## [0.3.2] — 2026-11-20
+
+### Fixed
+- **Release Workflow Checkout Depth (`fetch-depth: 0`)**: Added `fetch-depth: 0` to all `actions/checkout` steps in `.github/workflows/release.yml` (`quality`, `build`, `github-release`, and PR parity jobs). This ensures Git commit history and `refs/remotes/origin/main` are fully fetched during tagged push events, preventing `git rev-parse` failures during MRL machine-state and project-state admission checks.
+
+### Changed
+- Version metadata bumped to `0.3.2` across `src/medscale/__about__.py`, `CITATION.cff`, and release qualification scripts.
+
+## [0.3.1] — 2026-11-20 (SUPERSEDED by 0.3.2)
+
+> [!NOTE]
+> Tag `v0.3.1` was created on canonical `main` at commit `4d2a3d30b68577a78b863094e869b70724164b81`. During the automated tag release run (`44814588191`), the `quality gate` job failed because `actions/checkout` used default shallow clone (`fetch-depth: 1`), causing git-based machine state admission tests to fail on missing `refs/remotes/origin/main`. In accordance with ADR-0010 and founder directives prohibiting tag reassignment or binary replacement, tag `v0.3.1` is preserved immutably and superseded by `v0.3.2`. Full incident documentation in `docs/releases/v0_3_1_workflow_parity_incident.md`.
 
 ### Added
 - **Canonical `medorigin` CLI entrypoint**: Added `medorigin` console dispatcher in `src/medscale/cli/__init__.py` and top-level `__main__.py` entrypoints for forward brand alignment alongside backward-compatible `medscale`.

@@ -110,6 +110,7 @@ def _version(cli: Path, root: Path) -> None:
     if response.returncode != 0 or response.stdout.strip() not in (
         "medscale 0.3.0",
         "medscale 0.3.1",
+        "medscale 0.3.2",
     ):
         raise AssertionError("installed Core runtime version identity refused")
 
