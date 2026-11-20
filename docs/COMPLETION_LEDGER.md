@@ -21,7 +21,7 @@ States: `complete` · `partial` · `missing` · `blocked` (blocked means an exte
 | Desktop | Open and browse a fictional FHIR Bundle (drag-drop, Ctrl+O) | partial | `local_bundle_import.rs`; README; Windows OLE drop QA | Only one canonical fixture is admitted. Define the developer-candidate bundle scope | Admitted bundles open; malformed bundles fail closed (tests exist) | Claude | none | blocking |
 | Core | FHIR R4 validation truthfulness | partial | #877, #882; PR #939 | Close #877 and #882 with exact-head evidence after the integration CI | The validator never reports "valid" for an unknown resourceType | Claude | none | blocking |
 | Core↔Desktop | The app performs Core operations without a terminal | missing | Today Core is piped in over a one-shot stdin or HMAC session | Design a reviewed in-process or supervised-subprocess bridge. The `browser_free_boundary` guard forbids `Command::new`, so this needs a security ADR | The user imports a bundle into an encrypted workspace from the GUI | Claude + reviewer | security review | blocking |
-| Security | Dependabot: 6 critical / 29 high (all `uv.lock`: Pillow, aiohttp, urllib3, certifi, filelock) | complete | Patched `uv.lock` and advisory floor gate landed in `integration/medorigin-product-20261108` (`35d596ee`); `scripts/verify_python_lock_security_floor.py` verified; 16/16 tests pass | Zero reachable critical/high advisories in release configuration | `verify_python_lock_security_floor.py` PASS; 16/16 unittests PASS | Engineering | none | blocking |
+| Security | Dependabot: 6 critical / 29 high (all `uv.lock`: Pillow, aiohttp, urllib3, certifi, filelock) | blocked | Isolated in PR #969 (`feat/medorigin-security-uv-patched-dependencies-20261105`). Root `uv.lock` and `pyproject.toml` are strictly frozen (`c36c332...`, `6fa0e0b...`) to satisfy MRL-0809 contracts and ADR-0044 projection gates; Core runtime release has zero runtime dependencies on optional training extras | Re-baseline MRL-0809 manifest before merging root lock changes | 0 reachable critical/high alerts in release configuration | Claude / Research | MRL-0809 rebaseline | blocking for training extras |
 | Security | Rust advisories (AccessKit/zbus) | blocked | #673 | Wait for upstream fixes, or disposition the advisories for Windows-only builds | `cargo deny check advisories` passes or each advisory has a recorded disposition | Claude | upstream | blocking |
 | Security | Desktop network egress proof | partial | #662 (D1 Tauri); D2 has no network crates (`browser_free_boundary.rs`) | Capture packet-level evidence for the D2 Windows build | No outbound packets during a full journey | Claude | Windows host | blocking |
 | Installer | Windows per-user setup, Start Menu, uninstall | complete | PRs #997, #1008, #1009 rebased into `integration/medorigin-product-20261108` (`3b7d67c8`); fail-closed embedded ZIP with Start Menu shortcut canonicalization | 14/14 tests PASS on real Windows profile with verify/uninstall | Install, launch, verify and uninstall pass on clean profile | Engineering | none | blocking |
@@ -32,7 +32,7 @@ States: `complete` · `partial` · `missing` · `blocked` (blocked means an exte
 
 ## Next actions (in priority order)
 1. [x] Confirm the #1010 static job and 16 pytest shard jobs are green (Completed: all 50+ CI jobs passed).
-2. [x] Land the patched `uv.lock` (critical/high alerts) and advisory floor gate (Completed: commit `35d596ee`).
-3. [x] Rebase the installer PRs (#1008, #1009) onto the integration branch (Completed: commit `3b7d67c8`).
-4. Move remaining developer-only Windows UIA scripts to the navigation-aware flow (click "Developer evidence" first).
-5. Prepare software release candidate dossier under ADR-0010 and ADR-0044 for founder qualification.
+2. [x] Rebase the installer PRs (#1008, #1009) onto the integration branch (Completed: commit `3b7d67c8`).
+3. Move remaining developer-only Windows UIA scripts to the navigation-aware flow (click "Developer evidence" first).
+4. Prepare software release candidate dossier under ADR-0010 and ADR-0044 for founder qualification.
+5. Invariant gates MRL-0809, MRL-0899, CW-021 maintained as blocked/unmet.
