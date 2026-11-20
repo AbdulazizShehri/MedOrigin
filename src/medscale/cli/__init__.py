@@ -66,7 +66,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         print("  snapshot capture or --verify a citable knowledge-state identity")
         print("  bench    list/validate/run snapshot-bound evidence benchmarks")
         print("  dataset  init/preview/validate/freeze deterministic dataset artifacts")
-        print("  fhir     validate FHIR payloads and store deterministic reports")
+        print("  fhir     provenance, offline structural outcome, encrypted demos")
         print("  mesc-eval deterministic B0 zero-shot evaluation (research baseline)")
         print("  mesc-b1-eval deterministic B1 evidence-cued baseline (research)")
         print("  mesc-b1-evidence deterministic B1 evidence tooling: subset/annotate/cues")

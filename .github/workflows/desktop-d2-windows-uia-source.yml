@@ -1,0 +1,63 @@
+# Only source verification is feasible on GitHub hosted Windows CI.
+# Real UIA 4/4 interactions are separately observed on authorized Windows.
+name: D2 Windows native UIA source qualification (nonpublishing)
+
+on:
+  push:
+    branches:
+      - test/medorigin-d2-windows-native-uia-20261031
+  pull_request:
+    branches:
+      - test/medorigin-d2-linux-netns-20261030
+    paths:
+      - '.github/workflows/desktop-d2-windows-uia-source.yml'
+      - 'experiments/desktop-d2-native-egui/**'
+      - 'experiments/desktop-d0-rust/**'
+
+permissions:
+  contents: read
+
+jobs:
+  windows-native-source:
+    name: Windows Rust source, strict no-network guard, PowerShell parser
+    runs-on: windows-latest
+    timeout-minutes: 40
+    env:
+      CARGO_INCREMENTAL: '0'
+      CARGO_PROFILE_DEV_DEBUG: '0'
+      CARGO_PROFILE_TEST_DEBUG: '0'
+    steps:
+      - name: Read-only checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+          fetch-tags: false
+      - name: Pinned compiler and quality components
+        shell: pwsh
+        run: |
+          rustup toolchain install 1.97.1 --profile minimal --component rustfmt --component clippy
+          rustup default 1.97.1
+      - name: Rustfmt strict
+        run: cargo fmt --all -- --check
+        working-directory: experiments/desktop-d2-native-egui
+      - name: Native Rust tests including production network/browser boundary
+        run: cargo test --locked --all-targets
+        working-directory: experiments/desktop-d2-native-egui
+      - name: Clippy warnings are errors
+        run: cargo clippy --locked --all-targets -- -D warnings
+        working-directory: experiments/desktop-d2-native-egui
+      - name: Build unchanged Windows native D2 source only
+        run: cargo build --locked --bin medorigin-desktop-d2-native-egui
+        working-directory: experiments/desktop-d2-native-egui
+      - name: PowerShell UIA contract syntax only (never GUI claim)
+        shell: pwsh
+        run: |
+          $source = Join-Path (Get-Location) 'experiments/desktop-d2-native-egui/tests/windows-native-uia-qualification.ps1'
+          $tokens = $null
+          $errors = $null
+          [void][System.Management.Automation.Language.Parser]::ParseFile($source, [ref]$tokens, [ref]$errors)
+          if ($errors.Count -ne 0) { $errors | Out-String | Write-Error; exit 1 }
+          Write-Output 'D2_WINDOWS_UIA_SCRIPT_PARSER_PASS_SOURCE_ONLY'
+      - name: Explicitly nonpublishing source outcome
+        run: echo "D2_WINDOWS_NATIVE_SOURCE_ONLY_PASS_NO_INTERACTIVE_UIA_OR_NETWORK_DENIAL_OR_RELEASE"

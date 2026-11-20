@@ -1,0 +1,384 @@
+//! Offline-only experimental SHA-256 on twelve exact, fictional D0 fixture byte sequences.
+//!
+//! This module accepts ONLY named in-memory, synthetic fixtures. It never opens
+//! paths, executes commands, starts servers, reads secrets, or emits telemetry.
+//! It is neither a FHIR validator nor a production Tauri command.
+//! No public release or Rust parity qualification follows from this source.
+
+use sha2::{Digest, Sha256};
+
+mod synthetic_bundle;
+
+const BUNDLE_VALID: &[u8] = include_bytes!("../fixtures/bundle-valid.json");
+const BUNDLE_BAD_REFERENCE: &[u8] = include_bytes!("../fixtures/bundle-bad-reference.json");
+const BUNDLE_DUPLICATE: &[u8] = include_bytes!("../fixtures/bundle-duplicate.json");
+const BUNDLE_WRONG_TYPE: &[u8] = include_bytes!("../fixtures/bundle-wrong-type.json");
+const BUNDLE_LINKED: &[u8] = include_bytes!("../fixtures/bundle-linked.json");
+const BUNDLE_DANGLING: &[u8] = include_bytes!("../fixtures/bundle-dangling.json");
+
+const PATIENT: &[u8] = br#"{"resourceType":"Patient","id":"synthetic","active":true}"#;
+const OBSERVATION: &[u8] = br#"{"resourceType":"Observation","id":"synthetic-observation","status":"final","code":{"coding":[{"system":"urn:synthetic:code","code":"fictional-measurement"}]},"subject":{"reference":"Patient/synthetic"},"valueQuantity":{"value":37,"unit":"fictional"}}"#;
+const OBSERVATION_BAD_SUBJECT: &[u8] = br#"{"resourceType":"Observation","id":"synthetic-observation","status":"final","code":{"coding":[{"system":"urn:synthetic:code","code":"fictional-measurement"}]},"subject":{"reference":"Patient/nonexistent"},"valueQuantity":{"value":37,"unit":"fictional"}}"#;
+const MAX_PROTOTYPE_INPUT_BYTES: usize = 65_536;
+const FHIR_RESOURCE_LIMIT_BYTES: usize = 32_768;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum HashError {
+    UnknownFixture,
+    InvalidLimit,
+    InputTooLarge,
+    PreviewUnavailable,
+}
+
+impl HashError {
+    #[must_use]
+    pub const fn code(self) -> &'static str {
+        match self {
+            Self::UnknownFixture => "unknown_fixture",
+            Self::InvalidLimit => "invalid_limit",
+            Self::InputTooLarge => "input_too_large",
+            Self::PreviewUnavailable => "preview_unavailable",
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct HashOutcome {
+    pub contract: &'static str,
+    pub fixture_id: &'static str,
+    pub bytes: usize,
+    pub sha256_hex: String,
+}
+
+/// Bounded, source-only RAW JSON preview. This is not a file importer or
+/// clinical parser. Explicitly excludes malformed UTF-8 and large boundary
+/// test cases. Never normalizes or repairs intentionally negative JSON.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FictionalJsonPreview {
+    pub contract: &'static str,
+    pub fixture_id: &'static str,
+    pub bytes: usize,
+    pub sha256_hex: String,
+    pub raw_json: &'static str,
+    pub synthetic_only: bool,
+    pub release_authorized: bool,
+}
+
+pub fn fictional_json_preview_v1(id: &str) -> Result<FictionalJsonPreview, HashError> {
+    let (canonical, bytes): (&'static str, &'static [u8]) = match id {
+        "patient-minimal" => ("patient-minimal", PATIENT),
+        "observation-minimal" => ("observation-minimal", OBSERVATION),
+        "observation-bad-subject" => ("observation-bad-subject", OBSERVATION_BAD_SUBJECT),
+        "bundle-valid" => ("bundle-valid", BUNDLE_VALID),
+        "bundle-bad-reference" => ("bundle-bad-reference", BUNDLE_BAD_REFERENCE),
+        "bundle-duplicate" => ("bundle-duplicate", BUNDLE_DUPLICATE),
+        "bundle-wrong-type" => ("bundle-wrong-type", BUNDLE_WRONG_TYPE),
+        "bundle-linked" => ("bundle-linked", BUNDLE_LINKED),
+        "bundle-dangling" => ("bundle-dangling", BUNDLE_DANGLING),
+        "patient-invalid-utf8" | "patient-over-limit" | "patient-exact-limit" => {
+            return Err(HashError::PreviewUnavailable);
+        }
+        _ => return Err(HashError::UnknownFixture),
+    };
+    const MAX_VISIBLE_FICTIONAL_JSON_BYTES: usize = 2048;
+    if bytes.len() > MAX_VISIBLE_FICTIONAL_JSON_BYTES {
+        return Err(HashError::PreviewUnavailable);
+    }
+    let raw_json = std::str::from_utf8(bytes).map_err(|_| HashError::PreviewUnavailable)?;
+    let digest = hash_fixture_raw_v1(canonical, MAX_VISIBLE_FICTIONAL_JSON_BYTES)?;
+    Ok(FictionalJsonPreview {
+        contract: "medorigin-d0-fictional-json-preview-v1",
+        fixture_id: canonical,
+        bytes: bytes.len(),
+        sha256_hex: digest.sha256_hex,
+        raw_json,
+        synthetic_only: true,
+        release_authorized: false,
+    })
+}
+
+/// Return the SHA-256 of exact raw fixture bytes. Never JSON-canonicalize.
+///
+/// The limit is checked before a fixture is allocated and must itself be
+/// bounded. An arbitrary user path or network resource cannot be supplied.
+pub fn hash_fixture_raw_v1(
+    fixture_id: &str,
+    max_input_bytes: usize,
+) -> Result<HashOutcome, HashError> {
+    if max_input_bytes == 0 || max_input_bytes > MAX_PROTOTYPE_INPUT_BYTES {
+        return Err(HashError::InvalidLimit);
+    }
+    let (identity, required_bytes) = match fixture_id {
+        "bundle-valid" => ("bundle-valid", BUNDLE_VALID.len()),
+        "bundle-bad-reference" => ("bundle-bad-reference", BUNDLE_BAD_REFERENCE.len()),
+        "bundle-duplicate" => ("bundle-duplicate", BUNDLE_DUPLICATE.len()),
+        "bundle-wrong-type" => ("bundle-wrong-type", BUNDLE_WRONG_TYPE.len()),
+        "bundle-linked" => ("bundle-linked", BUNDLE_LINKED.len()),
+        "bundle-dangling" => ("bundle-dangling", BUNDLE_DANGLING.len()),
+        "observation-minimal" => ("observation-minimal", OBSERVATION.len()),
+        "observation-bad-subject" => ("observation-bad-subject", OBSERVATION_BAD_SUBJECT.len()),
+        "patient-minimal" => ("patient-minimal", PATIENT.len()),
+        "patient-invalid-utf8" => ("patient-invalid-utf8", 1),
+        "patient-over-limit" => ("patient-over-limit", FHIR_RESOURCE_LIMIT_BYTES + 1),
+        "patient-exact-limit" => ("patient-exact-limit", FHIR_RESOURCE_LIMIT_BYTES),
+        _ => return Err(HashError::UnknownFixture),
+    };
+    if required_bytes > max_input_bytes {
+        return Err(HashError::InputTooLarge);
+    }
+
+    let bytes = match identity {
+        "bundle-valid" => BUNDLE_VALID.to_vec(),
+        "bundle-bad-reference" => BUNDLE_BAD_REFERENCE.to_vec(),
+        "bundle-duplicate" => BUNDLE_DUPLICATE.to_vec(),
+        "bundle-wrong-type" => BUNDLE_WRONG_TYPE.to_vec(),
+        "bundle-linked" => BUNDLE_LINKED.to_vec(),
+        "bundle-dangling" => BUNDLE_DANGLING.to_vec(),
+        "patient-minimal" => PATIENT.to_vec(),
+        "observation-minimal" => OBSERVATION.to_vec(),
+        "observation-bad-subject" => OBSERVATION_BAD_SUBJECT.to_vec(),
+        "patient-invalid-utf8" => vec![0xff],
+        "patient-over-limit" => vec![b' '; required_bytes],
+        "patient-exact-limit" => {
+            let mut padded = PATIENT.to_vec();
+            padded.resize(required_bytes, b' ');
+            padded
+        }
+        _ => unreachable!("already matched an allowlisted in-memory fixture"),
+    };
+    let digest = Sha256::digest(&bytes);
+    let mut hex = String::with_capacity(64);
+    for byte in digest {
+        use core::fmt::Write as _;
+        // Writing into a String cannot fail.
+        write!(&mut hex, "{byte:02x}").expect("String write");
+    }
+    Ok(HashOutcome {
+        contract: "medorigin-desktop-d0-raw-sha256-v1",
+        fixture_id: identity,
+        bytes: bytes.len(),
+        sha256_hex: hex,
+    })
+}
+
+/// A narrow offline envelope check for twelve BUILT-IN fictional test fixtures.
+///
+/// This does not implement FHIR R4 conformance, terminology, profiles,
+/// terminology, profiles, clinical validation, or arbitrary user-file parsing.
+/// The only allowed Observation subject is the built-in synthetic Patient.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SyntheticFhirEnvelope {
+    pub contract: &'static str,
+    pub fixture_id: &'static str,
+    pub bytes: usize,
+    pub status: &'static str,
+    pub synthetic_only: bool,
+    pub full_fhir_r4_validated: bool,
+    pub release_authorized: bool,
+}
+
+pub fn inspect_named_synthetic_fhir_envelope_v1(
+    fixture_id: &str,
+    max_input_bytes: usize,
+) -> Result<SyntheticFhirEnvelope, HashError> {
+    if max_input_bytes == 0 || max_input_bytes > MAX_PROTOTYPE_INPUT_BYTES {
+        return Err(HashError::InvalidLimit);
+    }
+    let (name, len) = match fixture_id {
+        "bundle-valid" => ("bundle-valid", BUNDLE_VALID.len()),
+        "bundle-bad-reference" => ("bundle-bad-reference", BUNDLE_BAD_REFERENCE.len()),
+        "bundle-duplicate" => ("bundle-duplicate", BUNDLE_DUPLICATE.len()),
+        "bundle-wrong-type" => ("bundle-wrong-type", BUNDLE_WRONG_TYPE.len()),
+        "bundle-linked" => ("bundle-linked", BUNDLE_LINKED.len()),
+        "bundle-dangling" => ("bundle-dangling", BUNDLE_DANGLING.len()),
+        "observation-minimal" => ("observation-minimal", OBSERVATION.len()),
+        "observation-bad-subject" => ("observation-bad-subject", OBSERVATION_BAD_SUBJECT.len()),
+        "patient-minimal" => ("patient-minimal", PATIENT.len()),
+        "patient-invalid-utf8" => ("patient-invalid-utf8", 1),
+        "patient-exact-limit" => ("patient-exact-limit", FHIR_RESOURCE_LIMIT_BYTES),
+        "patient-over-limit" => ("patient-over-limit", FHIR_RESOURCE_LIMIT_BYTES + 1),
+        _ => return Err(HashError::UnknownFixture),
+    };
+    if len > max_input_bytes {
+        return Err(HashError::InputTooLarge);
+    }
+    // Reject oversize before allocating or attempting to parse its bytes.
+    let status = if len > FHIR_RESOURCE_LIMIT_BYTES {
+        "RESOURCE_TOO_LARGE"
+    } else {
+        let mut payload: Vec<u8> = match name {
+            "bundle-valid" => BUNDLE_VALID.to_vec(),
+            "bundle-bad-reference" => BUNDLE_BAD_REFERENCE.to_vec(),
+            "bundle-duplicate" => BUNDLE_DUPLICATE.to_vec(),
+            "bundle-wrong-type" => BUNDLE_WRONG_TYPE.to_vec(),
+            "bundle-linked" => BUNDLE_LINKED.to_vec(),
+            "bundle-dangling" => BUNDLE_DANGLING.to_vec(),
+            "patient-minimal" | "patient-exact-limit" => PATIENT.to_vec(),
+            "patient-invalid-utf8" => vec![0xff],
+            "observation-minimal" => OBSERVATION.to_vec(),
+            "observation-bad-subject" => OBSERVATION_BAD_SUBJECT.to_vec(),
+            _ => unreachable!("allowlisted fixture"),
+        };
+        if name == "patient-exact-limit" {
+            payload.resize(FHIR_RESOURCE_LIMIT_BYTES, b' ');
+        }
+        if name.starts_with("bundle-") {
+            synthetic_bundle::inspect_fictional_bundle(&payload)
+        } else if std::str::from_utf8(&payload).is_err() {
+            "INVALID_UTF8"
+        } else if synthetic_bundle::reject_duplicate_object_keys(&payload).is_err() {
+            "INVALID_JSON"
+        } else {
+            match serde_json::from_slice::<serde_json::Value>(&payload) {
+                Ok(value)
+                    if value.get("resourceType").and_then(|v| v.as_str()) == Some("Patient")
+                        && value.get("id").and_then(|v| v.as_str()) == Some("synthetic")
+                        && value.get("active").and_then(|v| v.as_bool()) == Some(true) =>
+                {
+                    "FHIR_ENVELOPE_OK"
+                }
+                Ok(value)
+                    if value.get("resourceType").and_then(|v| v.as_str())
+                        == Some("Observation") =>
+                {
+                    let complete = value.get("id").and_then(|v| v.as_str())
+                        == Some("synthetic-observation")
+                        && value.get("status").and_then(|v| v.as_str()) == Some("final")
+                        && value
+                            .pointer("/code/coding/0/system")
+                            .and_then(|v| v.as_str())
+                            == Some("urn:synthetic:code")
+                        && value
+                            .pointer("/code/coding/0/code")
+                            .and_then(|v| v.as_str())
+                            == Some("fictional-measurement")
+                        && value
+                            .pointer("/valueQuantity/value")
+                            .and_then(|v| v.as_i64())
+                            == Some(37)
+                        && value
+                            .pointer("/valueQuantity/unit")
+                            .and_then(|v| v.as_str())
+                            == Some("fictional");
+                    if !complete {
+                        "INVALID_FHIR_ENVELOPE"
+                    } else if value.pointer("/subject/reference").and_then(|v| v.as_str())
+                        != Some("Patient/synthetic")
+                    {
+                        "INVALID_REFERENCE"
+                    } else {
+                        "FHIR_ENVELOPE_OK"
+                    }
+                }
+                Ok(_) => "INVALID_FHIR_ENVELOPE",
+                Err(_) if std::str::from_utf8(&payload).is_err() => "INVALID_UTF8",
+                Err(_) => "INVALID_JSON",
+            }
+        }
+    };
+    Ok(SyntheticFhirEnvelope {
+        contract: "medorigin-d0-synthetic-fhir-envelope-v1",
+        fixture_id: name,
+        bytes: len,
+        status,
+        synthetic_only: true,
+        full_fhir_r4_validated: false,
+        release_authorized: false,
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn all_four_synthetic_golden_raw_byte_vectors_match_python() {
+        let golden = [
+            (
+                "patient-minimal",
+                57,
+                "747e1e038d6cc9a39a9cee209f621841cf6a9748d82be42fa545f19cfd6877a0",
+            ),
+            (
+                "patient-invalid-utf8",
+                1,
+                "a8100ae6aa1940d0b663bb31cd466142ebbdbd5187131b92d93818987832eb89",
+            ),
+            (
+                "patient-over-limit",
+                32_769,
+                "b929f15ca4f3fa28f54991ed0cb8ac5f430e388ee08bf401a853d8af91e44538",
+            ),
+            (
+                "patient-exact-limit",
+                32_768,
+                "ea711ce560191a81c0722c4a26592e0e2d9abb2186b6fd3af6897cd89d417d4e",
+            ),
+        ];
+        for (fixture_id, bytes, digest) in golden {
+            let actual = hash_fixture_raw_v1(fixture_id, MAX_PROTOTYPE_INPUT_BYTES)
+                .expect("known synthetic fixture");
+            assert_eq!(actual.contract, "medorigin-desktop-d0-raw-sha256-v1");
+            assert_eq!(actual.fixture_id, fixture_id);
+            assert_eq!(actual.bytes, bytes);
+            assert_eq!(actual.sha256_hex, digest);
+        }
+    }
+
+    #[test]
+    fn unknown_fixture_and_untrusted_paths_never_gain_file_access() {
+        for invalid in [
+            "",
+            "patient-minimal/../secret",
+            "../secret",
+            "C:\\secret",
+            "/etc/passwd",
+            "patient-minimal\0",
+        ] {
+            assert_eq!(
+                hash_fixture_raw_v1(invalid, 65_536),
+                Err(HashError::UnknownFixture)
+            );
+        }
+        assert_eq!(HashError::UnknownFixture.code(), "unknown_fixture");
+    }
+
+    #[test]
+    fn bounds_enforced_before_allocation() {
+        assert_eq!(
+            hash_fixture_raw_v1("patient-minimal", 0),
+            Err(HashError::InvalidLimit)
+        );
+        assert_eq!(
+            hash_fixture_raw_v1("patient-minimal", 65_537),
+            Err(HashError::InvalidLimit)
+        );
+        assert_eq!(
+            hash_fixture_raw_v1("patient-over-limit", 32_768),
+            Err(HashError::InputTooLarge)
+        );
+        assert_eq!(
+            hash_fixture_raw_v1("patient-exact-limit", 32_767),
+            Err(HashError::InputTooLarge)
+        );
+        assert_eq!(
+            hash_fixture_raw_v1("patient-minimal", 56),
+            Err(HashError::InputTooLarge)
+        );
+        assert_eq!(
+            hash_fixture_raw_v1("patient-minimal", 57)
+                .expect("limit inclusive")
+                .bytes,
+            57
+        );
+    }
+
+    #[test]
+    fn raw_sha256_does_not_canonicalize_or_parse_invalid_json() {
+        let invalid = hash_fixture_raw_v1("patient-invalid-utf8", 1).unwrap();
+        let padded = hash_fixture_raw_v1("patient-exact-limit", 32_768).unwrap();
+        let base = hash_fixture_raw_v1("patient-minimal", 57).unwrap();
+        assert_ne!(invalid.sha256_hex, base.sha256_hex);
+        assert_ne!(padded.sha256_hex, base.sha256_hex);
+    }
+}

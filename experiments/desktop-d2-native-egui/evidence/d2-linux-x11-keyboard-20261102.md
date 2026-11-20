@@ -1,0 +1,22 @@
+# D2 Linux keyboard-only native accessibility — 2026-11-02
+
+**Scope:** one disposable GitHub Ubuntu 24.04 Xvfb + fluxbox + private D-Bus runner. No PHI, real clinical validation, external EHR, persistent user settings, privileged host firewall or OS packet measurement. Source branch is stacked unmerged private Draft #856 on #855; qualifying code SHA `eecaaafcfcd17d04f9b851d7394811452dd1da84`.
+
+## Real behavior (not just a source inspection)
+
+Added a second, independent **keyboard-only** mode to `tests/linux-native-fhir-atspi-qualification.py`. The source-controlled acceptance test pins the exact native D2 executable via SHA-256, creates a private accessibility-enabled Linux D-Bus session and Xvfb display, and focuses the actual native Rust eframe window. The new mode uses ONLY `xdotool key --clearmodifiers` XTest keyboard events **Tab, Shift+Tab and Space** to move focus and activate controls; it does not use programmatic AT-SPI `doAction` to select or verify results. It reads `STATE_FOCUSED` and distinct exact accessible SHA/FHIR envelope text labels from the native AT-SPI tree as independent proof of the keyboard interactions.
+
+- Four original **fictional** Patient cases each checked with actual native keyboard-only selection, native Verify button via Space, and exact SHA-256 and expected limited structural status in two separate labels: **4/4 PASS**.
+- Reverse keyboard navigation from Verify to previous original selector via **Shift+Tab PASS**.
+- The original 12-case real AT-SPI action test is unchanged in purpose and still requires all 12 fictional Patient, Observation and Bundle positive/negative outcomes: **12/12 PASS** in the successful runs.
+- Exact original-code source SHA `eecaaafcfcd17d04f9b851d7394811452dd1da84`: native Linux GUI push [Actions 41478150420](https://github.com/AbdulazizShehri/MedOrigin/actions/runs/41478150420) **SUCCESS**, PR [Actions 41478164208](https://github.com/AbdulazizShehri/MedOrigin/actions/runs/41478164208) **SUCCESS**. Both logs contain `LINUX_D2_ATSPI_12_OF_12_PASS_NONPUBLISHING`, `LINUX_D2_KEYBOARD_4_OF_4_PASS_NONPUBLISHING`, and `LINUX_D2_KEYBOARD_REVERSE_SHIFT_TAB_PASS_NONPUBLISHING`.
+- Same exact SHA locked Rust D0/D2 native matrix [Actions 41478164491](https://github.com/AbdulazizShehri/MedOrigin/actions/runs/41478164491): Windows Server 2025 + Ubuntu 24.04 both **SUCCESS**. Total **4/4 GitHub PR checks** at qualified source SHA.
+- Local Windows source-only Python 10/10 unit tests PASS, Ruff lint and formatting PASS. Source tests assert malformed executable/CLI rejection, fail-closed duplicate or unknown app/frame, fatal error propagation, strict keyboard-only no-AT-SPI Action path, and stale receipt synchronization.
+
+## Intermittent failure found and substantive fix
+
+The first source candidate `1eb026fc` showed a flaky result: GitHub hosted Linux PR GUI run succeeded on all 12 AT-SPI + 4/4 XTest keyboard, whereas Linux push run observed a timeout for `bundle-linked` after ten successful cases. This was NOT silently ignored or retried to manufacture success. The test sometimes sent programmatic Verify before the **asynchronous UI had cleared the previous fixture's visible result**. Source fix `eecaaafc` enforces an additional fail-closed invariant: after selecting a new fixture through real AT-SPI Action, the prior synthetic SHA/status labels **must disappear** before Verify is invoked. Added dedicated unit test showing old results are rejected and a fresh no-receipt view permits verification. Two independent hosted Linux runs at exact source SHA then passed both real UI modes.
+
+## Remaining NO-GO, unchanged
+
+This is keyboard and AT-SPI native Linux UI qualification, **not** actual spoken assistive reader usability, full FHIR R4/clinical data, human security signoff or a release. In particular, #673 remains OPEN: AccessKit Unix still imports transitive **unmaintained zbus 5 / zvariant / zbus_names** RustSec notices; passing accessibility tests does not resolve maintenance risk, justify disabling AccessKit, or authorize silent suppression. #676 Mac spoken VoiceOver/independent accessibility review, #662 actual Windows WebView2 broker/descendant DNS/TCP/UDP zero-egress packet proof, #622 canonical frozen optional research advisories, #603 independent security review, and #574 founder ADR package identity/version/signing/publication authorization all stay OPEN / product NO-GO. No protected-main merge, release tag, installer, PHI, EHR integration or publication.

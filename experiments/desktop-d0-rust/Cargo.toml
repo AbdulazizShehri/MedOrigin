@@ -1,0 +1,16 @@
+[package]
+name = "medorigin-desktop-d0-rust-prototype"
+version = "0.0.0"
+edition = "2024"
+rust-version = "1.88"
+license = "Apache-2.0"
+publish = false
+description = "Unreleased, synthetic-only Rust reference-hash experiment; not the MedOrigin product"
+
+[dependencies]
+sha2 = { version = "=0.11.1", default-features = false }
+serde_json = { version = "1", default-features = false, features = ["std"] }
+serde = { version = "1", default-features = false, features = ["std"] }
+
+[lints.rust]
+unsafe_code = "forbid"

@@ -1,0 +1,55 @@
+name: Desktop app bug report
+description: Report a problem in the MedOrigin desktop app.
+title: "Desktop: "
+labels: ["bug", "desktop"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for helping improve MedOrigin.
+        **Never include real patient information, health records, workspace files
+        or screenshots that show personal data.** This issue is public.
+        For security vulnerabilities, use a private security advisory instead.
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open Settings & help
+        2. ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Diagnostics summary
+      description: |
+        In the app, open Settings & help (F1) → Report an issue → Copy diagnostics,
+        and paste it here. Review it first; remove anything you do not want to share.
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Optional logs or screenshots
+      description: Only attach material you have reviewed and that contains no personal or health data.
+  - type: checkboxes
+    id: consent
+    attributes:
+      label: Sharing consent
+      options:
+        - label: I reviewed everything above and it contains no real patient or personal information.
+          required: true

@@ -1,0 +1,57 @@
+# Read-only tests for review and security-alert visibility; no repo-settings mutation.
+name: MedOrigin independent-review and security visibility tests (NO RELEASE)
+
+on:
+  pull_request:
+    branches:
+      - test/medorigin-cross-platform-artifact-diagnostics-20261026
+      - test/medorigin-independent-review-governance-audit-20261026
+    paths:
+      - "scripts/check_medorigin_independent_review_governance.py"
+      - "tests/test_medorigin_independent_review_governance.py"
+      - "docs/releases/independent_review_governance_preflight.md"
+      - "scripts/check_medorigin_security_visibility.py"
+      - "tests/test_medorigin_security_visibility.py"
+      - "docs/releases/security_alert_visibility_preflight.md"
+      - ".github/workflows/medorigin-independent-review-diagnostic.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  pure-security-visibility-tests:
+    name: Read-only release-review and alert-visibility tests (NO RELEASE)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout exact PR head without credentials
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+          ref: ${{ github.event.pull_request.head.sha }}
+      - name: Install uv (free)
+        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        with:
+          enable-cache: false
+      - name: Run pure tests and style checks without release credentials
+        shell: bash
+        run: |
+          set -euo pipefail
+          uv python install 3.11
+          uv venv --python 3.11 "$RUNNER_TEMP/review-gate-venv"
+          uv pip install --python "$RUNNER_TEMP/review-gate-venv/bin/python" pytest ruff
+          PYTHONPATH=src "$RUNNER_TEMP/review-gate-venv/bin/python" -m pytest \
+            tests/test_medorigin_independent_review_governance.py \
+            tests/test_medorigin_security_visibility.py -q
+          "$RUNNER_TEMP/review-gate-venv/bin/ruff" check \
+            scripts/check_medorigin_independent_review_governance.py \
+            tests/test_medorigin_independent_review_governance.py \
+            scripts/check_medorigin_security_visibility.py \
+            tests/test_medorigin_security_visibility.py
+          "$RUNNER_TEMP/review-gate-venv/bin/ruff" format --check \
+            scripts/check_medorigin_independent_review_governance.py \
+            tests/test_medorigin_independent_review_governance.py \
+            scripts/check_medorigin_security_visibility.py \
+            tests/test_medorigin_security_visibility.py
+          echo 'READ_ONLY_REVIEW_AND_VISIBILITY_TESTS_PASS; no release authorized'
