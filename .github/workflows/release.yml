@@ -90,6 +90,8 @@ jobs:
         run: uv run mypy
       - name: Install the CW-002 Workspace AEAD dependency
         run: uv pip install --python .venv "cryptography==50.0.1"
+      - name: Install the optional FHIR R4 structural-check dependency
+        run: uv pip install --python .venv "jsonschema==4.25.1"
       - name: Install official FHIR R4 validator dependency
         run: uv pip install --python .venv "fhir.resources==7.1.0"
       - name: Pytest

@@ -21,8 +21,8 @@ from typing import Any
 
 SCRIPT_ROOT = Path(__file__).resolve().parents[1]
 MARKER = "MEDORIGIN_SYNTHETIC_FHIR_NOT_VALIDATED_PREVIEW_ONLY"
-EXPECTED_VERSION = "0.3.2"
-EXPECTED_VERSIONS = ("0.3.0", "0.3.1", "0.3.2")
+EXPECTED_VERSION = "0.3.3"
+EXPECTED_VERSIONS = ("0.3.0", "0.3.1", "0.3.2", "0.3.3")
 EXPECTED_REPORT_SHA256 = "165b41acdc416617e8f207366d454ac6a713ecf4c9a5efd740d14a0af882bd08"
 MAX_OUTPUT = 100_000
 
@@ -41,7 +41,7 @@ try:
     installed = importlib.metadata.distribution("medscale")
 except importlib.metadata.PackageNotFoundError:
     raise SystemExit(7) from None
-if installed.version not in ("0.3.0", "0.3.1", "0.3.2"):
+if installed.version not in ("0.3.0", "0.3.1", "0.3.2", "0.3.3"):
     raise SystemExit(8)
 root = pathlib.Path(installed.locate_file("medscale"))
 if not root.is_dir():

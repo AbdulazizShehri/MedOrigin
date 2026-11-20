@@ -27,8 +27,8 @@ WARNING = (
     "FHIR R4 schema, terminology, and profile validation were not performed; "
     "this local report records deterministic provenance only."
 )
-VERSION = "medscale 0.3.2"
-ALLOWED_VERSIONS = ("medscale 0.3.0", "medscale 0.3.1", "medscale 0.3.2")
+VERSION = "medscale 0.3.3"
+ALLOWED_VERSIONS = ("medscale 0.3.0", "medscale 0.3.1", "medscale 0.3.2", "medscale 0.3.3")
 MAX_OUTPUT = 64_000
 STATUS = "LOCAL_FHIR_PROVENANCE_ONLY"
 REPORT_KEYS = frozenset(

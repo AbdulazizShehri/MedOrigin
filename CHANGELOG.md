@@ -6,7 +6,18 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
-## [0.3.2] — 2026-11-20
+## [0.3.3] — 2026-11-20
+
+### Fixed
+- **Release Workflow Dependency Parity (`jsonschema==4.25.1`)**: Added `jsonschema==4.25.1` test dependency installation step to `.github/workflows/release.yml` quality gate, aligning release quality checks with CI matrix environment and resolving synthetic FHIR structural schema check errors.
+
+### Changed
+- Version metadata bumped to `0.3.3` across `src/medscale/__about__.py`, `CITATION.cff`, and release qualification scripts.
+
+## [0.3.2] — 2026-11-20 (SUPERSEDED by 0.3.3)
+
+> [!NOTE]
+> Tag `v0.3.2` was created on canonical `main` at commit `2e8c9df744a750940ce7f31fa16a4686a535da99`. Tag admission and full git-history checkout (`fetch-depth: 0`) succeeded. During the automated tag release run (`44825285788`), 7,917 tests passed; 13 synthetic structural tests failed due to `release.yml` omitting `jsonschema==4.25.1`. In accordance with ADR-0010, tag `v0.3.2` is preserved immutably and superseded by `v0.3.3`. Full incident documentation in `docs/releases/v0_3_2_workflow_parity_incident.md`.
 
 ### Fixed
 - **Release Workflow Checkout Depth (`fetch-depth: 0`)**: Added `fetch-depth: 0` to all `actions/checkout` steps in `.github/workflows/release.yml` (`quality`, `build`, `github-release`, and PR parity jobs). This ensures Git commit history and `refs/remotes/origin/main` are fully fetched during tagged push events, preventing `git rev-parse` failures during MRL machine-state and project-state admission checks.

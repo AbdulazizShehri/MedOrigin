@@ -111,6 +111,7 @@ def _version(cli: Path, root: Path) -> None:
         "medscale 0.3.0",
         "medscale 0.3.1",
         "medscale 0.3.2",
+        "medscale 0.3.3",
     ):
         raise AssertionError("installed Core runtime version identity refused")
 
