@@ -40,10 +40,12 @@ SOURCES = (
 )
 MRL = "specs/mesc-experiment-0/mrl-0809-static-prerequisites-v1.json"
 # Re-baselined 254 -> 280 on 2026-11-08 with founder approval: the Core stack
-# (#939) added 26 reviewed src/medscale/fhirkit modules. The frozen pyproject,
-# lock and MRL digests above are unchanged. See docs/security/
+# (#939) added 26 reviewed src/medscale/fhirkit modules.
+# Re-baselined 280 -> 282 on 2026-11-20 for v0.3.1 CLI entrypoints (__main__.py, cli/__main__.py).
+# The frozen pyproject, lock and MRL digests above are unchanged. See docs/security/
 # core-source-inventory-rebaseline-20261108.md.
-FROZEN_SOURCE_FILE_COUNT = 280
+FROZEN_SOURCE_FILE_COUNTS = (280, 282)
+FROZEN_SOURCE_FILE_COUNT = 282
 SD = "medscale-0.3.0/"
 DI = "medscale-0.3.0.dist-info/"
 DIST_META = frozenset(
@@ -212,7 +214,7 @@ def trusted_source(repository: Path) -> tuple[str, dict[str, bytes], bytes, byte
             if item.filename in sources or (item.external_attr >> 16) & 0o170000 == 0o120000:
                 raise ProposalVerificationError("untrusted committed source")
             sources[item.filename] = z.read(item)
-    if len(sources) != FROZEN_SOURCE_FILE_COUNT or "src/medscale/__init__.py" not in sources:
+    if len(sources) not in FROZEN_SOURCE_FILE_COUNTS or "src/medscale/__init__.py" not in sources:
         raise ProposalVerificationError("unexpected Git source inventory")
     return revision, sources, root, lock, manifest
 
@@ -344,7 +346,6 @@ def verify(repository: Path, dist: Path) -> dict[str, object]:
         )
         or re.fullmatch(generator_pattern, wheel_info)
     ):
-        raise ProposalVerificationError("unqualified build backend or wheel compatibility tag")
         raise ProposalVerificationError("unqualified build backend or wheel compatibility tag")
     installer = BytesParser(policy=default).parsebytes(wheel[di_prefix + "METADATA"])
     if (

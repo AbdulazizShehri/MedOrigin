@@ -191,7 +191,7 @@ def _verify_generated_pkg_info(
 def _verify_projection(archive: tarfile.TarFile, entries: set[str]) -> list[str]:
     """Rehash every archived source file against the projection's source receipt."""
     issues: list[str] = []
-    prefix_candidates = {entry.split("/")[0] for entry in entries if "/" in entry}
+    prefix_candidates = {entry.split("/")[0] for entry in archive.getnames() if "/" in entry}
     valid_prefixes = [p for p in prefix_candidates if p.startswith("medscale-")]
     prefix = valid_prefixes[0] + "/" if len(valid_prefixes) == 1 else "medscale-0.3.0/"
     try:
