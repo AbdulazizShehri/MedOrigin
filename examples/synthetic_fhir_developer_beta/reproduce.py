@@ -17,7 +17,8 @@ from typing import Any
 HERE = Path(__file__).resolve().parent
 GOOD = HERE / "synthetic_structure_definition.json"
 BAD = HERE / "malformed.json"
-VERSION = "medscale 0.3.0"
+VERSION = "medscale 0.3.1"
+ALLOWED_VERSIONS = ("medscale 0.3.0", "medscale 0.3.1")
 TIMESTAMP = "2026-10-24T00:00:00Z"
 # Source-backed Core explicitly does NOT validate HL7 FHIR profiles or terms.
 # The prior valid/exit0 demo claimed a validation that never occurred.
@@ -66,8 +67,8 @@ def call(cli: Path, args: list[str], cwd: Path) -> subprocess.CompletedProcess[s
 
 def run_one(cli: Path, directory: Path, label: str) -> dict[str, Any]:
     version = call(cli, ["--version"], directory)
-    if version.returncode or version.stdout.strip() != VERSION:
-        raise ValueError(f"{label}: expected installed {VERSION}")
+    if version.returncode or version.stdout.strip() not in ALLOWED_VERSIONS:
+        raise ValueError(f"{label}: unexpected installed version {version.stdout.strip()!r}")
     output = directory / ("reports_" + label)
     validated = call(
         cli,
@@ -120,7 +121,7 @@ def run_one(cli: Path, directory: Path, label: str) -> dict[str, Any]:
         raise ValueError(f"{label}: malformed input not safely rejected")
     return {
         "label": label,
-        "installed_version": VERSION,
+        "installed_version": version.stdout.strip(),
         "fixture_sha256": digest(GOOD),
         "report_sha256": digest(reports[0]),
         "report_path": reports[0].relative_to(directory).as_posix(),

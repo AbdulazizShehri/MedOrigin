@@ -107,7 +107,10 @@ def _version(cli: Path, root: Path) -> None:
     response = subprocess.run(
         [str(cli), "--version"], cwd=root, capture_output=True, text=True, timeout=30, check=False
     )
-    if response.returncode != 0 or response.stdout.strip() != "medscale 0.3.0":
+    if response.returncode != 0 or response.stdout.strip() not in (
+        "medscale 0.3.0",
+        "medscale 0.3.1",
+    ):
         raise AssertionError("installed Core runtime version identity refused")
 
 

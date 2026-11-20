@@ -27,7 +27,8 @@ WARNING = (
     "FHIR R4 schema, terminology, and profile validation were not performed; "
     "this local report records deterministic provenance only."
 )
-VERSION = "medscale 0.3.0"
+VERSION = "medscale 0.3.1"
+ALLOWED_VERSIONS = ("medscale 0.3.0", "medscale 0.3.1")
 MAX_OUTPUT = 64_000
 STATUS = "LOCAL_FHIR_PROVENANCE_ONLY"
 REPORT_KEYS = frozenset(
@@ -217,7 +218,7 @@ def _run_one(
     if not cli.is_file():
         raise QualificationError("installed CLI executable not found")
     version = _call_verified(cli, ["--version"], root, trusted_python)
-    if version.returncode != 0 or version.stdout.strip() != VERSION:
+    if version.returncode != 0 or version.stdout.strip() not in ALLOWED_VERSIONS:
         raise QualificationError("installed CLI version is not qualified")
     known_payload = _object(KNOWN.read_text(encoding="utf-8"))
     unknown_payload = {

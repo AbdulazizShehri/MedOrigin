@@ -25,7 +25,8 @@ _WARNING = (
     "FHIR R4 schema, terminology, and profile validation were not performed; "
     "this local report records deterministic provenance only."
 )
-_INSTALLED_VERSION = "medscale 0.3.0"
+_INSTALLED_VERSION = "medscale 0.3.1"
+_ALLOWED_INSTALLED_VERSIONS = ("medscale 0.3.0", "medscale 0.3.1")
 _WORKSPACE = {
     "application": "medscale-workspace",
     "version": "0.1.0.dev1",
@@ -121,7 +122,7 @@ def admit_receipt(receipt: object, *, directory: Path) -> dict[str, Any]:
             raise ValueError("unexpected synthetic run fields")
         if (
             row["label"] != f"run_{i}"
-            or row["installed_version"] != _INSTALLED_VERSION
+            or row["installed_version"] not in _ALLOWED_INSTALLED_VERSIONS
             or row["fixture_sha256"] != fixture_hash
             or row["provenance_status"] != "not_validated"
             or type(row["validation_exit"]) is not int
