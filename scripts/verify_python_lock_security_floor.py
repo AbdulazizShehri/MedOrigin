@@ -12,7 +12,6 @@ import re
 import sys
 import tomllib
 from pathlib import Path
-from typing import Any
 
 # Minimum versions for distinct packages in open GH Dependabot advisories
 # with an available fix on 2026-11-05. Accelerate and diskcache have no
@@ -42,7 +41,7 @@ def patched_at_least(actual: str, minimum: str) -> bool:
     return left + (0,) * (padded - len(left)) >= right + (0,) * (padded - len(right))
 
 
-def verify_lock(lock: dict[str, Any], pyproject: dict[str, Any]) -> list[str]:
+def verify_lock(lock: dict, pyproject: dict) -> list[str]:
     violations: list[str] = []
     rows = lock.get("package")
     if not isinstance(rows, list):
