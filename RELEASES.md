@@ -1,5 +1,25 @@
 # MedOrigin Release History
 
+## MedOrigin v0.3.5 — Desktop Functional Integrity & Real Backend Execution
+
+- **Release date:** 2026-11-21
+- **Tag:** `v0.3.5`
+- **Python:** 3.11, 3.12
+- **Governance Track:** Lane A (Synthetic-Only Developer Software Track — QUALIFIED)
+- **Scientific Invariants:** Lane B (MRL-0809/0899 `SCIENTIFIC_NOT_QUALIFIED`, frozen root intact)
+- **Clinical Boundaries:** Lane C (CW-021 `CLINICAL_NOT_AUTHORIZED`, zero PHI, zero live EHR)
+
+### Highlights
+- **Real Backend Dynamic Calculations**: Replaced all static arrays and simulated operations across the 16 connected desktop screens with dynamic computations over loaded synthetic records.
+- **Dynamic Graph Topology & Cycle Detection**: Live node and edge extraction with real 3-color DFS topological cycle detection and SHA-256 edge provenance locking.
+- **Cryptographic Audit Ledger**: Immutable SHA-256 append-only ledger with mathematical chain verification (`verify_audit_chain`) and negative-control tamper detection.
+- **Storage & Recovery Vault**: SHA-256 key derivation, integrity tagging, and verifiable backup snapshot tamper detection.
+- **Truthful Benchmark Status**: Removed all hardcoded outcome claims (e.g. 86.4% accuracy). Implemented truthful offline specification audits with seed locking.
+- **Dedicated Execution Test Suite**: Added 7 comprehensive integration tests in `test_desktop_screens_execution.rs` and 5 unit tests in `screens_connected.rs`.
+- **CycloneDX 1.5 SBOM**: Published unified SBOM at `docs/releases/sbom-v0.3.5.cdx.json` covering 263 workspace components.
+
+---
+
 ## MedOrigin v0.3.4 — Desktop Completion & Product Reality Hardening
 
 - **Release date:** 2026-11-21

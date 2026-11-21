@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import Any
 
 
-def generate_sbom(repo_root: Path, output_path: Path, version: str = "0.3.4") -> None:
+def generate_sbom(repo_root: Path, output_path: Path, version: str = "0.3.5") -> None:
     lock_file = repo_root / "uv.lock"
     rust_cdx_file = (
         repo_root
@@ -116,10 +116,10 @@ if __name__ == "__main__":
     parser.add_argument(
         "--output",
         type=Path,
-        default=Path("docs/releases/sbom-v0.3.4.cdx.json"),
+        default=Path("docs/releases/sbom-v0.3.5.cdx.json"),
         help="Path for generated SBOM JSON",
     )
-    parser.add_argument("--version", default="0.3.4", help="Product version")
+    parser.add_argument("--version", default="0.3.5", help="Product version")
     args = parser.parse_args()
     repo_root = Path(__file__).resolve().parents[1]
     generate_sbom(repo_root, args.output, args.version)

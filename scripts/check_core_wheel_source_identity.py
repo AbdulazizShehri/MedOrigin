@@ -151,7 +151,7 @@ def _verify_install_metadata(
             if [str(v) for v in meta.get_all(key, [])] != [expected]:
                 issues.append(f"wheel METADATA {key} differs from frozen Git project")
         actual_versions = [str(v) for v in meta.get_all("Version", [])]
-        if actual_versions not in (["0.3.0"], ["0.3.1"], ["0.3.2"], ["0.3.3"], ["0.3.4"]):
+        if actual_versions not in (["0.3.0"], ["0.3.1"], ["0.3.2"], ["0.3.3"], ["0.3.4"], ["0.3.5"]):
             issues.append("wheel METADATA Version differs from frozen Git project")
         python_range = [str(v) for v in meta.get_all("Requires-Python", [])]
         if len(python_range) != 1 or sorted(

@@ -17,13 +17,14 @@ from typing import Any
 HERE = Path(__file__).resolve().parent
 GOOD = HERE / "synthetic_structure_definition.json"
 BAD = HERE / "malformed.json"
-VERSION = "medscale 0.3.4"
+VERSION = "medscale 0.3.5"
 ALLOWED_VERSIONS = (
     "medscale 0.3.0",
     "medscale 0.3.1",
     "medscale 0.3.2",
     "medscale 0.3.3",
     "medscale 0.3.4",
+    "medscale 0.3.5",
 )
 TIMESTAMP = "2026-10-24T00:00:00Z"
 # Source-backed Core explicitly does NOT validate HL7 FHIR profiles or terms.
