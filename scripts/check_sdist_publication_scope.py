@@ -163,7 +163,7 @@ def _verify_generated_pkg_info(
         ):
             check(field, values, unordered=field in {"Project-URL", "Classifier"})
         actual_versions = [str(value) for value in metadata.get_all("Version", [])]
-        if actual_versions not in (["0.3.0"], ["0.3.1"], ["0.3.2"], ["0.3.3"]):
+        if actual_versions not in (["0.3.0"], ["0.3.1"], ["0.3.2"], ["0.3.3"], ["0.3.4"]):
             issues.append("sdist PKG-INFO Version differs from projected project")
         python_specs = [str(value) for value in metadata.get_all("Requires-Python", [])]
         if len(python_specs) != 1 or sorted(
@@ -414,7 +414,13 @@ def inspect(path: Path, *, source_repo: Path | None = None) -> dict[str, object]
                 if (
                     len(parts) < 2
                     or parts[0]
-                    not in ("medscale-0.3.0", "medscale-0.3.1", "medscale-0.3.2", "medscale-0.3.3")
+                    not in (
+                        "medscale-0.3.0",
+                        "medscale-0.3.1",
+                        "medscale-0.3.2",
+                        "medscale-0.3.3",
+                        "medscale-0.3.4",
+                    )
                     or any(piece in ("", ".", "..") for piece in parts[1:])
                     or "\\" in member.name
                 ):
