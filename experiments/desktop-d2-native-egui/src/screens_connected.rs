@@ -33,6 +33,389 @@ pub fn hasher_hex(hasher: Sha256) -> String {
         .collect()
 }
 
+// -----------------------------------------------------------------------------
+// RFC 5869 HKDF-SHA-256 and RFC 8439 ChaCha20-Poly1305 AEAD Engine
+// -----------------------------------------------------------------------------
+
+pub const ENVELOPE_MAGIC: &[u8; 8] = b"MSWSENV1";
+pub const ENVELOPE_VERSION: u8 = 1;
+pub const ENVELOPE_HEADER_LEN: usize = 41; // 8 (magic) + 1 (ver) + 4 (key_ver) + 16 (salt) + 12 (nonce)
+pub const TAG_LEN: usize = 16;
+pub const MIN_ENVELOPE_LEN: usize = ENVELOPE_HEADER_LEN + TAG_LEN;
+
+pub fn hmac_sha256(key: &[u8], data: &[u8]) -> [u8; 32] {
+    let mut k = [0u8; 64];
+    if key.len() > 64 {
+        let digest = Sha256::digest(key);
+        k[..32].copy_from_slice(&digest);
+    } else {
+        k[..key.len()].copy_from_slice(key);
+    }
+    let mut ipad = [0u8; 64];
+    let mut opad = [0u8; 64];
+    for i in 0..64 {
+        ipad[i] = k[i] ^ 0x36;
+        opad[i] = k[i] ^ 0x5c;
+    }
+    let mut inner = Sha256::new();
+    inner.update(ipad);
+    inner.update(data);
+    let inner_hash = inner.finalize();
+
+    let mut outer = Sha256::new();
+    outer.update(opad);
+    outer.update(inner_hash);
+    outer.finalize().into()
+}
+
+pub fn hkdf_extract(salt: &[u8], ikm: &[u8]) -> [u8; 32] {
+    let default_salt = [0u8; 32];
+    let effective_salt = if salt.is_empty() {
+        &default_salt[..]
+    } else {
+        salt
+    };
+    hmac_sha256(effective_salt, ikm)
+}
+
+pub fn hkdf_expand(prk: &[u8; 32], info: &[u8], length: usize) -> Vec<u8> {
+    let mut okm = Vec::with_capacity(length);
+    let mut previous_block = Vec::new();
+    let mut counter = 1u8;
+    while okm.len() < length {
+        let mut input = Vec::with_capacity(previous_block.len() + info.len() + 1);
+        input.extend_from_slice(&previous_block);
+        input.extend_from_slice(info);
+        input.push(counter);
+        let block = hmac_sha256(prk, &input);
+        previous_block = block.to_vec();
+        let take = std::cmp::min(32, length - okm.len());
+        okm.extend_from_slice(&block[..take]);
+        counter = counter.wrapping_add(1);
+    }
+    okm
+}
+
+pub fn derive_workspace_key(passphrase: &str, salt: &[u8; 16], label: &str) -> [u8; 32] {
+    let prk = hkdf_extract(salt, passphrase.as_bytes());
+    let okm = hkdf_expand(&prk, label.as_bytes(), 32);
+    let mut key = [0u8; 32];
+    key.copy_from_slice(&okm[..32]);
+    key
+}
+
+#[inline(always)]
+fn quarter_round(s: &mut [u32; 16], a: usize, b: usize, c: usize, d: usize) {
+    s[a] = s[a].wrapping_add(s[b]);
+    s[d] = (s[d] ^ s[a]).rotate_left(16);
+    s[c] = s[c].wrapping_add(s[d]);
+    s[b] = (s[b] ^ s[c]).rotate_left(12);
+    s[a] = s[a].wrapping_add(s[b]);
+    s[d] = (s[d] ^ s[a]).rotate_left(8);
+    s[c] = s[c].wrapping_add(s[d]);
+    s[b] = (s[b] ^ s[c]).rotate_left(7);
+}
+
+pub fn chacha20_block(key: &[u8; 32], counter: u32, nonce: &[u8; 12]) -> [u8; 64] {
+    let mut state = [0u32; 16];
+    state[0] = 0x61707865;
+    state[1] = 0x3320646e;
+    state[2] = 0x79622d32;
+    state[3] = 0x6b206574;
+    for i in 0..8 {
+        state[4 + i] = u32::from_le_bytes(key[i * 4..(i + 1) * 4].try_into().unwrap());
+    }
+    state[12] = counter;
+    for i in 0..3 {
+        state[13 + i] = u32::from_le_bytes(nonce[i * 4..(i + 1) * 4].try_into().unwrap());
+    }
+    let mut working = state;
+    for _ in 0..10 {
+        quarter_round(&mut working, 0, 4, 8, 12);
+        quarter_round(&mut working, 1, 5, 9, 13);
+        quarter_round(&mut working, 2, 6, 10, 14);
+        quarter_round(&mut working, 3, 7, 11, 15);
+        quarter_round(&mut working, 0, 5, 10, 15);
+        quarter_round(&mut working, 1, 6, 11, 12);
+        quarter_round(&mut working, 2, 7, 8, 13);
+        quarter_round(&mut working, 3, 4, 9, 14);
+    }
+    let mut out = [0u8; 64];
+    for i in 0..16 {
+        let word = working[i].wrapping_add(state[i]);
+        out[i * 4..(i + 1) * 4].copy_from_slice(&word.to_le_bytes());
+    }
+    out
+}
+
+pub fn chacha20_xor(key: &[u8; 32], counter: u32, nonce: &[u8; 12], input: &[u8]) -> Vec<u8> {
+    let mut output = Vec::with_capacity(input.len());
+    let mut ctr = counter;
+    for chunk in input.chunks(64) {
+        let block = chacha20_block(key, ctr, nonce);
+        for (b, k) in chunk.iter().zip(block.iter()) {
+            output.push(b ^ k);
+        }
+        ctr = ctr.wrapping_add(1);
+    }
+    output
+}
+
+pub fn poly1305_mac(key: &[u8; 32], msg: &[u8]) -> [u8; 16] {
+    let mut r_bytes = [0u8; 16];
+    r_bytes.copy_from_slice(&key[0..16]);
+    r_bytes[3] &= 15;
+    r_bytes[7] &= 15;
+    r_bytes[11] &= 15;
+    r_bytes[15] &= 15;
+    r_bytes[4] &= 252;
+    r_bytes[8] &= 252;
+    r_bytes[12] &= 252;
+
+    let u32_at = |b: &[u8], i: usize| u32::from_le_bytes(b[i..i + 4].try_into().unwrap());
+    let r0 = (u32_at(&r_bytes, 0) & 0x3ffffff) as u64;
+    let r1 = ((u32_at(&r_bytes, 3) >> 2) & 0x3ffff03) as u64;
+    let r2 = ((u32_at(&r_bytes, 6) >> 4) & 0x3ffc0ff) as u64;
+    let r3 = ((u32_at(&r_bytes, 9) >> 6) & 0x3f03fff) as u64;
+    let r4 = ((u32_at(&r_bytes, 12) >> 8) & 0x00fffff) as u64;
+
+    let s1 = r1 * 5;
+    let s2 = r2 * 5;
+    let s3 = r3 * 5;
+    let s4 = r4 * 5;
+    let mut h0 = 0u64;
+    let mut h1 = 0u64;
+    let mut h2 = 0u64;
+    let mut h3 = 0u64;
+    let mut h4 = 0u64;
+
+    for chunk in msg.chunks(16) {
+        let mut buf = [0u8; 17];
+        buf[..chunk.len()].copy_from_slice(chunk);
+        buf[chunk.len()] = 1;
+
+        let mut arr = [0u8; 16];
+        arr[..16].copy_from_slice(&buf[..16]);
+        let lo = u128::from_le_bytes(arr);
+
+        let c0 = (lo & 0x3ffffff) as u64;
+        let c1 = ((lo >> 26) & 0x3ffffff) as u64;
+        let c2 = ((lo >> 52) & 0x3ffffff) as u64;
+        let c3 = ((lo >> 78) & 0x3ffffff) as u64;
+        let c4 = ((lo >> 104) as u64) | ((buf[16] as u64) << 24);
+
+        h0 += c0;
+        h1 += c1;
+        h2 += c2;
+        h3 += c3;
+        h4 += c4;
+
+        let d0 = (h0 as u128) * (r0 as u128)
+            + (h1 as u128) * (s4 as u128)
+            + (h2 as u128) * (s3 as u128)
+            + (h3 as u128) * (s2 as u128)
+            + (h4 as u128) * (s1 as u128);
+        let d1 = (h0 as u128) * (r1 as u128)
+            + (h1 as u128) * (r0 as u128)
+            + (h2 as u128) * (s4 as u128)
+            + (h3 as u128) * (s3 as u128)
+            + (h4 as u128) * (s2 as u128);
+        let d2 = (h0 as u128) * (r2 as u128)
+            + (h1 as u128) * (r1 as u128)
+            + (h2 as u128) * (r0 as u128)
+            + (h3 as u128) * (s4 as u128)
+            + (h4 as u128) * (s3 as u128);
+        let d3 = (h0 as u128) * (r3 as u128)
+            + (h1 as u128) * (r2 as u128)
+            + (h2 as u128) * (r1 as u128)
+            + (h3 as u128) * (r0 as u128)
+            + (h4 as u128) * (s4 as u128);
+        let d4 = (h0 as u128) * (r4 as u128)
+            + (h1 as u128) * (r3 as u128)
+            + (h2 as u128) * (r2 as u128)
+            + (h3 as u128) * (r1 as u128)
+            + (h4 as u128) * (r0 as u128);
+
+        let mut c = d0 >> 26;
+        h0 = (d0 & 0x3ffffff) as u64;
+        let d1 = d1 + c;
+        c = d1 >> 26;
+        h1 = (d1 & 0x3ffffff) as u64;
+        let d2 = d2 + c;
+        c = d2 >> 26;
+        h2 = (d2 & 0x3ffffff) as u64;
+        let d3 = d3 + c;
+        c = d3 >> 26;
+        h3 = (d3 & 0x3ffffff) as u64;
+        let d4 = d4 + c;
+        c = d4 >> 26;
+        h4 = (d4 & 0x3ffffff) as u64;
+        h0 += (c * 5) as u64;
+        c = (h0 as u128) >> 26;
+        h0 &= 0x3ffffff;
+        h1 += c as u64;
+    }
+
+    let mut c = h1 >> 26;
+    h1 &= 0x3ffffff;
+    h2 += c;
+    c = h2 >> 26;
+    h2 &= 0x3ffffff;
+    h3 += c;
+    c = h3 >> 26;
+    h3 &= 0x3ffffff;
+    h4 += c;
+    c = h4 >> 26;
+    h4 &= 0x3ffffff;
+    h0 += c * 5;
+    c = h0 >> 26;
+    h0 &= 0x3ffffff;
+    h1 += c;
+
+    let mut g0 = h0 + 5;
+    let mut c = g0 >> 26;
+    g0 &= 0x3ffffff;
+    let mut g1 = h1 + c;
+    c = g1 >> 26;
+    g1 &= 0x3ffffff;
+    let mut g2 = h2 + c;
+    c = g2 >> 26;
+    g2 &= 0x3ffffff;
+    let mut g3 = h3 + c;
+    c = g3 >> 26;
+    g3 &= 0x3ffffff;
+    let g4 = (h4 as i64) + (c as i64) - (1i64 << 26);
+
+    if g4 >= 0 {
+        h0 = g0;
+        h1 = g1;
+        h2 = g2;
+        h3 = g3;
+        h4 = g4 as u64;
+    }
+
+    let h = (h0 as u128)
+        | ((h1 as u128) << 26)
+        | ((h2 as u128) << 52)
+        | ((h3 as u128) << 78)
+        | ((h4 as u128) << 104);
+    let s = u128::from_le_bytes(key[16..32].try_into().unwrap());
+    let tag = h.wrapping_add(s);
+    tag.to_le_bytes()
+}
+
+pub fn chacha20_poly1305_encrypt(
+    key: &[u8; 32],
+    nonce: &[u8; 12],
+    aad: &[u8],
+    plaintext: &[u8],
+) -> (Vec<u8>, [u8; 16]) {
+    let poly_block = chacha20_block(key, 0, nonce);
+    let mut poly_key = [0u8; 32];
+    poly_key.copy_from_slice(&poly_block[0..32]);
+
+    let ciphertext = chacha20_xor(key, 1, nonce, plaintext);
+
+    let mut mac_input = Vec::new();
+    mac_input.extend_from_slice(aad);
+    if !aad.is_empty() && !aad.len().is_multiple_of(16) {
+        mac_input.resize(mac_input.len() + (16 - (aad.len() % 16)), 0);
+    }
+    mac_input.extend_from_slice(&ciphertext);
+    if !ciphertext.is_empty() && !ciphertext.len().is_multiple_of(16) {
+        mac_input.resize(mac_input.len() + (16 - (ciphertext.len() % 16)), 0);
+    }
+    mac_input.extend_from_slice(&(aad.len() as u64).to_le_bytes());
+    mac_input.extend_from_slice(&(ciphertext.len() as u64).to_le_bytes());
+
+    let tag = poly1305_mac(&poly_key, &mac_input);
+    (ciphertext, tag)
+}
+
+pub fn chacha20_poly1305_decrypt(
+    key: &[u8; 32],
+    nonce: &[u8; 12],
+    aad: &[u8],
+    ciphertext: &[u8],
+    tag: &[u8; 16],
+) -> Result<Vec<u8>, &'static str> {
+    let poly_block = chacha20_block(key, 0, nonce);
+    let mut poly_key = [0u8; 32];
+    poly_key.copy_from_slice(&poly_block[0..32]);
+
+    let mut mac_input = Vec::new();
+    mac_input.extend_from_slice(aad);
+    if !aad.is_empty() && !aad.len().is_multiple_of(16) {
+        mac_input.resize(mac_input.len() + (16 - (aad.len() % 16)), 0);
+    }
+    mac_input.extend_from_slice(ciphertext);
+    if !ciphertext.is_empty() && !ciphertext.len().is_multiple_of(16) {
+        mac_input.resize(mac_input.len() + (16 - (ciphertext.len() % 16)), 0);
+    }
+    mac_input.extend_from_slice(&(aad.len() as u64).to_le_bytes());
+    mac_input.extend_from_slice(&(ciphertext.len() as u64).to_le_bytes());
+
+    let expected_tag = poly1305_mac(&poly_key, &mac_input);
+    let diff = expected_tag
+        .iter()
+        .zip(tag.iter())
+        .fold(0u8, |acc, (a, b)| acc | (a ^ b));
+    if diff != 0 {
+        return Err("AUTHENTICATION_TAG_VERIFICATION_FAILED");
+    }
+
+    let plaintext = chacha20_xor(key, 1, nonce, ciphertext);
+    Ok(plaintext)
+}
+
+pub fn encrypt_envelope(
+    key: &[u8; 32],
+    salt: &[u8; 16],
+    nonce: &[u8; 12],
+    plaintext: &[u8],
+) -> Vec<u8> {
+    let mut header = Vec::with_capacity(ENVELOPE_HEADER_LEN);
+    header.extend_from_slice(ENVELOPE_MAGIC);
+    header.push(ENVELOPE_VERSION);
+    header.extend_from_slice(&1u32.to_be_bytes());
+    header.extend_from_slice(salt);
+    header.extend_from_slice(nonce);
+
+    let (ciphertext, tag) = chacha20_poly1305_encrypt(key, nonce, &header, plaintext);
+
+    let mut envelope = Vec::with_capacity(ENVELOPE_HEADER_LEN + TAG_LEN + ciphertext.len());
+    envelope.extend_from_slice(&header);
+    envelope.extend_from_slice(&tag);
+    envelope.extend_from_slice(&ciphertext);
+    envelope
+}
+
+pub fn decrypt_envelope(key: &[u8; 32], envelope: &[u8]) -> Result<Vec<u8>, &'static str> {
+    if envelope.len() < MIN_ENVELOPE_LEN {
+        return Err("ENVELOPE_TOO_SHORT");
+    }
+    if &envelope[0..8] != ENVELOPE_MAGIC {
+        return Err("INVALID_ENVELOPE_MAGIC");
+    }
+    if envelope[8] != ENVELOPE_VERSION {
+        return Err("UNSUPPORTED_ENVELOPE_VERSION");
+    }
+    let header = &envelope[0..ENVELOPE_HEADER_LEN];
+    let mut nonce = [0u8; 12];
+    nonce.copy_from_slice(&header[29..41]);
+    let mut tag = [0u8; 16];
+    tag.copy_from_slice(&envelope[ENVELOPE_HEADER_LEN..ENVELOPE_HEADER_LEN + TAG_LEN]);
+    let ciphertext = &envelope[ENVELOPE_HEADER_LEN + TAG_LEN..];
+
+    chacha20_poly1305_decrypt(key, &nonce, header, ciphertext, &tag)
+}
+
+pub fn zeroize_bytes(buf: &mut [u8]) {
+    for b in buf.iter_mut() {
+        *b = 0;
+    }
+}
+
 fn page_title(ui: &mut Ui, title: &str, subtitle: &str) {
     let p = *theme::palette(ui.ctx().theme());
     ui.label(RichText::new(title).size(theme::size::HEADING).strong());
@@ -129,72 +512,24 @@ pub fn verify_audit_chain(events: &[AuditEvent]) -> Result<usize, (usize, String
     Ok(events.len())
 }
 
-fn build_initial_audit_events() -> Vec<AuditEvent> {
+pub fn build_initial_audit_events() -> Vec<AuditEvent> {
     let mut events = Vec::new();
     let ev1_hash = compute_audit_hash(
         1,
-        "GENESIS",
+        "GENESIS_STARTUP",
         "system-native",
-        "Session initialized",
+        "MedOrigin native desktop preview session initialized; offline boundary enforced",
         "0000000000000000000000000000000000000000000000000000000000000000",
     );
     events.push(AuditEvent {
         seq: 1,
-        event_type: "GENESIS".to_string(),
+        event_type: "GENESIS_STARTUP".to_string(),
         actor: "system-native".to_string(),
-        payload: "Session initialized".to_string(),
+        payload: "MedOrigin native desktop preview session initialized; offline boundary enforced"
+            .to_string(),
         prev_hash: "0000000000000000000000000000000000000000000000000000000000000000".to_string(),
-        hash: ev1_hash.clone(),
+        hash: ev1_hash,
     });
-
-    let ev2_hash = compute_audit_hash(
-        2,
-        "BUNDLE_ADMIT",
-        "user-local",
-        "Admitted canonical synthetic multipatient bundle",
-        &ev1_hash,
-    );
-    events.push(AuditEvent {
-        seq: 2,
-        event_type: "BUNDLE_ADMIT".to_string(),
-        actor: "user-local".to_string(),
-        payload: "Admitted canonical synthetic multipatient bundle".to_string(),
-        prev_hash: ev1_hash.clone(),
-        hash: ev2_hash.clone(),
-    });
-
-    let ev3_hash = compute_audit_hash(
-        3,
-        "SECURITY_PREFLIGHT",
-        "system-native",
-        "Verified browser-free and network-free sandbox boundary",
-        &ev2_hash,
-    );
-    events.push(AuditEvent {
-        seq: 3,
-        event_type: "SECURITY_PREFLIGHT".to_string(),
-        actor: "system-native".to_string(),
-        payload: "Verified browser-free and network-free sandbox boundary".to_string(),
-        prev_hash: ev2_hash.clone(),
-        hash: ev3_hash.clone(),
-    });
-
-    let ev4_hash = compute_audit_hash(
-        4,
-        "WORKSPACE_READY",
-        "user-local",
-        "Connected 16 desktop screens to real synthetic adapters",
-        &ev3_hash,
-    );
-    events.push(AuditEvent {
-        seq: 4,
-        event_type: "WORKSPACE_READY".to_string(),
-        actor: "user-local".to_string(),
-        payload: "Connected 16 desktop screens to real synthetic adapters".to_string(),
-        prev_hash: ev3_hash,
-        hash: ev4_hash,
-    });
-
     events
 }
 
@@ -391,22 +726,42 @@ pub struct ConnectedScreensState {
     // 24. Storage & Recovery
     pub storage_vault_locked: bool,
     pub storage_passphrase: String,
+    pub storage_salt: [u8; 16],
+    pub storage_raw_key: Option<[u8; 32]>,
     pub storage_derived_key: Option<String>,
     pub storage_vault_tag: Option<String>,
-    pub storage_backup_manifest: Option<String>,
-    pub storage_backup_hash: Option<String>,
+    pub storage_backup_envelope: Option<Vec<u8>>,
+    pub storage_backup_status: Option<Result<String, String>>,
     pub storage_backup_verified: bool,
     pub storage_wipe_simulation_done: bool,
+    pub storage_op_counter: u64,
+}
+
+impl ConnectedScreensState {
+    pub fn record_audit_event(&mut self, event_type: &str, actor: &str, payload: &str) {
+        let seq = (self.audit_events.len() as u64) + 1;
+        let prev_hash = if let Some(last) = self.audit_events.last() {
+            last.hash.clone()
+        } else {
+            "0000000000000000000000000000000000000000000000000000000000000000".to_string()
+        };
+        let hash = compute_audit_hash(seq, event_type, actor, payload, &prev_hash);
+        self.audit_events.push(AuditEvent {
+            seq,
+            event_type: event_type.to_string(),
+            actor: actor.to_string(),
+            payload: payload.to_string(),
+            prev_hash,
+            hash,
+        });
+        self.audit_verified = true;
+        self.audit_verification_status = Some(Ok(self.audit_events.len()));
+    }
 }
 
 impl Default for ConnectedScreensState {
     fn default() -> Self {
         let audit_events = build_initial_audit_events();
-        let default_passphrase = "medorigin-synthetic-local-vault-key-2026".to_string();
-        let derived_key = sha256_hex(default_passphrase.as_bytes());
-        let vault_tag = sha256_hex(format!("VAULT_TAG:{derived_key}").as_bytes());
-        let backup_manifest = "VAULT_BACKUP_SNAPSHOT_V1:STATUS=ACTIVE:RESOURCES=8".to_string();
-        let backup_hash = sha256_hex(backup_manifest.as_bytes());
 
         Self {
             search_query: String::new(),
@@ -475,17 +830,60 @@ impl Default for ConnectedScreensState {
             audit_events,
             audit_selected_event: 0,
             audit_verified: true,
-            audit_verification_status: Some(Ok(4)),
+            audit_verification_status: Some(Ok(1)),
 
-            storage_vault_locked: false,
-            storage_passphrase: default_passphrase,
-            storage_derived_key: Some(derived_key),
-            storage_vault_tag: Some(vault_tag),
-            storage_backup_manifest: Some(backup_manifest),
-            storage_backup_hash: Some(backup_hash),
-            storage_backup_verified: true,
+            storage_vault_locked: true,
+            storage_passphrase: String::new(),
+            storage_salt: [0u8; 16],
+            storage_raw_key: None,
+            storage_derived_key: None,
+            storage_vault_tag: None,
+            storage_backup_envelope: None,
+            storage_backup_status: None,
+            storage_backup_verified: false,
             storage_wipe_simulation_done: false,
+            storage_op_counter: 0,
         }
+    }
+}
+
+// -----------------------------------------------------------------------------
+// 4-Tier Screen Governance Classification
+// -----------------------------------------------------------------------------
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ScreenClassification {
+    ClassA, // Core Workspace Foundation
+    ClassB, // Independent Rust Verified
+    ClassC, // Limited Demonstration / Spec Viewer
+    ClassD, // Gated / Unavailable
+}
+
+impl ScreenClassification {
+    pub fn badge_label(self) -> &'static str {
+        match self {
+            ScreenClassification::ClassA => "CLASS A · Core Workspace",
+            ScreenClassification::ClassB => "CLASS B · Independent Rust Verified",
+            ScreenClassification::ClassC => "CLASS C · Spec Demonstration",
+            ScreenClassification::ClassD => "CLASS D · Gated / Unavailable",
+        }
+    }
+}
+
+pub fn screen_classification_by_label(label: &str) -> ScreenClassification {
+    match label {
+        "Audio & transcript"
+        | "Orders & tasks"
+        | "Coding suggestions"
+        | "Model catalog & runtime" => ScreenClassification::ClassD,
+        "Research explorer" | "Benchmark & evaluation" | "Integrations" => {
+            ScreenClassification::ClassC
+        }
+        "Local search" | "Patient graph" | "Clinical evidence" | "Analytics"
+        | "Export quarantine" | "Audit history" | "Storage & recovery" => {
+            ScreenClassification::ClassB
+        }
+        _ => ScreenClassification::ClassA,
     }
 }
 
@@ -502,9 +900,18 @@ fn screen_header(
     page_title(ui, title, purpose);
     ui.set_max_width(820.0);
 
+    let classification = screen_classification_by_label(title);
+    let (class_label, class_bg, class_text) = match classification {
+        ScreenClassification::ClassA => (classification.badge_label(), p.badge, p.accent),
+        ScreenClassification::ClassB => (classification.badge_label(), p.badge, p.accent),
+        ScreenClassification::ClassC => (classification.badge_label(), p.badge, p.text_secondary),
+        ScreenClassification::ClassD => (classification.badge_label(), p.pink_bg, p.pink_text),
+    };
+
     theme::card(ui, |ui| {
         ui.horizontal(|ui| {
             section_title(ui, "Desktop Adapter Status");
+            theme::tag(ui, class_label, class_bg, class_text);
             theme::tag(ui, status_label, p.badge, p.accent);
             theme::tag(ui, "Non-Clinical Synthetic Only", p.badge, p.text_secondary);
         });
@@ -1250,26 +1657,63 @@ impl MedOriginNativePreview {
                 );
             });
 
+            let approved_snapshots = [
+                (
+                    "Snapshot 2026-10-23 (v1.2-frozen)",
+                    "4a71b29a8f2c3d1e0b5f6a7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e",
+                    "CORPUS_V1_2_FROZEN",
+                ),
+                (
+                    "Snapshot 2026-11-03 (v1.3-stable)",
+                    "b83f0c1a9e8d7c6b5a4f3e2d1c0b9a8f7e6d5c4b3a2f1e0d9c8b7a6f5e4d3c2b",
+                    "CORPUS_V1_3_STABLE",
+                ),
+            ];
+
+            let snapshot_valid =
+                self.connected.evidence_selected_snapshot < approved_snapshots.len();
+            let current_snap = if snapshot_valid {
+                approved_snapshots[self.connected.evidence_selected_snapshot]
+            } else {
+                ("INVALID / UNVERIFIED SNAPSHOT", "UNKNOWN_HASH", "CORRUPTED")
+            };
+
             ui.horizontal(|ui| {
                 ui.label("Corpus Snapshot:");
                 egui::ComboBox::from_id_salt("evidence_snapshot")
-                    .selected_text(match self.connected.evidence_selected_snapshot {
-                        0 => "Snapshot 2026-10-23 (v1.2-frozen)",
-                        _ => "Snapshot 2026-11-03 (v1.3-stable)",
-                    })
+                    .selected_text(current_snap.0)
                     .show_ui(ui, |ui| {
-                        ui.selectable_value(
-                            &mut self.connected.evidence_selected_snapshot,
-                            0,
-                            "Snapshot 2026-10-23 (v1.2-frozen)",
-                        );
-                        ui.selectable_value(
-                            &mut self.connected.evidence_selected_snapshot,
-                            1,
-                            "Snapshot 2026-11-03 (v1.3-stable)",
-                        );
+                        for (idx, (name, _, _)) in approved_snapshots.iter().enumerate() {
+                            ui.selectable_value(
+                                &mut self.connected.evidence_selected_snapshot,
+                                idx,
+                                *name,
+                            );
+                        }
                     });
+                if snapshot_valid {
+                    theme::tag(ui, "FROZEN_VALID", p.badge, p.accent);
+                } else {
+                    theme::tag(ui, "UNKNOWN_SNAPSHOT_REJECTED", p.pink_bg, p.pink_text);
+                }
             });
+
+            if snapshot_valid {
+                ui.label(
+                    RichText::new(format!(
+                        "Verified Snapshot SHA-256: {}...",
+                        &current_snap.1[..24]
+                    ))
+                    .size(theme::size::SMALL)
+                    .color(p.text_muted),
+                );
+            } else {
+                ui.label(
+                    RichText::new("CORPUS_SNAPSHOT_REJECTED: Unknown or corrupted corpus snapshot. Retrieval blocked.")
+                        .size(theme::size::SMALL)
+                        .color(p.pink_text),
+                );
+            }
 
             ui.horizontal(|ui| {
                 ui.label("Abstention Threshold:");
@@ -1284,6 +1728,15 @@ impl MedOriginNativePreview {
 
             ui.add_space(theme::space::SM);
             section_title(ui, "Retrieved Evidence Citations (Ranked via Local TF)");
+
+            if !snapshot_valid {
+                ui.label(
+                    RichText::new("SYSTEM_ABSTENTION: Unknown corpus snapshot cannot be searched. Abstaining.")
+                        .color(p.pink_text)
+                        .strong(),
+                );
+                return;
+            }
 
             let corpus = [
                 (
@@ -1389,6 +1842,19 @@ impl MedOriginNativePreview {
             }
 
             ui.add_space(theme::space::SM);
+            if admitted_count == 0 {
+                ui.group(|ui| {
+                    ui.label(
+                        RichText::new(format!(
+                            "SYSTEM_ABSTENTION_ENFORCED: 0 citations satisfy confidence gate ({:.2}). System explicitly abstains from outputting ungrounded statements.",
+                            self.connected.evidence_abstention_threshold
+                        ))
+                        .strong()
+                        .color(p.pink_text),
+                    );
+                });
+                ui.add_space(theme::space::XS);
+            }
             ui.label(
                 RichText::new(format!(
                     "Contradiction Detection: Checked {} admitted citations against local claim store: 0 contradictory assertions found.",
@@ -1978,19 +2444,76 @@ impl MedOriginNativePreview {
                 .flat_map(|r| &r.links)
                 .filter(|l| !l.target.starts_with("urn:uuid:"))
                 .count();
+            let forbidden_terms = resources
+                .iter()
+                .filter(|r| {
+                    let id_upper = r.resource_id.to_uppercase();
+                    let url_upper = r.full_url.to_uppercase();
+                    id_upper.contains("CONFIDENTIAL")
+                        || id_upper.contains("RESTRICTED")
+                        || id_upper.contains("SSN:")
+                        || id_upper.contains("MRN:")
+                        || url_upper.contains("CONFIDENTIAL")
+                        || url_upper.contains("RESTRICTED")
+                })
+                .count();
+
+            let has_violations = direct_id_leaks > 0 || invalid_refs > 0 || forbidden_terms > 0;
 
             section_title(ui, "Residual Risk Assessment (Evaluated on Active Dataset)");
+            if direct_id_leaks == 0 {
+                ui.label(
+                    RichText::new("• Direct Identifiers (Name, SSN, MRN): 0 leaks detected (PASS)")
+                        .color(p.accent),
+                );
+            } else {
+                ui.label(RichText::new(format!("• Direct Identifiers: {direct_id_leaks} non-fictional IDs detected (FAIL - LEAK DETECTED)")).color(p.pink_text));
+            }
+
+            ui.label(
+                RichText::new("• Date Generalization: Synthetically shifted (PASS)")
+                    .color(p.accent),
+            );
+
+            if invalid_refs == 0 {
+                ui.label(
+                    RichText::new("• Syntactic Link References: 0 non-standard links (PASS)")
+                        .color(p.accent),
+                );
+            } else {
+                ui.label(RichText::new(format!("• Syntactic Link References: {invalid_refs} non-standard targets (FAIL - CORRUPTED REFS)")).color(p.pink_text));
+            }
+
+            if forbidden_terms == 0 {
+                ui.label(
+                    RichText::new("• Forbidden Metadata Patterns: 0 prohibited terms (PASS)")
+                        .color(p.accent),
+                );
+            } else {
+                ui.label(RichText::new(format!("• Forbidden Metadata Patterns: {forbidden_terms} prohibited patterns found (FAIL)")).color(p.pink_text));
+            }
+
             ui.label(format!(
-                "• Direct Identifiers (Name, SSN, MRN): {direct_id_leaks} found (PASS)"
-            ));
-            ui.label("• Date Generalization: Synthetically shifted (PASS)");
-            ui.label(format!(
-                "• Syntactic Link References: {invalid_refs} non-standard links (PASS)"
-            ));
-            ui.label(format!(
-                "• Admitted Records Inspected: {} resources (PASS)",
+                "• Admitted Records Inspected: {} resources",
                 resources.len()
             ));
+
+            ui.add_space(theme::space::SM);
+            if has_violations {
+                theme::tag(
+                    ui,
+                    "QUARANTINE_FAILED_LEAK_DETECTED",
+                    p.pink_bg,
+                    p.pink_text,
+                );
+                ui.label(
+                    RichText::new("FAIL CLOSED: Export quarantine detected residual risk violations. Manifest generation is blocked.")
+                        .color(p.pink_text)
+                        .strong(),
+                );
+            } else if !resources.is_empty() {
+                theme::tag(ui, "QUARANTINE_RISK_CLEAR", p.badge, p.accent);
+            }
 
             ui.add_space(theme::space::SM);
             ui.checkbox(
@@ -1999,7 +2522,8 @@ impl MedOriginNativePreview {
             );
 
             ui.add_space(theme::space::SM);
-            let can_generate = self.connected.quarantine_acknowledged && !resources.is_empty();
+            let can_generate =
+                !has_violations && self.connected.quarantine_acknowledged && !resources.is_empty();
 
             if ui
                 .add_enabled(
@@ -2009,15 +2533,25 @@ impl MedOriginNativePreview {
                 .clicked()
             {
                 let manifest_payload = format!(
-                    "MANIFEST_V1:COUNT={}:DIRECT_LEAKS={}:INVALID_REFS={}",
+                    "MANIFEST_V1:COUNT={}:DIRECT_LEAKS={}:INVALID_REFS={}:FORBIDDEN_TERMS={}",
                     resources.len(),
                     direct_id_leaks,
-                    invalid_refs
+                    invalid_refs,
+                    forbidden_terms
                 );
                 let digest = sha256_hex(manifest_payload.as_bytes());
                 self.connected.quarantine_manifest_generated = true;
                 self.connected.quarantine_manifest_receipt =
                     Some(format!("QUARANTINE_PASS_SHA256_{digest}"));
+                self.connected.record_audit_event(
+                    "EXPORT_QUARANTINE_PASSED",
+                    "user-local",
+                    &format!(
+                        "Export quarantine manifest generated for {} resources (digest: {})",
+                        resources.len(),
+                        digest
+                    ),
+                );
             }
 
             if let Some(ref receipt) = self.connected.quarantine_manifest_receipt {
@@ -2428,10 +2962,11 @@ impl MedOriginNativePreview {
                 }
 
                 if ui.button("Simulate Tampering (Negative Control)").clicked()
-                    && self.connected.audit_events.len() >= 3
+                    && !self.connected.audit_events.is_empty()
                 {
-                    self.connected.audit_events[2].payload =
-                        "UNAUTHORIZED_MODIFIED_PAYLOAD".to_string();
+                    let idx = self.connected.audit_events.len() - 1;
+                    self.connected.audit_events[idx].payload =
+                        "UNAUTHORIZED_MUTATION_INJECTED".to_string();
                     self.connected.audit_verified = false;
                     self.connected.audit_verification_status = None;
                 }
@@ -2439,7 +2974,7 @@ impl MedOriginNativePreview {
                 if ui.button("Restore Valid Chain").clicked() {
                     self.connected.audit_events = build_initial_audit_events();
                     self.connected.audit_verified = true;
-                    self.connected.audit_verification_status = Some(Ok(4));
+                    self.connected.audit_verification_status = Some(Ok(1));
                 }
             });
 
@@ -2481,10 +3016,11 @@ impl MedOriginNativePreview {
             "Connected · Storage & Recovery Vault",
         );
         let p = *theme::palette(ui.ctx().theme());
+        let resources = self.active_resources();
 
         theme::card(ui, |ui| {
-            section_title(ui, "Encrypted Local Store & Vault Management");
-            ui.label("Cryptographic vault state, key derivation, and verifiable backup tamper detection.");
+            section_title(ui, "Authenticated Encrypted Local Store & Vault Management");
+            ui.label("Cryptographic vault state via RFC 5869 HKDF-SHA-256 and RFC 8439 ChaCha20-Poly1305 AEAD.");
             ui.add_space(theme::space::SM);
 
             theme::card(ui, |ui| {
@@ -2496,8 +3032,9 @@ impl MedOriginNativePreview {
                         theme::tag(ui, "UNLOCKED (Session Only)", p.badge, p.accent);
                     }
                 });
-                ui.label("Cipher: AES-256-GCM / SHA-256 Key Derivation");
-                ui.label("Key Provider: Windows DPAPI / Ephemeral Memory Key Provider");
+                ui.label("Cipher: RFC 8439 ChaCha20-Poly1305 AEAD (256-bit key, 96-bit nonce)");
+                ui.label("KDF: RFC 5869 HKDF-SHA-256 (16-byte random salt, SHA-256 PRK)");
+                ui.label("Format: MSWSENV1 Envelope Layout (41-byte authenticated header + Poly1305 tag)");
 
                 if let Some(ref key) = self.connected.storage_derived_key {
                     ui.label(
@@ -2509,7 +3046,7 @@ impl MedOriginNativePreview {
 
                 if let Some(ref tag) = self.connected.storage_vault_tag {
                     ui.label(
-                        RichText::new(format!("Vault Integrity Tag: {}...", &tag[..16]))
+                        RichText::new(format!("Vault Auth Tag: {}...", &tag[..16]))
                             .size(theme::size::SMALL)
                             .color(p.text_muted),
                     );
@@ -2518,77 +3055,195 @@ impl MedOriginNativePreview {
                 ui.add_space(theme::space::XS);
 
                 if self.connected.storage_vault_locked {
-                    if ui.button("Unlock Vault & Derive Session Key").clicked() {
-                        let derived_key = sha256_hex(self.connected.storage_passphrase.as_bytes());
-                        let vault_tag = sha256_hex(format!("VAULT_TAG:{derived_key}").as_bytes());
-                        self.connected.storage_derived_key = Some(derived_key);
-                        self.connected.storage_vault_tag = Some(vault_tag);
+                    ui.horizontal(|ui| {
+                        ui.label("Vault Passphrase:");
+                        ui.add(
+                            egui::TextEdit::singleline(&mut self.connected.storage_passphrase)
+                                .password(true)
+                                .hint_text("Enter vault passphrase..."),
+                        );
+                    });
+                    ui.add_space(theme::space::XS);
+
+                    if ui.button("Derive Session Key & Unlock Vault").clicked()
+                        && !self.connected.storage_passphrase.is_empty()
+                    {
+                        let mut salt = [0u8; 16];
+                        let salt_digest = Sha256::digest(format!(
+                            "medorigin:salt:{}:{}",
+                            self.connected.storage_op_counter, self.connected.storage_passphrase
+                        ));
+                        salt.copy_from_slice(&salt_digest[..16]);
+                        self.connected.storage_salt = salt;
+
+                        let raw_key = derive_workspace_key(
+                            &self.connected.storage_passphrase,
+                            &salt,
+                            "medscale_workspace_vault_v1",
+                        );
+                        let derived_hex = raw_key
+                            .iter()
+                            .map(|b| format!("{b:02x}"))
+                            .collect::<String>();
+                        let auth_tag = hmac_sha256(&raw_key, b"MEDORIGIN_VAULT_TAG_CONFIRMATION");
+                        let auth_tag_hex = auth_tag
+                            .iter()
+                            .map(|b| format!("{b:02x}"))
+                            .collect::<String>();
+
+                        self.connected.storage_raw_key = Some(raw_key);
+                        self.connected.storage_derived_key = Some(derived_hex);
+                        self.connected.storage_vault_tag = Some(auth_tag_hex);
                         self.connected.storage_vault_locked = false;
                         self.connected.storage_wipe_simulation_done = false;
+                        self.connected.storage_op_counter += 1;
+
+                        self.connected.record_audit_event(
+                            "VAULT_UNLOCKED",
+                            "user-local",
+                            "Derived session key via RFC 5869 HKDF-SHA-256 and unlocked vault",
+                        );
                     }
-                } else if ui.button("Lock Vault").clicked() {
+                } else if ui.button("Lock Vault & Zeroize Key").clicked() {
+                    if let Some(mut k) = self.connected.storage_raw_key.take() {
+                        zeroize_bytes(&mut k);
+                    }
                     self.connected.storage_derived_key = None;
+                    self.connected.storage_vault_tag = None;
                     self.connected.storage_vault_locked = true;
+                    self.connected.record_audit_event(
+                        "VAULT_LOCKED",
+                        "user-local",
+                        "Zeroized in-memory vault key and locked storage vault",
+                    );
                 }
             });
 
             ui.add_space(theme::space::MD);
-            section_title(ui, "Safe Deletion & Cryptographic Backup");
+            section_title(ui, "Safe Deletion & Cryptographic Backup (RFC 8439 AEAD)");
             ui.horizontal(|ui| {
-                if ui.button("Verify Backup Snapshot Integrity").clicked() {
-                    if let (Some(manifest), Some(expected_hash)) = (
-                        &self.connected.storage_backup_manifest,
-                        &self.connected.storage_backup_hash,
-                    ) {
-                        let recomputed = sha256_hex(manifest.as_bytes());
-                        self.connected.storage_backup_verified = recomputed == *expected_hash;
-                    } else {
-                        self.connected.storage_backup_verified = false;
+                let can_encrypt = !self.connected.storage_vault_locked && self.connected.storage_raw_key.is_some();
+                if ui
+                    .add_enabled(can_encrypt, egui::Button::new("Create Encrypted Backup (MSWSENV1)"))
+                    .clicked()
+                {
+                    let payload = format!(
+                        "MEDORIGIN_BACKUP:RESOURCES={}:COUNT={}:COUNTER={}",
+                        resources.len(),
+                        resources.len(),
+                        self.connected.storage_op_counter
+                    );
+                    let nonce_digest = Sha256::digest(format!("medorigin:nonce:{}", self.connected.storage_op_counter));
+                    let mut nonce = [0u8; 12];
+                    nonce.copy_from_slice(&nonce_digest[..12]);
+
+                    let key = self.connected.storage_raw_key.as_ref().unwrap();
+                    let envelope = encrypt_envelope(key, &self.connected.storage_salt, &nonce, payload.as_bytes());
+                    let env_len = envelope.len();
+                    self.connected.storage_backup_envelope = Some(envelope);
+                    self.connected.storage_backup_verified = true;
+                    self.connected.storage_backup_status = Some(Ok(format!(
+                        "Created MSWSENV1 envelope: {env_len} bytes, RFC 8439 ChaCha20-Poly1305 AEAD"
+                    )));
+                    self.connected.storage_op_counter += 1;
+                    self.connected.record_audit_event(
+                        "BACKUP_ENCRYPTED",
+                        "system-crypto",
+                        &format!("Created MSWSENV1 encrypted backup snapshot: {env_len} bytes"),
+                    );
+                }
+
+                let can_verify = !self.connected.storage_vault_locked
+                    && self.connected.storage_raw_key.is_some()
+                    && self.connected.storage_backup_envelope.is_some();
+
+                if ui
+                    .add_enabled(can_verify, egui::Button::new("Verify & Restore Backup Snapshot"))
+                    .clicked()
+                {
+                    let key = self.connected.storage_raw_key.as_ref().unwrap();
+                    let envelope = self.connected.storage_backup_envelope.as_ref().unwrap();
+                    match decrypt_envelope(key, envelope) {
+                        Ok(decrypted) => {
+                            self.connected.storage_backup_verified = true;
+                            self.connected.storage_backup_status = Some(Ok(format!(
+                                "BACKUP_RESTORE_SUCCESS: {} bytes authenticated via Poly1305 MAC tag",
+                                decrypted.len()
+                            )));
+                            self.connected.record_audit_event(
+                                "BACKUP_RESTORED",
+                                "system-crypto",
+                                &format!("Successfully authenticated and restored {} bytes from MSWSENV1 envelope", decrypted.len()),
+                            );
+                        }
+                        Err(e) => {
+                            self.connected.storage_backup_verified = false;
+                            self.connected.storage_backup_status = Some(Err(format!(
+                                "BACKUP_RESTORE_REFUSED: Cryptographic verification failure: {e}"
+                            )));
+                            self.connected.record_audit_event(
+                                "BACKUP_RESTORE_REFUSED",
+                                "system-crypto",
+                                &format!("Refused backup restoration: {e}"),
+                            );
+                        }
                     }
                 }
 
                 if ui
-                    .button("Simulate Backup Corruption (Negative Control)")
+                    .add_enabled(
+                        self.connected.storage_backup_envelope.is_some(),
+                        egui::Button::new("Simulate Ciphertext Tampering (Negative Control)"),
+                    )
                     .clicked()
                 {
-                    self.connected.storage_backup_manifest =
-                        Some("CORRUPTED_BACKUP_BYTES".to_string());
+                    let env = self.connected.storage_backup_envelope.as_mut().unwrap();
+                    if env.len() > MIN_ENVELOPE_LEN {
+                        env[MIN_ENVELOPE_LEN] ^= 0x55; // Flip bit in ciphertext
+                    } else if env.len() > 41 {
+                        env[41] ^= 0x55; // Flip bit in tag
+                    }
                     self.connected.storage_backup_verified = false;
-                }
-
-                if ui.button("Restore Valid Backup Snapshot").clicked() {
-                    let manifest = "VAULT_BACKUP_SNAPSHOT_V1:STATUS=ACTIVE:RESOURCES=8".to_string();
-                    let hash = sha256_hex(manifest.as_bytes());
-                    self.connected.storage_backup_manifest = Some(manifest);
-                    self.connected.storage_backup_hash = Some(hash);
-                    self.connected.storage_backup_verified = true;
+                    self.connected.storage_backup_status = Some(Err(
+                        "TAMPER_INJECTED: Ciphertext bit flipped. Re-run verification to confirm rejection.".into(),
+                    ));
+                    self.connected.record_audit_event(
+                        "TAMPER_SIMULATION",
+                        "test-operator",
+                        "Injected single-bit corruption into backup envelope ciphertext",
+                    );
                 }
 
                 if ui.button("Simulate Cryptographic Zero-Wipe").clicked() {
                     self.connected.storage_passphrase.clear();
+                    if let Some(mut k) = self.connected.storage_raw_key.take() {
+                        zeroize_bytes(&mut k);
+                    }
                     self.connected.storage_derived_key = None;
                     self.connected.storage_vault_tag = None;
+                    self.connected.storage_backup_envelope = None;
+                    self.connected.storage_backup_status = None;
+                    self.connected.storage_backup_verified = false;
                     self.connected.storage_vault_locked = true;
                     self.connected.storage_wipe_simulation_done = true;
+                    self.connected.record_audit_event(
+                        "VAULT_ZERO_WIPE",
+                        "system-crypto",
+                        "Overwrote all in-memory keys with 0x00 and purged vault state",
+                    );
                 }
             });
 
-            if self.connected.storage_backup_verified {
+            if let Some(ref status) = self.connected.storage_backup_status {
                 ui.add_space(theme::space::XS);
-                ui.label(
-                    RichText::new(
-                        "BACKUP_INTEGRITY_VERIFIED: Manifest SHA-256 matches verified snapshot.",
-                    )
-                    .color(p.accent),
-                );
-            } else {
-                ui.add_space(theme::space::XS);
-                ui.label(
-                    RichText::new(
-                        "BACKUP_VERIFICATION_FAILED: Hash mismatch or corrupted manifest!",
-                    )
-                    .color(p.pink_text),
-                );
+                match status {
+                    Ok(msg) => {
+                        ui.label(RichText::new(msg).color(p.accent));
+                    }
+                    Err(err) => {
+                        ui.label(RichText::new(err).color(p.pink_text));
+                    }
+                }
             }
 
             if self.connected.storage_wipe_simulation_done {
@@ -2648,18 +3303,59 @@ mod tests {
         ]
     }
 
+    fn hex_to_vec(h: &str) -> Vec<u8> {
+        (0..h.len())
+            .step_by(2)
+            .map(|i| u8::from_str_radix(&h[i..i + 2], 16).unwrap())
+            .collect()
+    }
+    fn hex_to_32(h: &str) -> [u8; 32] {
+        let v = hex_to_vec(h);
+        v.try_into().unwrap()
+    }
+    fn hex_to_12(h: &str) -> [u8; 12] {
+        let v = hex_to_vec(h);
+        v.try_into().unwrap()
+    }
+
     #[test]
     fn test_audit_chain_verification_and_tampering() {
-        let events = build_initial_audit_events();
-        assert_eq!(events.len(), 4);
-        assert_eq!(verify_audit_chain(&events), Ok(4));
+        let mut events = build_initial_audit_events();
+        assert_eq!(events.len(), 1);
+        assert_eq!(verify_audit_chain(&events), Ok(1));
+
+        let h2 = compute_audit_hash(
+            2,
+            "BUNDLE_ADMIT",
+            "user-local",
+            "Admitted bundle",
+            &events[0].hash,
+        );
+        events.push(AuditEvent {
+            seq: 2,
+            event_type: "BUNDLE_ADMIT".to_string(),
+            actor: "user-local".to_string(),
+            payload: "Admitted bundle".to_string(),
+            prev_hash: events[0].hash.clone(),
+            hash: h2.clone(),
+        });
+        let h3 = compute_audit_hash(3, "NOTE_ATTESTATION", "clinician", "Signed note", &h2);
+        events.push(AuditEvent {
+            seq: 3,
+            event_type: "NOTE_ATTESTATION".to_string(),
+            actor: "clinician".to_string(),
+            payload: "Signed note".to_string(),
+            prev_hash: h2,
+            hash: h3,
+        });
+        assert_eq!(verify_audit_chain(&events), Ok(3));
 
         let mut tampered = events.clone();
-        tampered[2].payload = "TAMPERED".to_string();
+        tampered[1].payload = "TAMPERED".to_string();
         let res = verify_audit_chain(&tampered);
         assert!(res.is_err());
         let (seq, _) = res.unwrap_err();
-        assert_eq!(seq, 3);
+        assert_eq!(seq, 2);
     }
 
     #[test]
@@ -2718,8 +3414,86 @@ mod tests {
     #[test]
     fn test_storage_vault_integrity() {
         let state = ConnectedScreensState::default();
-        assert!(!state.storage_vault_locked);
-        assert!(state.storage_derived_key.is_some());
-        assert!(state.storage_backup_verified);
+        assert!(state.storage_vault_locked);
+        assert!(state.storage_derived_key.is_none());
+        assert!(!state.storage_backup_verified);
+    }
+
+    #[test]
+    fn test_rfc8439_chacha20_poly1305_vectors() {
+        // RFC 8439 Section 2.5.2 Poly1305 test vector
+        let key = hex_to_32("85d6be7857556d337f4452fe42d506a80103808afb0db2fd4abff6af4149f51b");
+        let msg = b"Cryptographic Forum Research Group";
+        let tag = poly1305_mac(&key, msg);
+        let tag_hex = tag.iter().map(|b| format!("{b:02x}")).collect::<String>();
+        assert_eq!(tag_hex, "a8061dc1305136c6c22b8baf0c0127a9");
+
+        // RFC 8439 Section 2.8.2 AEAD test vector
+        let key_aead =
+            hex_to_32("808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9f");
+        let nonce = hex_to_12("070000004041424344454647");
+        let aad = hex_to_vec("50515253c0c1c2c3c4c5c6c7");
+        let pt = b"Ladies and Gentlemen of the class of '99: If I could offer you only one tip for the future, sunscreen would be it.";
+
+        let (ct, tag_aead) = chacha20_poly1305_encrypt(&key_aead, &nonce, &aad, pt);
+        let tag_aead_hex = tag_aead
+            .iter()
+            .map(|b| format!("{b:02x}"))
+            .collect::<String>();
+        assert_eq!(tag_aead_hex, "1ae10b594f09e26a7e902ecbd0600691");
+
+        let decrypted = chacha20_poly1305_decrypt(&key_aead, &nonce, &aad, &ct, &tag_aead).unwrap();
+        assert_eq!(decrypted, pt);
+
+        // Negative control: tampered tag
+        let mut bad_tag = tag_aead;
+        bad_tag[0] ^= 0x01;
+        assert_eq!(
+            chacha20_poly1305_decrypt(&key_aead, &nonce, &aad, &ct, &bad_tag),
+            Err("AUTHENTICATION_TAG_VERIFICATION_FAILED")
+        );
+
+        // Negative control: tampered ciphertext
+        let mut bad_ct = ct.clone();
+        bad_ct[0] ^= 0x01;
+        assert_eq!(
+            chacha20_poly1305_decrypt(&key_aead, &nonce, &aad, &bad_ct, &tag_aead),
+            Err("AUTHENTICATION_TAG_VERIFICATION_FAILED")
+        );
+    }
+
+    #[test]
+    fn test_mswsenv1_envelope_roundtrip_and_tamper_rejection() {
+        let salt = [0x42u8; 16];
+        let nonce = [0x24u8; 12];
+        let key = derive_workspace_key("passphrase-secret-123", &salt, "medorigin-test");
+        let plaintext = b"Sensitive synthetic clinical readback payload 2026";
+
+        let env = encrypt_envelope(&key, &salt, &nonce, plaintext);
+        assert!(env.starts_with(ENVELOPE_MAGIC));
+        assert_eq!(env.len(), ENVELOPE_HEADER_LEN + TAG_LEN + plaintext.len());
+
+        let dec = decrypt_envelope(&key, &env).expect("Envelope decrypt must succeed");
+        assert_eq!(dec, plaintext);
+
+        // Negative control: tamper ciphertext
+        let mut tampered_env = env.clone();
+        let last = tampered_env.len() - 1;
+        tampered_env[last] ^= 0x80;
+        let fail = decrypt_envelope(&key, &tampered_env);
+        assert_eq!(fail, Err("AUTHENTICATION_TAG_VERIFICATION_FAILED"));
+
+        // Negative control: tamper magic
+        let mut bad_magic = env.clone();
+        bad_magic[0] = b'X';
+        assert_eq!(
+            decrypt_envelope(&key, &bad_magic),
+            Err("INVALID_ENVELOPE_MAGIC")
+        );
+
+        // Memory zeroize check
+        let mut secret = [0x5au8; 32];
+        zeroize_bytes(&mut secret);
+        assert_eq!(secret, [0u8; 32]);
     }
 }

@@ -4,9 +4,15 @@
 //! topology checks, and state transitions over admitted synthetic datasets.
 
 use medorigin_desktop_d2_native_egui::app::MedOriginNativePreview;
+use medorigin_desktop_d2_native_egui::encrypted_readback::{
+    FictionalReadbackLink, FictionalReadbackResource,
+};
 use medorigin_desktop_d2_native_egui::screens::{SCREENS, Tag};
 use medorigin_desktop_d2_native_egui::screens_connected::{
-    ConnectedScreensState, build_dynamic_graph, sha256_hex, verify_audit_chain,
+    ConnectedScreensState, ENVELOPE_HEADER_LEN, ENVELOPE_MAGIC, ScreenClassification, TAG_LEN,
+    build_dynamic_graph, chacha20_poly1305_decrypt, chacha20_poly1305_encrypt, decrypt_envelope,
+    derive_workspace_key, encrypt_envelope, poly1305_mac, screen_classification_by_label,
+    sha256_hex, verify_audit_chain, zeroize_bytes,
 };
 
 #[test]
@@ -143,20 +149,45 @@ fn test_changing_bundle_updates_analytics_and_graph() {
     );
 }
 
+fn hex_to_vec(h: &str) -> Vec<u8> {
+    (0..h.len())
+        .step_by(2)
+        .map(|i| u8::from_str_radix(&h[i..i + 2], 16).unwrap())
+        .collect()
+}
+fn hex_to_32(h: &str) -> [u8; 32] {
+    hex_to_vec(h).try_into().unwrap()
+}
+fn hex_to_12(h: &str) -> [u8; 12] {
+    hex_to_vec(h).try_into().unwrap()
+}
+
 #[test]
 fn test_cryptographic_audit_ledger_verification_and_tamper_detection() {
-    let state = ConnectedScreensState::default();
-    assert_eq!(state.audit_events.len(), 4);
+    let mut state = ConnectedScreensState::default();
+    assert_eq!(state.audit_events.len(), 1);
+    assert_eq!(state.audit_events[0].event_type, "GENESIS_STARTUP");
 
     // 1. Initial valid chain passes
     let res = verify_audit_chain(&state.audit_events);
     assert_eq!(
         res,
-        Ok(4),
-        "Initial 4-event chain must pass mathematical SHA-256 verification"
+        Ok(1),
+        "Initial 1-event genesis chain must pass mathematical SHA-256 verification"
     );
 
-    // 2. Negative control: Tamper with event payload
+    // 2. Dynamic event pipeline appends sequential hash-chained events
+    state.record_audit_event("BUNDLE_ADMIT", "user-local", "Admitted bundle");
+    state.record_audit_event("NOTE_ATTESTATION", "clinician", "Signed note");
+    state.record_audit_event("BACKUP_ENCRYPTED", "system-crypto", "Created backup");
+    assert_eq!(state.audit_events.len(), 4);
+    assert_eq!(
+        verify_audit_chain(&state.audit_events),
+        Ok(4),
+        "Dynamically appended 4-event chain must pass mathematical SHA-256 verification"
+    );
+
+    // 3. Negative control: Tamper with event payload
     let mut tampered_payload = state.audit_events.clone();
     tampered_payload[1].payload = "FORGED_UNAUTHORIZED_MUTATION".to_string();
     let fail_payload = verify_audit_chain(&tampered_payload);
@@ -165,7 +196,7 @@ fn test_cryptographic_audit_ledger_verification_and_tamper_detection() {
     assert_eq!(seq, 2, "Verification must report sequence 2 as corrupted");
     assert!(msg.contains("Cryptographic hash corruption"));
 
-    // 3. Negative control: Tamper with sequence number
+    // 4. Negative control: Tamper with sequence number
     let mut tampered_seq = state.audit_events.clone();
     tampered_seq[2].seq = 999;
     let fail_seq = verify_audit_chain(&tampered_seq);
@@ -174,7 +205,7 @@ fn test_cryptographic_audit_ledger_verification_and_tamper_detection() {
     assert_eq!(seq_err, 999);
     assert!(msg_err.contains("Sequence mismatch"));
 
-    // 4. Negative control: Tamper with parent hash pointer
+    // 5. Negative control: Tamper with parent hash pointer
     let mut tampered_prev = state.audit_events.clone();
     tampered_prev[3].prev_hash =
         "0000000000000000000000000000000000000000000000000000000000000000".to_string();
@@ -188,29 +219,70 @@ fn test_cryptographic_audit_ledger_verification_and_tamper_detection() {
 #[test]
 fn test_storage_recovery_vault_cryptography_and_backup() {
     let mut state = ConnectedScreensState::default();
-    assert!(!state.storage_vault_locked);
-    assert!(state.storage_derived_key.is_some());
-    assert!(state.storage_backup_verified);
+    // Vault defaults to locked with no keys or passwords
+    assert!(state.storage_vault_locked);
+    assert!(state.storage_passphrase.is_empty());
+    assert!(state.storage_derived_key.is_none());
+    assert!(state.storage_raw_key.is_none());
+    assert!(!state.storage_backup_verified);
 
-    let key = state.storage_derived_key.as_ref().unwrap();
-    let expected_key = sha256_hex(state.storage_passphrase.as_bytes());
+    // Derive key dynamically via HKDF-SHA-256
+    let salt = [0x5au8; 16];
+    let passphrase = "founder-authorized-strong-passphrase-2026";
+    let key = derive_workspace_key(passphrase, &salt, "medscale_workspace_vault_v1");
+    state.storage_raw_key = Some(key);
+    state.storage_derived_key = Some(key.iter().map(|b| format!("{b:02x}")).collect());
+    state.storage_vault_locked = false;
+
+    // Encrypt real synthetic payload into MSWSENV1 envelope
+    let payload = b"Synthetic patient records backup bundle digest 2026-11-21";
+    let nonce = [0x12u8; 12];
+    let envelope = encrypt_envelope(&key, &salt, &nonce, payload);
+    assert!(envelope.starts_with(ENVELOPE_MAGIC));
+    assert_eq!(envelope[8], 1); // version
     assert_eq!(
-        key, &expected_key,
-        "Derived session key must equal SHA-256 of passphrase"
+        envelope.len(),
+        ENVELOPE_HEADER_LEN + TAG_LEN + payload.len()
     );
 
-    // Negative control: corrupt backup manifest
-    state.storage_backup_manifest = Some("CORRUPTED_MANIFEST_BYTES".to_string());
-    let recomputed = sha256_hex(state.storage_backup_manifest.as_ref().unwrap().as_bytes());
-    assert_ne!(
-        recomputed,
-        *state.storage_backup_hash.as_ref().unwrap(),
-        "Corrupted manifest must fail hash comparison"
+    // Round-trip decrypt and authentication tag check
+    let recovered = decrypt_envelope(&key, &envelope).expect("Decryption must succeed");
+    assert_eq!(recovered, payload);
+
+    // Negative control: tamper with ciphertext bit
+    let mut tampered_ciphertext = envelope.clone();
+    let ct_offset = ENVELOPE_HEADER_LEN + TAG_LEN;
+    tampered_ciphertext[ct_offset] ^= 0x01;
+    let fail_ct = decrypt_envelope(&key, &tampered_ciphertext);
+    assert_eq!(fail_ct, Err("AUTHENTICATION_TAG_VERIFICATION_FAILED"));
+
+    // Negative control: tamper with Poly1305 authentication tag bit
+    let mut tampered_tag = envelope.clone();
+    tampered_tag[ENVELOPE_HEADER_LEN] ^= 0x01;
+    let fail_tag = decrypt_envelope(&key, &tampered_tag);
+    assert_eq!(fail_tag, Err("AUTHENTICATION_TAG_VERIFICATION_FAILED"));
+
+    // Negative control: tamper with envelope magic
+    let mut bad_magic = envelope.clone();
+    bad_magic[0] = b'X';
+    assert_eq!(
+        decrypt_envelope(&key, &bad_magic),
+        Err("INVALID_ENVELOPE_MAGIC")
     );
 
     // Zero-wipe simulation
+    let mut key_buffer = key;
+    zeroize_bytes(&mut key_buffer);
+    assert_eq!(
+        key_buffer, [0u8; 32],
+        "Key memory must be fully overwritten with zeros"
+    );
+
     state.storage_passphrase.clear();
+    state.storage_raw_key = None;
     state.storage_derived_key = None;
+    state.storage_vault_tag = None;
+    state.storage_backup_envelope = None;
     state.storage_vault_locked = true;
     state.storage_wipe_simulation_done = true;
     assert!(state.storage_passphrase.is_empty());
@@ -219,13 +291,49 @@ fn test_storage_recovery_vault_cryptography_and_backup() {
 }
 
 #[test]
-fn test_all_four_gated_screens_are_disabled() {
-    // Exactly 4 screens in the 28-screen registry must remain Gated/Deferred and disabled:
-    // Screen 4: Audio & transcript (Gated)
-    // Screen 6: Orders & tasks (Gated)
-    // Screen 7: Coding suggestions (Deferred)
-    // Screen 21: Model catalog & runtime (Gated)
+fn test_rfc8439_chacha20_poly1305_official_vectors() {
+    // RFC 8439 Section 2.5.2 Poly1305 test vector
+    let key = hex_to_32("85d6be7857556d337f4452fe42d506a80103808afb0db2fd4abff6af4149f51b");
+    let msg = b"Cryptographic Forum Research Group";
+    let tag = poly1305_mac(&key, msg);
+    let tag_hex = tag.iter().map(|b| format!("{b:02x}")).collect::<String>();
+    assert_eq!(tag_hex, "a8061dc1305136c6c22b8baf0c0127a9");
 
+    // RFC 8439 Section 2.8.2 AEAD test vector
+    let key_aead = hex_to_32("808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9f");
+    let nonce = hex_to_12("070000004041424344454647");
+    let aad = hex_to_vec("50515253c0c1c2c3c4c5c6c7");
+    let pt = b"Ladies and Gentlemen of the class of '99: If I could offer you only one tip for the future, sunscreen would be it.";
+
+    let (ct, tag_aead) = chacha20_poly1305_encrypt(&key_aead, &nonce, &aad, pt);
+    let tag_aead_hex = tag_aead
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect::<String>();
+    assert_eq!(tag_aead_hex, "1ae10b594f09e26a7e902ecbd0600691");
+
+    let decrypted = chacha20_poly1305_decrypt(&key_aead, &nonce, &aad, &ct, &tag_aead).unwrap();
+    assert_eq!(decrypted, pt);
+
+    // Negative control: tag corruption
+    let mut bad_tag = tag_aead;
+    bad_tag[0] ^= 0x01;
+    assert_eq!(
+        chacha20_poly1305_decrypt(&key_aead, &nonce, &aad, &ct, &bad_tag),
+        Err("AUTHENTICATION_TAG_VERIFICATION_FAILED")
+    );
+
+    // Negative control: ciphertext corruption
+    let mut bad_ct = ct.clone();
+    bad_ct[0] ^= 0x01;
+    assert_eq!(
+        chacha20_poly1305_decrypt(&key_aead, &nonce, &aad, &bad_ct, &tag_aead),
+        Err("AUTHENTICATION_TAG_VERIFICATION_FAILED")
+    );
+}
+
+#[test]
+fn test_all_four_gated_screens_are_disabled() {
     assert_eq!(SCREENS[4].label, "Audio & transcript");
     assert_eq!(SCREENS[4].tag, Some(Tag::Gated));
     assert!(!SCREENS[4].enabled(), "Audio capture must remain disabled");
@@ -242,7 +350,6 @@ fn test_all_four_gated_screens_are_disabled() {
     assert_eq!(SCREENS[21].tag, Some(Tag::Gated));
     assert!(!SCREENS[21].enabled(), "Model runtime must remain disabled");
 
-    // The remaining 24 screens are enabled
     let enabled_count = SCREENS.iter().filter(|s| s.enabled()).count();
     assert_eq!(
         enabled_count, 24,
@@ -251,20 +358,42 @@ fn test_all_four_gated_screens_are_disabled() {
 }
 
 #[test]
-fn test_export_quarantine_risk_scan_and_manifest() {
+fn test_screen_classification_all_28_screens() {
+    for screen in SCREENS.iter() {
+        let class = screen_classification_by_label(screen.label);
+        match screen.label {
+            "Audio & transcript"
+            | "Orders & tasks"
+            | "Coding suggestions"
+            | "Model catalog & runtime" => {
+                assert_eq!(class, ScreenClassification::ClassD);
+            }
+            "Research explorer" | "Benchmark & evaluation" | "Integrations" => {
+                assert_eq!(class, ScreenClassification::ClassC);
+            }
+            "Local search" | "Patient graph" | "Clinical evidence" | "Analytics"
+            | "Export quarantine" | "Audit history" | "Storage & recovery" => {
+                assert_eq!(class, ScreenClassification::ClassB);
+            }
+            _ => {
+                assert_eq!(class, ScreenClassification::ClassA);
+            }
+        }
+    }
+}
+
+#[test]
+fn test_export_quarantine_risk_scan_and_manifest_fail_closed() {
     let mut app = MedOriginNativePreview::default();
     app.open_embedded_fictional_bundle_demo().unwrap();
     let resources = app.active_resources();
 
-    // Verify all resources pass synthetic prefix checks
+    // Verify clean synthetic dataset passes scan
     let direct_id_leaks = resources
         .iter()
         .filter(|r| !r.resource_id.starts_with("fictional-"))
         .count();
-    assert_eq!(
-        direct_id_leaks, 0,
-        "Zero PHI or non-fictional IDs permitted"
-    );
+    assert_eq!(direct_id_leaks, 0, "Zero direct leaks in clean bundle");
 
     let invalid_refs = resources
         .iter()
@@ -277,11 +406,73 @@ fn test_export_quarantine_risk_scan_and_manifest() {
     );
 
     let manifest_payload = format!(
-        "MANIFEST_V1:COUNT={}:DIRECT_LEAKS={}:INVALID_REFS={}",
+        "MANIFEST_V1:COUNT={}:DIRECT_LEAKS={}:INVALID_REFS={}:FORBIDDEN_TERMS=0",
         resources.len(),
         direct_id_leaks,
         invalid_refs
     );
     let digest = sha256_hex(manifest_payload.as_bytes());
     assert_eq!(digest.len(), 64);
+
+    // Negative control: simulate injected non-synthetic ID
+    let mut contaminated = resources.clone();
+    contaminated.push(FictionalReadbackResource {
+        resource_type: "Patient".to_string(),
+        resource_id: "REAL-PATIENT-99999".to_string(),
+        full_url: "urn:uuid:00000000-0000-4000-8000-000000000999".to_string(),
+        links: vec![],
+    });
+    let leak_count = contaminated
+        .iter()
+        .filter(|r| !r.resource_id.starts_with("fictional-"))
+        .count();
+    assert_eq!(
+        leak_count, 1,
+        "Quarantine risk scan must detect non-fictional ID leak"
+    );
+
+    // Negative control: simulate invalid non-UUID link
+    contaminated.push(FictionalReadbackResource {
+        resource_type: "Observation".to_string(),
+        resource_id: "fictional-obs-badref".to_string(),
+        full_url: "urn:uuid:00000000-0000-4000-8000-000000000888".to_string(),
+        links: vec![FictionalReadbackLink {
+            field: "subject".to_string(),
+            target: "http://external-ehr.org/Patient/123".to_string(),
+        }],
+    });
+    let bad_ref_count = contaminated
+        .iter()
+        .flat_map(|r| &r.links)
+        .filter(|l| !l.target.starts_with("urn:uuid:"))
+        .count();
+    assert_eq!(
+        bad_ref_count, 1,
+        "Quarantine risk scan must detect non-UUID link"
+    );
+}
+
+#[test]
+fn test_bundle_admission_records_audit_events() {
+    let mut app = MedOriginNativePreview::default();
+    assert_eq!(app.connected.audit_events.len(), 1);
+    assert_eq!(app.connected.audit_events[0].event_type, "GENESIS_STARTUP");
+
+    // Admission logs dynamic event
+    app.open_embedded_fictional_bundle_demo().unwrap();
+    assert_eq!(app.connected.audit_events.len(), 2);
+    assert_eq!(app.connected.audit_events[1].event_type, "BUNDLE_ADMISSION");
+
+    // Attestation logs dynamic event
+    app.connected
+        .record_audit_event("NOTE_ATTESTATION", "clinician", "Attested SOAP draft");
+    assert_eq!(app.connected.audit_events.len(), 3);
+
+    // Clear logs dynamic event
+    app.clear_fictional_output();
+    assert_eq!(app.connected.audit_events.len(), 4);
+    assert_eq!(app.connected.audit_events[3].event_type, "SESSION_CLEAR");
+
+    // Entire 4-event runtime chain passes SHA-256 verification
+    assert_eq!(verify_audit_chain(&app.connected.audit_events), Ok(4));
 }
