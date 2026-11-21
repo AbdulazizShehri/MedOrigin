@@ -163,7 +163,14 @@ def _verify_generated_pkg_info(
         ):
             check(field, values, unordered=field in {"Project-URL", "Classifier"})
         actual_versions = [str(value) for value in metadata.get_all("Version", [])]
-        if actual_versions not in (["0.3.0"], ["0.3.1"], ["0.3.2"], ["0.3.3"], ["0.3.4"], ["0.3.5"]):
+        if actual_versions not in (
+            ["0.3.0"],
+            ["0.3.1"],
+            ["0.3.2"],
+            ["0.3.3"],
+            ["0.3.4"],
+            ["0.3.5"],
+        ):
             issues.append("sdist PKG-INFO Version differs from projected project")
         python_specs = [str(value) for value in metadata.get_all("Requires-Python", [])]
         if len(python_specs) != 1 or sorted(
