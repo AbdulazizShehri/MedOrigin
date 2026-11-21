@@ -92,7 +92,9 @@ fn count(value: &Value, min: u64, max: u64) -> Option<usize> {
 /// Accept *only* a source-shaped, canonical, LF-terminated nonclinical summary
 /// from the Core file-batch encrypted demo. Never a FHIR Bundle, patient field,
 /// path, arbitrary note or reimportable persisted patient record.
-pub fn admit_fictional_core_file_batch(mut raw: &[u8]) -> Result<FictionalCoreFileBatch, &'static str> {
+pub fn admit_fictional_core_file_batch(
+    mut raw: &[u8],
+) -> Result<FictionalCoreFileBatch, &'static str> {
     if raw.starts_with(b"\xef\xbb\xbf") {
         raw = &raw[3..];
     }

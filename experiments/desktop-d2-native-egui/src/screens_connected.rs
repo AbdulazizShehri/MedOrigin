@@ -18,7 +18,11 @@ fn page_title(ui: &mut Ui, title: &str, subtitle: &str) {
     let p = *theme::palette(ui.ctx().theme());
     ui.label(RichText::new(title).size(theme::size::HEADING).strong());
     if !subtitle.is_empty() {
-        ui.label(RichText::new(subtitle).size(theme::size::BODY).color(p.text_secondary));
+        ui.label(
+            RichText::new(subtitle)
+                .size(theme::size::BODY)
+                .color(p.text_secondary),
+        );
     }
     ui.add_space(theme::space::MD);
 }
@@ -195,9 +199,7 @@ fn screen_header(
             theme::tag(ui, "Non-Clinical Synthetic Only", p.badge, p.text_secondary);
         });
         ui.add_space(theme::space::SM);
-        ui.label(
-            RichText::new(format!("Design contract: {contract}")).color(p.text_secondary),
-        );
+        ui.label(RichText::new(format!("Design contract: {contract}")).color(p.text_secondary));
         ui.label(
             RichText::new(format!("Backed by: {sources}"))
                 .size(theme::size::SMALL)
@@ -231,7 +233,9 @@ impl MedOriginNativePreview {
                 ui.label("Query:");
                 ui.add(
                     egui::TextEdit::singleline(&mut self.connected.search_query)
-                        .hint_text("Type resource type, code, or synthetic ID (e.g., patient, blood, 101)")
+                        .hint_text(
+                            "Type resource type, code, or synthetic ID (e.g., patient, blood, 101)",
+                        )
                         .desired_width(320.0),
                 );
                 ui.label("Scope:");
@@ -246,7 +250,11 @@ impl MedOriginNativePreview {
                         ui.selectable_value(&mut self.connected.search_scope, 0, "All Resources");
                         ui.selectable_value(&mut self.connected.search_scope, 1, "Patients Only");
                         ui.selectable_value(&mut self.connected.search_scope, 2, "Encounters Only");
-                        ui.selectable_value(&mut self.connected.search_scope, 3, "Observations Only");
+                        ui.selectable_value(
+                            &mut self.connected.search_scope,
+                            3,
+                            "Observations Only",
+                        );
                     });
             });
 
@@ -255,10 +263,30 @@ impl MedOriginNativePreview {
 
             // Demonstration / loaded records
             let entries: [(&str, &str, &str, &str); 4] = [
-                ("Patient", "Fictional-Pt-Alpha-101", "Synthetic adult patient, age 45, hypertension cohort", "a1b2c3d4e5f6..."),
-                ("Patient", "Fictional-Pt-Beta-102", "Synthetic adult patient, age 62, cardiology cohort", "b2c3d4e5f6a1..."),
-                ("Encounter", "Encounter/fictional-enc-001", "Ambulatory routine checkup, status finished", "c3d4e5f6a1b2..."),
-                ("Observation", "Observation/fictional-obs-001", "Blood Pressure 120/80 mmHg, status final", "d4e5f6a1b2c3..."),
+                (
+                    "Patient",
+                    "Fictional-Pt-Alpha-101",
+                    "Synthetic adult patient, age 45, hypertension cohort",
+                    "a1b2c3d4e5f6...",
+                ),
+                (
+                    "Patient",
+                    "Fictional-Pt-Beta-102",
+                    "Synthetic adult patient, age 62, cardiology cohort",
+                    "b2c3d4e5f6a1...",
+                ),
+                (
+                    "Encounter",
+                    "Encounter/fictional-enc-001",
+                    "Ambulatory routine checkup, status finished",
+                    "c3d4e5f6a1b2...",
+                ),
+                (
+                    "Observation",
+                    "Observation/fictional-obs-001",
+                    "Blood Pressure 120/80 mmHg, status final",
+                    "d4e5f6a1b2c3...",
+                ),
             ];
 
             let matches: Vec<_> = entries
@@ -280,7 +308,9 @@ impl MedOriginNativePreview {
 
             self.connected.search_last_match_count = matches.len();
 
-            ui.label(RichText::new(format!("Matching synthetic records: {}", matches.len())).strong());
+            ui.label(
+                RichText::new(format!("Matching synthetic records: {}", matches.len())).strong(),
+            );
             ui.separator();
 
             egui::ScrollArea::vertical()
@@ -291,7 +321,11 @@ impl MedOriginNativePreview {
                             ui.horizontal(|ui| {
                                 theme::tag(ui, res_type, p.badge, p.accent);
                                 ui.strong(*id);
-                                ui.label(RichText::new(format!("SHA: {hash}")).size(theme::size::SMALL).color(p.text_muted));
+                                ui.label(
+                                    RichText::new(format!("SHA: {hash}"))
+                                        .size(theme::size::SMALL)
+                                        .color(p.text_muted),
+                                );
                             });
                             ui.label(*desc);
                         });
@@ -387,8 +421,14 @@ impl MedOriginNativePreview {
             if let Some(receipt) = &self.connected.note_attestation_receipt {
                 ui.add_space(theme::space::XS);
                 ui.group(|ui| {
-                    ui.label(RichText::new(format!("Attestation Receipt: {receipt}")).strong().color(p.accent));
-                    ui.label("Session-only receipt. Not stored or transmitted to external systems.");
+                    ui.label(
+                        RichText::new(format!("Attestation Receipt: {receipt}"))
+                            .strong()
+                            .color(p.accent),
+                    );
+                    ui.label(
+                        "Session-only receipt. Not stored or transmitted to external systems.",
+                    );
                 });
             }
         });
@@ -422,26 +462,66 @@ impl MedOriginNativePreview {
                         _ => "Derived / Extracted (2)",
                     })
                     .show_ui(ui, |ui| {
-                        ui.selectable_value(&mut self.connected.graph_edge_filter, 0, "All Edges (5)");
-                        ui.selectable_value(&mut self.connected.graph_edge_filter, 1, "Explicit FHIR References (3)");
-                        ui.selectable_value(&mut self.connected.graph_edge_filter, 2, "Derived / Extracted (2)");
+                        ui.selectable_value(
+                            &mut self.connected.graph_edge_filter,
+                            0,
+                            "All Edges (5)",
+                        );
+                        ui.selectable_value(
+                            &mut self.connected.graph_edge_filter,
+                            1,
+                            "Explicit FHIR References (3)",
+                        );
+                        ui.selectable_value(
+                            &mut self.connected.graph_edge_filter,
+                            2,
+                            "Derived / Extracted (2)",
+                        );
                     });
             });
 
             ui.add_space(theme::space::SM);
             let nodes = [
-                ("Node 0", "Patient/Fictional-Pt-Alpha-101", "Core Subject", "Outgoing: 3 | Incoming: 0"),
-                ("Node 1", "Encounter/fictional-enc-001", "Ambulatory Encounter", "Outgoing: 2 | Incoming: 1"),
-                ("Node 2", "Condition/fictional-cond-001", "Essential Hypertension", "Outgoing: 0 | Incoming: 2"),
-                ("Node 3", "Observation/fictional-obs-001", "Blood Pressure 120/80", "Outgoing: 0 | Incoming: 2"),
-                ("Node 4", "Observation/fictional-obs-002", "Heart Rate 72 bpm", "Outgoing: 0 | Incoming: 1"),
+                (
+                    "Node 0",
+                    "Patient/Fictional-Pt-Alpha-101",
+                    "Core Subject",
+                    "Outgoing: 3 | Incoming: 0",
+                ),
+                (
+                    "Node 1",
+                    "Encounter/fictional-enc-001",
+                    "Ambulatory Encounter",
+                    "Outgoing: 2 | Incoming: 1",
+                ),
+                (
+                    "Node 2",
+                    "Condition/fictional-cond-001",
+                    "Essential Hypertension",
+                    "Outgoing: 0 | Incoming: 2",
+                ),
+                (
+                    "Node 3",
+                    "Observation/fictional-obs-001",
+                    "Blood Pressure 120/80",
+                    "Outgoing: 0 | Incoming: 2",
+                ),
+                (
+                    "Node 4",
+                    "Observation/fictional-obs-002",
+                    "Heart Rate 72 bpm",
+                    "Outgoing: 0 | Incoming: 1",
+                ),
             ];
 
             ui.columns(2, |columns| {
                 columns[0].label(RichText::new("Graph Nodes:").strong());
                 for (idx, (node_id, label, _role, _)) in nodes.iter().enumerate() {
                     let is_selected = self.connected.graph_selected_node == idx;
-                    if columns[0].selectable_label(is_selected, format!("{node_id}: {label}")).clicked() {
+                    if columns[0]
+                        .selectable_label(is_selected, format!("{node_id}: {label}"))
+                        .clicked()
+                    {
                         self.connected.graph_selected_node = idx;
                     }
                 }
@@ -453,8 +533,15 @@ impl MedOriginNativePreview {
                     ui.label(format!("Role: {role}"));
                     ui.label(format!("Topology: {links}"));
                     ui.add_space(theme::space::XS);
-                    ui.label(RichText::new("Cycle Check: 0 cycles detected (DAG validated)").color(p.accent));
-                    ui.label(RichText::new("Edge Provenance: SYNTHETIC_EDGE_LOCK_VERIFIED").size(theme::size::SMALL).color(p.text_muted));
+                    ui.label(
+                        RichText::new("Cycle Check: 0 cycles detected (DAG validated)")
+                            .color(p.accent),
+                    );
+                    ui.label(
+                        RichText::new("Edge Provenance: SYNTHETIC_EDGE_LOCK_VERIFIED")
+                            .size(theme::size::SMALL)
+                            .color(p.text_muted),
+                    );
                 });
             });
         });
@@ -489,20 +576,62 @@ impl MedOriginNativePreview {
                         _ => "Labs Only",
                     })
                     .show_ui(ui, |ui| {
-                        ui.selectable_value(&mut self.connected.timeline_category, 0, "All Events (5)");
-                        ui.selectable_value(&mut self.connected.timeline_category, 1, "Encounters Only");
-                        ui.selectable_value(&mut self.connected.timeline_category, 2, "Vitals Only");
+                        ui.selectable_value(
+                            &mut self.connected.timeline_category,
+                            0,
+                            "All Events (5)",
+                        );
+                        ui.selectable_value(
+                            &mut self.connected.timeline_category,
+                            1,
+                            "Encounters Only",
+                        );
+                        ui.selectable_value(
+                            &mut self.connected.timeline_category,
+                            2,
+                            "Vitals Only",
+                        );
                         ui.selectable_value(&mut self.connected.timeline_category, 3, "Labs Only");
                     });
             });
 
             ui.add_space(theme::space::SM);
             let events = [
-                ("2026-10-15 09:30", "Encounter", "Encounter/fictional-enc-001", "Ambulatory Routine Review", "Uncertainty: None (Exact timestamp)"),
-                ("2026-10-15 09:45", "Vitals", "Observation/fictional-obs-001", "Blood Pressure 120/80 mmHg", "Uncertainty: ±2 mmHg manual cuff"),
-                ("2026-10-15 09:50", "Vitals", "Observation/fictional-obs-002", "Heart Rate 72 bpm regular", "Uncertainty: ±1 bpm pulse ox"),
-                ("2026-10-20 14:00", "Labs", "Observation/fictional-obs-003", "Serum Creatinine 0.9 mg/dL", "Uncertainty: ±0.05 mg/dL automated assay"),
-                ("2026-11-01 11:15", "Encounter", "Encounter/fictional-enc-002", "Follow-up Telehealth Checkup", "Uncertainty: Scheduled window (±30 min)"),
+                (
+                    "2026-10-15 09:30",
+                    "Encounter",
+                    "Encounter/fictional-enc-001",
+                    "Ambulatory Routine Review",
+                    "Uncertainty: None (Exact timestamp)",
+                ),
+                (
+                    "2026-10-15 09:45",
+                    "Vitals",
+                    "Observation/fictional-obs-001",
+                    "Blood Pressure 120/80 mmHg",
+                    "Uncertainty: ±2 mmHg manual cuff",
+                ),
+                (
+                    "2026-10-15 09:50",
+                    "Vitals",
+                    "Observation/fictional-obs-002",
+                    "Heart Rate 72 bpm regular",
+                    "Uncertainty: ±1 bpm pulse ox",
+                ),
+                (
+                    "2026-10-20 14:00",
+                    "Labs",
+                    "Observation/fictional-obs-003",
+                    "Serum Creatinine 0.9 mg/dL",
+                    "Uncertainty: ±0.05 mg/dL automated assay",
+                ),
+                (
+                    "2026-11-01 11:15",
+                    "Encounter",
+                    "Encounter/fictional-enc-002",
+                    "Follow-up Telehealth Checkup",
+                    "Uncertainty: Scheduled window (±30 min)",
+                ),
             ];
 
             for (idx, (time, cat, id, desc, uncert)) in events.iter().enumerate() {
@@ -525,7 +654,11 @@ impl MedOriginNativePreview {
                         ui.strong(*id);
                     });
                     ui.label(*desc);
-                    ui.label(RichText::new(*uncert).size(theme::size::SMALL).color(p.text_muted));
+                    ui.label(
+                        RichText::new(*uncert)
+                            .size(theme::size::SMALL)
+                            .color(p.text_muted),
+                    );
                 });
                 ui.add_space(theme::space::XS);
             }
@@ -559,8 +692,16 @@ impl MedOriginNativePreview {
                         _ => "Template B: Synthetic Research Study Case Report",
                     })
                     .show_ui(ui, |ui| {
-                        ui.selectable_value(&mut self.connected.canvas_selected_doc, 0, "Template A: Synthetic Ambulatory Summary");
-                        ui.selectable_value(&mut self.connected.canvas_selected_doc, 1, "Template B: Synthetic Research Study Case Report");
+                        ui.selectable_value(
+                            &mut self.connected.canvas_selected_doc,
+                            0,
+                            "Template A: Synthetic Ambulatory Summary",
+                        );
+                        ui.selectable_value(
+                            &mut self.connected.canvas_selected_doc,
+                            1,
+                            "Template B: Synthetic Research Study Case Report",
+                        );
                     });
             });
 
@@ -572,7 +713,9 @@ impl MedOriginNativePreview {
 
             ui.group(|ui| {
                 ui.strong("Block 2: Encounter Clinical Synopsis");
-                ui.label("Encounter ID: fictional-enc-001 | Class: AMB | Period: 2026-10-15T09:30:00Z");
+                ui.label(
+                    "Encounter ID: fictional-enc-001 | Class: AMB | Period: 2026-10-15T09:30:00Z",
+                );
             });
 
             ui.group(|ui| {
@@ -587,7 +730,9 @@ impl MedOriginNativePreview {
             ui.add_space(theme::space::SM);
             ui.horizontal(|ui| {
                 theme::tag(ui, "QUARANTINED EXPORT BOUNDARY", p.pink_bg, p.pink_text);
-                ui.label("Blocks created here cannot flow into Research Core training or benchmarks.");
+                ui.label(
+                    "Blocks created here cannot flow into Research Core training or benchmarks.",
+                );
             });
         });
     }
@@ -627,23 +772,52 @@ impl MedOriginNativePreview {
                         _ => "Snapshot 2026-11-03 (v1.3-stable)",
                     })
                     .show_ui(ui, |ui| {
-                        ui.selectable_value(&mut self.connected.evidence_selected_snapshot, 0, "Snapshot 2026-10-23 (v1.2-frozen)");
-                        ui.selectable_value(&mut self.connected.evidence_selected_snapshot, 1, "Snapshot 2026-11-03 (v1.3-stable)");
+                        ui.selectable_value(
+                            &mut self.connected.evidence_selected_snapshot,
+                            0,
+                            "Snapshot 2026-10-23 (v1.2-frozen)",
+                        );
+                        ui.selectable_value(
+                            &mut self.connected.evidence_selected_snapshot,
+                            1,
+                            "Snapshot 2026-11-03 (v1.3-stable)",
+                        );
                     });
             });
 
             ui.horizontal(|ui| {
                 ui.label("Abstention Threshold:");
-                ui.add(egui::Slider::new(&mut self.connected.evidence_abstention_threshold, 0.50..=0.99).text("Confidence Gate"));
+                ui.add(
+                    egui::Slider::new(
+                        &mut self.connected.evidence_abstention_threshold,
+                        0.50..=0.99,
+                    )
+                    .text("Confidence Gate"),
+                );
             });
 
             ui.add_space(theme::space::SM);
             section_title(ui, "Retrieved Evidence Citations (Ranked)");
 
             let citations = [
-                ("Citation 1", "Evidence-Based Management of Ambulatory Fatigue Protocols", "Grade A (High)", 0.94),
-                ("Citation 2", "Synthetic Cohort Benchmarks for Deterministic Clinical Q&A", "Grade A (High)", 0.91),
-                ("Citation 3", "Uncertainty Estimation in Clinical Note Extraction", "Grade B (Moderate)", 0.82),
+                (
+                    "Citation 1",
+                    "Evidence-Based Management of Ambulatory Fatigue Protocols",
+                    "Grade A (High)",
+                    0.94,
+                ),
+                (
+                    "Citation 2",
+                    "Synthetic Cohort Benchmarks for Deterministic Clinical Q&A",
+                    "Grade A (High)",
+                    0.91,
+                ),
+                (
+                    "Citation 3",
+                    "Uncertainty Estimation in Clinical Note Extraction",
+                    "Grade B (Moderate)",
+                    0.82,
+                ),
             ];
 
             for (cite_id, title, grade, score) in citations {
@@ -687,22 +861,61 @@ impl MedOriginNativePreview {
 
         theme::card(ui, |ui| {
             section_title(ui, "Systematic Review Screening Criteria");
-            ui.label("Inclusion and exclusion screening criteria with reproducible provenance export.");
+            ui.label(
+                "Inclusion and exclusion screening criteria with reproducible provenance export.",
+            );
 
-            ui.checkbox(&mut self.connected.lit_criteria_include[0], "Peer-reviewed scientific study or verified preprint");
-            ui.checkbox(&mut self.connected.lit_criteria_include[1], "Evaluates evidence provenance, grounding or uncertainty");
-            ui.checkbox(&mut self.connected.lit_criteria_include[2], "Open-access or Apache-2.0 compatible literature license");
-            ui.checkbox(&mut self.connected.lit_criteria_include[3], "Includes real clinical deployment trial (Excluded by Lane C)");
+            ui.checkbox(
+                &mut self.connected.lit_criteria_include[0],
+                "Peer-reviewed scientific study or verified preprint",
+            );
+            ui.checkbox(
+                &mut self.connected.lit_criteria_include[1],
+                "Evaluates evidence provenance, grounding or uncertainty",
+            );
+            ui.checkbox(
+                &mut self.connected.lit_criteria_include[2],
+                "Open-access or Apache-2.0 compatible literature license",
+            );
+            ui.checkbox(
+                &mut self.connected.lit_criteria_include[3],
+                "Includes real clinical deployment trial (Excluded by Lane C)",
+            );
 
             ui.add_space(theme::space::SM);
             section_title(ui, "Screening Queue (LitDB Synthetic Collection)");
 
             let papers = [
-                ("Paper 1", "Evidence Provenance in Autonomous Medical AI Systems", "PMID: 38291001", "Authors: Al-Shehri et al."),
-                ("Paper 2", "Deterministic Question Answering on Frozen Biomedical Benchmarks", "PMID: 38450122", "Authors: Research Core Consortium"),
-                ("Paper 3", "Privacy-Preserving Synthetic EHR Workflows with FHIR R4", "PMID: 38671190", "Authors: Workspace Security Group"),
-                ("Paper 4", "Cryptographic Audit Trails for Healthcare Machine Learning", "PMID: 38789045", "Authors: Integrity Foundation"),
-                ("Paper 5", "Evaluation Protocols for Explicit Abstention in Clinical AI", "PMID: 38912301", "Authors: Medical AI Governance"),
+                (
+                    "Paper 1",
+                    "Evidence Provenance in Autonomous Medical AI Systems",
+                    "PMID: 38291001",
+                    "Authors: Al-Shehri et al.",
+                ),
+                (
+                    "Paper 2",
+                    "Deterministic Question Answering on Frozen Biomedical Benchmarks",
+                    "PMID: 38450122",
+                    "Authors: Research Core Consortium",
+                ),
+                (
+                    "Paper 3",
+                    "Privacy-Preserving Synthetic EHR Workflows with FHIR R4",
+                    "PMID: 38671190",
+                    "Authors: Workspace Security Group",
+                ),
+                (
+                    "Paper 4",
+                    "Cryptographic Audit Trails for Healthcare Machine Learning",
+                    "PMID: 38789045",
+                    "Authors: Integrity Foundation",
+                ),
+                (
+                    "Paper 5",
+                    "Evaluation Protocols for Explicit Abstention in Clinical AI",
+                    "PMID: 38912301",
+                    "Authors: Medical AI Governance",
+                ),
             ];
 
             for (idx, (tag, title, pmid, authors)) in papers.iter().enumerate() {
@@ -718,7 +931,16 @@ impl MedOriginNativePreview {
                             self.connected.lit_selected_item = idx;
                         }
                         ui.strong(*title);
-                        theme::tag(ui, decision_str, p.badge, if decision_str == "Included" { p.accent } else { p.text_secondary });
+                        theme::tag(
+                            ui,
+                            decision_str,
+                            p.badge,
+                            if decision_str == "Included" {
+                                p.accent
+                            } else {
+                                p.text_secondary
+                            },
+                        );
                     });
                     ui.label(format!("{pmid} · {authors}"));
                 });
@@ -770,13 +992,28 @@ impl MedOriginNativePreview {
                         _ => "Synthetic Conditions",
                     })
                     .show_ui(ui, |ui| {
-                        ui.selectable_value(&mut self.connected.tables_selected_table, 0, "Synthetic Observations (Vitals / Labs)");
-                        ui.selectable_value(&mut self.connected.tables_selected_table, 1, "Synthetic Encounters");
-                        ui.selectable_value(&mut self.connected.tables_selected_table, 2, "Synthetic Conditions");
+                        ui.selectable_value(
+                            &mut self.connected.tables_selected_table,
+                            0,
+                            "Synthetic Observations (Vitals / Labs)",
+                        );
+                        ui.selectable_value(
+                            &mut self.connected.tables_selected_table,
+                            1,
+                            "Synthetic Encounters",
+                        );
+                        ui.selectable_value(
+                            &mut self.connected.tables_selected_table,
+                            2,
+                            "Synthetic Conditions",
+                        );
                     });
 
                 ui.label("Filter:");
-                ui.add(egui::TextEdit::singleline(&mut self.connected.tables_filter).desired_width(180.0));
+                ui.add(
+                    egui::TextEdit::singleline(&mut self.connected.tables_filter)
+                        .desired_width(180.0),
+                );
             });
 
             ui.add_space(theme::space::SM);
@@ -812,7 +1049,13 @@ impl MedOriginNativePreview {
                 });
 
             ui.add_space(theme::space::SM);
-            ui.label(RichText::new("Export Boundary: In-memory table only. Zero telemetry, zero external writes.").size(theme::size::SMALL).color(p.text_muted));
+            ui.label(
+                RichText::new(
+                    "Export Boundary: In-memory table only. Zero telemetry, zero external writes.",
+                )
+                .size(theme::size::SMALL)
+                .color(p.text_muted),
+            );
         });
     }
 
@@ -843,22 +1086,38 @@ impl MedOriginNativePreview {
                 theme::card(&mut columns[0], |ui| {
                     ui.label("Synthetic Patients");
                     ui.heading("2");
-                    ui.label(RichText::new("100% fictional").size(theme::size::SMALL).color(p.text_muted));
+                    ui.label(
+                        RichText::new("100% fictional")
+                            .size(theme::size::SMALL)
+                            .color(p.text_muted),
+                    );
                 });
                 theme::card(&mut columns[1], |ui| {
                     ui.label("Total Observations");
                     ui.heading("14");
-                    ui.label(RichText::new("100% verified").size(theme::size::SMALL).color(p.text_muted));
+                    ui.label(
+                        RichText::new("100% verified")
+                            .size(theme::size::SMALL)
+                            .color(p.text_muted),
+                    );
                 });
                 theme::card(&mut columns[2], |ui| {
                     ui.label("Encounters");
                     ui.heading("4");
-                    ui.label(RichText::new("Ambulatory").size(theme::size::SMALL).color(p.text_muted));
+                    ui.label(
+                        RichText::new("Ambulatory")
+                            .size(theme::size::SMALL)
+                            .color(p.text_muted),
+                    );
                 });
                 theme::card(&mut columns[3], |ui| {
                     ui.label("Completeness");
                     ui.heading("100.0%");
-                    ui.label(RichText::new("0 missing fields").size(theme::size::SMALL).color(p.accent));
+                    ui.label(
+                        RichText::new("0 missing fields")
+                            .size(theme::size::SMALL)
+                            .color(p.accent),
+                    );
                 });
             });
 
@@ -870,7 +1129,10 @@ impl MedOriginNativePreview {
 
             if self.connected.analytics_receipt_verified {
                 ui.add_space(theme::space::XS);
-                ui.label(RichText::new("ANALYTICS_RECEIPT_VERIFIED: sha256:7f4c3a2b1e0d9c8b7a6f...").color(p.accent));
+                ui.label(
+                    RichText::new("ANALYTICS_RECEIPT_VERIFIED: sha256:7f4c3a2b1e0d9c8b7a6f...")
+                        .color(p.accent),
+                );
             }
         });
     }
@@ -895,21 +1157,50 @@ impl MedOriginNativePreview {
             ui.label("Distinguish frozen Research Core benchmarks from Workspace export staging.");
 
             ui.horizontal(|ui| {
-                if ui.selectable_label(self.connected.dataset_active_tab == 0, "Research Datasets (Frozen)").clicked() {
+                if ui
+                    .selectable_label(
+                        self.connected.dataset_active_tab == 0,
+                        "Research Datasets (Frozen)",
+                    )
+                    .clicked()
+                {
                     self.connected.dataset_active_tab = 0;
                 }
-                if ui.selectable_label(self.connected.dataset_active_tab == 1, "Workspace Export Staging (Quarantined)").clicked() {
+                if ui
+                    .selectable_label(
+                        self.connected.dataset_active_tab == 1,
+                        "Workspace Export Staging (Quarantined)",
+                    )
+                    .clicked()
+                {
                     self.connected.dataset_active_tab = 1;
                 }
             });
 
             ui.add_space(theme::space::SM);
             if self.connected.dataset_active_tab == 0 {
-                ui.label(RichText::new("Frozen Research Core Benchmark Datasets (Read-Only):").strong());
+                ui.label(
+                    RichText::new("Frozen Research Core Benchmark Datasets (Read-Only):").strong(),
+                );
                 let datasets = [
-                    ("Dataset 1", "medqa-usmle-synthetic-v1", "1,273 items", "SHA-256: 7f9b4c2e..."),
-                    ("Dataset 2", "pubmedqa-biomedical-synthetic-v2", "1,000 items", "SHA-256: 4a1c8d3e..."),
-                    ("Dataset 3", "fhir-r4-conformance-fixtures-v1", "250 items", "SHA-256: 88e2b10a..."),
+                    (
+                        "Dataset 1",
+                        "medqa-usmle-synthetic-v1",
+                        "1,273 items",
+                        "SHA-256: 7f9b4c2e...",
+                    ),
+                    (
+                        "Dataset 2",
+                        "pubmedqa-biomedical-synthetic-v2",
+                        "1,000 items",
+                        "SHA-256: 4a1c8d3e...",
+                    ),
+                    (
+                        "Dataset 3",
+                        "fhir-r4-conformance-fixtures-v1",
+                        "250 items",
+                        "SHA-256: 88e2b10a...",
+                    ),
                 ];
                 for (id, name, count, hash) in datasets {
                     ui.group(|ui| {
@@ -918,7 +1209,11 @@ impl MedOriginNativePreview {
                             ui.label(name);
                             theme::tag(ui, count, p.badge, p.accent);
                         });
-                        ui.label(RichText::new(hash).size(theme::size::SMALL).color(p.text_muted));
+                        ui.label(
+                            RichText::new(hash)
+                                .size(theme::size::SMALL)
+                                .color(p.text_muted),
+                        );
                     });
                     ui.add_space(theme::space::XS);
                 }
@@ -1018,8 +1313,16 @@ impl MedOriginNativePreview {
                         _ => "Study 02: Deterministic FHIR R4 Invariant Verification",
                     })
                     .show_ui(ui, |ui| {
-                        ui.selectable_value(&mut self.connected.research_selected_study, 0, "Study 01: Evidence-Grounded Medical Q&A");
-                        ui.selectable_value(&mut self.connected.research_selected_study, 1, "Study 02: Deterministic FHIR R4 Invariant Verification");
+                        ui.selectable_value(
+                            &mut self.connected.research_selected_study,
+                            0,
+                            "Study 01: Evidence-Grounded Medical Q&A",
+                        );
+                        ui.selectable_value(
+                            &mut self.connected.research_selected_study,
+                            1,
+                            "Study 02: Deterministic FHIR R4 Invariant Verification",
+                        );
                     });
             });
 
@@ -1032,7 +1335,13 @@ impl MedOriginNativePreview {
                 ui.label("Evaluator: mesc-evaluator-v1.4 | Seed: 42 | Abstention: Active (0.85)");
                 ui.add_space(theme::space::XS);
                 ui.strong("Provenance Receipt:");
-                ui.label(RichText::new("SHA-256: 4f3a2b1c0e9d8c7b6a5f4e3d2c1b0a9f8e7d6c5b4a3f2e1d0c9b8a7f6e5d4c3b").size(theme::size::SMALL).color(p.text_muted));
+                ui.label(
+                    RichText::new(
+                        "SHA-256: 4f3a2b1c0e9d8c7b6a5f4e3d2c1b0a9f8e7d6c5b4a3f2e1d0c9b8a7f6e5d4c3b",
+                    )
+                    .size(theme::size::SMALL)
+                    .color(p.text_muted),
+                );
             });
         });
     }
@@ -1057,7 +1366,9 @@ impl MedOriginNativePreview {
                 section_title(ui, "Deterministic Benchmark Scorecards");
                 theme::tag(ui, "TRAINING & PROMOTION GATED", p.pink_bg, p.pink_text);
             });
-            ui.label("Inspect frozen benchmark suites, seed locks, and deterministic scoring receipts.");
+            ui.label(
+                "Inspect frozen benchmark suites, seed locks, and deterministic scoring receipts.",
+            );
             ui.add_space(theme::space::SM);
 
             ui.horizontal(|ui| {
@@ -1069,9 +1380,21 @@ impl MedOriginNativePreview {
                         _ => "Synthetic Clinical Reasoning Suite",
                     })
                     .show_ui(ui, |ui| {
-                        ui.selectable_value(&mut self.connected.bench_selected_suite, 0, "MedQA 4-Option (USMLE Synthetic)");
-                        ui.selectable_value(&mut self.connected.bench_selected_suite, 1, "PubMedQA (Yes/No/Maybe Synthetic)");
-                        ui.selectable_value(&mut self.connected.bench_selected_suite, 2, "Synthetic Clinical Reasoning Suite");
+                        ui.selectable_value(
+                            &mut self.connected.bench_selected_suite,
+                            0,
+                            "MedQA 4-Option (USMLE Synthetic)",
+                        );
+                        ui.selectable_value(
+                            &mut self.connected.bench_selected_suite,
+                            1,
+                            "PubMedQA (Yes/No/Maybe Synthetic)",
+                        );
+                        ui.selectable_value(
+                            &mut self.connected.bench_selected_suite,
+                            2,
+                            "Synthetic Clinical Reasoning Suite",
+                        );
                     });
             });
 
@@ -1112,8 +1435,16 @@ impl MedOriginNativePreview {
                 });
 
             ui.add_space(theme::space::MD);
-            ui.checkbox(&mut self.connected.bench_seed_locked, "Deterministic Seed Lock (seed=42)");
-            ui.label(RichText::new("DETERMINISTIC_REPLAY_VERIFIED: Score matches frozen benchmark receipt.").color(p.accent));
+            ui.checkbox(
+                &mut self.connected.bench_seed_locked,
+                "Deterministic Seed Lock (seed=42)",
+            );
+            ui.label(
+                RichText::new(
+                    "DETERMINISTIC_REPLAY_VERIFIED: Score matches frozen benchmark receipt.",
+                )
+                .color(p.accent),
+            );
         });
     }
 
@@ -1141,9 +1472,27 @@ impl MedOriginNativePreview {
             ui.add_space(theme::space::SM);
 
             let endpoints = [
-                ("Endpoint 1", "Local Synthetic Fixture Provider", "Static Read", "Active", true),
-                ("Endpoint 2", "Mock SMART-on-FHIR Endpoint", "Simulated Read", "Offline", true),
-                ("Endpoint 3", "Production EHR Live Write Adapter", "Live Mutation", "PERMANENTLY BLOCKED", false),
+                (
+                    "Endpoint 1",
+                    "Local Synthetic Fixture Provider",
+                    "Static Read",
+                    "Active",
+                    true,
+                ),
+                (
+                    "Endpoint 2",
+                    "Mock SMART-on-FHIR Endpoint",
+                    "Simulated Read",
+                    "Offline",
+                    true,
+                ),
+                (
+                    "Endpoint 3",
+                    "Production EHR Live Write Adapter",
+                    "Live Mutation",
+                    "PERMANENTLY BLOCKED",
+                    false,
+                ),
             ];
 
             for (id, name, cap, status, allowed) in endpoints {
@@ -1152,7 +1501,16 @@ impl MedOriginNativePreview {
                         ui.strong(id);
                         ui.label(name);
                         theme::tag(ui, cap, p.badge, p.accent);
-                        theme::tag(ui, status, if allowed { p.badge } else { p.pink_bg }, if allowed { p.text_secondary } else { p.pink_text });
+                        theme::tag(
+                            ui,
+                            status,
+                            if allowed { p.badge } else { p.pink_bg },
+                            if allowed {
+                                p.text_secondary
+                            } else {
+                                p.pink_text
+                            },
+                        );
                     });
                 });
                 ui.add_space(theme::space::XS);
@@ -1196,10 +1554,34 @@ impl MedOriginNativePreview {
             ui.add_space(theme::space::SM);
 
             let audit_events = [
-                ("Seq 001", "APP_STARTUP", "system-native", "Genesis event, session initialized", "000000..."),
-                ("Seq 002", "BUNDLE_IMPORT", "user-local", "Admitted canonical synthetic bundle (32 KiB)", "e3b0c4..."),
-                ("Seq 003", "VERIFY_FIXTURES", "user-local", "Verified 12 native synthetic fixture hashes", "92004d..."),
-                ("Seq 004", "SCREEN_NAVIGATE", "user-local", "Navigated to Audit History screen", "a1b2c3..."),
+                (
+                    "Seq 001",
+                    "APP_STARTUP",
+                    "system-native",
+                    "Genesis event, session initialized",
+                    "000000...",
+                ),
+                (
+                    "Seq 002",
+                    "BUNDLE_IMPORT",
+                    "user-local",
+                    "Admitted canonical synthetic bundle (32 KiB)",
+                    "e3b0c4...",
+                ),
+                (
+                    "Seq 003",
+                    "VERIFY_FIXTURES",
+                    "user-local",
+                    "Verified 12 native synthetic fixture hashes",
+                    "92004d...",
+                ),
+                (
+                    "Seq 004",
+                    "SCREEN_NAVIGATE",
+                    "user-local",
+                    "Navigated to Audit History screen",
+                    "a1b2c3...",
+                ),
             ];
 
             for (seq, event_type, actor, desc, prev_hash) in audit_events {
@@ -1210,7 +1592,11 @@ impl MedOriginNativePreview {
                         ui.label(format!("Actor: {actor}"));
                     });
                     ui.label(desc);
-                    ui.label(RichText::new(format!("Parent Hash: {prev_hash}")).size(theme::size::SMALL).color(p.text_muted));
+                    ui.label(
+                        RichText::new(format!("Parent Hash: {prev_hash}"))
+                            .size(theme::size::SMALL)
+                            .color(p.text_muted),
+                    );
                 });
                 ui.add_space(theme::space::XS);
             }
@@ -1283,7 +1669,12 @@ impl MedOriginNativePreview {
 
             if self.connected.storage_wipe_simulation_done {
                 ui.add_space(theme::space::XS);
-                ui.label(RichText::new("ZERO_WIPE_SIMULATION_PASS: In-memory keys purged, 0 residue remaining.").color(p.accent));
+                ui.label(
+                    RichText::new(
+                        "ZERO_WIPE_SIMULATION_PASS: In-memory keys purged, 0 residue remaining.",
+                    )
+                    .color(p.accent),
+                );
             }
         });
     }
