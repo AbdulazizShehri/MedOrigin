@@ -1,6 +1,6 @@
 # MedOrigin D2 — private Windows single-EXE user setup
 
-Status: PRIVATE, UNSIGNED, FICTIONAL-ONLY, UNPUBLISHED. This is an engineering path toward direct downloads without an app store. It is not a patient, clinician, production or clinical installer.
+Status: DEVELOPER PREVIEW (Lane A), UNSIGNED, FICTIONAL-ONLY. Distributed under Lane A developer software track for evaluation and research. Not a patient, clinician, production medical device, or clinical installer.
 
 ## Implemented
 

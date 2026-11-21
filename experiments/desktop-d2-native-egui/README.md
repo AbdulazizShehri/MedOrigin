@@ -1,8 +1,9 @@
-# MedOrigin D2 — native Rust UI (experimental, strictly nonpublishing)
+# MedOrigin D2 — Synthetic Developer Preview Desktop (Lane A)
 
-This is an **isolated browser-engine-free native UI feasibility spike** derived
-from the permissively licensed eframe template, not a replacement for the Tauri
-D1 source candidate, the Python Research Core or the Workspace.
+This is the **native Windows desktop application (Lane A Developer Software Track)**
+for MedOrigin, providing a browserless, local-first interface for inspecting synthetic
+FHIR health records, exploring evidence provenance, reviewing clinical note drafts,
+and verifying cryptographic audit receipts.
 
 ## Strict test scope
 - Only four exact **fictional in-memory** fixture IDs from the already qualified

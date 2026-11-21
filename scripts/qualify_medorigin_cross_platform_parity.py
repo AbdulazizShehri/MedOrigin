@@ -34,17 +34,19 @@ VALID_EXPECTED_FILES = {
         "medscale-0.3.1-py3-none-any.whl",
         "medscale-0.3.2-py3-none-any.whl",
         "medscale-0.3.3-py3-none-any.whl",
+        "medscale-0.3.4-py3-none-any.whl",
     },
     "sdist": {
         "medscale-0.3.0.tar.gz",
         "medscale-0.3.1.tar.gz",
         "medscale-0.3.2.tar.gz",
         "medscale-0.3.3.tar.gz",
+        "medscale-0.3.4.tar.gz",
     },
 }
 EXPECTED_FILES = {
-    "wheel": "medscale-0.3.3-py3-none-any.whl",
-    "sdist": "medscale-0.3.3.tar.gz",
+    "wheel": "medscale-0.3.4-py3-none-any.whl",
+    "sdist": "medscale-0.3.4.tar.gz",
 }
 
 

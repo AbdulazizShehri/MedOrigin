@@ -119,6 +119,7 @@ fn audited_native_source_files(root: &Path) -> Vec<PathBuf> {
             "main.rs",
             "protected_audit.rs",
             "screens.rs",
+            "screens_connected.rs",
             "session.rs",
             "support.rs",
             "synthetic_bundle.rs",
@@ -306,6 +307,7 @@ fn guard_refuses_unreviewed_nested_module_layout() {
         "main.rs",
         "protected_audit.rs",
         "screens.rs",
+        "screens_connected.rs",
         "session.rs",
         "support.rs",
         "synthetic_bundle.rs",
@@ -314,7 +316,7 @@ fn guard_refuses_unreviewed_nested_module_layout() {
     ] {
         fs::write(root.join(name), "// synthetic, no execution").expect("fixture");
     }
-    assert_eq!(audited_native_source_files(&root).len(), 14);
+    assert_eq!(audited_native_source_files(&root).len(), 15);
     let nested = root.join("hidden");
     fs::create_dir(&nested).expect("create nested fixture");
     fs::write(nested.join("socket.rs"), "// unreviewed nested source").expect("fixture");

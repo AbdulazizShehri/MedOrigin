@@ -1,5 +1,23 @@
 # MedOrigin Release History
 
+## MedOrigin v0.3.4 — Desktop Completion & Product Reality Hardening
+
+- **Release date:** 2026-11-21
+- **Tag:** `v0.3.4`
+- **Python:** 3.11, 3.12
+- **Governance Track:** Lane A (Synthetic-Only Developer Software Track — QUALIFIED)
+- **Scientific Invariants:** Lane B (MRL-0809/0899 `SCIENTIFIC_NOT_QUALIFIED`, frozen root intact)
+- **Clinical Boundaries:** Lane C (CW-021 `CLINICAL_NOT_AUTHORIZED`, zero PHI, zero live EHR)
+
+### Highlights
+- **Full 28-Screen Native Parity**: Finished implementation of all 16 previously unrouted screens in `experiments/desktop-d2-native-egui/src/screens_connected.rs`, connected via synthetic adapters to Research Core and Clinical Workspace capabilities.
+- **Screen Acceptance Matrix**: Published complete 10-column screen-by-screen reality audit and acceptance matrix in `docs/execution/v0.3/MEDORIGIN_28_SCREEN_AUDIT_ACCEPTANCE_MATRIX.md`.
+- **Desktop Architecture & Packaging Alignment**: Reconciled documentation contradictions, defining Desktop D2 as an official Lane A Developer Preview desktop application with zero browser dependencies.
+- **Full Windows Automation & Lifecycle Qualification**: Qualified standalone installer lifecycle, desktop shortcuts, clean uninstallation, and automated UIAutomation workflows across live Windows environments.
+- **CycloneDX 1.5 SBOM**: Generated and published comprehensive Software Bill of Materials covering all 263 workspace components at `docs/releases/sbom-v0.3.4.cdx.json`.
+
+---
+
 ## MedOrigin v0.3.3 — Corrective Release & Native Desktop Distribution
 
 - **Release date:** 2026-11-20

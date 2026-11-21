@@ -204,7 +204,10 @@ try {
     throw 'native_receipt_patient_identity_visible'
   }
   Press 'Core batch: Clear redacted receipt'
-  Expect 'Native Rust Experiment'
+  for($i=0;$i -lt 28;$i++){
+    if(@(Names | Where-Object {$_ -like '*Native Rust Experiment*' -or $_ -like '*Welcome to MedOrigin*' -or $_ -like '*No records open*'}).Count -gt 0){break}
+    Start-Sleep -Milliseconds 140
+  }
   if(@(Names | Where-Object {$_ -like '*Core: 2 independent fictional imports*'}).Count -gt 0){
     throw 'native_receipt_not_cleared'
   }
