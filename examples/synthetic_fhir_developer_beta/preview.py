@@ -25,13 +25,14 @@ _WARNING = (
     "FHIR R4 schema, terminology, and profile validation were not performed; "
     "this local report records deterministic provenance only."
 )
-_INSTALLED_VERSION = "medscale 0.3.4"
+_INSTALLED_VERSION = "medscale 0.3.5"
 _ALLOWED_INSTALLED_VERSIONS = (
     "medscale 0.3.0",
     "medscale 0.3.1",
     "medscale 0.3.2",
     "medscale 0.3.3",
     "medscale 0.3.4",
+    "medscale 0.3.5",
 )
 _WORKSPACE = {
     "application": "medscale-workspace",

@@ -1241,7 +1241,7 @@ impl MedOriginNativePreview {
     /// One-click, compiled, nonclinical demo from the same strict reviewed
     /// fictional fixture. No stdin/file picker, Core process or new network
     /// permission. This is opt-in, never implicit on native default startup.
-    fn open_embedded_fictional_bundle_demo(&mut self) -> Result<(), &'static str> {
+    pub fn open_embedded_fictional_bundle_demo(&mut self) -> Result<(), &'static str> {
         const DEMO: &[u8] =
             include_bytes!("../fixtures/core/synthetic-multipatient-fhir-bundle.json");
         let admitted = Self::from_one_time_synthetic_bundle_stdin(DEMO).inspect_err(|_| {
@@ -1255,6 +1255,18 @@ impl MedOriginNativePreview {
         self.synthetic_bundle
             .as_ref()
             .map_or(0, |b| b.resources.len())
+    }
+
+    /// Retrieve currently active synthetic resources from either the admitted
+    /// synthetic bundle or decrypted fictional readback projection.
+    pub fn active_resources(&self) -> Vec<crate::encrypted_readback::FictionalReadbackResource> {
+        if let Some(ref bundle) = self.synthetic_bundle {
+            bundle.resources.clone()
+        } else if let Some(ref readback) = self.encrypted_readback {
+            readback.resources.clone()
+        } else {
+            Vec::new()
+        }
     }
 
     /// Same strict verified fictional source as the developer readback mode,

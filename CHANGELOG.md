@@ -6,6 +6,25 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
+## [0.3.5] — 2026-11-21
+
+### Fixed
+- **Desktop Functional Integrity & Real Backend Execution**: Corrected engineering integrity defects identified in v0.3.4 where 16 connected desktop screens used static arrays and simulated operations. Re-implemented all 16 connected screens in `experiments/desktop-d2-native-egui/src/screens_connected.rs` with genuine dynamic computations over admitted synthetic FHIR datasets (`FictionalReadbackResource`):
+  - **Local Search**: Real in-memory search across active bundle resources by ID, type, URL, and references with dynamic match counts and SHA-256 computation.
+  - **Dynamic Knowledge Graph**: Dynamic node and edge extraction from admitted FHIR references, in/out-degree calculation, real 3-color DFS topological cycle detection (DAG validation), and edge provenance fingerprints.
+  - **Patient Timeline**: Chronological event streams derived dynamically from loaded resources with explicit measurement uncertainty indicators.
+  - **Workspace Analytics**: Real-time cohort indicators (patient count, observation count, encounter count, link density, and completeness) calculated directly from the active bundle with real SHA-256 provenance receipts.
+  - **Cryptographic Audit Ledger**: Append-only SHA-256 hash chain with mathematical verification (`verify_audit_chain`) traversing all events and detecting any corrupted sequence or tampered payload.
+  - **Storage & Recovery**: Cryptographic vault with SHA-256 key derivation, integrity tagging, and verifiable backup snapshot tamper detection.
+  - **Export Quarantine**: Real residual-risk scanning on active resources for direct identifier leaks and syntactic link validity, generating genuine SHA-256 quarantine manifests.
+  - **Clinical Evidence**: Term-frequency keyword relevance scoring against a reviewed synthetic corpus, evaluating scores against configurable confidence gates, with explicit offline synthetic disclosures.
+  - **Benchmark & Evaluation**: Removed all hardcoded performance constants (86.4%, 88.1%, etc.) claiming `DETERMINISTIC_REPLAY_VERIFIED`. Replaced with truthful benchmark suite specification audits and seed lock verification.
+- **Execution Test Suite**: Added `experiments/desktop-d2-native-egui/tests/test_desktop_screens_execution.rs` (7 integration tests) and unit tests in `screens_connected.rs`, verifying dynamic computations, negative controls (tampered audit events, corrupted backup manifests, changing bundle metrics), and clean empty states for zero-resource bundles.
+- **Gated Screen Invariance**: Maintained compile-time denial and disabled state for all 4 gated screens (`Audio & transcript`, `Orders & tasks`, `Coding suggestions`, `Model catalog & runtime`).
+
+### Changed
+- Monotonic version increment to `0.3.5` across `src/medscale/__about__.py`, `CITATION.cff`, CycloneDX 1.5 SBOM, and release qualification scripts. Immutability of `v0.3.4` preserved per ADR-0010.
+
 ## [0.3.4] — 2026-11-21
 
 ### Added

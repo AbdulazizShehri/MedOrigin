@@ -1,9 +1,9 @@
 # MedOrigin Desktop — 28-Screen Functional Reality Audit & Acceptance Matrix
 
 - **Audit Date:** 2026-11-21
-- **Baseline Release:** v0.3.3 (`f74efb170c98cce50628b24afdbc8082b806d7f2`)
-- **Target Release:** v0.3.4
-- **Audit Standard:** Strict adherence to `docs/design/desktop-v1/FEATURE_COVERAGE.md`, Lane A (Developer Software Track), Lane B (Scientific Invariants), and Lane C (Clinical Boundaries).
+- **Baseline Release:** v0.3.4 (`cd5e5ec2589cded9fa735a256a742f094f3165e8`)
+- **Target Release:** v0.3.5
+- **Audit Standard:** Strict adherence to `docs/design/desktop-v1/FEATURE_COVERAGE.md`, Lane A (Developer Software Track), Lane B (Scientific Invariants), and Lane C (Clinical Boundaries). Real dynamic computations and mathematical cryptographic chains over admitted synthetic data.
 
 ---
 
