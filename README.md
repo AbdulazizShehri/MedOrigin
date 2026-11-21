@@ -35,7 +35,7 @@ Rather than starting with a chatbot interface, MedOrigin starts with explicit da
 | **Evidence & literature** | Provenance, screening, reproducible literature workflows, research artifacts | Evidence infrastructure is not itself a verified medical answer service |
 | **Evaluation & research** | Deterministic benchmark/scoring contracts, replay, governed research-loop framework | Real GPU feasibility, training, and model promotion require separate evidence and authorization |
 | **FHIR** | Deterministic validation, bounded FHIR R4 import/export contracts | Structural validity does not establish clinical correctness |
-| **Clinical Workspace** | Local Python APIs for synthetic encounters, drafts, review, evidence, timeline/graph, dataset staging, analytics, and encrypted storage | **No general-purpose desktop/web GUI or PHI-ready production workflow** |
+| **Clinical Workspace & Native Desktop** | Local Python APIs and native Rust developer desktop for synthetic encounters, drafts, review, evidence, timeline/graph, dataset staging, analytics, and encrypted storage | **Synthetic Developer Preview Desktop (Lane A); zero PHI; no authorized production clinical EHR workflow** |
 | **Trust & privacy** | One-way Research/Workspace boundary, integrity/audit controls, quarantined export semantics | Patient/workspace data cannot flow into Research Core training or benchmarks |
 
 ### Architecture
@@ -79,7 +79,7 @@ uv run ruff format --check .
 uv run mypy
 ```
 
-The `medscale` CLI and Python import paths are **intentional compatibility names**; they are not an alternative product identity. The Clinical Workspace is a separate local Python package and currently provides a synthetic offline shell, **not a user-ready browser or desktop application**.
+The `medscale` CLI and Python import paths are **intentional compatibility names**; they are not an alternative product identity. The Clinical Workspace provides a local Python foundation alongside the **MedOrigin Synthetic Developer Preview Desktop Application** (Lane A developer software track: native Windows x64, browser-engine-free, offline-only, zero PHI, synthetic-only).
 
 ## Documentation
 

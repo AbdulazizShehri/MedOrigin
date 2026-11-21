@@ -6,6 +6,7 @@ pub mod encrypted_readback;
 pub mod local_bundle_import;
 pub mod protected_audit;
 pub mod screens;
+pub mod screens_connected;
 pub mod session;
 pub mod support;
 pub mod synthetic_bundle;

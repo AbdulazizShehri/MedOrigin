@@ -55,6 +55,13 @@ try {
   for($i=0;$i -lt 30;$i++){
     $header=Find-Unique 'Additional fictional FHIR/Bundle cases (8)'
     if($header){break}
+    $nav=Find-Unique 'FHIR fixture inspector  Exp '
+    if(-not $nav){
+      $nav=@(UI | Where-Object { try { $_.Current.Name -like '*FHIR fixture inspector*' -and $_.Current.IsEnabled } catch { $false } }) | Select-Object -First 1
+    }
+    if($nav){
+      try { Perform $nav } catch {}
+    }
     Start-Sleep -Milliseconds 200
   }
   if(-not $header){

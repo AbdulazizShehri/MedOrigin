@@ -6,6 +6,21 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
+## [0.3.4] — 2026-11-21
+
+### Added
+- **28-Screen Native Desktop Completion**: Implemented real, interactive, accessible UI views across all 16 previously unrouted screens in `experiments/desktop-d2-native-egui/src/screens_connected.rs`. Every active screen connects to synthetic-only Clinical Workspace and Research Core adapters with full WCAG AAA contrast, keyboard accessibility, and state isolation.
+- **Screen Acceptance Matrix**: Authored exhaustive 28-screen reality audit and acceptance matrix in `docs/execution/v0.3/MEDORIGIN_28_SCREEN_AUDIT_ACCEPTANCE_MATRIX.md` detailing backend connection, interaction, persistence, test evidence, and release boundaries for every screen.
+- **CycloneDX 1.5 SBOM**: Added unified CycloneDX 1.5 JSON Software Bill of Materials generator (`scripts/generate_release_sbom.py`) and published `docs/releases/sbom-v0.3.4.cdx.json` covering all 263 workspace components (Python Research Core, Clinical Workspace, and native Rust desktop crates).
+
+### Fixed
+- **Desktop Positioning & Experimental Contradiction Resolution**: Reconciled documentation across root `README.md`, `experiments/desktop-d2-native-egui/README.md`, and single-EXE setup docs, clarifying that MedOrigin Desktop D2 is distributed under Lane A (Developer Software Track) as an offline, zero-PHI, browserless synthetic evaluation tool.
+- **Windows UIAutomation Qualification & Line-Ending / BOM Resiliency**: Hardened native receipt stdin parser against Windows PowerShell/.NET UTF-8 preamble injection and updated test suites (`windows-native-fhir-uia-qualification.ps1`, `windows-real-core963-file-batch-receipt-uia.ps1`) for seamless automated qualification on live Windows environments.
+
+### Changed
+- Version metadata bumped to `0.3.4` across `src/medscale/__about__.py`, `CITATION.cff`, and release tooling.
+- Preserved strict research boundaries: Lane B (`MRL-0809` and `MRL-0899`) remains `SCIENTIFIC_NOT_QUALIFIED` with frozen `pyproject.toml` and `uv.lock` byte-intact; Lane C (`CW-021`) remains `CLINICAL_NOT_AUTHORIZED`.
+
 ## [0.3.3] — 2026-11-20
 
 ### Fixed

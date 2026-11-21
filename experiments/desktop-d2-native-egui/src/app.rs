@@ -731,6 +731,7 @@ pub struct MedOriginNativePreview {
     // Help surface state. Never cleared with session data and never
     // persisted; it holds no workspace or patient content.
     diagnostics_copied: bool,
+    pub connected: crate::screens_connected::ConnectedScreensState,
 }
 
 const NAV_STATE_ID: &str = "medorigin-navigation-state";
@@ -4002,6 +4003,12 @@ impl MedOriginNativePreview {
                 section_title(ui, "Open records");
                 ui.label(
                     egui::RichText::new(
+                        "Open a local imaginary FHIR Bundle by dragging one canonical synthetic-only .json file into this window (no patient records).",
+                    )
+                    .color(p.text_secondary),
+                );
+                ui.label(
+                    egui::RichText::new(
                         "Drag one fictional FHIR Bundle (.json) onto this window, or paste its \
                          path below. Ctrl+O focuses the path field.",
                     )
@@ -4393,10 +4400,106 @@ impl eframe::App for MedOriginNativePreview {
                     .show(ui, |ui| self.home_ui(ui));
                 return;
             }
+            Route::LocalSearch => {
+                egui::CentralPanel::default()
+                    .frame(page)
+                    .show(ui, |ui| self.local_search_ui(ui));
+                return;
+            }
             Route::Records { .. } => {
                 egui::CentralPanel::default()
                     .frame(page)
                     .show(ui, |ui| self.local_records_ui(ui));
+                return;
+            }
+            Route::NoteDrafts => {
+                egui::CentralPanel::default()
+                    .frame(page)
+                    .show(ui, |ui| self.note_drafts_ui(ui));
+                return;
+            }
+            Route::PatientGraph => {
+                egui::CentralPanel::default()
+                    .frame(page)
+                    .show(ui, |ui| self.patient_graph_ui(ui));
+                return;
+            }
+            Route::PatientTimeline => {
+                egui::CentralPanel::default()
+                    .frame(page)
+                    .show(ui, |ui| self.patient_timeline_ui(ui));
+                return;
+            }
+            Route::DocumentsCanvas => {
+                egui::CentralPanel::default()
+                    .frame(page)
+                    .show(ui, |ui| self.documents_canvas_ui(ui));
+                return;
+            }
+            Route::ClinicalEvidence => {
+                egui::CentralPanel::default()
+                    .frame(page)
+                    .show(ui, |ui| self.clinical_evidence_ui(ui));
+                return;
+            }
+            Route::LiteratureScreening => {
+                egui::CentralPanel::default()
+                    .frame(page)
+                    .show(ui, |ui| self.literature_screening_ui(ui));
+                return;
+            }
+            Route::Tables => {
+                egui::CentralPanel::default()
+                    .frame(page)
+                    .show(ui, |ui| self.tables_ui(ui));
+                return;
+            }
+            Route::Analytics => {
+                egui::CentralPanel::default()
+                    .frame(page)
+                    .show(ui, |ui| self.analytics_ui(ui));
+                return;
+            }
+            Route::DatasetManager => {
+                egui::CentralPanel::default()
+                    .frame(page)
+                    .show(ui, |ui| self.dataset_manager_ui(ui));
+                return;
+            }
+            Route::ExportQuarantine => {
+                egui::CentralPanel::default()
+                    .frame(page)
+                    .show(ui, |ui| self.export_quarantine_ui(ui));
+                return;
+            }
+            Route::ResearchExplorer => {
+                egui::CentralPanel::default()
+                    .frame(page)
+                    .show(ui, |ui| self.research_explorer_ui(ui));
+                return;
+            }
+            Route::BenchmarkEvaluation => {
+                egui::CentralPanel::default()
+                    .frame(page)
+                    .show(ui, |ui| self.benchmark_evaluation_ui(ui));
+                return;
+            }
+            Route::Integrations => {
+                egui::CentralPanel::default()
+                    .frame(page)
+                    .show(ui, |ui| self.integrations_ui(ui));
+                return;
+            }
+            Route::AuditHistory => {
+                egui::CentralPanel::default()
+                    .frame(page)
+                    .show(ui, |ui| self.audit_history_ui(ui));
+                return;
+            }
+            Route::StorageRecovery => {
+                egui::CentralPanel::default()
+                    .frame(page)
+                    .show(ui, |ui| self.storage_recovery_ui(ui));
                 return;
             }
             Route::Settings => {
