@@ -1,0 +1,51 @@
+# Nonpublishing, read-only ledger. CI green means the *ledger works*,
+# never that MedOrigin is released, signed, clinically approved or security-ready.
+name: MedOrigin read-only release blocker ledger
+on:
+  push:
+    branches:
+      - security/medorigin-no-go-ledger-20261102
+  pull_request:
+    paths:
+      - 'scripts/medorigin_release_blocker_ledger.py'
+      - 'tests/test_medorigin_release_blocker_ledger.py'
+      - '.github/workflows/medorigin-release-blocker-ledger.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  source-unit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Checkout exact candidate without credentials
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - name: Run fail-closed mocked issue tests
+        run: python3 -m unittest discover -s tests -p test_medorigin_release_blocker_ledger.py -v
+      - name: Prove strict mode returns NO-GO under mocked open issues
+        run: echo 'UNIT_TESTS_ONLY_DO_NOT_ATTEST_RELEASE_AUTHORIZATION'
+  live-read-only:
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 6
+    permissions:
+      contents: read
+      issues: read
+    steps:
+      - name: Checkout exact candidate without persisted credentials
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Fetch six issue status receipts, with no writes
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/medorigin_release_blocker_ledger.py --json > "$RUNNER_TEMP/medorigin-release-ledger.json"
+      - name: Validate status remains never-authorized
+        run: |
+          python3 -c 'import json,os,pathlib; p=pathlib.Path(os.environ["RUNNER_TEMP"])/"medorigin-release-ledger.json"; v=json.loads(p.read_text()); assert v["schema"]=="MEDORIGIN_RELEASE_BLOCKER_LEDGER_V1"; assert v["repository"]=="AbdulazizShehri/MedOrigin"; assert v["publication_authorized"] is False; assert len(v["gates"])==6; assert v["state"]=="PUBLICATION_NO_GO"; print("MEDORIGIN_PUBLICATION_NO_GO_LIVE_ISSUES_VERIFIED")'
+      - name: Never grant publishing or signing authority
+        run: echo 'NOT_AN_ARTIFACT_SECURITY_AUDIT_NOT_A_SIGNING_APPROVAL_NOT_A_RELEASE_GATE_PASS'
