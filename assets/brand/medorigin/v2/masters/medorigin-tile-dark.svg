@@ -1,0 +1,3 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-label="MedOrigin dark app icon"><rect width="512" height="512" rx="108" fill="#101313"/><g transform="translate(45,82) scale(.60)"><defs><clipPath id="originDisc"><circle cx="390" cy="318" r="242"/></clipPath></defs>
+ <g clip-path="url(#originDisc)" fill="#FE681B"><path d="M186 -20 H700 V660 H432 Z"/><path d="M140 -20 H169 L397 660 H365 Z"/></g>
+ <g fill="none" stroke="#FFFFFF" stroke-width="26" stroke-linecap="round"><path d="M43 162 174 539 M124 162 255 539"/></g></g></svg>
