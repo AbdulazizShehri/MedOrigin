@@ -1748,11 +1748,7 @@ impl MedOriginNativePreview {
         self.fictional_workspace_back = None;
         self.fictional_workspace_detail = None;
         self.fictional_workspace_notice = None;
-        self.connected.record_audit_event(
-            "SESSION_CLEAR",
-            "user-local",
-            "Cleared synthetic active session",
-        );
+        self.connected.clear_sensitive_session_state();
     }
 
     /// Fail closed if either the trusted raw digest OR the independent

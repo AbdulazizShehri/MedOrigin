@@ -10,9 +10,14 @@ use medorigin_desktop_d2_native_egui::encrypted_readback::{
 use medorigin_desktop_d2_native_egui::screens::{SCREENS, Tag};
 use medorigin_desktop_d2_native_egui::screens_connected::{
     ConnectedScreensState, ENVELOPE_HEADER_LEN, ENVELOPE_MAGIC, ScreenClassification, TAG_LEN,
+    VAULT_KEY_LABEL, VERIFIED_EVIDENCE_SNAPSHOT_IDS, benchmark_measured_results_available,
     build_dynamic_graph, chacha20_poly1305_decrypt, chacha20_poly1305_encrypt, decrypt_envelope,
-    derive_workspace_key, encrypt_envelope, poly1305_mac, screen_classification_by_label,
-    sha256_hex, verify_audit_chain, zeroize_bytes,
+    decrypt_envelope_with_passphrase, derive_workspace_key, encrypt_envelope,
+    execute_integration_dry_run, generate_random_bytes, load_audit_ledger_from_path,
+    load_encrypted_backup_from_path, load_verified_evidence_snapshot, pbkdf2_hmac_sha256,
+    poly1305_mac, save_audit_ledger_to_path, save_encrypted_backup_to_path, scan_export_quarantine,
+    screen_classification_by_label, search_verified_evidence, sha256_hex, verify_audit_chain,
+    zeroize_bytes,
 };
 
 #[test]
@@ -359,8 +364,18 @@ fn test_all_four_gated_screens_are_disabled() {
 
 #[test]
 fn test_screen_classification_all_28_screens() {
+    let mut count_a = 0usize;
+    let mut count_b = 0usize;
+    let mut count_c = 0usize;
+    let mut count_d = 0usize;
     for screen in SCREENS.iter() {
         let class = screen_classification_by_label(screen.label);
+        match class {
+            ScreenClassification::ClassA => count_a += 1,
+            ScreenClassification::ClassB => count_b += 1,
+            ScreenClassification::ClassC => count_c += 1,
+            ScreenClassification::ClassD => count_d += 1,
+        }
         match screen.label {
             "Audio & transcript"
             | "Orders & tasks"
@@ -368,11 +383,24 @@ fn test_screen_classification_all_28_screens() {
             | "Model catalog & runtime" => {
                 assert_eq!(class, ScreenClassification::ClassD);
             }
-            "Research explorer" | "Benchmark & evaluation" | "Integrations" => {
+            "Literature screening"
+            | "Research explorer"
+            | "Benchmark & evaluation"
+            | "Integrations" => {
                 assert_eq!(class, ScreenClassification::ClassC);
             }
-            "Local search" | "Patient graph" | "Clinical evidence" | "Analytics"
-            | "Export quarantine" | "Audit history" | "Storage & recovery" => {
+            "Local search"
+            | "Note drafts"
+            | "Patient graph"
+            | "Patient timeline"
+            | "Documents & canvas"
+            | "Clinical evidence"
+            | "Tables & structured data"
+            | "Analytics"
+            | "Dataset manager"
+            | "Export quarantine"
+            | "Audit history"
+            | "Storage & recovery" => {
                 assert_eq!(class, ScreenClassification::ClassB);
             }
             _ => {
@@ -380,41 +408,32 @@ fn test_screen_classification_all_28_screens() {
             }
         }
     }
+    assert_eq!((count_a, count_b, count_c, count_d), (8, 12, 4, 4));
+    assert_eq!(count_a + count_b + count_c + count_d, 28);
 }
 
 #[test]
 fn test_export_quarantine_risk_scan_and_manifest_fail_closed() {
+    // 1. Empty bundle must NEVER pass
+    let empty_scan = scan_export_quarantine(&[], &[]);
+    assert!(
+        !empty_scan.passed,
+        "Empty dataset must never produce a PASS quarantine scan"
+    );
+
     let mut app = MedOriginNativePreview::default();
     app.open_embedded_fictional_bundle_demo().unwrap();
     let resources = app.active_resources();
 
-    // Verify clean synthetic dataset passes scan
-    let direct_id_leaks = resources
-        .iter()
-        .filter(|r| !r.resource_id.starts_with("fictional-"))
-        .count();
-    assert_eq!(direct_id_leaks, 0, "Zero direct leaks in clean bundle");
+    // 2. Clean synthetic dataset passes scan
+    let clean_scan = scan_export_quarantine(&resources, &["Synthetic research draft 2026-10-15"]);
+    assert!(clean_scan.passed);
+    assert_eq!(clean_scan.direct_id_leaks, 0);
+    assert_eq!(clean_scan.invalid_refs, 0);
+    assert_eq!(clean_scan.forbidden_terms, 0);
+    assert_eq!(clean_scan.raw_date_leaks, 0);
 
-    let invalid_refs = resources
-        .iter()
-        .flat_map(|r| &r.links)
-        .filter(|l| !l.target.starts_with("urn:uuid:"))
-        .count();
-    assert_eq!(
-        invalid_refs, 0,
-        "All links must be well-formed urn:uuid: references"
-    );
-
-    let manifest_payload = format!(
-        "MANIFEST_V1:COUNT={}:DIRECT_LEAKS={}:INVALID_REFS={}:FORBIDDEN_TERMS=0",
-        resources.len(),
-        direct_id_leaks,
-        invalid_refs
-    );
-    let digest = sha256_hex(manifest_payload.as_bytes());
-    assert_eq!(digest.len(), 64);
-
-    // Negative control: simulate injected non-synthetic ID
+    // 3. Negative control: injected non-synthetic ID
     let mut contaminated = resources.clone();
     contaminated.push(FictionalReadbackResource {
         resource_type: "Patient".to_string(),
@@ -422,16 +441,11 @@ fn test_export_quarantine_risk_scan_and_manifest_fail_closed() {
         full_url: "urn:uuid:00000000-0000-4000-8000-000000000999".to_string(),
         links: vec![],
     });
-    let leak_count = contaminated
-        .iter()
-        .filter(|r| !r.resource_id.starts_with("fictional-"))
-        .count();
-    assert_eq!(
-        leak_count, 1,
-        "Quarantine risk scan must detect non-fictional ID leak"
-    );
+    let leak_scan = scan_export_quarantine(&contaminated, &[]);
+    assert!(!leak_scan.passed);
+    assert_eq!(leak_scan.direct_id_leaks, 1);
 
-    // Negative control: simulate invalid non-UUID link
+    // 4. Negative control: invalid non-UUID link
     contaminated.push(FictionalReadbackResource {
         resource_type: "Observation".to_string(),
         resource_id: "fictional-obs-badref".to_string(),
@@ -441,15 +455,19 @@ fn test_export_quarantine_risk_scan_and_manifest_fail_closed() {
             target: "http://external-ehr.org/Patient/123".to_string(),
         }],
     });
-    let bad_ref_count = contaminated
-        .iter()
-        .flat_map(|r| &r.links)
-        .filter(|l| !l.target.starts_with("urn:uuid:"))
-        .count();
-    assert_eq!(
-        bad_ref_count, 1,
-        "Quarantine risk scan must detect non-UUID link"
+    let ref_scan = scan_export_quarantine(&contaminated, &[]);
+    assert!(!ref_scan.passed);
+    assert_eq!(ref_scan.invalid_refs, 1);
+
+    // 5. Negative control: prohibited SSN, CONFIDENTIAL, MRN, email, unshifted date in draft text
+    let draft_leak_scan = scan_export_quarantine(
+        &resources,
+        &["CONFIDENTIAL MRN:4455 SSN 123-45-6789 DOB 1984-05-12 user@example.org"],
     );
+    assert!(!draft_leak_scan.passed);
+    assert!(draft_leak_scan.direct_id_leaks >= 1);
+    assert!(draft_leak_scan.forbidden_terms >= 1);
+    assert!(draft_leak_scan.raw_date_leaks >= 1);
 }
 
 #[test]
@@ -475,4 +493,230 @@ fn test_bundle_admission_records_audit_events() {
 
     // Entire 4-event runtime chain passes SHA-256 verification
     assert_eq!(verify_audit_chain(&app.connected.audit_events), Ok(4));
+}
+
+#[test]
+fn test_pbkdf2_rfc_vectors_and_unique_entropy_salts_nonces() {
+    // Standard PBKDF2-HMAC-SHA256 test vectors (iter=1 and iter=2)
+    let dk1 = pbkdf2_hmac_sha256(b"password", b"salt", 1);
+    let dk1_hex: String = dk1.iter().map(|b| format!("{b:02x}")).collect();
+    assert_eq!(
+        dk1_hex,
+        "120fb6cffcf8b32c43e7225256c4f837a86548c92ccc35480805987cb70be17b"
+    );
+
+    let dk2 = pbkdf2_hmac_sha256(b"password", b"salt", 2);
+    let dk2_hex: String = dk2.iter().map(|b| format!("{b:02x}")).collect();
+    assert_eq!(
+        dk2_hex,
+        "ae4d0c95af6b46d32d0adff928f06dd02a303f8ef3c251dfd6e2d85a95474c43"
+    );
+
+    // Unique OS-seeded salts and nonces (no deterministic reuse)
+    let salt_a = generate_random_bytes::<16>(b"test-salt");
+    let salt_b = generate_random_bytes::<16>(b"test-salt");
+    assert_ne!(salt_a, salt_b, "Salts must be unique across calls");
+
+    let nonce_a = generate_random_bytes::<12>(b"test-nonce");
+    let nonce_b = generate_random_bytes::<12>(b"test-nonce");
+    assert_ne!(nonce_a, nonce_b, "96-bit nonces must never repeat");
+}
+
+#[test]
+fn test_encrypted_backup_persistence_and_restart_recovery() {
+    let dir = std::env::temp_dir().join(format!(
+        "medorigin-d2-backup-test-{}-{}",
+        std::process::id(),
+        &sha256_hex(&generate_random_bytes::<16>(b"dir"))[..12]
+    ));
+    std::fs::create_dir_all(&dir).expect("create temp test dir");
+    let backup_file = dir.join("synthetic-backup.mswsenv");
+
+    let passphrase = "synthetic-restart-recovery-passphrase-2026!";
+    let plaintext = b"MEDORIGIN_BACKUP:RESOURCES=8:SYNTHETIC_RESTART_PAYLOAD";
+
+    // Session 1: Derive key, encrypt MSWSENV1 envelope, persist to disk
+    {
+        let salt = generate_random_bytes::<16>(b"session1-salt");
+        let nonce = generate_random_bytes::<12>(b"session1-nonce");
+        let mut key = derive_workspace_key(passphrase, &salt, VAULT_KEY_LABEL);
+        let envelope = encrypt_envelope(&key, &salt, &nonce, plaintext);
+        zeroize_bytes(&mut key);
+
+        // Verify raw ciphertext on disk does NOT contain plaintext
+        assert!(!envelope.windows(plaintext.len()).any(|w| w == plaintext));
+        let written = save_encrypted_backup_to_path(&backup_file, &envelope).unwrap();
+        assert_eq!(written, envelope.len());
+    }
+
+    // Session 2 (simulated restart — zero prior in-memory key or salt):
+    let disk_bytes = load_encrypted_backup_from_path(&backup_file).unwrap();
+
+    // Negative control 1: Wrong passphrase fails closed
+    assert_eq!(
+        decrypt_envelope_with_passphrase("wrong-passphrase", &disk_bytes, VAULT_KEY_LABEL),
+        Err("AUTHENTICATION_TAG_VERIFICATION_FAILED")
+    );
+
+    // Negative control 2: Empty passphrase fails closed
+    assert_eq!(
+        decrypt_envelope_with_passphrase("", &disk_bytes, VAULT_KEY_LABEL),
+        Err("EMPTY_PASSPHRASE_REFUSED")
+    );
+
+    // Positive control: Correct passphrase recovers exact original authenticated bytes
+    let recovered =
+        decrypt_envelope_with_passphrase(passphrase, &disk_bytes, VAULT_KEY_LABEL).unwrap();
+    assert_eq!(recovered.as_slice(), plaintext);
+
+    // Negative control 3: Corrupted backup file on disk cannot be restored
+    let mut corrupted = disk_bytes.clone();
+    let idx = corrupted.len() - 1;
+    corrupted[idx] ^= 0x40;
+    std::fs::write(&backup_file, &corrupted).unwrap();
+    let reloaded_corrupted = load_encrypted_backup_from_path(&backup_file).unwrap();
+    assert_eq!(
+        decrypt_envelope_with_passphrase(passphrase, &reloaded_corrupted, VAULT_KEY_LABEL),
+        Err("AUTHENTICATION_TAG_VERIFICATION_FAILED")
+    );
+
+    // Negative control 4: Truncated backup file rejected
+    std::fs::write(&backup_file, &corrupted[..20]).unwrap();
+    assert_eq!(
+        load_encrypted_backup_from_path(&backup_file),
+        Err("ENVELOPE_TOO_SHORT")
+    );
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn test_audit_ledger_persistence_restart_and_disk_tamper_rejection() {
+    let dir = std::env::temp_dir().join(format!(
+        "medorigin-d2-audit-test-{}-{}",
+        std::process::id(),
+        &sha256_hex(&generate_random_bytes::<16>(b"audit-dir"))[..12]
+    ));
+    std::fs::create_dir_all(&dir).expect("create temp audit dir");
+    let ledger_file = dir.join("synthetic-audit.json");
+
+    // Session 1: Create real runtime events and save ledger
+    let mut state = ConnectedScreensState::default();
+    state.record_audit_event("BUNDLE_ADMISSION", "user-local", "Admitted 8 resources");
+    state.record_audit_event("EXPORT_QUARANTINE_PASSED", "user-local", "Clean scan");
+    let saved_count = save_audit_ledger_to_path(&ledger_file, &state.audit_events).unwrap();
+    assert_eq!(saved_count, 3);
+
+    // Session 2 (simulated restart): Load and verify intact ledger
+    let reloaded = load_audit_ledger_from_path(&ledger_file).unwrap();
+    assert_eq!(reloaded.len(), 3);
+    assert_eq!(reloaded, state.audit_events);
+
+    // Negative control: Tamper with persisted JSON on disk -> load MUST fail closed
+    let raw = std::fs::read_to_string(&ledger_file).unwrap();
+    let tampered = raw.replace("Admitted 8 resources", "Admitted 999 REAL resources");
+    std::fs::write(&ledger_file, tampered).unwrap();
+    let err = load_audit_ledger_from_path(&ledger_file).unwrap_err();
+    assert!(
+        err.contains("AUDIT_CHAIN_CORRUPTED"),
+        "Expected tamper detection error, got: {err}"
+    );
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn test_evidence_retrieval_verified_snapshots_unknown_rejection_and_abstention() {
+    // Unknown or missing snapshot is rejected
+    assert_eq!(
+        load_verified_evidence_snapshot("unknown-snapshot-2099.json"),
+        Err("UNKNOWN_OR_MISSING_SNAPSHOT_REFUSED")
+    );
+    assert_eq!(
+        search_verified_evidence("missing.json", "patient", 0.5),
+        Err("UNKNOWN_OR_MISSING_SNAPSHOT_REFUSED")
+    );
+
+    // Both committed snapshots load with distinct real SHA-256 hashes and real entries
+    let snap0 = load_verified_evidence_snapshot(VERIFIED_EVIDENCE_SNAPSHOT_IDS[0]).unwrap();
+    let snap1 = load_verified_evidence_snapshot(VERIFIED_EVIDENCE_SNAPSHOT_IDS[1]).unwrap();
+    assert_eq!(snap0.sha256.len(), 64);
+    assert_eq!(snap1.sha256.len(), 64);
+    assert_ne!(snap0.sha256, snap1.sha256);
+    assert_eq!(snap0.entries.len(), 8);
+    assert_eq!(snap1.entries.len(), 3);
+
+    // Matching query admits relevant entries
+    let (_, ranked_match) =
+        search_verified_evidence(VERIFIED_EVIDENCE_SNAPSHOT_IDS[0], "observation 001", 0.5)
+            .unwrap();
+    let admitted = ranked_match.iter().filter(|(_, _, _, ok)| *ok).count();
+    assert!(admitted >= 1);
+
+    // Unmatched query enforces explicit abstention (0 admitted)
+    let (_, ranked_miss) = search_verified_evidence(
+        VERIFIED_EVIDENCE_SNAPSHOT_IDS[0],
+        "nonexistent_quantum_drug_xyz",
+        0.5,
+    )
+    .unwrap();
+    let admitted_miss = ranked_miss.iter().filter(|(_, _, _, ok)| *ok).count();
+    assert_eq!(admitted_miss, 0, "Unmatched query must trigger abstention");
+}
+
+#[test]
+fn test_benchmark_never_fabricates_measured_results_and_ehr_write_blocked() {
+    assert!(
+        !benchmark_measured_results_available(),
+        "Offline desktop must never claim measured benchmark results without an authentic receipt"
+    );
+
+    // Read-only synthetic dry run succeeds without claiming PASS on EHR write
+    let ok_dry = execute_integration_dry_run(0, 8).unwrap();
+    assert!(ok_dry.starts_with("DRY_RUN_READONLY_SIMULATION_SHA256_"));
+
+    // Blocked live EHR write endpoint MUST refuse and NEVER return PASS
+    let blocked = execute_integration_dry_run(2, 8);
+    assert_eq!(blocked, Err("SECURITY_REFUSAL_EHR_WRITE_BLOCKED"));
+}
+
+#[test]
+fn test_session_clear_purges_sensitive_keys_passphrases_and_receipts() {
+    let mut app = MedOriginNativePreview::default();
+    app.open_embedded_fictional_bundle_demo().unwrap();
+
+    // Populate sensitive in-memory state
+    let salt = generate_random_bytes::<16>(b"clear-test-salt");
+    let key = derive_workspace_key("secret-session-passphrase", &salt, VAULT_KEY_LABEL);
+    app.connected.storage_passphrase = "secret-session-passphrase".to_string();
+    app.connected.storage_salt = salt;
+    app.connected.storage_raw_key = Some(key);
+    app.connected.storage_derived_key = Some(sha256_hex(&key));
+    app.connected.storage_vault_tag = Some("tag".to_string());
+    app.connected.storage_backup_envelope = Some(vec![1, 2, 3, 4]);
+    app.connected.storage_vault_locked = false;
+    app.connected.note_attestation_receipt = Some("RECEIPT".to_string());
+    app.connected.analytics_verified_receipt = Some("ANALYTICS".to_string());
+    app.connected.quarantine_manifest_receipt = Some("QUARANTINE".to_string());
+
+    // Clear session
+    app.clear_fictional_output();
+
+    // Verify all sensitive in-memory references were purged
+    assert!(app.active_resources().is_empty());
+    assert!(app.connected.storage_vault_locked);
+    assert!(app.connected.storage_passphrase.is_empty());
+    assert_eq!(app.connected.storage_salt, [0u8; 16]);
+    assert!(app.connected.storage_raw_key.is_none());
+    assert!(app.connected.storage_derived_key.is_none());
+    assert!(app.connected.storage_vault_tag.is_none());
+    assert!(app.connected.storage_backup_envelope.is_none());
+    assert!(app.connected.note_attestation_receipt.is_none());
+    assert!(app.connected.analytics_verified_receipt.is_none());
+    assert!(app.connected.quarantine_manifest_receipt.is_none());
+    assert_eq!(
+        app.connected.audit_events.last().unwrap().event_type,
+        "SESSION_CLEAR"
+    );
+    assert!(verify_audit_chain(&app.connected.audit_events).is_ok());
 }
