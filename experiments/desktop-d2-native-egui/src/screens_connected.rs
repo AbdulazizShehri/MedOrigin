@@ -436,13 +436,24 @@ fn is_reparse_point(_meta: &fs::Metadata) -> bool {
     false
 }
 
+#[cfg(target_os = "macos")]
+fn is_macos_system_root_symlink(path: &Path) -> bool {
+    matches!(path.to_str(), Some("/var" | "/tmp" | "/etc"))
+}
+
+#[cfg(not(target_os = "macos"))]
+fn is_macos_system_root_symlink(_path: &Path) -> bool {
+    false
+}
+
 pub fn validate_local_regular_path(path: &Path, must_exist: bool) -> Result<(), &'static str> {
     if path.as_os_str().is_empty() {
         return Err("EMPTY_FILE_PATH_REFUSED");
     }
     // Check all existing ancestor directories for symlinks or Windows junctions/reparse points
+    // (exempting macOS SIP-protected OS root symlinks `/var`, `/tmp`, `/etc`).
     for ancestor in path.ancestors().skip(1) {
-        if ancestor.as_os_str().is_empty() {
+        if ancestor.as_os_str().is_empty() || is_macos_system_root_symlink(ancestor) {
             continue;
         }
         if let Ok(meta) = fs::symlink_metadata(ancestor)
@@ -463,9 +474,17 @@ pub fn validate_local_regular_path(path: &Path, must_exist: bool) -> Result<(), 
         if let Some(parent) = path.parent()
             && !parent.as_os_str().is_empty()
         {
-            let pmeta = fs::symlink_metadata(parent).map_err(|_| "PARENT_DIRECTORY_NOT_FOUND")?;
-            if pmeta.file_type().is_symlink() || is_reparse_point(&pmeta) || !pmeta.is_dir() {
-                return Err("PARENT_DIRECTORY_INVALID");
+            if is_macos_system_root_symlink(parent) {
+                let pmeta = fs::metadata(parent).map_err(|_| "PARENT_DIRECTORY_NOT_FOUND")?;
+                if !pmeta.is_dir() {
+                    return Err("PARENT_DIRECTORY_INVALID");
+                }
+            } else {
+                let pmeta =
+                    fs::symlink_metadata(parent).map_err(|_| "PARENT_DIRECTORY_NOT_FOUND")?;
+                if pmeta.file_type().is_symlink() || is_reparse_point(&pmeta) || !pmeta.is_dir() {
+                    return Err("PARENT_DIRECTORY_INVALID");
+                }
             }
         }
         if let Ok(meta) = fs::symlink_metadata(path)
