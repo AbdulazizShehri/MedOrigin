@@ -871,11 +871,18 @@ impl MedOriginNativePreview {
         raw: &[u8],
     ) -> Result<Self, &'static str> {
         let readback = admit_exact_encrypted_readback_projection(raw)?;
-        Ok(Self {
+        let mut app = Self {
             encrypted_readback: Some(readback),
             encrypted_readback_source_external: true,
             ..Default::default()
-        })
+        };
+        let count = app.active_resources().len();
+        app.connected.record_audit_event(
+            "READBACK_ADMISSION",
+            "user-local",
+            &format!("Admitted synthetic encrypted readback containing {count} resources"),
+        );
+        Ok(app)
     }
 
     /// The independently cold-reopened *fictional audit-only* Core #981
@@ -1160,14 +1167,21 @@ impl MedOriginNativePreview {
         if let Some(index) = first_patient {
             visited[index] = true;
         }
-        Self {
+        let mut app = Self {
             synthetic_bundle: Some(bundle),
             synthetic_bundle_visited: visited,
             synthetic_bundle_patient: first_patient,
             synthetic_bundle_selected: first_patient,
             synthetic_bundle_type: "All",
             ..Default::default()
-        }
+        };
+        let count = app.active_resources().len();
+        app.connected.record_audit_event(
+            "BUNDLE_ADMISSION",
+            "user-local",
+            &format!("Admitted synthetic FHIR bundle containing {count} resources"),
+        );
+        app
     }
 
     /// Explicit native drag and drop, strictly fictional-only. Does not load
@@ -1734,6 +1748,7 @@ impl MedOriginNativePreview {
         self.fictional_workspace_back = None;
         self.fictional_workspace_detail = None;
         self.fictional_workspace_notice = None;
+        self.connected.clear_sensitive_session_state();
     }
 
     /// Fail closed if either the trusted raw digest OR the independent
@@ -4164,6 +4179,7 @@ impl MedOriginNativePreview {
         crate::theme::card(ui, |ui| {
             ui.horizontal(|ui| {
                 section_title(ui, "In this desktop build");
+                crate::theme::tag(ui, "CLASS D · Gated / Unavailable", p.pink_bg, p.pink_text);
                 match screen.tag {
                     Some(Tag::Gated) => crate::theme::tag(ui, "Gated", p.pink_bg, p.pink_text),
                     Some(Tag::Deferred) => crate::theme::tag(ui, "Deferred", p.badge, p.text_muted),
@@ -4205,7 +4221,10 @@ impl MedOriginNativePreview {
         Self::page_title(ui, "Settings", "Appearance, keyboard and offline state.");
         ui.set_max_width(760.0);
         crate::theme::card(ui, |ui| {
-            section_title(ui, "Appearance");
+            ui.horizontal(|ui| {
+                section_title(ui, "Appearance");
+                crate::theme::tag(ui, "CLASS A · Core Workspace", p.badge, p.accent);
+            });
             let mut pref = ui.ctx().options(|o| o.theme_preference);
             let before = pref;
             ui.horizontal(|ui| {
@@ -4265,13 +4284,16 @@ impl MedOriginNativePreview {
             ui.horizontal(|ui| {
                 crate::theme::mark(ui, 40.0);
                 ui.vertical(|ui| {
-                    ui.label(
-                        egui::RichText::new(format!(
-                            "MedOrigin Desktop {}",
-                            crate::support::APP_VERSION
-                        ))
-                        .strong(),
-                    );
+                    ui.horizontal(|ui| {
+                        ui.label(
+                            egui::RichText::new(format!(
+                                "MedOrigin Desktop {}",
+                                crate::support::APP_VERSION
+                            ))
+                            .strong(),
+                        );
+                        crate::theme::tag(ui, "CLASS A · Core Workspace", p.badge, p.accent);
+                    });
                     ui.label(egui::RichText::new(crate::support::CHANNEL).color(p.text_secondary));
                     ui.label(egui::RichText::new("Open source · Apache-2.0").color(p.text_muted));
                 });
@@ -4336,7 +4358,10 @@ impl MedOriginNativePreview {
         );
         ui.set_max_width(760.0);
         crate::theme::card(ui, |ui| {
-            section_title(ui, "Safety boundaries");
+            ui.horizontal(|ui| {
+                section_title(ui, "Safety boundaries");
+                crate::theme::tag(ui, "CLASS A · Core Workspace", p.badge, p.accent);
+            });
             for fact in [
                 "Research and development use only. Not a medical device and not for clinical decisions.",
                 "Only fictional, synthetic records are accepted. Never open real patient data.",

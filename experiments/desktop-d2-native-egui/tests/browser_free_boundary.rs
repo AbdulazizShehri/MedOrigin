@@ -184,10 +184,17 @@ fn direct_dependencies_remain_limited_to_native_ui_and_existing_d0() {
     assert_eq!(
         declared,
         [
+            "argon2",
+            "chacha20poly1305",
             "eframe",
+            "getrandom",
+            "hkdf",
+            "hmac",
             "medorigin-desktop-d0-rust-prototype",
+            "pbkdf2",
             "serde_json",
             "sha2",
+            "zeroize",
         ],
         "D2 dependency additions require a separate safety review"
     );
@@ -197,32 +204,64 @@ fn direct_dependencies_remain_limited_to_native_ui_and_existing_d0() {
             && dependencies.contains("\"glow\""),
         "D2 must preserve explicit native-only eframe features and AccessKit"
     );
-    // SHA-256 is an additional explicitly reviewed direct dependency for
-    // the two in-memory fictional preview byte checks. Do not silently admit
-    // another crate version, extra default features or a new network library.
-    const PINNED_SHA2_DEPENDENCY: &str =
-        "sha2 = { version = \"=0.11.1\", default-features = false }";
-    assert!(
-        dependencies
-            .lines()
-            .any(|line| line.trim() == PINNED_SHA2_DEPENDENCY),
-        "D2 SHA-256 source integrity requires reviewed, exact locked sha2"
-    );
+    // Explicitly reviewed, exact-pinned RustCrypto and OS-CSPRNG crates for
+    // authenticated local storage (Argon2id + HKDF-SHA-256 + ChaCha20-Poly1305),
+    // legacy v1 migration (PBKDF2-HMAC-SHA256), authenticated audit HMACs,
+    // and volatile memory scrubbing (zeroize). Zero network/browser libraries.
+    const PINNED_CRYPTO_DEPENDENCIES: &[&str] = &[
+        "argon2 = { version = \"=0.6.0\", default-features = false, features = [\"alloc\", \"zeroize\"] }",
+        "chacha20poly1305 = { version = \"=0.11.0\", default-features = false, features = [\"alloc\", \"zeroize\"] }",
+        "getrandom = { version = \"=0.4.3\", default-features = false }",
+        "hkdf = { version = \"=0.13.0\", default-features = false }",
+        "hmac = { version = \"=0.13.0\", default-features = false, features = [\"zeroize\"] }",
+        "pbkdf2 = { version = \"=0.13.0\", default-features = false, features = [\"hmac\"] }",
+        "sha2 = { version = \"=0.11.1\", default-features = false }",
+        "zeroize = { version = \"=1.9.2\", default-features = false, features = [\"alloc\"] }",
+    ];
+    for pinned in PINNED_CRYPTO_DEPENDENCIES {
+        assert!(
+            dependencies.lines().any(|line| line.trim() == *pinned),
+            "D2 cryptographic dependency must remain exact-pinned and reviewed: {pinned}"
+        );
+    }
     let lock = fs::read_to_string(Path::new(env!("CARGO_MANIFEST_DIR")).join("Cargo.lock"))
         .expect("committed Cargo lock");
-    assert!(
-        lock.contains("name = \"sha2\"\nversion = \"0.11.1\""),
-        "reviewed sha2 version absent from lockfile"
-    );
+    for (name, ver) in [
+        ("argon2", "0.6.0"),
+        ("chacha20poly1305", "0.11.0"),
+        ("getrandom", "0.4.3"),
+        ("hkdf", "0.13.0"),
+        ("hmac", "0.13.0"),
+        ("pbkdf2", "0.13.0"),
+        ("sha2", "0.11.1"),
+        ("zeroize", "1.9.2"),
+    ] {
+        let needle = format!("name = \"{name}\"\nversion = \"{ver}\"");
+        assert!(
+            lock.contains(&needle),
+            "reviewed crypto crate {name} {ver} absent from Cargo.lock"
+        );
+    }
     let own_package = lock
         .split("[[package]]\nname = \"medorigin-desktop-d2-native-egui\"")
         .nth(1)
         .and_then(|s| s.split("[[package]]").next())
         .expect("locked D2 root package");
-    assert!(
-        own_package.contains("\"sha2\""),
-        "D2 must pin its direct SHA-256 runtime dependency in Cargo.lock"
-    );
+    for dep in [
+        "\"argon2\"",
+        "\"chacha20poly1305\"",
+        "\"getrandom 0.4.3\"",
+        "\"hkdf\"",
+        "\"hmac\"",
+        "\"pbkdf2\"",
+        "\"sha2\"",
+        "\"zeroize\"",
+    ] {
+        assert!(
+            own_package.contains(dep),
+            "D2 must pin direct crypto dependency {dep} in Cargo.lock"
+        );
+    }
 }
 
 #[test]
