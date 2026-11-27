@@ -70,7 +70,7 @@ jobs:
         run: cargo +1.97.1 clippy --locked --all-targets -- -D warnings
       - name: Preserve dependency lock for license and security review
         if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: medorigin-native-d2-lock-${{ matrix.os }}
           path: experiments/desktop-d2-native-egui/Cargo.lock
@@ -109,7 +109,7 @@ jobs:
           cargo-deny --locked -L info check advisories licenses sources
       - name: Preserve the auditable source-bound policy
         if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: medorigin-native-d2-audit-policy
           path: |
