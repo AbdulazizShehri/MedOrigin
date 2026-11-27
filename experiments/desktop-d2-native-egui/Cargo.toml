@@ -8,10 +8,17 @@ license = "Apache-2.0"
 description = "Isolated synthetic-only native Rust GUI experiment with no WebView runtime"
 
 [dependencies]
+argon2 = { version = "=0.6.0", default-features = false, features = ["alloc", "zeroize"] }
+chacha20poly1305 = { version = "=0.11.0", default-features = false, features = ["alloc", "zeroize"] }
 eframe = { version = "=0.36.0", default-features = false, features = ["accesskit", "default_fonts", "glow", "x11", "wayland"] }
+getrandom = { version = "=0.4.3", default-features = false }
+hkdf = { version = "=0.13.0", default-features = false }
+hmac = { version = "=0.13.0", default-features = false, features = ["zeroize"] }
 medorigin-desktop-d0-rust-prototype = { path = "../desktop-d0-rust" }
+pbkdf2 = { version = "=0.13.0", default-features = false, features = ["hmac"] }
 serde_json = "1.0"
 sha2 = { version = "=0.11.1", default-features = false }
+zeroize = { version = "=1.9.2", default-features = false, features = ["alloc"] }
 
 [lints.rust]
 unsafe_code = "forbid"
